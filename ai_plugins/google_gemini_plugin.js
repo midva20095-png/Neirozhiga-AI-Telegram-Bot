@@ -17,9 +17,9 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
         const resolvedModel = MODEL_MAPPING[modelKey] || MODEL_MAPPING['flash'];
         const safePrompt = prompt ? prompt.trim() : "";
 
-        // 🎬 ОБРАБОТКА ГЕНЕРАЦИИ ВИДЕО ЧЕРЕЗ VEO 3.1
+        // 🎬 ОБРАБОТКА ГЕНЕРАЦИИ ВИДЕО ЧЕРЕЗ VEO
         if (modelKey === 'veo') {
-            console.log(`🎬 Запуск генерации видео через Veo 3.1 (${resolvedModel})...`);
+            console.log(`🎬 Запуск генерации видео через Veo (${resolvedModel})...`);
             
             let videoPayload = { model: resolvedModel };
             let targetBuffer = fileBuffer || (Array.isArray(fileBuffers) && fileBuffers.length > 0 ? fileBuffers[0] : null);
@@ -58,46 +58,37 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
                 throw new Error('Превышено время ожидания генерации видео Veo (таймаут)');
             }
 
-            // УНИВЕРСАЛЬНЫЙ ПОИСК (поддерживает любые вариации библиотеки)
-            const generatedVideo = 
-                operation.response?.generatedVideos?.[0] || 
-                operation.response?.generated_videos?.[0] || 
-                operation.result?.generatedVideos?.[0] || 
-                operation.result?.generated_videos?.[0] ||
-                operation.generatedVideos?.[0] ||
-                operation.generated_videos?.[0];
+            // Официальная структура по документации @google/genai
+            const generatedVideo = operation.response?.generatedVideos?.[0];
 
             if (!generatedVideo || !generatedVideo.video) {
-                console.error("🔍 Структура ответа от сервера:", JSON.stringify(operation, null, 2));
+                console.error("🔍 Полный ответ сервера:", JSON.stringify(operation, null, 2));
                 throw new Error('Не удалось получить сгенерированное видео от Veo');
             }
 
+            const videoFileRef = generatedVideo.video;
+            const fileName = typeof videoFileRef === 'string' ? videoFileRef : (videoFileRef.name || videoFileRef.uri);
+
+            console.log(`📥 Скачивание готового видео: ${fileName}`);
+            const downloadedFile = await ai.files.download({ name: fileName });
+            
             let videoBuffer = null;
-            try {
-                const fileInfo = generatedVideo.video;
-                const fileName = typeof fileInfo === 'string' ? fileInfo : (fileInfo.name || fileInfo.uri);
-                const downloadedFile = await ai.files.download({ name: fileName });
-                if (Buffer.isBuffer(downloadedFile)) {
-                    videoBuffer = downloadedFile;
-                } else if (downloadedFile.data) {
-                    videoBuffer = Buffer.from(downloadedFile.data);
-                }
-            } catch (downloadErr) {
-                console.warn('⚠ Ошибка скачивания через ai.files.download, пробуем по URI:', downloadErr.message);
-                if (generatedVideo.video.uri) {
-                    const res = await axios.get(generatedVideo.video.uri, { responseType: 'arraybuffer' });
-                    videoBuffer = Buffer.from(res.data);
-                }
+            if (Buffer.isBuffer(downloadedFile)) {
+                videoBuffer = downloadedFile;
+            } else if (downloadedFile && downloadedFile.data) {
+                videoBuffer = Buffer.from(downloadedFile.data);
+            } else {
+                videoBuffer = Buffer.from(downloadedFile);
             }
 
-            if (!videoBuffer) {
+            if (!videoBuffer || videoBuffer.length === 0) {
                 throw new Error('Не удалось загрузить бинарные данные сгенерированного видео');
             }
 
             return {
                 type: 'video',
                 buffer: videoBuffer,
-                text: safePrompt || '🎬 Видео успешно создано с помощью Veo 3.1!'
+                text: safePrompt || '🎬 Видео успешно создано с помощью Veo!'
             };
         }
 
