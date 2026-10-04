@@ -4,11 +4,11 @@ const axios = require('axios');
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 /**
- * АКТУАЛЬНЫЙ СЛОВАРЬ МОДЕЛЕЙ (БЕЗ УСТАРЕВШИХ 2.5)
+ * АКТУАЛЬНЫЙ СЛОВАРЬ МОДЕЛЕЙ
  */
 const MODEL_MAPPING = {
     'flash': 'gemini-3.8-flash',               // Gemini 3.8 Flash (Текст)
-    'flash_25': 'gemini-3.8-flash',            // Перенаправляем старый flash_25 на актуальный 3.8
+    'flash_25': 'gemini-3.8-flash',            // Редирект старого flash_25 на 3.8
     'pro': 'gemini-3.1-pro-preview',           // Профессиональная текстовая модель
     'nanobanana': 'gemini-3.1-flash-image',    // Nano Banana 2 (Картинки)
     'nanobanana_pro': 'gemini-3-pro-image',    // Nano Banana Pro (HQ Картинки)
@@ -23,25 +23,30 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
 
         const safePrompt = prompt ? prompt.trim() : "";
 
-        // 🎬 ОБРАБОТКА ГЕНЕРАЦИИ ВИДЕО ЧЕРЕЗ VEO 3.1 (С УЧЕТОМ НОВОГО SDK)
+        // 🎬 ОБРАБОТКА ГЕНЕРАЦИИ ВИДЕО ЧЕРЕЗ VEO 3.1
         if (modelKey === 'veo') {
             console.log(`🎬 Запуск генерации видео через Veo 3.1 (${resolvedModel})...`);
             
-            const videoPayload = {
-                model: resolvedModel,
-                prompt: safePrompt || "Cinematic video generation with motion and sound"
+            let videoPayload = {
+                model: resolvedModel
             };
 
-            // Если прикреплена картинка для оживления (Image-to-Video) через параметр source
             let targetBuffer = fileBuffer || (Array.isArray(fileBuffers) && fileBuffers.length > 0 ? fileBuffers[0] : null);
+
+            // Если есть картинка для оживления, упаковываем её и промпт в source (без дублирования prompt на верхнем уровне)
             if (targetBuffer && Buffer.isBuffer(targetBuffer)) {
                 videoPayload.source = {
+                    prompt: safePrompt || "Cinematic video generation with motion and sound",
                     image: {
                         imageBytes: targetBuffer.toString("base64"),
                         mimeType: mimeType || 'image/jpeg'
                     }
                 };
-                console.log(`🖼 К запросу Veo прикреплено стартовое изображение через source`);
+                console.log(`🖼 Veo запущен в режиме Image-to-Video через source`);
+            } else {
+                // Обычный Text-to-Video
+                videoPayload.prompt = safePrompt || "Cinematic video generation with sound and high detail";
+                console.log(`📝 Veo запущен в режиме Text-to-Video`);
             }
 
             let operation = await ai.models.generateVideos(videoPayload);
@@ -57,7 +62,6 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
                 try {
                     const opName = operation.name || operation.id;
                     if (opName) {
-                        // Безопасный опрос через актуальный метод клиента
                         operation = await ai.operations.get({ name: opName });
                     }
                     console.log(`⏱ Проверка статуса видео (попытка ${attempts}): done = ${operation.done}`);
