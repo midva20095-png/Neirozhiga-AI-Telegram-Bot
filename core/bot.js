@@ -13,7 +13,10 @@ try {
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const userActiveMode = new Map();
 const userAwaitingEmail = new Map();
+const userAwaitingSupport = new Map(); // Состояние для техподдержки
 const userProcessing = new Set(); // 🛡️ Защита от спама
+
+const ADMIN_ID = '5943987954'; // Твой ID администратора
 
 bot.catch((err, ctx) => {
     console.error(`⚠️ Ошибка в Telegraf для ${ctx?.updateType || 'неизвестного события'}:`, err.message);
@@ -48,7 +51,8 @@ const CREDIT_PACKAGES = {
 
 const mainKeyboard = Markup.keyboard([
     ['🤖 Выбрать модель ИИ', '💳 Мой баланс'],
-    ['💰 Пополнить баланс', 'ℹ Справка']
+    ['💰 Пополнить баланс', '💬 Поддержка'],
+    ['ℹ Справка']
 ]).resize();
 
 async function getUserBalance(userId) {
@@ -175,6 +179,7 @@ async function startBot(app) {
 
     bot.start(async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
+        userAwaitingSupport.delete(ctx.from.id);
         userProcessing.delete(ctx.from.id);
         if (!userActiveMode.has(ctx.from.id)) {
             userActiveMode.set(ctx.from.id, 'flash');
@@ -193,6 +198,7 @@ async function startBot(app) {
 
     bot.hears(['💳 Мой баланс', '💳 Баланс'], async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
+        userAwaitingSupport.delete(ctx.from.id);
         const balance = await getUserBalance(ctx.from.id);
         const currentMode = userActiveMode.get(ctx.from.id) || 'flash';
         await ctx.reply(
@@ -208,12 +214,14 @@ async function startBot(app) {
 
     bot.hears(['🤖 Выбрать модель ИИ', '🤖 Модели'], async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
+        userAwaitingSupport.delete(ctx.from.id);
         const currentMode = userActiveMode.get(ctx.from.id) || 'flash';
         await ctx.reply(`🤖 *Выберите модель:*`, { parse_mode: 'Markdown', ...getModelSelectionKeyboard(currentMode) });
     });
 
     bot.hears('💰 Пополнить баланс', async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
+        userAwaitingSupport.delete(ctx.from.id);
         const keyboard = Object.keys(CREDIT_PACKAGES).map(pkgKey => {
             const pkg = CREDIT_PACKAGES[pkgKey];
             return [Markup.button.callback(`💳 ${pkg.title} — ${pkg.price} ₽`, `buy_pkg_${pkgKey}`)];
@@ -221,8 +229,29 @@ async function startBot(app) {
         await ctx.reply(`💳 *Выберите пакет пополнения:*`, { parse_mode: 'Markdown', ...Markup.inlineKeyboard(keyboard) });
     });
 
+    // Обработка кнопки техподдержки
+    bot.hears('💬 Поддержка', async (ctx) => {
+        userAwaitingEmail.delete(ctx.from.id);
+        userAwaitingSupport.set(ctx.from.id, true);
+        await ctx.reply(
+            `💬 *Служба поддержки*\n\n` +
+            `Опишите вашу проблему или задайте вопрос одним сообщением. Администратор ответит вам в ближайшее время:`,
+            { 
+                parse_mode: 'Markdown', 
+                ...Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'cancel_support')]]) 
+            }
+        );
+    });
+
+    bot.action('cancel_support', async (ctx) => {
+        userAwaitingSupport.delete(ctx.from.id);
+        await ctx.answerCbQuery('Отменено');
+        await ctx.editMessageText('❌ Обращение в поддержку отменено.');
+    });
+
     bot.hears(['ℹ Справка', 'ℹ️ Справка'], async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
+        userAwaitingSupport.delete(ctx.from.id);
         await ctx.reply(
             `Здравствуйте! Я — универсальный ИИ-помощник.\n\n` +
             `Вот чем я могу вам помочь:\n` +
@@ -282,13 +311,53 @@ async function startBot(app) {
 
     const handleAiRequest = async (ctx) => {
         const text = ctx.message?.text || '';
-        if (['🤖 Выбрать модель ИИ', '💳 Мой баланс', '💰 Пополнить баланс', 'ℹ Справка', 'ℹ️ Справка', '🤖 Модели', '💳 Баланс'].includes(text)) {
+        if (['🤖 Выбрать модель ИИ', '💳 Мой баланс', '💰 Пополнить баланс', '💬 Поддержка', 'ℹ Справка', 'ℹ️ Справка', '🤖 Модели', '💳 Баланс'].includes(text)) {
             return;
         }
 
         const userId = ctx.from.id;
+        const stringUserId = String(userId);
 
-        // 🛡️ ЗАЩИТА ОТ СПАМА: Если запрос еще обрабатывается
+        // 1. ОТВЕТ АДМИНИСТРАТОРА ПОЛЬЗОВАТЕЛЮ ЧЕРЕЗ REPLY
+        if (stringUserId === ADMIN_ID && ctx.message.reply_to_message) {
+            const repliedText = ctx.message.reply_to_message.text || '';
+            const match = repliedText.match(/ID:\s*`?(\d+)`?/);
+            if (match && match[1]) {
+                const targetUserId = match[1];
+                try {
+                    await bot.telegram.sendMessage(
+                        targetUserId,
+                        `💬 *Ответ от службы поддержки:*\n\n${text}`,
+                        { parse_mode: 'Markdown' }
+                    );
+                    await ctx.reply('✅ Ответ успешно доставлен пользователю!');
+                } catch (err) {
+                    await ctx.reply(`❌ Не удалось отправить ответ: ${err.message}`);
+                }
+                return;
+            }
+        }
+
+        // 2. ОБРАЩЕНИЕ ПОЛЬЗОВАТЕЛЯ В ПОДДЕРЖКУ
+        if (userAwaitingSupport.has(userId)) {
+            userAwaitingSupport.delete(userId);
+
+            const supportMsg = 
+                `🚨 *Новое обращение в поддержку!*\n\n` +
+                `👤 От: ${ctx.from.first_name || 'Пользователь'} (ID: \`${userId}\`)\n` +
+                `💬 Текст:\n${text}`;
+
+            try {
+                await bot.telegram.sendMessage(ADMIN_ID, supportMsg, { parse_mode: 'Markdown' });
+                await ctx.reply('✅ Ваше сообщение отправлено в службу поддержки! Администратор ответит вам в ближайшее время.', { parse_mode: 'Markdown' });
+            } catch (err) {
+                console.error('Ошибка отправки в поддержку:', err);
+                await ctx.reply('⚠️ Не удалось отправить сообщение в поддержку. Попробуйте позже.');
+            }
+            return;
+        }
+
+        // 🛡️ ЗАЩИТА ОТ СПАМА
         if (userProcessing.has(userId)) {
             return ctx.reply('⏳ *Подождите...* Нейросеть еще отвечает на ваш предыдущий запрос. Пожалуйста, дождитесь завершения генерации.', { parse_mode: 'Markdown' });
         }
@@ -372,7 +441,6 @@ async function startBot(app) {
                 prompt, fileBuffer, mimeType, modelKey: currentMode
             });
 
-            // 💰 Списание строго при успешном ответе
             await deductUserBalance(userId, cost);
             const remainingBalance = await getUserBalance(userId);
 
@@ -384,20 +452,16 @@ async function startBot(app) {
                     { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
                 );
             } else {
-                const fullText = `${aiResult.text}\n\n───────────────\n💳 *Списано:* ${cost} кр. | *Остаток:* ${remainingBalance} кр.`;
+                const fullText = `${aiResult.text}\n\n───────────────\n💳 *Списано:* ${cost} кр. | * Остаток:* ${remainingBalance} кр.`;
                 try {
                     await ctx.reply(fullText, { parse_mode: 'Markdown' });
                 } catch (mdErr) {
-                    // Если Markdown сломался, отправляем чистым текстом БЕЗ каких-либо технических ошибок
                     await ctx.reply(fullText);
                 }
             }
         } catch (error) {
-            // Техническая ошибка пишется в консоль для тебя, но КЛИЕНТУ её не показываем!
             console.error('❌ Ошибка генерации (скрыта от пользователя):', error.message);
             try { await ctx.deleteMessage(waitMessage.message_id); } catch(e){}
-            
-            // Пользователю отдаем мягкое, красивое сообщение, а кредиты остаются на месте
             await ctx.reply(`⚠️ Не удалось получить ответ от нейросети. Пожалуйста, попробуйте сформулировать запрос иначе или повторить чуть позже. Ваши кредиты не были списаны.`);
         } finally {
             userProcessing.delete(userId);
@@ -410,7 +474,7 @@ async function startBot(app) {
     bot.launch().then(() => {
         console.log('🤖 Ядро бота успешно запущено!');
     }).catch((err) => {
-        console.error('⚠️ Ошибка при запуске Telegram polling:', err.message);
+        console.error('⚠️️ Ошибка при запуске Telegram polling:', err.message);
     });
 }
 
