@@ -13,11 +13,11 @@ try {
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const userActiveMode = new Map();
 const userAwaitingEmail = new Map();
-const userAwaitingSupport = new Map(); // Состояние для техподдержки
-const userProcessing = new Set(); // 🛡️ Защита от спама
-const mediaGroupBuffers = new Map(); // 📦 Буфер для сбора альбомов (media_group_id)
+const userAwaitingSupport = new Map();
+const userProcessing = new Set();
+const mediaGroupBuffers = new Map();
 
-const ADMIN_ID = '5943987954'; // Твой ID администратора
+const ADMIN_ID = '5943987954';
 
 bot.catch((err, ctx) => {
     console.error(`⚠️ Ошибка в Telegraf для ${ctx?.updateType || 'неизвестного события'}:`, err.message);
@@ -155,6 +155,14 @@ async function startBot(app) {
     }
 
     if (app) {
+        // 🛡️ ОБЯЗАТЕЛЬНЫЕ HEALTH-CHECK МАРШРУТЫ (Предотвращают SIGTERM падения от хостинга)
+        app.get('/', (req, res) => {
+            res.status(200).send('🤖 Telegram AI Bot is running and healthy!');
+        });
+        app.get('/health', (req, res) => {
+            res.status(200).send('OK');
+        });
+
         app.post('/yookassa-webhook', async (req, res) => {
             try {
                 const event = req.body;
@@ -320,7 +328,6 @@ async function startBot(app) {
         const userId = ctx.from.id;
         const stringUserId = String(userId);
 
-        // 1. ОТВЕТ АДМИНИСТРАТОРА ПОЛЬЗОВАТЕЛЮ ЧЕРЕЗ REPLY
         if (stringUserId === ADMIN_ID && ctx.message.reply_to_message) {
             const repliedText = ctx.message.reply_to_message.text || '';
             const match = repliedText.match(/ID:\s*`?(\d+)`?/);
@@ -340,10 +347,8 @@ async function startBot(app) {
             }
         }
 
-        // 2. ОБРАЩЕНИЕ ПОЛЬЗОВАТЕЛЯ В ПОДДЕРЖКУ
         if (userAwaitingSupport.has(userId)) {
             userAwaitingSupport.delete(userId);
-
             const supportMsg = 
                 `🚨 *Новое обращение в поддержку!*\n\n` +
                 `👤 От: ${ctx.from.first_name || 'Пользователь'} (ID: \`${userId}\`)\n` +
@@ -359,7 +364,6 @@ async function startBot(app) {
             return;
         }
 
-        // 🛡️ ЗАЩИТА ОТ СПАМА
         if (userProcessing.has(userId)) {
             return ctx.reply('⏳ *Подождите...* Нейросеть еще отвечает на ваш предыдущий запрос. Пожалуйста, дождитесь завершения генерации.', { parse_mode: 'Markdown' });
         }
@@ -427,7 +431,7 @@ async function startBot(app) {
         if (!aiPlugin) return ctx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
 
         userProcessing.add(userId);
-        const waitMessage = await ctx.reply(`⏳ *Генерирую ответ...*`, { parse_mode: 'Markdown' });
+        const waitMessage = await ctx.reply(`⏳ *Генерирую ответ...* ${currentMode === 'veo' ? '(Видео создается около 1–2 минут, пожалуйста, подождите)' : ''}`, { parse_mode: 'Markdown' });
 
         try {
             let fileBuffers = [];
@@ -471,15 +475,14 @@ async function startBot(app) {
                 }
             }
         } catch (error) {
-            console.error('❌ Ошибка генерации (скрыта от пользователя):', error.message);
+            console.error('❌ Ошибка генерации (скрыта от пользователя):', error.message || error);
             try { await ctx.deleteMessage(waitMessage.message_id); } catch(e){}
-            await ctx.reply(`⚠️️ Не удалось получить ответ от нейросети. Попробуйте сформулировать запрос иначе или повторить чуть позже. Ваши кредиты не были списаны.`);
+            await ctx.reply(`⚠️ Не удалось получить ответ от нейросети. Проверьте лимиты в Google AI Studio. Ваши кредиты не были списаны.`);
         } finally {
             userProcessing.delete(userId);
         }
     };
 
-    // Функция обработки собранного альбома фотографий (media_group_id)
     const handleAlbumRequest = async (contexts) => {
         const firstCtx = contexts[0];
         const userId = firstCtx.from.id;
@@ -494,15 +497,6 @@ async function startBot(app) {
                 prompt = c.message.caption;
                 break;
             }
-        }
-
-        const MAX_PROMPT_LENGTH = 3500;
-        if (prompt.length > MAX_PROMPT_LENGTH) {
-            return firstCtx.reply(
-                `⚠️ *Слишком длинный запрос!*\n\n` +
-                `Ваш текст содержит ${prompt.length} символов. Максимальный лимит — ${MAX_PROMPT_LENGTH} символов.\n` +
-                `Пожалуйста, разделите ваш текст на несколько частей.`
-            );
         }
 
         const currentMode = userActiveMode.get(userId) || 'flash';
@@ -568,9 +562,9 @@ async function startBot(app) {
                 }
             }
         } catch (error) {
-            console.error('❌ Ошибка генерации (скрыта от пользователя):', error.message);
+            console.error('❌ Ошибка генерации (скрыта от пользователя):', error.message || error);
             try { await firstCtx.deleteMessage(waitMessage.message_id); } catch(e){}
-            await firstCtx.reply(`⚠️ Не удалось получить ответ от нейросети. Попробуйте сформулировать запрос иначе или повторить чуть позже. Ваши кредиты не были списаны.`);
+            await firstCtx.reply(`⚠️ Не удалось получить ответ от нейросети. Ваши кредиты не были списаны.`);
         } finally {
             userProcessing.delete(userId);
         }
@@ -578,7 +572,6 @@ async function startBot(app) {
 
     bot.on('text', handleAiRequest);
     
-    // Перехватчик фото с дебаунсером для альбомов (media_group_id)
     bot.on('photo', async (ctx) => {
         const mediaGroupId = ctx.message?.media_group_id;
         if (mediaGroupId) {
@@ -591,7 +584,7 @@ async function startBot(app) {
                         if (group && group.contexts.length > 0) {
                             await handleAlbumRequest(group.contexts);
                         }
-                    }, 400) // 400мс на сбор всех фото из альбома
+                    }, 400)
                 });
             } else {
                 mediaGroupBuffers.get(mediaGroupId).contexts.push(ctx);

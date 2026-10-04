@@ -33,7 +33,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
 
             let targetBuffer = fileBuffer || (Array.isArray(fileBuffers) && fileBuffers.length > 0 ? fileBuffers[0] : null);
 
-            // Если есть картинка для оживления, упаковываем её и промпт в source (без дублирования prompt на верхнем уровне)
+            // Если есть картинка для оживления, упаковываем через source
             if (targetBuffer && Buffer.isBuffer(targetBuffer)) {
                 videoPayload.source = {
                     prompt: safePrompt || "Cinematic video generation with motion and sound",
@@ -44,13 +44,12 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
                 };
                 console.log(`🖼 Veo запущен в режиме Image-to-Video через source`);
             } else {
-                // Обычный Text-to-Video
                 videoPayload.prompt = safePrompt || "Cinematic video generation with sound and high detail";
                 console.log(`📝 Veo запущен в режиме Text-to-Video`);
             }
 
             let operation = await ai.models.generateVideos(videoPayload);
-            console.log(`⏳ Задача генерации видео создана. Operation ID: ${operation.name || operation.id}. Ожидаем готовности...`);
+            console.log(`⏳ Задача генерации видео создана. Ожидаем готовности...`);
 
             let attempts = 0;
             const maxAttempts = 60; // До 10 минут ожидания рендеринга
@@ -60,10 +59,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
                 attempts++;
                 
                 try {
-                    const opName = operation.name || operation.id;
-                    if (opName) {
-                        operation = await ai.operations.get({ name: opName });
-                    }
+                    operation = await ai.operations.get({ operation: operation });
                     console.log(`⏱ Проверка статуса видео (попытка ${attempts}): done = ${operation.done}`);
                 } catch (pollErr) {
                     console.warn(`⚠ Ошибка при опросе статуса операции Veo:`, pollErr.message);
