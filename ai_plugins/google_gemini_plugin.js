@@ -17,7 +17,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
         const resolvedModel = MODEL_MAPPING[modelKey] || MODEL_MAPPING['flash'];
         const safePrompt = prompt ? prompt.trim() : "";
 
-        // 🎬 ГЕНЕРАЦИЯ ВИДЕО ЧЕРЕЗ VEO
+        // 🎬 ОБРАБОТКА ГЕНЕРАЦИИ ВИДЕО ЧЕРЕЗ VEO
         if (modelKey === 'veo') {
             console.log(`🎬 Запуск генерации видео через Veo (${resolvedModel})...`);
             
@@ -60,29 +60,27 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
 
             const generatedVideo = operation.response?.generatedVideos?.[0];
             if (!generatedVideo || !generatedVideo.video) {
+                console.error("🔍 Полный ответ сервера:", JSON.stringify(operation, null, 2));
                 throw new Error('Не удалось получить сгенерированное видео от Veo');
             }
 
             const videoFileRef = generatedVideo.video;
-            const fileUri = typeof videoFileRef === 'string' ? videoFileRef : (videoFileRef.uri || videoFileRef.name);
+            let fileUri = typeof videoFileRef === 'string' ? videoFileRef : (videoFileRef.uri || videoFileRef.name);
 
-            let fileName = fileUri;
-            const match = fileUri.match(/(files\/[a-zA-Z0-9_-]+)/);
-            if (match) {
-                fileName = match[1];
+            // Если пришло короткое имя (например, files/xyz), формируем полный URL для скачивания
+            let downloadUrl = fileUri;
+            if (!downloadUrl.startsWith('http')) {
+                downloadUrl = `https://generativelanguage.googleapis.com/v1beta/${fileUri}:download?alt=media`;
             }
 
-            console.log(`📥 Скачивание файла через SDK Google: ${fileName}`);
-            const downloadedFile = await ai.files.download({ name: fileName });
-            
-            let videoBuffer = null;
-            if (Buffer.isBuffer(downloadedFile)) {
-                videoBuffer = downloadedFile;
-            } else if (downloadedFile && downloadedFile.data) {
-                videoBuffer = Buffer.from(downloadedFile.data);
-            } else if (downloadedFile) {
-                videoBuffer = Buffer.from(downloadedFile);
-            }
+            // Добавляем ключ в параметры запроса, чтобы обойти 403 ошибку авторизации
+            const apiKey = process.env.GEMINI_API_KEY;
+            const separator = downloadUrl.includes('?') ? '&' : '?';
+            downloadUrl = `${downloadUrl}${separator}key=${apiKey}`;
+
+            console.log(`📥 Скачивание видео с авторизацией по ключу...`);
+            const res = await axios.get(downloadUrl, { responseType: 'arraybuffer' });
+            const videoBuffer = Buffer.from(res.data);
 
             if (!videoBuffer || videoBuffer.length === 0) {
                 throw new Error('Не удалось загрузить бинарные данные сгенерированного видео');
