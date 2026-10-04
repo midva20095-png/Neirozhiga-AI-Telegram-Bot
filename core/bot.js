@@ -7,7 +7,7 @@ try {
     aiPlugin = require('../ai_plugins/google_gemini_plugin');
     console.log('✅ Плагин Google Gemini успешно подключен к ядру');
 } catch (e) {
-    console.warn('⚠️️ Внимание: Плагин ИИ не найден!', e.message);
+    console.warn('⚠ Внимание: Плагин ИИ не найден!', e.message);
 }
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -15,6 +15,7 @@ const userActiveMode = new Map();
 const userAwaitingEmail = new Map();
 const userAwaitingSupport = new Map(); // Состояние для техподдержки
 const userProcessing = new Set(); // 🛡️ Защита от спама
+const mediaGroupBuffers = new Map(); // 📦 Буфер для сбора альбомов (media_group_id)
 
 const ADMIN_ID = '5943987954'; // Твой ID администратора
 
@@ -472,8 +473,122 @@ async function startBot(app) {
         }
     };
 
+    // Функция обработки собранного альбома фотографий (media_group_id)
+    const handleAlbumRequest = async (contexts) => {
+        const firstCtx = contexts[0];
+        const userId = firstCtx.from.id;
+
+        if (userProcessing.has(userId)) {
+            return firstCtx.reply('⏳ *Подождите...* Нейросеть еще отвечает на ваш предыдущий запрос. Пожалуйста, дождитесь завершения генерации.', { parse_mode: 'Markdown' });
+        }
+
+        let prompt = '';
+        for (const c of contexts) {
+            if (c.message?.caption) {
+                prompt = c.message.caption;
+                break;
+            }
+        }
+
+        const MAX_PROMPT_LENGTH = 3500;
+        if (prompt.length > MAX_PROMPT_LENGTH) {
+            return firstCtx.reply(
+                `⚠️ *Слишком длинный запрос!*\n\n` +
+                `Ваш текст содержит ${prompt.length} символов. Максимальный лимит — ${MAX_PROMPT_LENGTH} символов.\n` +
+                `Пожалуйста, разделите ваш текст на несколько частей.`
+            );
+        }
+
+        const currentMode = userActiveMode.get(userId) || 'flash';
+        const cost = MODEL_COSTS[currentMode] || 1;
+
+        const balance = await getUserBalance(userId);
+        if (balance < cost) {
+            return firstCtx.reply(
+                `❌ *Недостаточно кредитов!*\nВаш баланс: ${balance} кр. Требуется: ${cost} кр.`,
+                {
+                    parse_mode: 'Markdown',
+                    ...Markup.inlineKeyboard([[Markup.button.callback('💰 Пополнить баланс', 'action_buy_credits')]])
+                }
+            );
+        }
+
+        if (!aiPlugin) return firstCtx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
+
+        userProcessing.add(userId);
+        const waitMessage = await firstCtx.reply(`⏳ *Генерирую ответ...*`, { parse_mode: 'Markdown' });
+
+        try {
+            let fileBuffers = [];
+            let mimeType = 'image/jpeg';
+
+            for (const c of contexts) {
+                if (c.message?.photo && c.message.photo.length > 0) {
+                    const largestPhoto = c.message.photo[c.message.photo.length - 1];
+                    const buf = await getTelegramFileBuffer(firstCtx, largestPhoto.file_id);
+                    if (buf) fileBuffers.push(buf);
+                }
+            }
+
+            const aiResult = await aiPlugin.processRequest({
+                prompt, 
+                fileBuffer: fileBuffers.length === 1 ? fileBuffers[0] : null,
+                fileBuffers: fileBuffers.length > 1 ? fileBuffers : undefined,
+                mimeType, 
+                modelKey: currentMode
+            });
+
+            await deductUserBalance(userId, cost);
+            const remainingBalance = await getUserBalance(userId);
+
+            try { await firstCtx.deleteMessage(waitMessage.message_id); } catch(e){}
+
+            if (aiResult.type === 'image' && aiResult.buffer) {
+                await firstCtx.replyWithPhoto(
+                    { source: aiResult.buffer }, 
+                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
+                );
+            } else {
+                const fullText = `${aiResult.text}\n\n───────────────\n💳 *Списано:* ${cost} кр. | *Остаток:* ${remainingBalance} кр.`;
+                try {
+                    await firstCtx.reply(fullText, { parse_mode: 'Markdown' });
+                } catch (mdErr) {
+                    await firstCtx.reply(fullText);
+                }
+            }
+        } catch (error) {
+            console.error('❌ Ошибка генерации (скрыта от пользователя):', error.message);
+            try { await firstCtx.deleteMessage(waitMessage.message_id); } catch(e){}
+            await firstCtx.reply(`⚠️ Не удалось получить ответ от нейросети. Пожалуйста, попробуйте сформулировать запрос иначе или повторить чуть позже. Ваши кредиты не были списаны.`);
+        } finally {
+            userProcessing.delete(userId);
+        }
+    };
+
     bot.on('text', handleAiRequest);
-    bot.on('photo', handleAiRequest);
+    
+    // Перехватчик фото с дебаунсером для альбомов (media_group_id)
+    bot.on('photo', async (ctx) => {
+        const mediaGroupId = ctx.message?.media_group_id;
+        if (mediaGroupId) {
+            if (!mediaGroupBuffers.has(mediaGroupId)) {
+                mediaGroupBuffers.set(mediaGroupId, {
+                    contexts: [ctx],
+                    timer: setTimeout(async () => {
+                        const group = mediaGroupBuffers.get(mediaGroupId);
+                        mediaGroupBuffers.delete(mediaGroupId);
+                        if (group && group.contexts.length > 0) {
+                            await handleAlbumRequest(group.contexts);
+                        }
+                    }, 400) // 400мс на сбор всех фото из альбома
+                });
+            } else {
+                mediaGroupBuffers.get(mediaGroupId).contexts.push(ctx);
+            }
+            return;
+        }
+        return handleAiRequest(ctx);
+    });
 
     bot.launch().then(() => {
         console.log('🤖 Ядро бота успешно запущено!');
