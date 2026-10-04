@@ -7,7 +7,7 @@ try {
     aiPlugin = require('../ai_plugins/google_gemini_plugin');
     console.log('✅ Плагин Google Gemini успешно подключен к ядру');
 } catch (e) {
-    console.warn('⚠️ Внимание: Плагин ИИ не найден!', e.message);
+    console.warn('⚠️️ Внимание: Плагин ИИ не найден!', e.message);
 }
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -428,17 +428,21 @@ async function startBot(app) {
         const waitMessage = await ctx.reply(`⏳ *Генерирую ответ...*`, { parse_mode: 'Markdown' });
 
         try {
-            let fileBuffer = null;
-            let mimeType = null;
+            let fileBuffers = [];
+            let mimeType = 'image/jpeg';
 
             if (ctx.message?.photo && ctx.message.photo.length > 0) {
                 const largestPhoto = ctx.message.photo[ctx.message.photo.length - 1];
-                fileBuffer = await getTelegramFileBuffer(ctx, largestPhoto.file_id);
-                mimeType = 'image/jpeg';
+                const buf = await getTelegramFileBuffer(ctx, largestPhoto.file_id);
+                if (buf) fileBuffers.push(buf);
             }
 
             const aiResult = await aiPlugin.processRequest({
-                prompt, fileBuffer, mimeType, modelKey: currentMode
+                prompt, 
+                fileBuffer: fileBuffers.length === 1 ? fileBuffers[0] : null,
+                fileBuffers: fileBuffers.length > 1 ? fileBuffers : undefined,
+                mimeType, 
+                modelKey: currentMode
             });
 
             await deductUserBalance(userId, cost);
@@ -452,7 +456,7 @@ async function startBot(app) {
                     { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
                 );
             } else {
-                const fullText = `${aiResult.text}\n\n───────────────\n💳 *Списано:* ${cost} кр. | * Остаток:* ${remainingBalance} кр.`;
+                const fullText = `${aiResult.text}\n\n───────────────\n💳 *Списано:* ${cost} кр. | *Остаток:* ${remainingBalance} кр.`;
                 try {
                     await ctx.reply(fullText, { parse_mode: 'Markdown' });
                 } catch (mdErr) {
@@ -474,7 +478,7 @@ async function startBot(app) {
     bot.launch().then(() => {
         console.log('🤖 Ядро бота успешно запущено!');
     }).catch((err) => {
-        console.error('⚠️️ Ошибка при запуске Telegram polling:', err.message);
+        console.error('⚠ Ошибка при запуске Telegram polling:', err.message);
     });
 }
 
