@@ -1,110 +1,111 @@
-import { GoogleGenAI } from "@google/genai";
+const { GoogleGenAI } = require('@google/genai');
 
-export class GoogleGeminiImagePlugin {
-    constructor(apiKey) {
-        // Инициализация официального клиента @google/genai
-        this.ai = new GoogleGenAI({ apiKey: apiKey || process.env.GEMINI_API_KEY });
-    }
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-    /**
-     * Универсальный метод генерации и редактирования изображений (Nano Banana / Gemini 3)
-     * @param {Object} options 
-     * @param {string} options.model - Модель ('gemini-3.1-flash-image', 'gemini-3.1-flash-lite-image', 'gemini-3-pro-image', 'gemini-2.5-flash-image')
-     * @param {string|Array} options.input - Текст запроса или массив частей (текст, картинки, видео)
-     * @param {string} [options.aspectRatio] - Соотношение сторон ("1:1", "16:9", "5:4", "4:1", "1:4", "8:1", "1:8")
-     * @param {string} [options.imageSize] - Размер изображения: "512px", "1K", "2K", "4K" (обязательно с заглавной 'K')
-     * @param {string} [options.mimeType] - MIME-тип ("image/jpeg", "image/png")
-     * @param {Array} [options.tools] - Инструменты (например, [{ type: "google_search" }])
-     * @param {string} [options.thinkingLevel] - Уровень размышлений ("minimal", "high")
-     * @param {string} [options.previousInteractionId] - ID предыдущего взаимодействия для многошагового редактирования
-     */
-    async generateImage(options) {
-        const {
-            model = "gemini-3.1-flash-image",
-            input,
-            aspectRatio = "1:1",
-            imageSize = "1K",
-            mimeType = "image/png",
-            tools,
-            thinkingLevel,
-            previousInteractionId
-        } = options;
+/**
+ * СЛОВАРЬ МОДЕЛЕЙ И ВОЗМОЖНОСТЕЙ
+ */
+const MODEL_MAPPING = {
+    'flash': 'gemini-3.8-flash',               // Gemini 3.8 Flash
+    'flash_25': 'gemini-2.5-flash',            // Gemini 2.5 Flash
+    'pro': 'gemini-3.1-pro-preview',           // Профессиональная текстовая модель
+    'nanobanana': 'gemini-3.1-flash-image',    // Модель для генерации и редактирования изображений
+    'nanobanana_pro': 'gemini-3.1-flash-image' // Версия Pro для продвинутой работы с графикой
+};
 
-        const config = {};
+async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeTypes, modelKey = 'flash', imageConfig }) {
+    try {
+        const resolvedModel = MODEL_MAPPING[modelKey] || MODEL_MAPPING['flash'];
 
-        // Настройка формата вывода изображения
-        if (aspectRatio || imageSize || mimeType) {
-            config.responseFormat = {
-                type: "image",
-                mimeType: mimeType,
-                aspectRatio: aspectRatio,
-                imageSize: imageSize
-            };
+        console.log(`⚙ Вызов метода для ключа [${modelKey}], маппинг на модель: "${resolvedModel}"`);
+
+        const safePrompt = prompt ? prompt.trim() : "";
+
+        // Универсальный сбор всех картинок (одиночный файл или альбом/пачка)
+        let images = [];
+        if (Array.isArray(fileBuffers) && fileBuffers.length > 0) {
+            images = fileBuffers.map((buf, idx) => ({
+                buffer: buf,
+                mimeType: Array.isArray(mimeTypes) ? (mimeTypes[idx] || mimeType || 'image/jpeg') : (mimeType || 'image/jpeg')
+            }));
+        } else if (fileBuffer && Buffer.isBuffer(fileBuffer) && fileBuffer.length > 0) {
+            images = [{ buffer: fileBuffer, mimeType: mimeType || 'image/jpeg' }];
         }
 
-        // Настройка уровня мышления (для Gemini 3.1 Flash / Flash Lite / Pro)
-        if (thinkingLevel) {
-            config.generationConfig = {
-                thinkingLevel: thinkingLevel
-            };
-        }
+        console.log(`📸 Всего картинок передано в обработку: ${images.length}`);
 
-        if (tools) {
-            config.tools = tools;
-        }
+        // Формируем части запроса для Google API (все картинки + текст)
+        let parts = [];
 
-        if (previousInteractionId) {
-            config.previousInteractionId = previousInteractionId;
-        }
-
-        try {
-            const interaction = await this.ai.interactions.create({
-                model: model,
-                input: input,
-                ...config
+        for (const img of images) {
+            parts.push({
+                inlineData: {
+                    data: img.buffer.toString("base64"),
+                    mimeType: img.mimeType || 'application/octet-stream'
+                }
             });
+        }
+        
+        const finalPrompt = safePrompt || (images.length > 0 ? "Обработай эти изображения (сшей, замени фон или выполни задачу)" : "Создай креативное изображение высокого качества");
+        parts.push({ text: finalPrompt });
 
-            let imageBuffer = null;
-            let textOutput = interaction.output_text || "";
-            let steps = interaction.steps || [];
+        console.log(`💬 Отправка запроса в модель: ${resolvedModel}...`);
+        
+        const generatePayload = {
+            model: resolvedModel,
+            contents: [
+                {
+                    role: 'user',
+                    parts: parts
+                }
+            ],
+        };
 
-            // Проверяем прямое свойство output_image
-            if (interaction.output_image && interaction.output_image.data) {
-                imageBuffer = Buffer.from(interaction.output_image.data, 'base64');
-            } else {
-                // Если вывод содержит чередующиеся блоки или сложную структуру
-                for (const step of steps) {
-                    if (step.type === "model_output" && step.content) {
-                        for (const block of step.content) {
-                            if (block.type === "image" && block.data) {
-                                imageBuffer = Buffer.from(block.data, 'base64');
-                            }
-                            if (block.type === "text" && block.text) {
-                                textOutput += "\n" + block.text;
-                            }
-                        }
-                    }
+        if (imageConfig) {
+            generatePayload.config = imageConfig;
+        }
+
+        const generatePromise = ai.models.generateContent(generatePayload);
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Превышено время ожидания ответа от Google AI (120с)')), 120000)
+        );
+
+        const response = await Promise.race([generatePromise, timeoutPromise]);
+
+        // Обработка ответа (текст или сгенерированная/измененная картинка)
+        let textOutput = response.text || '';
+        let imageBuffer = null;
+
+        if (response.candidates && response.candidates[0]?.content?.parts) {
+            for (const part of response.candidates[0].content.parts) {
+                if (part.text && !textOutput) {
+                    textOutput += part.text;
+                }
+                if (part.inlineData && part.inlineData.data) {
+                    imageBuffer = Buffer.from(part.inlineData.data, 'base64');
+                } else if (part.inline_data && part.inline_data.data) {
+                    imageBuffer = Buffer.from(part.inline_data.data, 'base64');
                 }
             }
+        }
 
-            if (!imageBuffer) {
-                throw new Error("Интерфейс Google не вернул данные изображения в ответе.");
-            }
-
+        if (imageBuffer) {
             return {
-                success: true,
-                imageBuffer,
-                textOutput,
-                interactionId: interaction.id,
-                steps
-            };
-
-        } catch (error) {
-            console.error("Ошибка при генерации изображения через Nano Banana API:", error);
-            return {
-                success: false,
-                error: error.message || error
+                type: 'image',
+                buffer: imageBuffer,
+                text: textOutput || '🎨 Изображение успешно создано!'
             };
         }
+
+        return {
+            type: 'text',
+            text: textOutput || response.text || "Готово!"
+        };
+
+    } catch (error) {
+        console.error(`❌ Ошибка в плагине [модель: ${modelKey}]:`, error.message || error);
+        throw new Error(error.message || 'Неизвестная ошибка связи с нейросетью');
     }
 }
+
+module.exports = { processRequest };
