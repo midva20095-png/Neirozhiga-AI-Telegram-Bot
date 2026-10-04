@@ -3,62 +3,49 @@ const { GoogleGenAI } = require('@google/genai');
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 /**
- * СЛОВАРЬ МОДЕЛЕЙ И ВОЗМОЖНОСТЕЙ
+- СЛОВАРЬ МОДЕЛЕЙ И ВОЗМОЖНОСТЕЙ
+- Используем правильные имена моделей из актуальной документации Google
  */
 const MODEL_MAPPING = {
-    'flash': 'gemini-3.8-flash',               
-    'flash_25': 'gemini-2.5-flash',            
-    'pro': 'gemini-3.1-pro-preview',                   
-    'nanobanana': 'gemini-3.1-flash-image',    
-    'nanobanana_pro': 'gemini-3.1-flash-image' 
+    'flash': 'gemini-3.8-flash',               // Gemini 3.8 Flash
+    'flash_25': 'gemini-2.5-flash',            // Добавлена модель Gemini 2.5 Flash
+    'pro': 'gemini-3.1-pro-preview',                   // Профессиональная текстовая модель
+    'nanobanana': 'gemini-3.1-flash-image',    // Модель для генерации и редактирования изображений
+    'nanobanana_pro': 'gemini-3.1-flash-image' // Версия Pro для продвинутой работы с графикой
 };
 
-async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeTypes, modelKey = 'flash', imageConfig }) {
+async function processRequest({ prompt, fileBuffer, mimeType, modelKey = 'flash', imageConfig }) {
     try {
         const resolvedModel = MODEL_MAPPING[modelKey] || MODEL_MAPPING['flash'];
 
         console.log(`⚙️ Вызов метода для ключа [${modelKey}], маппинг на модель: "${resolvedModel}"`);
 
+        // Очищаем промпт от лишних пробелов, чтобы избежать ошибок с "пустым" текстом
         const safePrompt = prompt ? prompt.trim() : "";
 
-        // Универсальный сбор всех картинок (поддерживаем fileBuffers, массивы в fileBuffer, или одиночный буфер)
-        let images = [];
-        
-        if (Array.isArray(fileBuffers) && fileBuffers.length > 0) {
-            images = fileBuffers.map((buf, idx) => ({
-                buffer: buf,
-                mimeType: Array.isArray(mimeTypes) ? (mimeTypes[idx] || mimeType || 'image/jpeg') : (mimeType || 'image/jpeg')
-            }));
-        } else if (Array.isArray(fileBuffer) && fileBuffer.length > 0) {
-            images = fileBuffer.map((buf, idx) => ({
-                buffer: buf,
-                mimeType: Array.isArray(mimeType) ? (mimeType[idx] || 'image/jpeg') : (mimeType || 'image/jpeg')
-            }));
-        } else if (fileBuffer && Buffer.isBuffer(fileBuffer) && fileBuffer.length > 0) {
-            images = [{ buffer: fileBuffer, mimeType: mimeType || 'image/jpeg' }];
-        }
-
-        console.log(`📸 Всего картинок распознано для запроса: ${images.length}`);
-
-        // --- БЛОК 1: ГЕНЕРАЦИЯ И РЕДАКТИРОВАНИЕ ИЗОБРАЖЕНИЙ (interactions) ---
+        // --- БЛОК 1: ГЕНЕРАЦИЯ И РЕДАКТИРОВАНИЕ ИЗОБРАЖЕНИЙ (по новому стандарту interactions) ---
         if (modelKey === 'nanobanana' || modelKey === 'nanobanana_pro') {
             console.log(`🎨 Запуск генерации/обработки изображений через interactions с промптом: "${safePrompt}"`);
             
+            // Формируем входные данные в соответствии с документацией Google
             let inputPayload = [];
 
-            for (const img of images) {
+            // Если пользователь прикрепил картинку (режим редактирования / image-to-image)
+            if (fileBuffer && Buffer.isBuffer(fileBuffer) && fileBuffer.length > 0) {
                 inputPayload.push({
                     type: "image",
-                    data: img.buffer.toString("base64"),
-                    mime_type: img.mimeType || "image/png"
+                    data: fileBuffer.toString("base64"),
+                    mime_type: mimeType || "image/png"
                 });
             }
 
+            // Добавляем текстовый промпт (с защитой от пустого текста)
             inputPayload.push({
                 type: "text",
                 text: safePrompt || "Создай креативное изображение высокого качества"
             });
 
+            // Конфигурация запроса
             const interactionPayload = {
                 model: resolvedModel,
                 input: inputPayload.length === 1 ? inputPayload[0].text : inputPayload,
@@ -68,6 +55,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
                 interactionPayload.config = imageConfig;
             }
 
+            // Оборачиваем в промис с увеличенным до 120с таймаутом для генерации графики
             const imageGenerationPromise = ai.interactions.create(interactionPayload);
             const timeoutPromise = new Promise((_, reject) => 
                 setTimeout(() => reject(new Error('Превышено время ожидания генерации изображения (120с)')), 120000)
@@ -75,9 +63,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
 
             const interaction = await Promise.race([imageGenerationPromise, timeoutPromise]);
 
-            // Логируем ответ для полной прозрачности
-            console.log("🔍 Ответ от Google API (interactions):", JSON.stringify(interaction, null, 2));
-
+            // Проверяем наличие выходного изображения в ответе
             if (interaction && interaction.output_image && interaction.output_image.data) {
                 const base64Image = interaction.output_image.data;
                 return {
@@ -93,18 +79,19 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
         // --- БЛОК 2: СТАНДАРТНЫЙ ТЕКСТ / МУЛЬТИМОДАЛ (Flash, Pro) ---
         let contents = [];
 
-        for (const img of images) {
+        if (fileBuffer && Buffer.isBuffer(fileBuffer) && fileBuffer.length > 0) {
             contents.push({
                 inlineData: {
-                    data: img.buffer.toString("base64"),
-                    mimeType: img.mimeType || 'application/octet-stream'
+                    data: fileBuffer.toString("base64"),
+                    mimeType: mimeType || 'application/octet-stream'
                 }
             });
         }
         
+        // Защита от пустого текста при отправке картинки без подписи
         contents.push(safePrompt || "Опиши, что находится на этом изображении");
 
-        console.log(`💬 Отправка запроса в модель: ${resolvedModel}...`);
+        console.log(`💬 Отправка текстового запроса в модель: ${resolvedModel}...`);
         
         const generatePromise = ai.models.generateContent({
             model: resolvedModel,
