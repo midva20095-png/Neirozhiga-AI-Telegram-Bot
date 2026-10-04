@@ -32,16 +32,18 @@ const MODEL_COSTS = {
     'flash': 1,
     'flash_25': 1,
     'pro': 3,
-    'nanobanana': 5,
-    'nanobanana_pro': 8
+    'nanobanana': 4,
+    'nanobanana_pro': 12,
+    'veo': 300
 };
 
 const MODEL_NAMES = {
     'flash': 'Gemini 3.8 Flash ⚡️',
     'flash_25': 'Gemini 2.5 Flash 🚀',
-    'pro': 'Gemini 2.5 Pro 🧠',
+    'pro': 'Gemini 3.1 Pro 🧠',
     'nanobanana': 'Nano Banana 2 (Картинки) 🎨',
-    'nanobanana_pro': 'Nano Banana Pro (HQ) 💎'
+    'nanobanana_pro': 'Nano Banana Pro (HQ) 💎',
+    'veo': 'Veo 3.1 Видео (VIP) 🎬'
 };
 
 const CREDIT_PACKAGES = {
@@ -230,7 +232,6 @@ async function startBot(app) {
         await ctx.reply(`💳 *Выберите пакет пополнения:*`, { parse_mode: 'Markdown', ...Markup.inlineKeyboard(keyboard) });
     });
 
-    // Обработка кнопки техподдержки
     bot.hears('💬 Поддержка', async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.set(ctx.from.id, true);
@@ -456,6 +457,11 @@ async function startBot(app) {
                     { source: aiResult.buffer }, 
                     { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
                 );
+            } else if (aiResult.type === 'video' && aiResult.buffer) {
+                await ctx.replyWithVideo(
+                    { source: aiResult.buffer },
+                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
+                );
             } else {
                 const fullText = `${aiResult.text}\n\n───────────────\n💳 *Списано:* ${cost} кр. | *Остаток:* ${remainingBalance} кр.`;
                 try {
@@ -467,7 +473,7 @@ async function startBot(app) {
         } catch (error) {
             console.error('❌ Ошибка генерации (скрыта от пользователя):', error.message);
             try { await ctx.deleteMessage(waitMessage.message_id); } catch(e){}
-            await ctx.reply(`⚠️ Не удалось получить ответ от нейросети. Пожалуйста, попробуйте сформулировать запрос иначе или повторить чуть позже. Ваши кредиты не были списаны.`);
+            await ctx.reply(`⚠️️ Не удалось получить ответ от нейросети. Попробуйте сформулировать запрос иначе или повторить чуть позже. Ваши кредиты не были списаны.`);
         } finally {
             userProcessing.delete(userId);
         }
@@ -548,6 +554,11 @@ async function startBot(app) {
                     { source: aiResult.buffer }, 
                     { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
                 );
+            } else if (aiResult.type === 'video' && aiResult.buffer) {
+                await firstCtx.replyWithVideo(
+                    { source: aiResult.buffer },
+                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
+                );
             } else {
                 const fullText = `${aiResult.text}\n\n───────────────\n💳 *Списано:* ${cost} кр. | *Остаток:* ${remainingBalance} кр.`;
                 try {
@@ -559,7 +570,7 @@ async function startBot(app) {
         } catch (error) {
             console.error('❌ Ошибка генерации (скрыта от пользователя):', error.message);
             try { await firstCtx.deleteMessage(waitMessage.message_id); } catch(e){}
-            await firstCtx.reply(`⚠️ Не удалось получить ответ от нейросети. Пожалуйста, попробуйте сформулировать запрос иначе или повторить чуть позже. Ваши кредиты не были списаны.`);
+            await firstCtx.reply(`⚠️ Не удалось получить ответ от нейросети. Попробуйте сформулировать запрос иначе или повторить чуть позже. Ваши кредиты не были списаны.`);
         } finally {
             userProcessing.delete(userId);
         }
