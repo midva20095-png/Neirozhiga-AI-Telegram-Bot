@@ -21,33 +21,39 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
 
         const safePrompt = prompt ? prompt.trim() : "";
 
-        // Универсально собираем все картинки (поддерживаем как одиночный файл, так и массив из альбомов)
+        // Универсальный сбор всех картинок (поддерживаем fileBuffers, массивы в fileBuffer, или одиночный буфер)
         let images = [];
+        
         if (Array.isArray(fileBuffers) && fileBuffers.length > 0) {
             images = fileBuffers.map((buf, idx) => ({
                 buffer: buf,
                 mimeType: Array.isArray(mimeTypes) ? (mimeTypes[idx] || mimeType || 'image/jpeg') : (mimeType || 'image/jpeg')
             }));
+        } else if (Array.isArray(fileBuffer) && fileBuffer.length > 0) {
+            images = fileBuffer.map((buf, idx) => ({
+                buffer: buf,
+                mimeType: Array.isArray(mimeType) ? (mimeType[idx] || 'image/jpeg') : (mimeType || 'image/jpeg')
+            }));
         } else if (fileBuffer && Buffer.isBuffer(fileBuffer) && fileBuffer.length > 0) {
             images = [{ buffer: fileBuffer, mimeType: mimeType || 'image/jpeg' }];
         }
 
+        console.log(`📸 Всего картинок распознано для запроса: ${images.length}`);
+
         // --- БЛОК 1: ГЕНЕРАЦИЯ И РЕДАКТИРОВАНИЕ ИЗОБРАЖЕНИЙ (interactions) ---
         if (modelKey === 'nanobanana' || modelKey === 'nanobanana_pro') {
-            console.log(`🎨 Запуск генерации/обработки изображений через interactions с промптом: "${safePrompt}". Всего картинок передано: ${images.length}`);
+            console.log(`🎨 Запуск генерации/обработки изображений через interactions с промптом: "${safePrompt}"`);
             
             let inputPayload = [];
 
-            // Добавляем ВСЕ картинки в массив входных данных для Google
             for (const img of images) {
                 inputPayload.push({
                     type: "image",
                     data: img.buffer.toString("base64"),
-                    mime_type: img.mimeType
+                    mime_type: img.mimeType || "image/png"
                 });
             }
 
-            // Добавляем текстовый промпт
             inputPayload.push({
                 type: "text",
                 text: safePrompt || "Создай креативное изображение высокого качества"
@@ -55,7 +61,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
 
             const interactionPayload = {
                 model: resolvedModel,
-                input: inputPayload,
+                input: inputPayload.length === 1 ? inputPayload[0].text : inputPayload,
             };
 
             if (imageConfig) {
@@ -68,6 +74,9 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
             );
 
             const interaction = await Promise.race([imageGenerationPromise, timeoutPromise]);
+
+            // Логируем ответ для полной прозрачности
+            console.log("🔍 Ответ от Google API (interactions):", JSON.stringify(interaction, null, 2));
 
             if (interaction && interaction.output_image && interaction.output_image.data) {
                 const base64Image = interaction.output_image.data;
@@ -88,14 +97,14 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
             contents.push({
                 inlineData: {
                     data: img.buffer.toString("base64"),
-                    mimeType: img.mimeType
+                    mimeType: img.mimeType || 'application/octet-stream'
                 }
             });
         }
         
         contents.push(safePrompt || "Опиши, что находится на этом изображении");
 
-        console.log(`💬 Отправка мультимодального запроса в модель: ${resolvedModel} (картинок: ${images.length})...`);
+        console.log(`💬 Отправка запроса в модель: ${resolvedModel}...`);
         
         const generatePromise = ai.models.generateContent({
             model: resolvedModel,
