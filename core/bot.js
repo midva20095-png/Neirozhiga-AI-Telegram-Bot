@@ -7,17 +7,14 @@ try {
     aiPlugin = require('../ai_plugins/google_gemini_plugin');
     console.log('✅ Плагин Google Gemini успешно подключен к ядру');
 } catch (e) {
-    console.warn('⚠ Внимание: Плагин ИИ не найден!', e.message);
+    console.warn('⚠️️ Внимание: Плагин ИИ не найден!', e.message);
 }
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const userActiveMode = new Map();
 const userAwaitingEmail = new Map();
-const userAwaitingSupport = new Map(); 
+const userAwaitingSupport = new Map(); // Состояние для техподдержки
 const userProcessing = new Set(); // 🛡️ Защита от спама
-
-// 📦 Буфер для сбора альбомов (мульти-фото)
-const mediaGroupBuffers = new Map();
 
 const ADMIN_ID = '5943987954'; // Твой ID администратора
 
@@ -232,6 +229,7 @@ async function startBot(app) {
         await ctx.reply(`💳 *Выберите пакет пополнения:*`, { parse_mode: 'Markdown', ...Markup.inlineKeyboard(keyboard) });
     });
 
+    // Обработка кнопки техподдержки
     bot.hears('💬 Поддержка', async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.set(ctx.from.id, true);
@@ -311,80 +309,6 @@ async function startBot(app) {
         );
     });
 
-    // ОСНОВНАЯ ФУНКЦИЯ ОБРАБОТКИ ЗАПРОСА К ИИ
-    const executeAiPipeline = async (ctx, prompt, photosList) => {
-        const userId = ctx.from.id;
-        const currentMode = userActiveMode.get(userId) || 'flash';
-        const cost = MODEL_COSTS[currentMode] || 1;
-
-        const balance = await getUserBalance(userId);
-        if (balance < cost) {
-            userProcessing.delete(userId);
-            return ctx.reply(
-                `❌ *Недостаточно кредитов!*\nВаш баланс: ${balance} кр. Требуется: ${cost} кр.`,
-                {
-                    parse_mode: 'Markdown',
-                    ...Markup.inlineKeyboard([[Markup.button.callback('💰 Пополнить баланс', 'action_buy_credits')]])
-                }
-            );
-        }
-
-        if (!aiPlugin) {
-            userProcessing.delete(userId);
-            return ctx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
-        }
-
-        // Сообщаем Telegram статус "печатает/отправляет фото", чтобы соединение не обрывалось по таймауту
-        try {
-            await ctx.sendChatAction(photosList.length > 0 ? 'upload_photo' : 'typing');
-        } catch(e) {}
-
-        const waitMessage = await ctx.reply(`⏳ *Генерирую ответ...* Пожалуйста, подождите.`, { parse_mode: 'Markdown' });
-
-        try {
-            let fileBuffers = [];
-            for (const p of photosList) {
-                const largestPhoto = p[p.length - 1];
-                const buf = await getTelegramFileBuffer(ctx, largestPhoto.file_id);
-                if (buf) fileBuffers.push(buf);
-            }
-
-            const aiResult = await aiPlugin.processRequest({
-                prompt, 
-                fileBuffer: fileBuffers.length === 1 ? fileBuffers[0] : null,
-                fileBuffers: fileBuffers.length > 1 ? fileBuffers : undefined,
-                mimeType: 'image/jpeg', 
-                modelKey: currentMode
-            });
-
-            await deductUserBalance(userId, cost);
-            const remainingBalance = await getUserBalance(userId);
-
-            try { await ctx.deleteMessage(waitMessage.message_id); } catch(e){}
-
-            if (aiResult.type === 'image' && aiResult.buffer) {
-                await ctx.replyWithPhoto(
-                    { source: aiResult.buffer }, 
-                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
-                );
-            } else {
-                const fullText = `${aiResult.text}\n\n───────────────\n💳 *Списано:* ${cost} кр. | *Остаток:* ${remainingBalance} кр.`;
-                try {
-                    await ctx.reply(fullText, { parse_mode: 'Markdown' });
-                } catch (mdErr) {
-                    await ctx.reply(fullText);
-                }
-            }
-        } catch (error) {
-            console.error('❌ Ошибка генерации:', error.message);
-            try { await ctx.deleteMessage(waitMessage.message_id); } catch(e){}
-            await ctx.reply(`⚠️️ Не удалось получить ответ от нейросети. Пожалуйста, попробуйте сформулировать запрос иначе или повторить чуть позже. Ваши кредиты не были списаны.`);
-        } finally {
-            // ВАЖНО: Всегда очищаем флаг блокировки, чтобы пользователь мог писать дальше
-            userProcessing.delete(userId);
-        }
-    };
-
     const handleAiRequest = async (ctx) => {
         const text = ctx.message?.text || '';
         if (['🤖 Выбрать модель ИИ', '💳 Мой баланс', '💰 Пополнить баланс', '💬 Поддержка', 'ℹ Справка', 'ℹ️ Справка', '🤖 Модели', '💳 Баланс'].includes(text)) {
@@ -394,7 +318,7 @@ async function startBot(app) {
         const userId = ctx.from.id;
         const stringUserId = String(userId);
 
-        // 1. ОТВЕТ АДМИНИСТРАТОРА
+        // 1. ОТВЕТ АДМИНИСТРАТОРА ПОЛЬЗОВАТЕЛЮ ЧЕРЕЗ REPLY
         if (stringUserId === ADMIN_ID && ctx.message.reply_to_message) {
             const repliedText = ctx.message.reply_to_message.text || '';
             const match = repliedText.match(/ID:\s*`?(\d+)`?/);
@@ -414,9 +338,10 @@ async function startBot(app) {
             }
         }
 
-        // 2. ПОДДЕРЖКА
+        // 2. ОБРАЩЕНИЕ ПОЛЬЗОВАТЕЛЯ В ПОДДЕРЖКУ
         if (userAwaitingSupport.has(userId)) {
             userAwaitingSupport.delete(userId);
+
             const supportMsg = 
                 `🚨 *Новое обращение в поддержку!*\n\n` +
                 `👤 От: ${ctx.from.first_name || 'Пользователь'} (ID: \`${userId}\`)\n` +
@@ -426,14 +351,15 @@ async function startBot(app) {
                 await bot.telegram.sendMessage(ADMIN_ID, supportMsg, { parse_mode: 'Markdown' });
                 await ctx.reply('✅ Ваше сообщение отправлено в службу поддержки! Администратор ответит вам в ближайшее время.', { parse_mode: 'Markdown' });
             } catch (err) {
+                console.error('Ошибка отправки в поддержку:', err);
                 await ctx.reply('⚠️ Не удалось отправить сообщение в поддержку. Попробуйте позже.');
             }
             return;
         }
 
-        // 🛡️ ЖЕСТКАЯ ЗАЩИТА ОТ СПАМ-ПРОМПТОВ
+        // 🛡️ ЗАЩИТА ОТ СПАМА
         if (userProcessing.has(userId)) {
-            return ctx.reply('⏳ *Подождите...* Нейросеть еще отвечает на ваш предыдущий запрос. Отправка новых сообщений временно заблокирована до завершения генерации.', { parse_mode: 'Markdown' });
+            return ctx.reply('⏳ *Подождите...* Нейросеть еще отвечает на ваш предыдущий запрос. Пожалуйста, дождитесь завершения генерации.', { parse_mode: 'Markdown' });
         }
 
         if (userAwaitingEmail.has(userId)) {
@@ -477,48 +403,73 @@ async function startBot(app) {
         if (prompt.length > MAX_PROMPT_LENGTH) {
             return ctx.reply(
                 `⚠️ *Слишком длинный запрос!*\n\n` +
-                `Ваш текст содержит ${prompt.length} символов. Максимальный лимит — ${MAX_PROMPT_LENGTH} символов.`
+                `Ваш текст содержит ${prompt.length} символов. Максимальный лимит — ${MAX_PROMPT_LENGTH} символов.\n` +
+                `Пожалуйста, разделите ваш текст на несколько частей.`
             );
         }
 
-        // 📦 ОБРАБОТКА МУЛЬТИ-ФОТО / АЛЬБОМОВ
-        const mediaGroupId = ctx.message?.media_group_id;
-        const hasPhoto = ctx.message?.photo && ctx.message.photo.length > 0;
+        const currentMode = userActiveMode.get(userId) || 'flash';
+        const cost = MODEL_COSTS[currentMode] || 1;
 
-        if (mediaGroupId && hasPhoto) {
-            userProcessing.add(userId); 
-
-            if (!mediaGroupBuffers.has(mediaGroupId)) {
-                mediaGroupBuffers.set(mediaGroupId, {
-                    photos: [],
-                    prompt: prompt,
-                    ctx: ctx,
-                    timer: setTimeout(async () => {
-                        const groupData = mediaGroupBuffers.get(mediaGroupId);
-                        mediaGroupBuffers.delete(mediaGroupId);
-                        if (groupData) {
-                            await executeAiPipeline(groupData.ctx, groupData.prompt, groupData.photos);
-                        }
-                    }, 1200) 
-                });
-            }
-
-            const group = mediaGroupBuffers.get(mediaGroupId);
-            group.photos.push(ctx.message.photo);
-            if (prompt && !group.prompt) {
-                group.prompt = prompt; 
-            }
-            return;
+        const balance = await getUserBalance(userId);
+        if (balance < cost) {
+            return ctx.reply(
+                `❌ *Недостаточно кредитов!*\nВаш баланс: ${balance} кр. Требуется: ${cost} кр.`,
+                {
+                    parse_mode: 'Markdown',
+                    ...Markup.inlineKeyboard([[Markup.button.callback('💰 Пополнить баланс', 'action_buy_credits')]])
+                }
+            );
         }
 
-        // Одиночное фото или обычный текст
+        if (!aiPlugin) return ctx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
+
         userProcessing.add(userId);
-        let photosList = [];
-        if (hasPhoto) {
-            photosList.push(ctx.message.photo);
-        }
+        const waitMessage = await ctx.reply(`⏳ *Генерирую ответ...*`, { parse_mode: 'Markdown' });
 
-        await executeAiPipeline(ctx, prompt, photosList);
+        try {
+            let fileBuffers = [];
+            let mimeType = 'image/jpeg';
+
+            if (ctx.message?.photo && ctx.message.photo.length > 0) {
+                const largestPhoto = ctx.message.photo[ctx.message.photo.length - 1];
+                const buf = await getTelegramFileBuffer(ctx, largestPhoto.file_id);
+                if (buf) fileBuffers.push(buf);
+            }
+
+            const aiResult = await aiPlugin.processRequest({
+                prompt, 
+                fileBuffer: fileBuffers.length === 1 ? fileBuffers[0] : null,
+                fileBuffers: fileBuffers.length > 1 ? fileBuffers : undefined,
+                mimeType, 
+                modelKey: currentMode
+            });
+
+            await deductUserBalance(userId, cost);
+            const remainingBalance = await getUserBalance(userId);
+
+            try { await ctx.deleteMessage(waitMessage.message_id); } catch(e){}
+
+            if (aiResult.type === 'image' && aiResult.buffer) {
+                await ctx.replyWithPhoto(
+                    { source: aiResult.buffer }, 
+                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
+                );
+            } else {
+                const fullText = `${aiResult.text}\n\n───────────────\n💳 *Списано:* ${cost} кр. | *Остаток:* ${remainingBalance} кр.`;
+                try {
+                    await ctx.reply(fullText, { parse_mode: 'Markdown' });
+                } catch (mdErr) {
+                    await ctx.reply(fullText);
+                }
+            }
+        } catch (error) {
+            console.error('❌ Ошибка генерации (скрыта от пользователя):', error.message);
+            try { await ctx.deleteMessage(waitMessage.message_id); } catch(e){}
+            await ctx.reply(`⚠️ Не удалось получить ответ от нейросети. Пожалуйста, попробуйте сформулировать запрос иначе или повторить чуть позже. Ваши кредиты не были списаны.`);
+        } finally {
+            userProcessing.delete(userId);
+        }
     };
 
     bot.on('text', handleAiRequest);
