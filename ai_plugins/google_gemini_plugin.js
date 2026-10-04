@@ -1,118 +1,110 @@
-const { GoogleGenAI } = require('@google/genai');
+import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+export class GoogleGeminiImagePlugin {
+    constructor(apiKey) {
+        // Инициализация официального клиента @google/genai
+        this.ai = new GoogleGenAI({ apiKey: apiKey || process.env.GEMINI_API_KEY });
+    }
 
-/**
-- СЛОВАРЬ МОДЕЛЕЙ И ВОЗМОЖНОСТЕЙ
-- Используем правильные имена моделей из актуальной документации Google
- */
-const MODEL_MAPPING = {
-    'flash': 'gemini-3.8-flash',               // Gemini 3.8 Flash
-    'flash_25': 'gemini-2.5-flash',            // Добавлена модель Gemini 2.5 Flash
-    'pro': 'gemini-3.1-pro-preview',                   // Профессиональная текстовая модель
-    'nanobanana': 'gemini-3.1-flash-image',    // Модель для генерации и редактирования изображений
-    'nanobanana_pro': 'gemini-3.1-flash-image' // Версия Pro для продвинутой работы с графикой
-};
+    /**
+     * Универсальный метод генерации и редактирования изображений (Nano Banana / Gemini 3)
+     * @param {Object} options 
+     * @param {string} options.model - Модель ('gemini-3.1-flash-image', 'gemini-3.1-flash-lite-image', 'gemini-3-pro-image', 'gemini-2.5-flash-image')
+     * @param {string|Array} options.input - Текст запроса или массив частей (текст, картинки, видео)
+     * @param {string} [options.aspectRatio] - Соотношение сторон ("1:1", "16:9", "5:4", "4:1", "1:4", "8:1", "1:8")
+     * @param {string} [options.imageSize] - Размер изображения: "512px", "1K", "2K", "4K" (обязательно с заглавной 'K')
+     * @param {string} [options.mimeType] - MIME-тип ("image/jpeg", "image/png")
+     * @param {Array} [options.tools] - Инструменты (например, [{ type: "google_search" }])
+     * @param {string} [options.thinkingLevel] - Уровень размышлений ("minimal", "high")
+     * @param {string} [options.previousInteractionId] - ID предыдущего взаимодействия для многошагового редактирования
+     */
+    async generateImage(options) {
+        const {
+            model = "gemini-3.1-flash-image",
+            input,
+            aspectRatio = "1:1",
+            imageSize = "1K",
+            mimeType = "image/png",
+            tools,
+            thinkingLevel,
+            previousInteractionId
+        } = options;
 
-async function processRequest({ prompt, fileBuffer, mimeType, modelKey = 'flash', imageConfig }) {
-    try {
-        const resolvedModel = MODEL_MAPPING[modelKey] || MODEL_MAPPING['flash'];
+        const config = {};
 
-        console.log(`⚙️ Вызов метода для ключа [${modelKey}], маппинг на модель: "${resolvedModel}"`);
+        // Настройка формата вывода изображения
+        if (aspectRatio || imageSize || mimeType) {
+            config.responseFormat = {
+                type: "image",
+                mimeType: mimeType,
+                aspectRatio: aspectRatio,
+                imageSize: imageSize
+            };
+        }
 
-        // Очищаем промпт от лишних пробелов, чтобы избежать ошибок с "пустым" текстом
-        const safePrompt = prompt ? prompt.trim() : "";
+        // Настройка уровня мышления (для Gemini 3.1 Flash / Flash Lite / Pro)
+        if (thinkingLevel) {
+            config.generationConfig = {
+                thinkingLevel: thinkingLevel
+            };
+        }
 
-        // --- БЛОК 1: ГЕНЕРАЦИЯ И РЕДАКТИРОВАНИЕ ИЗОБРАЖЕНИЙ (по новому стандарту interactions) ---
-        if (modelKey === 'nanobanana' || modelKey === 'nanobanana_pro') {
-            console.log(`🎨 Запуск генерации/обработки изображений через interactions с промптом: "${safePrompt}"`);
-            
-            // Формируем входные данные в соответствии с документацией Google
-            let inputPayload = [];
+        if (tools) {
+            config.tools = tools;
+        }
 
-            // Если пользователь прикрепил картинку (режим редактирования / image-to-image)
-            if (fileBuffer && Buffer.isBuffer(fileBuffer) && fileBuffer.length > 0) {
-                inputPayload.push({
-                    type: "image",
-                    data: fileBuffer.toString("base64"),
-                    mime_type: mimeType || "image/png"
-                });
-            }
+        if (previousInteractionId) {
+            config.previousInteractionId = previousInteractionId;
+        }
 
-            // Добавляем текстовый промпт (с защитой от пустого текста)
-            inputPayload.push({
-                type: "text",
-                text: safePrompt || "Создай креативное изображение высокого качества"
+        try {
+            const interaction = await this.ai.interactions.create({
+                model: model,
+                input: input,
+                ...config
             });
 
-            // Конфигурация запроса
-            const interactionPayload = {
-                model: resolvedModel,
-                input: inputPayload.length === 1 ? inputPayload[0].text : inputPayload,
+            let imageBuffer = null;
+            let textOutput = interaction.output_text || "";
+            let steps = interaction.steps || [];
+
+            // Проверяем прямое свойство output_image
+            if (interaction.output_image && interaction.output_image.data) {
+                imageBuffer = Buffer.from(interaction.output_image.data, 'base64');
+            } else {
+                // Если вывод содержит чередующиеся блоки или сложную структуру
+                for (const step of steps) {
+                    if (step.type === "model_output" && step.content) {
+                        for (const block of step.content) {
+                            if (block.type === "image" && block.data) {
+                                imageBuffer = Buffer.from(block.data, 'base64');
+                            }
+                            if (block.type === "text" && block.text) {
+                                textOutput += "\n" + block.text;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!imageBuffer) {
+                throw new Error("Интерфейс Google не вернул данные изображения в ответе.");
+            }
+
+            return {
+                success: true,
+                imageBuffer,
+                textOutput,
+                interactionId: interaction.id,
+                steps
             };
 
-            if (imageConfig) {
-                interactionPayload.config = imageConfig;
-            }
-
-            // Оборачиваем в промис с увеличенным до 120с таймаутом для генерации графики
-            const imageGenerationPromise = ai.interactions.create(interactionPayload);
-            const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Превышено время ожидания генерации изображения (120с)')), 120000)
-            );
-
-            const interaction = await Promise.race([imageGenerationPromise, timeoutPromise]);
-
-            // Проверяем наличие выходного изображения в ответе
-            if (interaction && interaction.output_image && interaction.output_image.data) {
-                const base64Image = interaction.output_image.data;
-                return {
-                    type: 'image',
-                    buffer: Buffer.from(base64Image, 'base64'),
-                    text: '🎨 Изображение успешно создано!'
-                };
-            }
-            
-            throw new Error('Интерфейс Google не вернул данные изображения.');
+        } catch (error) {
+            console.error("Ошибка при генерации изображения через Nano Banana API:", error);
+            return {
+                success: false,
+                error: error.message || error
+            };
         }
-
-        // --- БЛОК 2: СТАНДАРТНЫЙ ТЕКСТ / МУЛЬТИМОДАЛ (Flash, Pro) ---
-        let contents = [];
-
-        if (fileBuffer && Buffer.isBuffer(fileBuffer) && fileBuffer.length > 0) {
-            contents.push({
-                inlineData: {
-                    data: fileBuffer.toString("base64"),
-                    mimeType: mimeType || 'application/octet-stream'
-                }
-            });
-        }
-        
-        // Защита от пустого текста при отправке картинки без подписи
-        contents.push(safePrompt || "Опиши, что находится на этом изображении");
-
-        console.log(`💬 Отправка текстового запроса в модель: ${resolvedModel}...`);
-        
-        const generatePromise = ai.models.generateContent({
-            model: resolvedModel,
-            contents: contents,
-        });
-
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Превышено время ожидания ответа от Google AI')), 30000)
-        );
-
-        const response = await Promise.race([generatePromise, timeoutPromise]);
-
-        return {
-            type: 'text',
-            text: response.text || "Готово!"
-        };
-
-    } catch (error) {
-        console.error(`❌ Ошибка в плагине [модель: ${modelKey}]:`, error.message || error);
-        throw new Error("⚠️ Ошибка связи с нейросетью Google: " + (error.message || 'Неизвестная ошибка'));
     }
 }
-
-module.exports = { processRequest };
