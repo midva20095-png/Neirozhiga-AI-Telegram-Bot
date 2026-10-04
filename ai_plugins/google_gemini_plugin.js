@@ -4,11 +4,11 @@ const axios = require('axios');
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 /**
- * ПОЛНЫЙ СЛОВАРЬ МОДЕЛЕЙ И ВОЗМОЖНОСТЕЙ
+ * АКТУАЛЬНЫЙ СЛОВАРЬ МОДЕЛЕЙ (БЕЗ УСТАРЕВШИХ 2.5)
  */
 const MODEL_MAPPING = {
     'flash': 'gemini-3.8-flash',               // Gemini 3.8 Flash (Текст)
-    'flash_25': 'gemini-2.5-flash',            // Gemini 2.5 Flash
+    'flash_25': 'gemini-3.8-flash',            // Перенаправляем старый flash_25 на актуальный 3.8
     'pro': 'gemini-3.1-pro-preview',           // Профессиональная текстовая модель
     'nanobanana': 'gemini-3.1-flash-image',    // Nano Banana 2 (Картинки)
     'nanobanana_pro': 'gemini-3-pro-image',    // Nano Banana Pro (HQ Картинки)
@@ -23,30 +23,42 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
 
         const safePrompt = prompt ? prompt.trim() : "";
 
-        // 🎬 ОБРАБОТКА ГЕНЕРАЦИИ ВИДЕО ЧЕРЕЗ VEO 3.1
+        // 🎬 ОБРАБОТКА ГЕНЕРАЦИИ ВИДЕО ЧЕРЕЗ VEO 3.1 (С УЧЕТОМ НОВОГО SDK)
         if (modelKey === 'veo') {
-            console.log(`🎬 Запуск асинхронной генерации видео через Veo 3.1 (${resolvedModel})...`);
+            console.log(`🎬 Запуск генерации видео через Veo 3.1 (${resolvedModel})...`);
             
             const videoPayload = {
                 model: resolvedModel,
-                prompt: safePrompt || "Cinematic video generation with sound and high detail"
+                prompt: safePrompt || "Cinematic video generation with motion and sound"
             };
 
+            // Если прикреплена картинка для оживления (Image-to-Video) через параметр source
+            let targetBuffer = fileBuffer || (Array.isArray(fileBuffers) && fileBuffers.length > 0 ? fileBuffers[0] : null);
+            if (targetBuffer && Buffer.isBuffer(targetBuffer)) {
+                videoPayload.source = {
+                    image: {
+                        imageBytes: targetBuffer.toString("base64"),
+                        mimeType: mimeType || 'image/jpeg'
+                    }
+                };
+                console.log(`🖼 К запросу Veo прикреплено стартовое изображение через source`);
+            }
+
             let operation = await ai.models.generateVideos(videoPayload);
-            console.log(`⏳ Задача генерации видео создана. Operation ID: ${operation.name}. Ожидаем готовности...`);
+            console.log(`⏳ Задача генерации видео создана. Operation ID: ${operation.name || operation.id}. Ожидаем готовности...`);
 
             let attempts = 0;
-            const maxAttempts = 60; // Максимум 10 минут ожидания
+            const maxAttempts = 60; // До 10 минут ожидания рендеринга
 
             while (!operation.done && attempts < maxAttempts) {
                 await new Promise(resolve => setTimeout(resolve, 10000));
                 attempts++;
                 
                 try {
-                    if (typeof ai.operations?.getVideosOperation === 'function') {
-                        operation = await ai.operations.getVideosOperation({ name: operation.name });
-                    } else if (typeof ai.operations?.get === 'function') {
-                        operation = await ai.operations.get({ name: operation.name });
+                    const opName = operation.name || operation.id;
+                    if (opName) {
+                        // Безопасный опрос через актуальный метод клиента
+                        operation = await ai.operations.get({ name: opName });
                     }
                     console.log(`⏱ Проверка статуса видео (попытка ${attempts}): done = ${operation.done}`);
                 } catch (pollErr) {
@@ -58,7 +70,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
                 throw new Error('Превышено время ожидания генерации видео Veo (таймаут)');
             }
 
-            const generatedVideo = operation.response?.generated_videos?.[0];
+            const generatedVideo = operation.response?.generated_videos?.[0] || operation.result?.generated_videos?.[0];
             if (!generatedVideo || !generatedVideo.video) {
                 throw new Error('Не удалось получить сгенерированное видео от Veo');
             }
@@ -87,7 +99,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
             return {
                 type: 'video',
                 buffer: videoBuffer,
-                text: safePrompt || '🎬 Видео успешно сгенерировано с помощью Veo 3.1!'
+                text: safePrompt || '🎬 Видео успешно создано с помощью Veo 3.1!'
             };
         }
 
