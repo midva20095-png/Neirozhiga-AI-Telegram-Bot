@@ -72,14 +72,14 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
 
         const response = await Promise.race([generatePromise, timeoutPromise]);
 
-        // Обработка ответа (текст или сгенерированная/измененная картинка)
-        let textOutput = response.text || '';
+        // Безопасный парсинг ответа без вызова response.text (убираем предупреждение SDK)
+        let textOutput = '';
         let imageBuffer = null;
 
         if (response.candidates && response.candidates[0]?.content?.parts) {
             for (const part of response.candidates[0].content.parts) {
-                if (part.text && !textOutput) {
-                    textOutput += part.text;
+                if (part.text) {
+                    textOutput += (textOutput ? '\n' : '') + part.text;
                 }
                 if (part.inlineData && part.inlineData.data) {
                     imageBuffer = Buffer.from(part.inlineData.data, 'base64');
@@ -87,6 +87,8 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
                     imageBuffer = Buffer.from(part.inline_data.data, 'base64');
                 }
             }
+        } else if (response.text) {
+            textOutput = response.text;
         }
 
         if (imageBuffer) {
@@ -99,7 +101,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
 
         return {
             type: 'text',
-            text: textOutput || response.text || "Готово!"
+            text: textOutput || "Готово!"
         };
 
     } catch (error) {
