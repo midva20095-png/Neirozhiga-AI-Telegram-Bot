@@ -10,14 +10,6 @@ try {
     console.warn('⚠ Внимание: Плагин ИИ не найден!', e.message);
 }
 
-let klingPlugin = null;
-try {
-    klingPlugin = require('../ai_plugins/kling_plugin');
-    console.log('✅ Плагин Kling AI успешно подключен к ядру');
-} catch (e) {
-    console.warn('⚠ Внимание: Плагин Kling не найден!', e.message);
-}
-
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const userActiveMode = new Map();
 const userAwaitingEmail = new Map();
@@ -42,7 +34,6 @@ const MODEL_COSTS = {
     'pro': 3,
     'nanobanana': 4,
     'nanobanana_pro': 12,
-    'kling': 40,
     'veo': 300
 };
 
@@ -52,8 +43,7 @@ const MODEL_NAMES = {
     'pro': 'Gemini 3.1 Pro 🧠',
     'nanobanana': 'Nano Banana 2 (Картинки) 🎨',
     'nanobanana_pro': 'Nano Banana Pro (HQ) 💎',
-    'kling': 'Kling AI Видео (Быстро и дешево) 🎬',
-    'veo': 'Veo 3.1 Видео (VIP) 💎'
+    'veo': 'Veo 3.1 Видео (VIP) 🎬'
 };
 
 const CREDIT_PACKAGES = {
@@ -437,56 +427,28 @@ async function startBot(app) {
             );
         }
 
+        if (!aiPlugin) return ctx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
+
         userProcessing.add(userId);
-        let waitText = '⏳ *Генерирую ответ...*';
-        if (currentMode === 'veo') waitText = '⏳ *Генерирую видео через Veo...* (Около 1–2 минут)';
-        if (currentMode === 'kling') waitText = '⏳ *Генерирую видео через Kling AI...* (Быстро и качественно, ждем результат)';
-        
-        const waitMessage = await ctx.reply(waitText, { parse_mode: 'Markdown' });
+        const waitMessage = await ctx.reply(`⏳ *Генерирую ответ...* ${currentMode === 'veo' ? '(Видео создается около 1–2 минут, пожалуйста, подождите)' : ''}`, { parse_mode: 'Markdown' });
 
         try {
-            let aiResult;
+            let fileBuffers = [];
+            let mimeType = 'image/jpeg';
 
-            if (currentMode === 'kling') {
-                if (!klingPlugin) throw new Error('Плагин Kling AI не подключен');
-                
-                let imageUrl = null;
-                if (ctx.message?.photo && ctx.message.photo.length > 0) {
-                    const largestPhoto = ctx.message.photo[ctx.message.photo.length - 1];
-                    const file = await ctx.telegram.getFile(largestPhoto.file_id);
-                    imageUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
-                }
-
-                const videoUrl = await klingPlugin.generateKlingVideo(prompt || 'Анимируй это изображение', imageUrl, { 
-                    duration: 5, 
-                    resolution: '720p' 
-                });
-                
-                const videoResp = await axios.get(videoUrl, { responseType: 'arraybuffer' });
-                aiResult = {
-                    type: 'video',
-                    buffer: Buffer.from(videoResp.data),
-                    text: '✨ Видео сгенерировано через Kling AI'
-                };
-            } else {
-                if (!aiPlugin) throw new Error('Сервис временно недоступен');
-                let fileBuffers = [];
-                let mimeType = 'image/jpeg';
-
-                if (ctx.message?.photo && ctx.message.photo.length > 0) {
-                    const largestPhoto = ctx.message.photo[ctx.message.photo.length - 1];
-                    const buf = await getTelegramFileBuffer(ctx, largestPhoto.file_id);
-                    if (buf) fileBuffers.push(buf);
-                }
-
-                aiResult = await aiPlugin.processRequest({
-                    prompt, 
-                    fileBuffer: fileBuffers.length === 1 ? fileBuffers[0] : null,
-                    fileBuffers: fileBuffers.length > 1 ? fileBuffers : undefined,
-                    mimeType, 
-                    modelKey: currentMode
-                });
+            if (ctx.message?.photo && ctx.message.photo.length > 0) {
+                const largestPhoto = ctx.message.photo[ctx.message.photo.length - 1];
+                const buf = await getTelegramFileBuffer(ctx, largestPhoto.file_id);
+                if (buf) fileBuffers.push(buf);
             }
+
+            const aiResult = await aiPlugin.processRequest({
+                prompt, 
+                fileBuffer: fileBuffers.length === 1 ? fileBuffers[0] : null,
+                fileBuffers: fileBuffers.length > 1 ? fileBuffers : undefined,
+                mimeType, 
+                modelKey: currentMode
+            });
 
             await deductUserBalance(userId, cost);
             const remainingBalance = await getUserBalance(userId);
@@ -514,7 +476,7 @@ async function startBot(app) {
         } catch (error) {
             console.error('❌ Ошибка генерации (скрыта от пользователя):', error.message || error);
             try { await ctx.deleteMessage(waitMessage.message_id); } catch(e){}
-            await ctx.reply(`⚠️ Не удалось получить ответ от нейросети. Ваши кредиты не были списаны.`);
+            await ctx.reply(`⚠️ Не удалось получить ответ от нейросети. Проверьте лимиты в Google AI Studio. Ваши кредиты не были списаны.`);
         } finally {
             userProcessing.delete(userId);
         }
@@ -550,57 +512,30 @@ async function startBot(app) {
             );
         }
 
+        if (!aiPlugin) return firstCtx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
+
         userProcessing.add(userId);
         const waitMessage = await firstCtx.reply(`⏳ *Генерирую ответ...*`, { parse_mode: 'Markdown' });
 
         try {
-            let aiResult;
+            let fileBuffers = [];
+            let mimeType = 'image/jpeg';
 
-            if (currentMode === 'kling') {
-                if (!klingPlugin) throw new Error('Плагин Kling AI не подключен');
-                
-                let imageUrl = null;
-                for (const c of contexts) {
-                    if (c.message?.photo && c.message.photo.length > 0) {
-                        const largestPhoto = c.message.photo[c.message.photo.length - 1];
-                        const file = await firstCtx.telegram.getFile(largestPhoto.file_id);
-                        imageUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
-                        break;
-                    }
+            for (const c of contexts) {
+                if (c.message?.photo && c.message.photo.length > 0) {
+                    const largestPhoto = c.message.photo[c.message.photo.length - 1];
+                    const buf = await getTelegramFileBuffer(firstCtx, largestPhoto.file_id);
+                    if (buf) fileBuffers.push(buf);
                 }
-
-                const videoUrl = await klingPlugin.generateKlingVideo(prompt || 'Анимируй это изображение', imageUrl, { 
-                    duration: 5, 
-                    resolution: '720p' 
-                });
-                
-                const videoResp = await axios.get(videoUrl, { responseType: 'arraybuffer' });
-                aiResult = {
-                    type: 'video',
-                    buffer: Buffer.from(videoResp.data),
-                    text: '✨ Видео сгенерировано через Kling AI'
-                };
-            } else {
-                if (!aiPlugin) throw new Error('Сервис временно недоступен');
-                let fileBuffers = [];
-                let mimeType = 'image/jpeg';
-
-                for (const c of contexts) {
-                    if (c.message?.photo && c.message.photo.length > 0) {
-                        const largestPhoto = c.message.photo[c.message.photo.length - 1];
-                        const buf = await getTelegramFileBuffer(firstCtx, largestPhoto.file_id);
-                        if (buf) fileBuffers.push(buf);
-                    }
-                }
-
-                aiResult = await aiPlugin.processRequest({
-                    prompt, 
-                    fileBuffer: fileBuffers.length === 1 ? fileBuffers[0] : null,
-                    fileBuffers: fileBuffers.length > 1 ? fileBuffers : undefined,
-                    mimeType, 
-                    modelKey: currentMode
-                });
             }
+
+            const aiResult = await aiPlugin.processRequest({
+                prompt, 
+                fileBuffer: fileBuffers.length === 1 ? fileBuffers[0] : null,
+                fileBuffers: fileBuffers.length > 1 ? fileBuffers : undefined,
+                mimeType, 
+                modelKey: currentMode
+            });
 
             await deductUserBalance(userId, cost);
             const remainingBalance = await getUserBalance(userId);
