@@ -131,6 +131,29 @@ async function getTelegramFileBuffer(ctx, fileId) {
     }
 }
 
+// Функция для обработки и нормализации ответа плагина (парсинг JSON-строк с картинками)
+function normalizeAiResult(aiResult) {
+    if (!aiResult) return { type: 'text', text: 'Пустой ответ от нейросети' };
+
+    let text = aiResult.text || '';
+    let type = aiResult.type || 'text';
+    let buffer = aiResult.buffer;
+    let url = aiResult.url;
+
+    if (typeof text === 'string' && text.trim().startsWith('{')) {
+        try {
+            const parsed = JSON.parse(text);
+            if (parsed.type) type = parsed.type;
+            if (parsed.urls) url = parsed.urls;
+            if (parsed.url) url = parsed.url;
+            text = '';
+        } catch (e) {
+            // Обычный текст, если распарсить не удалось
+        }
+    }
+    return { type, text, buffer, url };
+}
+
 function getModelSelectionKeyboard(currentMode) {
     const textModels = ['flash', 'flash_25', 'pro', 'deepseek-v3.2', 'qwen3.5-9b'];
     const imageModels = ['nanobanana', 'nanobanana_pro', 'gpt-image-2-5'];
@@ -138,21 +161,18 @@ function getModelSelectionKeyboard(currentMode) {
 
     const buttons = [];
 
-    // Текстовые модели
     buttons.push([Markup.button.callback('💬 ─── ТЕКСТОВЫЕ МОДЕЛИ ───', 'noop_text')]);
     textModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
         buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
     });
 
-    // Генерация картинок
     buttons.push([Markup.button.callback('🎨 ─── ГЕНЕРАЦИЯ КАРТИНОК ───', 'noop_image')]);
     imageModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
         buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
     });
 
-    // Видео
     buttons.push([Markup.button.callback('🎬 ─── ВИДЕО ───', 'noop_video')]);
     videoModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
@@ -310,7 +330,6 @@ async function startBot(app) {
         await ctx.editMessageText('❌ Обращение в поддержку отменено.');
     });
 
-    // Обработка кликов по неактивным заголовкам разделов в меню моделей
     bot.action(/^noop_.+$/, async (ctx) => {
         await ctx.answerCbQuery('Это название раздела, выберите модель ниже 👇');
     });
@@ -506,7 +525,7 @@ async function startBot(app) {
                 if (buf) fileBuffers.push(buf);
             }
 
-            const aiResult = await activePlugin.processRequest({
+            const rawAiResult = await activePlugin.processRequest({
                 prompt, 
                 fileBuffer: fileBuffers.length === 1 ? fileBuffers[0] : null,
                 fileBuffers: fileBuffers.length > 1 ? fileBuffers : undefined,
@@ -514,30 +533,27 @@ async function startBot(app) {
                 modelKey: currentMode
             });
 
-            // Убираем технический мусор / ссылки на картинки из текста ответа плагина
-            if (aiResult && aiResult.text) {
-                if (aiResult.text.includes('"type":') || aiResult.text.includes('"urls":') || aiResult.text.trim().startsWith('{')) {
-                    aiResult.text = '';
-                }
-            }
+            const aiResult = normalizeAiResult(rawAiResult);
 
             await deductUserBalance(userId, cost);
             const remainingBalance = await getUserBalance(userId);
 
             try { await ctx.deleteMessage(waitMessage.message_id); } catch(e){}
 
-            if (aiResult.type === 'image' && aiResult.buffer) {
+            if (aiResult.type === 'image' && (aiResult.buffer || aiResult.url)) {
+                const photoSource = aiResult.buffer ? { source: aiResult.buffer } : aiResult.url;
                 await ctx.replyWithPhoto(
-                    { source: aiResult.buffer }, 
+                    photoSource, 
                     { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
                 );
-            } else if (aiResult.type === 'video' && aiResult.buffer) {
+            } else if (aiResult.type === 'video' && (aiResult.buffer || aiResult.url)) {
+                const videoSource = aiResult.buffer ? { source: aiResult.buffer } : aiResult.url;
                 await ctx.replyWithVideo(
-                    { source: aiResult.buffer },
+                    videoSource,
                     { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
                 );
             } else {
-                const fullText = `${aiResult.text}\n\n───────────────\n💳 *Списано:* ${cost} кр. | *Остаток:* ${remainingBalance} кр.`;
+                const fullText = `${aiResult.text || ''}\n\n───────────────\n💳 *Списано:* ${cost} кр. | *Остаток:* ${remainingBalance} кр.`;
                 try {
                     await ctx.reply(fullText, { parse_mode: 'Markdown' });
                 } catch (mdErr) {
@@ -604,7 +620,7 @@ async function startBot(app) {
                 }
             }
 
-            const aiResult = await activePlugin.processRequest({
+            const rawAiResult = await activePlugin.processRequest({
                 prompt, 
                 fileBuffer: fileBuffers.length === 1 ? fileBuffers[0] : null,
                 fileBuffers: fileBuffers.length > 1 ? fileBuffers : undefined,
@@ -612,30 +628,27 @@ async function startBot(app) {
                 modelKey: currentMode
             });
 
-            // Убираем технический мусор / ссылки на картинки из текста ответа плагина
-            if (aiResult && aiResult.text) {
-                if (aiResult.text.includes('"type":') || aiResult.text.includes('"urls":') || aiResult.text.trim().startsWith('{')) {
-                    aiResult.text = '';
-                }
-            }
+            const aiResult = normalizeAiResult(rawAiResult);
 
             await deductUserBalance(userId, cost);
             const remainingBalance = await getUserBalance(userId);
 
             try { await firstCtx.deleteMessage(waitMessage.message_id); } catch(e){}
 
-            if (aiResult.type === 'image' && aiResult.buffer) {
+            if (aiResult.type === 'image' && (aiResult.buffer || aiResult.url)) {
+                const photoSource = aiResult.buffer ? { source: aiResult.buffer } : aiResult.url;
                 await firstCtx.replyWithPhoto(
-                    { source: aiResult.buffer }, 
+                    photoSource, 
                     { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
                 );
-            } else if (aiResult.type === 'video' && aiResult.buffer) {
+            } else if (aiResult.type === 'video' && (aiResult.buffer || aiResult.url)) {
+                const videoSource = aiResult.buffer ? { source: aiResult.buffer } : aiResult.url;
                 await firstCtx.replyWithVideo(
-                    { source: aiResult.buffer },
+                    videoSource,
                     { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
                 );
             } else {
-                const fullText = `${aiResult.text}\n\n───────────────\n💳 *Списано:* ${cost} кр. | *Остаток:* ${remainingBalance} кр.`;
+                const fullText = `${aiResult.text || ''}\n\n───────────────\n💳 *Списано:* ${cost} кр. | *Остаток:* ${remainingBalance} кр.`;
                 try {
                     await firstCtx.reply(fullText, { parse_mode: 'Markdown' });
                 } catch (mdErr) {
