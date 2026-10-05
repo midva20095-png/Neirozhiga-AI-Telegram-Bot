@@ -11,22 +11,18 @@ async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
     const duration = options.duration || '5';
     const resolution = options.resolution || '720p';
 
-    // Раздельные эндпоинты согласно официальной документации Kling
-    let endpoint = imageUrl ? '/v1/videos/image-to-video' : '/v1/videos/text-to-video';
-    
+    // Используем правильные пути без дефисов (text2video / image2video)
+    const endpoint = imageUrl ? '/v1/videos/image2video' : '/v1/videos/text2video';
+
     let payload = {
-        model_name: 'kling-v1', // или kling-v3 в зависимости от вашего доступа
+        model_name: options.model_name || 'kling-v1',
         prompt: prompt,
         duration: String(duration),
         resolution: resolution
     };
 
-    // Если передана картинка, формируем правильную структуру contents с first_frame
+    // Если передана картинка для Image-to-Video
     if (imageUrl) {
-        payload.contents = [
-            { type: 'text', text: prompt },
-            { type: 'first_frame', image_url: imageUrl }
-        ];
         payload.image = imageUrl;
         payload.first_frame = imageUrl;
     }
@@ -36,6 +32,7 @@ async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
     try {
         console.log(`🎬 Отправка запроса в Kling API (${fullUrl})...`);
         
+        // 1. Создание задачи
         const createResp = await axios.post(fullUrl, payload, {
             headers: {
                 'Authorization': `Bearer ${apiKey}`,
@@ -50,6 +47,7 @@ async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
 
         console.log(`⏳ Задача создана (Task ID: ${taskId}). Ждем готовности видео...`);
 
+        // 2. Опрос статуса задачи (Polling)
         let videoUrl = null;
         const maxAttempts = 40; 
         const interval = 5000; 
