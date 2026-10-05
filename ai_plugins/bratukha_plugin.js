@@ -87,6 +87,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         const fileUrls = allBuffers.map(buf => `data:${mimeType || 'image/jpeg'};base64,${buf.toString('base64')}`);
         inputData.images = fileUrls;
         inputData.image_url = fileUrls[0];
+        console.log(`📎 [Bratukha Operations] Передано входных картинок: ${fileUrls.length}`);
     }
 
     const payload = {
@@ -130,21 +131,34 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                 if (opData.status === 'completed') {
                     const result = opData.result;
                     
-                    if (result && result.images && result.images.length > 0) {
-                        const mediaUrl = result.images[0];
+                    // Универсальный сбор медиа (поддерживаем массивы и одиночные ссылки разных форматов)
+                    const images = result?.images || (result?.image_url ? [result.image_url] : []) || (result?.image ? [result.image] : []);
+                    const videos = result?.videos || (result?.video_url ? [result.video_url] : []) || (result?.video ? [result.video] : []);
+                    const singleUrl = result?.url || (typeof result === 'string' && result.startsWith('http') ? result : null);
+
+                    if (images.length > 0) {
+                        const mediaUrl = images[0];
                         const mediaRes = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
                         return {
                             type: 'image',
                             buffer: Buffer.from(mediaRes.data),
                             text: `✨ Сгенерировано через ${toolSlug}`
                         };
-                    } else if (result && result.videos && result.videos.length > 0) {
-                        const mediaUrl = result.videos[0];
+                    } else if (videos.length > 0) {
+                        const mediaUrl = videos[0];
                         const mediaRes = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
                         return {
                             type: 'video',
                             buffer: Buffer.from(mediaRes.data),
                             text: `🎬 Сгенерировано через ${toolSlug}`
+                        };
+                    } else if (singleUrl) {
+                        const mediaRes = await axios.get(singleUrl, { responseType: 'arraybuffer' });
+                        const isVideo = singleUrl.endsWith('.mp4') || singleUrl.includes('video');
+                        return {
+                            type: isVideo ? 'video' : 'image',
+                            buffer: Buffer.from(mediaRes.data),
+                            text: `${isVideo ? '🎬' : '✨'} Сгенерировано через ${toolSlug}`
                         };
                     } else if (result && (result.text || typeof result === 'string')) {
                         return {
@@ -154,7 +168,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                     } else {
                         return {
                             type: 'text',
-                            text: JSON.stringify(result, null, 2)
+                            text: typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result || 'Готово')
                         };
                     }
                 } else if (opData.status === 'failed') {

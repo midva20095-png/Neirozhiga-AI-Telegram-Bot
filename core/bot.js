@@ -46,15 +46,12 @@ bot.use(async (ctx, next) => {
 });
 
 const MODEL_COSTS = {
-    // Гугловские (не трогаем)
     'flash': 1,
     'flash_25': 1,
     'pro': 3,
     'nanobanana': 4,
     'nanobanana_pro': 12,
     'veo': 300,
-
-    // Новые модели от Братухи (с учетом коэффициента x2.5)
     'gpt-image-2-5': 25,
     'deepseek-v3.2': 15,
     'qwen3.5-9b': 10,
@@ -62,15 +59,12 @@ const MODEL_COSTS = {
 };
 
 const MODEL_NAMES = {
-    // Гугловские (не трогаем)
     'flash': 'Gemini 3.8 Flash ⚡️',
     'flash_25': 'Gemini 2.5 Flash 🚀',
     'pro': 'Gemini 3.1 Pro 🧠',
     'nanobanana': 'Nano Banana 2 (Картинки) 🎨',
     'nanobanana_pro': 'Nano Banana Pro (HQ) 💎',
     'veo': 'Veo 3.1 Видео (VIP) 🎬',
-
-    // Новые модели от Братухи
     'gpt-image-2-5': 'GPT Image 2.5 🎨',
     'deepseek-v3.2': 'DeepSeek V3.2 🤖',
     'qwen3.5-9b': 'Qwen 3.5 9B 💬',
