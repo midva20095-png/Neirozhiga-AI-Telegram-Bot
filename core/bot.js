@@ -132,10 +132,33 @@ async function getTelegramFileBuffer(ctx, fileId) {
 }
 
 function getModelSelectionKeyboard(currentMode) {
-    const buttons = Object.keys(MODEL_NAMES).map(key => {
+    const textModels = ['flash', 'flash_25', 'pro', 'deepseek-v3.2', 'qwen3.5-9b'];
+    const imageModels = ['nanobanana', 'nanobanana_pro', 'gpt-image-2-5'];
+    const videoModels = ['veo'];
+
+    const buttons = [];
+
+    // Текстовые модели
+    buttons.push([Markup.button.callback('💬 ─── ТЕКСТОВЫЕ МОДЕЛИ ───', 'noop_text')]);
+    textModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
-        return [Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)];
+        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
     });
+
+    // Генерация картинок
+    buttons.push([Markup.button.callback('🎨 ─── ГЕНЕРАЦИЯ КАРТИНОК ───', 'noop_image')]);
+    imageModels.forEach(key => {
+        const isSelected = key === currentMode ? '✅ ' : '';
+        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
+    });
+
+    // Видео
+    buttons.push([Markup.button.callback('🎬 ─── ВИДЕО ───', 'noop_video')]);
+    videoModels.forEach(key => {
+        const isSelected = key === currentMode ? '✅ ' : '';
+        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
+    });
+
     return Markup.inlineKeyboard(buttons);
 }
 
@@ -287,6 +310,11 @@ async function startBot(app) {
         await ctx.editMessageText('❌ Обращение в поддержку отменено.');
     });
 
+    // Обработка кликов по неактивным заголовкам разделов в меню моделей
+    bot.action(/^noop_.+$/, async (ctx) => {
+        await ctx.answerCbQuery('Это название раздела, выберите модель ниже 👇');
+    });
+
     bot.hears(['ℹ Справка', 'ℹ️ Справка'], async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
@@ -344,7 +372,7 @@ async function startBot(app) {
         userAwaitingEmail.set(ctx.from.id, pkgKey);
 
         await ctx.reply(
-            `✉️️ Вы выбрали: *${pkg.title}* (${pkg.price} ₽).\n\n` +
+            `✉ Вы выбрали: *${pkg.title}* (${pkg.price} ₽).\n\n` +
             `Пожалуйста, введите ваш *Email* в ответном сообщении. На него будет отправлен электронный чек после оплаты:`,
             { parse_mode: 'Markdown' }
         );
@@ -603,7 +631,7 @@ async function startBot(app) {
         } catch (error) {
             console.error('❌ Ошибка генерации (скрыта от пользователя):', error.message || error);
             try { await firstCtx.deleteMessage(waitMessage.message_id); } catch(e){}
-            await firstCtx.reply(`⚠️️ Не удалось получить ответ от нейросети. Ваши кредиты не были списаны.`);
+            await firstCtx.reply(`⚠ Не удалось получить ответ от нейросети. Ваши кредиты не были списаны.`);
         } finally {
             userProcessing.delete(userId);
         }
