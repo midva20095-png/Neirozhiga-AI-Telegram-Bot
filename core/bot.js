@@ -12,7 +12,7 @@ try {
 
 let klingPlugin = null;
 try {
-    klingPlugin = require('./ai_plugins/kling_plugin');
+    klingPlugin = require('../ai_plugins/kling_plugin');
     console.log('✅ Плагин Kling AI успешно подключен к ядру');
 } catch (e) {
     console.warn('⚠ Внимание: Плагин Kling не найден!', e.message);
