@@ -60,7 +60,7 @@ async function generateKlingVideo(prompt, options = {}) {
         return videoUrl;
 
     } catch (error) {
-        console.error('Ошибка Kling API:', error.response?.data || error.message);
+        console.error('Ошибка Kling API (полный ответ):', JSON.stringify(error.response?.data || error.message, null, 2));
         throw error;
     }
 }
