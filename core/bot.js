@@ -2,12 +2,29 @@ require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 
-let aiPlugin = null;
+// Подключаем оба плагина
+let googlePlugin = null;
 try {
-    aiPlugin = require('../ai_plugins/google_gemini_plugin');
+    googlePlugin = require('../ai_plugins/google_gemini_plugin');
     console.log('✅ Плагин Google Gemini успешно подключен к ядру');
 } catch (e) {
-    console.warn('⚠ Внимание: Плагин ИИ не найден!', e.message);
+    console.warn('⚠ Внимание: Плагин Google Gemini не найден!', e.message);
+}
+
+let bratukhaPlugin = null;
+try {
+    bratukhaPlugin = require('../ai_plugins/bratukha_plugin');
+    console.log('✅ Плагин Братуха успешно подключен к ядру');
+} catch (e) {
+    console.warn('⚠ Внимание: Плагин Братуха не найден!', e.message);
+}
+
+// Роутер для выбора нужного плагина в зависимости от модели
+function getAiPlugin(modelKey) {
+    if (['flash', 'flash_25', 'pro', 'nanobanana', 'nanobanana_pro', 'veo'].includes(modelKey)) {
+        return googlePlugin;
+    }
+    return bratukhaPlugin;
 }
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -29,21 +46,35 @@ bot.use(async (ctx, next) => {
 });
 
 const MODEL_COSTS = {
+    // Гугловские (не трогаем)
     'flash': 1,
     'flash_25': 1,
     'pro': 3,
     'nanobanana': 4,
     'nanobanana_pro': 12,
-    'veo': 300
+    'veo': 300,
+
+    // Новые модели от Братухи (с учетом коэффициента x2.5)
+    'gpt-image-2-5': 25,
+    'deepseek-v3-2': 15,
+    'qwen-3-5-9b': 10,
+    'grok-video': 50
 };
 
 const MODEL_NAMES = {
+    // Гугловские (не трогаем)
     'flash': 'Gemini 3.8 Flash ⚡️',
     'flash_25': 'Gemini 2.5 Flash 🚀',
     'pro': 'Gemini 3.1 Pro 🧠',
     'nanobanana': 'Nano Banana 2 (Картинки) 🎨',
     'nanobanana_pro': 'Nano Banana Pro (HQ) 💎',
-    'veo': 'Veo 3.1 Видео (VIP) 🎬'
+    'veo': 'Veo 3.1 Видео (VIP) 🎬',
+
+    // Новые модели от Братухи
+    'gpt-image-2-5': 'GPT Image 2.5 🎨',
+    'deepseek-v3-2': 'DeepSeek V3.2 🤖',
+    'qwen-3-5-9b': 'Qwen 3.5 9B 💬',
+    'grok-video': 'Grok Video 🎥'
 };
 
 const CREDIT_PACKAGES = {
@@ -427,10 +458,11 @@ async function startBot(app) {
             );
         }
 
-        if (!aiPlugin) return ctx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
+        const activePlugin = getAiPlugin(currentMode);
+        if (!activePlugin) return ctx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
 
         userProcessing.add(userId);
-        const waitMessage = await ctx.reply(`⏳ *Генерирую ответ...* ${currentMode === 'veo' ? '(Видео создается около 1–2 минут, пожалуйста, подождите)' : ''}`, { parse_mode: 'Markdown' });
+        const waitMessage = await ctx.reply(`⏳ *Генерирую ответ...* ${currentMode === 'veo' || currentMode === 'grok-video' ? '(Видео создается около 1–2 минут, пожалуйста, подождите)' : ''}`, { parse_mode: 'Markdown' });
 
         try {
             let fileBuffers = [];
@@ -442,7 +474,7 @@ async function startBot(app) {
                 if (buf) fileBuffers.push(buf);
             }
 
-            const aiResult = await aiPlugin.processRequest({
+            const aiResult = await activePlugin.processRequest({
                 prompt, 
                 fileBuffer: fileBuffers.length === 1 ? fileBuffers[0] : null,
                 fileBuffers: fileBuffers.length > 1 ? fileBuffers : undefined,
@@ -476,7 +508,7 @@ async function startBot(app) {
         } catch (error) {
             console.error('❌ Ошибка генерации (скрыта от пользователя):', error.message || error);
             try { await ctx.deleteMessage(waitMessage.message_id); } catch(e){}
-            await ctx.reply(`⚠️ Не удалось получить ответ от нейросети. Проверьте лимиты в Google AI Studio. Ваши кредиты не были списаны.`);
+            await ctx.reply(`⚠️ Не удалось получить ответ от нейросети. Ваши кредиты не были списаны.`);
         } finally {
             userProcessing.delete(userId);
         }
@@ -512,7 +544,8 @@ async function startBot(app) {
             );
         }
 
-        if (!aiPlugin) return firstCtx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
+        const activePlugin = getAiPlugin(currentMode);
+        if (!activePlugin) return firstCtx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
 
         userProcessing.add(userId);
         const waitMessage = await firstCtx.reply(`⏳ *Генерирую ответ...*`, { parse_mode: 'Markdown' });
@@ -529,7 +562,7 @@ async function startBot(app) {
                 }
             }
 
-            const aiResult = await aiPlugin.processRequest({
+            const aiResult = await activePlugin.processRequest({
                 prompt, 
                 fileBuffer: fileBuffers.length === 1 ? fileBuffers[0] : null,
                 fileBuffers: fileBuffers.length > 1 ? fileBuffers : undefined,
