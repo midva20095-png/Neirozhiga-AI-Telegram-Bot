@@ -23,7 +23,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
     if (toolSlug === 'qwen-3-5-9b') toolSlug = 'qwen3.5-9b';
     if (toolSlug === 'deepseek-v3-2') toolSlug = 'deepseek-v3.2';
 
-    // 1. Текстовые модели (OpenAI-совместимый эндпоинт)
+    // 1. Обработка текстовых моделей (OpenAI-совместимый эндпоинт)
     if (TEXT_MODELS.includes(toolSlug)) {
         console.log(`💬 [Bratukha Chat] Запрос к текстовой модели: ${toolSlug}`);
 
@@ -67,7 +67,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         }
     }
 
-    // 2. Генеративные операции (/operations) для видео и медиа
+    // 2. Обработка генеративных операций (/operations) для медиа и видео
     const inputData = {
         prompt: prompt || 'Generate content'
     };
@@ -81,15 +81,16 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
     if (allBuffers.length > 0) {
         const base64Data = allBuffers[0].toString('base64');
         const dataUri = `data:${mimeType || 'image/jpeg'};base64,${base64Data}`;
+        const dataUriList = [dataUri];
         
-        // Передаем все возможные ключи и форматы, включая требуемое русское поле
-        inputData.images = [dataUri];
+        // Передаем все варианты полей, причем «Изображения» строго в виде массива
+        inputData.images = dataUriList;
         inputData.image = dataUri;
         inputData.image_url = dataUri;
-        inputData.Изображения = dataUri; // Передаем строкой, которую требует валидатор
-        inputData.Изображения_arr = [dataUri];
+        inputData.Изображения = dataUriList; // Обязательный массив для валидатора Братухи
+        inputData.Изображение = dataUri;     
         
-        console.log(`📎 [Bratukha Operations] Картинка успешно прикреплена, размер: ${allBuffers[0].length} байт`);
+        console.log(`📎 [Bratukha Operations] Картинка успешно прикреплена в виде массива, размер: ${allBuffers[0].length} байт`);
     } else {
         console.log(`⚠️ [Bratukha Operations] Внимание: запрос идет без изображений!`);
     }
