@@ -56,8 +56,8 @@ const MODEL_COSTS = {
 
     // Новые модели от Братухи (с учетом коэффициента x2.5)
     'gpt-image-2-5': 25,
-    'deepseek-v3-2': 15,
-    'qwen-3-5-9b': 10,
+    'deepseek-v3.2': 15,
+    'qwen3.5-9b': 10,
     'grok-video': 50
 };
 
@@ -72,8 +72,8 @@ const MODEL_NAMES = {
 
     // Новые модели от Братухи
     'gpt-image-2-5': 'GPT Image 2.5 🎨',
-    'deepseek-v3-2': 'DeepSeek V3.2 🤖',
-    'qwen-3-5-9b': 'Qwen 3.5 9B 💬',
+    'deepseek-v3.2': 'DeepSeek V3.2 🤖',
+    'qwen3.5-9b': 'Qwen 3.5 9B 💬',
     'grok-video': 'Grok Video 🎥'
 };
 
@@ -313,7 +313,10 @@ async function startBot(app) {
 
     bot.action(/^set_model_(.+)$/, async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
-        const selectedModel = ctx.match[1];
+        let selectedModel = ctx.match[1];
+        if (selectedModel === 'qwen-3-5-9b') selectedModel = 'qwen3.5-9b';
+        if (selectedModel === 'deepseek-v3-2') selectedModel = 'deepseek-v3.2';
+
         if (MODEL_NAMES[selectedModel]) {
             userActiveMode.set(ctx.from.id, selectedModel);
             await ctx.answerCbQuery(`Выбрано: ${MODEL_NAMES[selectedModel]}`);
@@ -444,7 +447,10 @@ async function startBot(app) {
             );
         }
 
-        const currentMode = userActiveMode.get(userId) || 'flash';
+        let currentMode = userActiveMode.get(userId) || 'flash';
+        if (currentMode === 'qwen-3-5-9b') currentMode = 'qwen3.5-9b';
+        if (currentMode === 'deepseek-v3-2') currentMode = 'deepseek-v3.2';
+
         const cost = MODEL_COSTS[currentMode] || 1;
 
         const balance = await getUserBalance(userId);
@@ -530,7 +536,10 @@ async function startBot(app) {
             }
         }
 
-        const currentMode = userActiveMode.get(userId) || 'flash';
+        let currentMode = userActiveMode.get(userId) || 'flash';
+        if (currentMode === 'qwen-3-5-9b') currentMode = 'qwen3.5-9b';
+        if (currentMode === 'deepseek-v3-2') currentMode = 'deepseek-v3.2';
+
         const cost = MODEL_COSTS[currentMode] || 1;
 
         const balance = await getUserBalance(userId);

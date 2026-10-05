@@ -2,7 +2,7 @@ const axios = require('axios');
 
 const BRATUKHA_API_URL = 'https://bratuha.ru/api/v1';
 
-// Полный список текстовых моделей каталога Братухи (OpenAI-совместимый эндпоинт /chat/completions)
+// Список текстовых моделей (OpenAI-совместимый эндпоинт /chat/completions)
 const TEXT_MODELS = [
     'gpt-6-astra', 'gpt-6-sol', 'gpt-5.6-terra', 'claude-fable-5.1', 
     'claude-opus-5-5', 'kimi-k3', 'gemini-3.8-flash', 'qwen3.8-max', 
@@ -16,18 +16,21 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         throw new Error('❌ BRATUKHA_API_KEY не задан в переменных окружения');
     }
 
-    const toolSlug = modelKey;
+    let toolSlug = modelKey;
     if (!toolSlug) {
         throw new Error('❌ Не указан slug модели для Братухи');
     }
 
-    // 1. Если это текстовая модель — идем в OpenAI-совместимый /chat/completions
+    // Нормализуем имя модели (убираем дефисы в версиях, если пришли из старых кнопок)
+    if (toolSlug === 'qwen-3-5-9b') toolSlug = 'qwen3.5-9b';
+    if (toolSlug === 'deepseek-v3-2') toolSlug = 'deepseek-v3.2';
+
+    // 1. Если это текстовая модель — отправляем в /chat/completions
     if (TEXT_MODELS.includes(toolSlug)) {
         console.log(`💬 [Bratukha Chat] Запрос к текстовой модели: ${toolSlug}`);
 
         const messages = [{ role: 'user', content: prompt || '' }];
 
-        // Поддержка vision для моделей, принимающих картинки
         const allBuffers = [];
         if (fileBuffer) allBuffers.push(fileBuffer);
         if (fileBuffers && Array.isArray(fileBuffers)) allBuffers.push(...fileBuffers);
@@ -68,7 +71,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         }
     }
 
-    // 2. Иначе используем асинхронный эндпоинт операций (/operations) для генерации картинок, видео и т.д.
+    // 2. Иначе — асинхронный эндпоинт операций (/operations) для медиа и видео
     const inputData = {};
     if (prompt) {
         inputData.prompt = prompt;
