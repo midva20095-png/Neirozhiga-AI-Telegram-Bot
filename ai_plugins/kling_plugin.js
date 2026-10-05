@@ -11,7 +11,7 @@ async function generateKlingVideo(prompt, options = {}) {
     try {
         const response = await axios.post(`${BASE_URL}/v1/videos/text2video`, {
             prompt: prompt,
-            model_name: options.model_name || 'kling-v1',
+            model_name: options.model_name || 'kling-3.0-turbo',
             duration: options.duration || '5',
             aspect_ratio: options.aspect_ratio || '16:9'
         }, {
