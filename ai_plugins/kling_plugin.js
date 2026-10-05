@@ -2,7 +2,7 @@ const axios = require('axios');
 const jwt = require('jsonwebtoken');
 
 /**
- * Генерация временного JWT для Kling API
+ * Генерация временного JWT для Kling API (если используются AK/SK)
  */
 function generateKlingJwt(accessKey, secretKey) {
     const payload = {
@@ -21,13 +21,15 @@ function generateKlingJwt(accessKey, secretKey) {
 }
 
 async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
-    // Берём пары ключей из .env
-    const accessKey = process.env.KLING_AK || process.env.KLING_ACCESS_KEY;
-    const secretKey = process.env.KLING_SK || process.env.KLING_SECRET_KEY;
     const baseUrl = 'https://api-singapore.klingai.com';
 
-    if (!accessKey || !secretKey) {
-        throw new Error('Не заданы KLING_AK и KLING_SK в переменных окружения');
+    // Поддерживаем все варианты ключей, чтобы не было ошибок
+    const apiKey = process.env.KLING_API_KEY;
+    const accessKey = process.env.KLING_AK || process.env.KLING_ACCESS_KEY;
+    const secretKey = process.env.KLING_SK || process.env.KLING_SECRET_KEY;
+
+    if (!apiKey && (!accessKey || !secretKey)) {
+        throw new Error('Не заданы ключи доступа (KLING_API_KEY или папка KLING_AK/KLING_SK) в переменных окружения');
     }
 
     const duration = options.duration || '5';
@@ -35,7 +37,7 @@ async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
     const endpoint = `/v1/videos/${typePath}`;
 
     let payload = {
-        model_name: options.model_name || 'kling-v1',
+        model_name: options.model_name || 'kling-v1.5', // Исправлено на актуальную модель v1.5
         prompt: prompt,
         duration: String(duration),
         mode: options.mode || 'std'
@@ -50,8 +52,13 @@ async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
     try {
         console.log(`🎬 Отправка запроса в Kling API (${fullUrl})...`);
         
-        // 1. Создание задачи с JWT авторизацией
-        const token = generateKlingJwt(accessKey, secretKey);
+        // Определяем тип авторизации (Bearer по API Key или JWT через AK/SK)
+        let token;
+        if (apiKey) {
+            token = apiKey;
+        } else {
+            token = generateKlingJwt(accessKey, secretKey);
+        }
 
         const createResp = await axios.post(fullUrl, payload, {
             headers: {
@@ -80,11 +87,10 @@ async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
             await new Promise(resolve => setTimeout(resolve, interval));
 
             try {
-                // В Kling API статус запрашивается по адресу: /v1/videos/{text2video|image2video}/{taskId}
                 const statusUrl = `${baseUrl}/v1/videos/${typePath}/${taskId}`;
                 
-                // Обновляем токен на случай долгого ожидания
-                const pollToken = generateKlingJwt(accessKey, secretKey);
+                // Обновляем токен при необходимости
+                let pollToken = apiKey ? apiKey : generateKlingJwt(accessKey, secretKey);
 
                 const statusResp = await axios.get(statusUrl, {
                     headers: {
