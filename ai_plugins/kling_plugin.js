@@ -2,35 +2,41 @@ const axios = require('axios');
 
 async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
     const apiKey = process.env.KLING_API_KEY;
-    const baseUrl = process.env.KLING_API_URL || 'https://api.klingai.com';
+    const baseUrl = 'https://api-singapore.klingai.com';
 
     if (!apiKey) {
         throw new Error('KLING_API_KEY не задан в переменных окружения');
     }
 
-    const duration = options.duration || 5;
+    const duration = options.duration || '5';
     const resolution = options.resolution || '720p';
 
-    // Единый эндпоинт для шлюзов (можно переопределить через KLING_ENDPOINT в .env при необходимости)
-    const endpoint = process.env.KLING_ENDPOINT || '/v1/videos';
-
+    // Раздельные эндпоинты согласно официальной документации Kling
+    let endpoint = imageUrl ? '/v1/videos/image-to-video' : '/v1/videos/text-to-video';
+    
     let payload = {
+        model_name: 'kling-v1', // или kling-v3 в зависимости от вашего доступа
         prompt: prompt,
         duration: String(duration),
         resolution: resolution
     };
 
-    // Если передана картинка, отправляем её в оба возможных поля шлюза
+    // Если передана картинка, формируем правильную структуру contents с first_frame
     if (imageUrl) {
+        payload.contents = [
+            { type: 'text', text: prompt },
+            { type: 'first_frame', image_url: imageUrl }
+        ];
         payload.image = imageUrl;
         payload.first_frame = imageUrl;
     }
 
+    const fullUrl = `${baseUrl}${endpoint}`;
+
     try {
-        console.log(`🎬 Отправка запроса в Kling (${baseUrl}${endpoint})...`);
+        console.log(`🎬 Отправка запроса в Kling API (${fullUrl})...`);
         
-        // 1. Создаем задачу на генерацию
-        const createResp = await axios.post(`${baseUrl}${endpoint}`, payload, {
+        const createResp = await axios.post(fullUrl, payload, {
             headers: {
                 'Authorization': `Bearer ${apiKey}`,
                 'Content-Type': 'application/json'
@@ -44,7 +50,6 @@ async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
 
         console.log(`⏳ Задача создана (Task ID: ${taskId}). Ждем готовности видео...`);
 
-        // 2. Опрашиваем статус задачи (polling)
         let videoUrl = null;
         const maxAttempts = 40; 
         const interval = 5000; 
@@ -53,8 +58,8 @@ async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
             await new Promise(resolve => setTimeout(resolve, interval));
 
             try {
-                // Запрос статуса (обычно /v1/videos/{taskId})
-                const statusResp = await axios.get(`${baseUrl}${endpoint}/${taskId}`, {
+                const statusUrl = `${baseUrl}/v1/videos/tasks/${taskId}`;
+                const statusResp = await axios.get(statusUrl, {
                     headers: {
                         'Authorization': `Bearer ${apiKey}`
                     }
