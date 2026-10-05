@@ -2,15 +2,17 @@ const axios = require('axios');
 
 async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
     const apiKey = process.env.KLING_API_KEY;
-    const baseUrl = process.env.KLING_API_URL || 'https://api.klingai.com'; // или ваш шлюз
+    const baseUrl = process.env.KLING_API_URL || 'https://api.klingai.com';
 
     if (!apiKey) {
         throw new Error('KLING_API_KEY не задан в переменных окружения');
     }
 
-    // Базовые параметры
     const duration = options.duration || 5;
     const resolution = options.resolution || '720p';
+
+    // Единый эндпоинт для шлюзов (можно переопределить через KLING_ENDPOINT в .env при необходимости)
+    const endpoint = process.env.KLING_ENDPOINT || '/v1/videos';
 
     let payload = {
         prompt: prompt,
@@ -18,18 +20,14 @@ async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
         resolution: resolution
     };
 
-    let endpoint = '/v1/videos/text-to-video';
-
-    // Если передана картинка — переключаемся на Image-to-Video и добавляем first_frame
+    // Если передана картинка, отправляем её в оба возможных поля шлюза
     if (imageUrl) {
-        endpoint = '/v1/videos/image-to-video';
-        payload.image = imageUrl; // или first_frame в зависимости от вашего API-шлюза
-        // Если ваш провайдер требует именно first_frame, можно передать и так:
-        // payload.first_frame = imageUrl;
+        payload.image = imageUrl;
+        payload.first_frame = imageUrl;
     }
 
     try {
-        console.log(`🎬 Отправка запроса в Kling (${imageUrl ? 'Image-to-Video' : 'Text-to-Video'})...`);
+        console.log(`🎬 Отправка запроса в Kling (${baseUrl}${endpoint})...`);
         
         // 1. Создаем задачу на генерацию
         const createResp = await axios.post(`${baseUrl}${endpoint}`, payload, {
@@ -39,37 +37,38 @@ async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
             }
         });
 
-        const taskId = createResp.data?.data?.task_id || createResp.data?.task_id;
+        const taskId = createResp.data?.data?.task_id || createResp.data?.task_id || createResp.data?.id;
         if (!taskId) {
             throw new Error(`Не удалось получить task_id от Kling: ${JSON.stringify(createResp.data)}`);
         }
 
         console.log(`⏳ Задача создана (Task ID: ${taskId}). Ждем готовности видео...`);
 
-        // 2. Опрашиваем статус задачи (polling) до готовности
+        // 2. Опрашиваем статус задачи (polling)
         let videoUrl = null;
-        const maxAttempts = 40; // ~3-4 минуты ожидания
-        const interval = 5000; // каждые 5 секунд
+        const maxAttempts = 40; 
+        const interval = 5000; 
 
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
             await new Promise(resolve => setTimeout(resolve, interval));
 
             try {
-                const statusResp = await axios.get(`${baseUrl}/v1/videos/tasks/${taskId}`, {
+                // Запрос статуса (обычно /v1/videos/{taskId})
+                const statusResp = await axios.get(`${baseUrl}${endpoint}/${taskId}`, {
                     headers: {
                         'Authorization': `Bearer ${apiKey}`
                     }
                 });
 
                 const taskData = statusResp.data?.data || statusResp.data;
-                const status = taskData?.status;
+                const status = taskData?.status || taskData?.state;
 
                 console.log(`🔄 Статус задачи ${taskId}: ${status} (попытка ${attempt + 1}/${maxAttempts})`);
 
-                if (status === 'completed' || status === 'SUCCESS') {
-                    videoUrl = taskData?.work_result?.[0]?.resource_url || taskData?.video_url;
+                if (status === 'completed' || status === 'SUCCESS' || status === 'succeeded') {
+                    videoUrl = taskData?.work_result?.[0]?.resource_url || taskData?.video_url || taskData?.url;
                     break;
-                } else if (status === 'failed' || status === 'FAILED') {
+                } else if (status === 'failed' || status === 'FAILED' || status === 'error') {
                     throw new Error(`Kling генерация завершилась с ошибкой: ${taskData?.message || 'Неизвестная ошибка'}`);
                 }
             } catch (pollErr) {
