@@ -1,107 +1,91 @@
 const axios = require('axios');
 
-const BASE_URL = 'https://api-singapore.klingai.com';
-
-// Вспомогательная функция для скачивания файла и конвертации в Base64
-async function convertUrlToBase64(url) {
-    try {
-        const response = await axios.get(url, { responseType: 'arraybuffer' });
-        const base64String = Buffer.from(response.data).toString('base64');
-        return base64String;
-    } catch (e) {
-        throw new Error(`Не удалось скачать и конвертировать изображение: ${e.message}`);
-    }
-}
-
 async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
     const apiKey = process.env.KLING_API_KEY;
+    const baseUrl = process.env.KLING_API_URL || 'https://api.klingai.com'; // или ваш шлюз
+
     if (!apiKey) {
-        throw new Error('Ключ KLING_API_KEY не задан в переменных окружения (.env)');
+        throw new Error('KLING_API_KEY не задан в переменных окружения');
+    }
+
+    // Базовые параметры
+    const duration = options.duration || 5;
+    const resolution = options.resolution || '720p';
+
+    let payload = {
+        prompt: prompt,
+        duration: String(duration),
+        resolution: resolution
+    };
+
+    let endpoint = '/v1/videos/text-to-video';
+
+    // Если передана картинка — переключаемся на Image-to-Video и добавляем first_frame
+    if (imageUrl) {
+        endpoint = '/v1/videos/image-to-video';
+        payload.image = imageUrl; // или first_frame в зависимости от вашего API-шлюза
+        // Если ваш провайдер требует именно first_frame, можно передать и так:
+        // payload.first_frame = imageUrl;
     }
 
     try {
-        let endpoint = `${BASE_URL}/image-to-video/kling-3.0`;
-        let contents = [
-            {
-                type: 'prompt',
-                text: prompt
-            }
-        ];
-
-        // Если передана картинка (например, из Телеграма), конвертируем её в Base64
-        if (imageUrl) {
-            const base64Image = await convertUrlToBase64(imageUrl);
-            contents.push({
-                type: 'first_frame',
-                url: base64Image // Передаем base64 строку, как требует Kling для защищенных ссылок
-            });
-        }
-
-        const requestBody = {
-            contents: contents,
-            settings: {
-                resolution: options.resolution || '720p',
-                duration: options.duration || 5,
-                audio: options.audio || 'off',
-                multi_shot: false
-            },
-            options: {
-                watermark_info: {
-                    enabled: false
-                }
-            }
-        };
-
-        const response = await axios.post(endpoint, requestBody, {
+        console.log(`🎬 Отправка запроса в Kling (${imageUrl ? 'Image-to-Video' : 'Text-to-Video'})...`);
+        
+        // 1. Создаем задачу на генерацию
+        const createResp = await axios.post(`${baseUrl}${endpoint}`, payload, {
             headers: {
                 'Authorization': `Bearer ${apiKey}`,
                 'Content-Type': 'application/json'
             }
         });
 
-        const taskId = response.data?.data?.id;
+        const taskId = createResp.data?.data?.task_id || createResp.data?.task_id;
         if (!taskId) {
-            throw new Error('Не удалось получить ID задачи от Kling AI');
+            throw new Error(`Не удалось получить task_id от Kling: ${JSON.stringify(createResp.data)}`);
         }
 
-        console.log(`[Kling Plugin] Задача создана. ID: ${taskId}. Ждем результат...`);
+        console.log(`⏳ Задача создана (Task ID: ${taskId}). Ждем готовности видео...`);
 
+        // 2. Опрашиваем статус задачи (polling) до готовности
         let videoUrl = null;
-        const maxAttempts = 60; 
-        let attempts = 0;
+        const maxAttempts = 40; // ~3-4 минуты ожидания
+        const interval = 5000; // каждые 5 секунд
 
-        while (!videoUrl && attempts < maxAttempts) {
-            attempts++;
-            await new Promise(resolve => setTimeout(resolve, 5000));
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, interval));
 
-            const statusRes = await axios.get(`${BASE_URL}/tasks?task_ids=${taskId}`, {
-                headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json'
+            try {
+                const statusResp = await axios.get(`${baseUrl}/v1/videos/tasks/${taskId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`
+                    }
+                });
+
+                const taskData = statusResp.data?.data || statusResp.data;
+                const status = taskData?.status;
+
+                console.log(`🔄 Статус задачи ${taskId}: ${status} (попытка ${attempt + 1}/${maxAttempts})`);
+
+                if (status === 'completed' || status === 'SUCCESS') {
+                    videoUrl = taskData?.work_result?.[0]?.resource_url || taskData?.video_url;
+                    break;
+                } else if (status === 'failed' || status === 'FAILED') {
+                    throw new Error(`Kling генерация завершилась с ошибкой: ${taskData?.message || 'Неизвестная ошибка'}`);
                 }
-            });
-
-            const taskData = statusRes.data?.data?.[0];
-            if (!taskData) continue;
-
-            if (taskData.status === 'succeeded' || taskData.status === 'completed') {
-                const videoOutput = taskData.outputs?.find(o => o.type === 'video');
-                videoUrl = videoOutput?.url;
-                break;
-            } else if (taskData.status === 'failed') {
-                throw new Error(`Ошибка в Kling: ${taskData.message || 'Неизвестно'}`);
+            } catch (pollErr) {
+                console.warn(`⚠ Ошибка при опросе статуса: ${pollErr.message}`);
             }
         }
 
         if (!videoUrl) {
-            throw new Error('Превышено время ожидания генерации видео');
+            throw new Error('Превышено время ожидания генерации видео Kling (Timeout)');
         }
 
         return videoUrl;
 
     } catch (error) {
-        console.error('Ошибка Kling API (полный ответ):', JSON.stringify(error.response?.data || error.message, null, 2));
-        throw error;
+        console.error('❌ Ошибка Kling API:', error.response?.data || error.message);
+        throw new Error(`Ошибка Kling API: ${JSON.stringify(error.response?.data || error.message)}`);
     }
 }
 
