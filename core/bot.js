@@ -514,6 +514,13 @@ async function startBot(app) {
                 modelKey: currentMode
             });
 
+            // Убираем технический мусор / ссылки на картинки из текста ответа плагина
+            if (aiResult && aiResult.text) {
+                if (aiResult.text.includes('"type":') || aiResult.text.includes('"urls":') || aiResult.text.trim().startsWith('{')) {
+                    aiResult.text = '';
+                }
+            }
+
             await deductUserBalance(userId, cost);
             const remainingBalance = await getUserBalance(userId);
 
@@ -604,6 +611,13 @@ async function startBot(app) {
                 mimeType, 
                 modelKey: currentMode
             });
+
+            // Убираем технический мусор / ссылки на картинки из текста ответа плагина
+            if (aiResult && aiResult.text) {
+                if (aiResult.text.includes('"type":') || aiResult.text.includes('"urls":') || aiResult.text.trim().startsWith('{')) {
+                    aiResult.text = '';
+                }
+            }
 
             await deductUserBalance(userId, cost);
             const remainingBalance = await getUserBalance(userId);
