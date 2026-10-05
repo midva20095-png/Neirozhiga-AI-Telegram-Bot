@@ -57,8 +57,7 @@ const MODEL_COSTS = {
     // Новые модели от Братухи (с учетом коэффициента x2.5)
     'gpt-image-2-5': 25,
     'deepseek-v3.2': 15,
-    'qwen3.5-9b': 10,
-    'grok-video': 50
+    'qwen3.5-9b': 10
 };
 
 const MODEL_NAMES = {
@@ -73,8 +72,7 @@ const MODEL_NAMES = {
     // Новые модели от Братухи
     'gpt-image-2-5': 'GPT Image 2.5 🎨',
     'deepseek-v3.2': 'DeepSeek V3.2 🤖',
-    'qwen3.5-9b': 'Qwen 3.5 9B 💬',
-    'grok-video': 'Grok Video 🎥'
+    'qwen3.5-9b': 'Qwen 3.5 9B 💬'
 };
 
 const CREDIT_PACKAGES = {
@@ -346,8 +344,7 @@ async function startBot(app) {
         userAwaitingEmail.set(ctx.from.id, pkgKey);
 
         await ctx.reply(
--             `✉️ Вы выбрали: *${pkg.title}(
-${pkg.price} ₽).\n\n` +
+            `✉️️ Вы выбрали: *${pkg.title}* (${pkg.price} ₽).\n\n` +
             `Пожалуйста, введите ваш *Email* в ответном сообщении. На него будет отправлен электронный чек после оплаты:`,
             { parse_mode: 'Markdown' }
         );
@@ -469,7 +466,7 @@ ${pkg.price} ₽).\n\n` +
         if (!activePlugin) return ctx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
 
         userProcessing.add(userId);
-        const waitMessage = await ctx.reply(`⏳ *Генерирую ответ...* ${currentMode === 'veo' || currentMode === 'grok-video' ? '(Видео создается около 1–2 минут, пожалуйста, подождите)' : ''}`, { parse_mode: 'Markdown' });
+        const waitMessage = await ctx.reply(`⏳ *Генерирую ответ...* ${currentMode === 'veo' ? '(Видео создается около 1–2 минут, пожалуйста, подождите)' : ''}`, { parse_mode: 'Markdown' });
 
         try {
             let fileBuffers = [];
@@ -606,7 +603,7 @@ ${pkg.price} ₽).\n\n` +
         } catch (error) {
             console.error('❌ Ошибка генерации (скрыта от пользователя):', error.message || error);
             try { await firstCtx.deleteMessage(waitMessage.message_id); } catch(e){}
-            await firstCtx.reply(`⚠️ Не удалось получить ответ от нейросети. Ваши кредиты не были списаны.`);
+            await firstCtx.reply(`⚠️️ Не удалось получить ответ от нейросети. Ваши кредиты не были списаны.`);
         } finally {
             userProcessing.delete(userId);
         }

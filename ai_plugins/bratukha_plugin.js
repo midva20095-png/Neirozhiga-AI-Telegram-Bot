@@ -6,7 +6,7 @@ const BRATUKHA_API_URL = 'https://bratuha.ru/api/v1';
 const TEXT_MODELS = [
     'gpt-6-astra', 'gpt-6-sol', 'gpt-5.6-terra', 'claude-fable-5.1', 
     'claude-opus-5-5', 'kimi-k3', 'gemini-3.8-flash', 'qwen3.8-max', 
-    'gemini-3.1-flash-lite-preview', 'grok-4.7', 'minimax-m3', 
+    'gemini-3.1-flash-lite-preview', 'minimax-m3', 
     'claude-sonnet-5', 'gpt-6-luna', 'qwen3.5-9b', 'deepseek-v3.2', 'seed-2.0-mini'
 ];
 
