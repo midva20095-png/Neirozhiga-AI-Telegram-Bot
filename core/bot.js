@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 
@@ -339,7 +340,7 @@ async function startBot(app) {
         userAwaitingEmail.set(ctx.from.id, pkgKey);
 
         await ctx.reply(
-            `✉️ Вы выбрали: *${pkg.title} (${pkg.price} ₽)*.\n\n` +
+            `✉️ Вы выбрали: *${pkg.title}* (${pkg.price} ₽).\n\n` +
             `Пожалуйста, введите ваш *Email* в ответном сообщении. На него будет отправлен электронный чек после оплаты:`,
             { parse_mode: 'Markdown' }
         );
