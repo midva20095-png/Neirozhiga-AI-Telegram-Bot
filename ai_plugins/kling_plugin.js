@@ -1,27 +1,54 @@
 const axios = require('axios');
 
-const BASE_URL = 'https://api.klingai.com';
+const BASE_URL = 'https://api-singapore.klingai.com';
 
-async function generateKlingVideo(prompt, options = {}) {
+async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
     const apiKey = process.env.KLING_API_KEY;
     if (!apiKey) {
         throw new Error('Ключ KLING_API_KEY не задан в переменных окружения (.env)');
     }
 
     try {
-        const response = await axios.post(`${BASE_URL}/v1/videos/text2video`, {
-            prompt: prompt,
-            model_name: options.model_name || 'kling-3.0-turbo',
-            duration: options.duration || '5',
-            aspect_ratio: options.aspect_ratio || '16:9'
-        }, {
+        // Формируем contents согласно документации Kling 3.0
+        const contents = [
+            {
+                type: 'prompt',
+                text: prompt
+            }
+        ];
+
+        // Если передана картинка, добавляем её как первый кадр (Image-to-Video)
+        if (imageUrl) {
+            contents.push({
+                type: 'first_frame',
+                url: imageUrl
+            });
+        }
+
+        const requestBody = {
+            contents: contents,
+            settings: {
+                resolution: options.resolution || '720p',
+                duration: options.duration || 5,
+                audio: options.audio || 'off',
+                multi_shot: false
+            },
+            options: {
+                watermark_info: {
+                    enabled: false
+                }
+            }
+        };
+
+        // Официальный эндпоинт Kling 3.0
+        const response = await axios.post(`${BASE_URL}/image-to-video/kling-3.0`, requestBody, {
             headers: {
                 'Authorization': `Bearer ${apiKey}`,
                 'Content-Type': 'application/json'
             }
         });
 
-        const taskId = response.data?.data?.task_id;
+        const taskId = response.data?.data?.id;
         if (!taskId) {
             throw new Error('Не удалось получить ID задачи от Kling AI');
         }
@@ -36,20 +63,23 @@ async function generateKlingVideo(prompt, options = {}) {
             attempts++;
             await new Promise(resolve => setTimeout(resolve, 5000));
 
-            const statusRes = await axios.get(`${BASE_URL}/v1/videos/text2video/${taskId}`, {
+            // Проверка статуса задачи по системному ID через GET /tasks
+            const statusRes = await axios.get(`${BASE_URL}/tasks?task_ids=${taskId}`, {
                 headers: {
-                    'Authorization': `Bearer ${apiKey}`
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
                 }
             });
 
-            const taskData = statusRes.data?.data;
+            const taskData = statusRes.data?.data?.[0];
             if (!taskData) continue;
 
-            if (taskData.status === 'completed' || taskData.status === 'succeed') {
-                videoUrl = taskData.task_result?.videos?.[0]?.url;
+            if (taskData.status === 'succeeded' || taskData.status === 'completed') {
+                const videoOutput = taskData.outputs?.find(o => o.type === 'video');
+                videoUrl = videoOutput?.url;
                 break;
             } else if (taskData.status === 'failed') {
-                throw new Error(`Ошибка в Kling: ${taskData.fail_reason || 'Неизвестно'}`);
+                throw new Error(`Ошибка в Kling: ${taskData.message || 'Неизвестно'}`);
             }
         }
 
