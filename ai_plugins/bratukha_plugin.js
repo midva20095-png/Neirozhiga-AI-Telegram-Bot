@@ -2,7 +2,6 @@ const axios = require('axios');
 
 const BRATUKHA_API_URL = 'https://bratuha.ru/api/v1';
 
-// Список текстовых моделей (OpenAI-совместимый эндпоинт /chat/completions)
 const TEXT_MODELS = [
     'gpt-6-astra', 'gpt-6-sol', 'gpt-5.6-terra', 'claude-fable-5.1', 
     'claude-opus-5-5', 'kimi-k3', 'gemini-3.8-flash', 'qwen3.8-max', 
@@ -21,16 +20,14 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         throw new Error('❌ Не указан slug модели для Братухи');
     }
 
-    // Нормализуем имя модели (убираем дефисы в версиях, если пришли из старых кнопок)
     if (toolSlug === 'qwen-3-5-9b') toolSlug = 'qwen3.5-9b';
     if (toolSlug === 'deepseek-v3-2') toolSlug = 'deepseek-v3.2';
 
-    // 1. Если это текстовая модель — отправляем в /chat/completions
+    // 1. Текстовые модели (OpenAI-совместимый эндпоинт)
     if (TEXT_MODELS.includes(toolSlug)) {
         console.log(`💬 [Bratukha Chat] Запрос к текстовой модели: ${toolSlug}`);
 
         const messages = [{ role: 'user', content: prompt || '' }];
-
         const allBuffers = [];
         if (fileBuffer) allBuffers.push(fileBuffer);
         if (fileBuffers && Array.isArray(fileBuffers)) allBuffers.push(...fileBuffers);
@@ -57,10 +54,9 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                 }
             });
 
-            const replyText = chatRes.data?.choices?.[0]?.message?.content || 'Пустой ответ от модели';
             return {
                 type: 'text',
-                text: replyText
+                text: chatRes.data?.choices?.[0]?.message?.content || 'Пустой ответ от модели'
             };
         } catch (err) {
             if (err.response) {
@@ -71,11 +67,10 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         }
     }
 
-    // 2. Иначе — асинхронный эндпоинт операций (/operations) для медиа и видео
-    const inputData = {};
-    if (prompt) {
-        inputData.prompt = prompt;
-    }
+    // 2. Генеративные операции (/operations) для видео и медиа
+    const inputData = {
+        prompt: prompt || 'Generate content'
+    };
 
     const allBuffers = [];
     if (fileBuffer) allBuffers.push(fileBuffer);
@@ -84,10 +79,19 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
     }
 
     if (allBuffers.length > 0) {
-        const fileUrls = allBuffers.map(buf => `data:${mimeType || 'image/jpeg'};base64,${buf.toString('base64')}`);
-        inputData.images = fileUrls;
-        inputData.image_url = fileUrls[0];
-        console.log(`📎 [Bratukha Operations] Передано входных картинок: ${fileUrls.length}`);
+        const base64Data = allBuffers[0].toString('base64');
+        const dataUri = `data:${mimeType || 'image/jpeg'};base64,${base64Data}`;
+        
+        // Передаем все возможные ключи и форматы, включая требуемое русское поле
+        inputData.images = [dataUri];
+        inputData.image = dataUri;
+        inputData.image_url = dataUri;
+        inputData.Изображения = dataUri; // Передаем строкой, которую требует валидатор
+        inputData.Изображения_arr = [dataUri];
+        
+        console.log(`📎 [Bratukha Operations] Картинка успешно прикреплена, размер: ${allBuffers[0].length} байт`);
+    } else {
+        console.log(`⚠️ [Bratukha Operations] Внимание: запрос идет без изображений!`);
     }
 
     const payload = {
@@ -95,7 +99,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         input: inputData
     };
 
-    console.log(`🚀 [Bratukha Operations] Создание операции для инструмента: ${toolSlug}`);
+    console.log(`🚀 [Bratukha Operations] Отправка запроса для инструмента: ${toolSlug}`);
 
     try {
         const createRes = await axios.post(`${BRATUKHA_API_URL}/operations`, payload, {
@@ -120,9 +124,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
 
             try {
                 const statusRes = await axios.get(`${BRATUKHA_API_URL}/operations/${operationId}`, {
-                    headers: {
-                        'Authorization': `Bearer ${apiKey}`
-                    }
+                    headers: { 'Authorization': `Bearer ${apiKey}` }
                 });
 
                 const opData = statusRes.data;
@@ -131,26 +133,23 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                 if (opData.status === 'completed') {
                     const result = opData.result;
                     
-                    // Универсальный сбор медиа (поддерживаем массивы и одиночные ссылки разных форматов)
                     const images = result?.images || (result?.image_url ? [result.image_url] : []) || (result?.image ? [result.image] : []);
                     const videos = result?.videos || (result?.video_url ? [result.video_url] : []) || (result?.video ? [result.video] : []);
                     const singleUrl = result?.url || (typeof result === 'string' && result.startsWith('http') ? result : null);
 
-                    if (images.length > 0) {
-                        const mediaUrl = images[0];
-                        const mediaRes = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
-                        return {
-                            type: 'image',
-                            buffer: Buffer.from(mediaRes.data),
-                            text: `✨ Сгенерировано через ${toolSlug}`
-                        };
-                    } else if (videos.length > 0) {
-                        const mediaUrl = videos[0];
-                        const mediaRes = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
+                    if (videos.length > 0) {
+                        const mediaRes = await axios.get(videos[0], { responseType: 'arraybuffer' });
                         return {
                             type: 'video',
                             buffer: Buffer.from(mediaRes.data),
                             text: `🎬 Сгенерировано через ${toolSlug}`
+                        };
+                    } else if (images.length > 0) {
+                        const mediaRes = await axios.get(images[0], { responseType: 'arraybuffer' });
+                        return {
+                            type: 'image',
+                            buffer: Buffer.from(mediaRes.data),
+                            text: `✨ Сгенерировано через ${toolSlug}`
                         };
                     } else if (singleUrl) {
                         const mediaRes = await axios.get(singleUrl, { responseType: 'arraybuffer' });
