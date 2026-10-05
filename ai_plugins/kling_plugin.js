@@ -2,6 +2,17 @@ const axios = require('axios');
 
 const BASE_URL = 'https://api-singapore.klingai.com';
 
+// Вспомогательная функция для скачивания файла и конвертации в Base64
+async function convertUrlToBase64(url) {
+    try {
+        const response = await axios.get(url, { responseType: 'arraybuffer' });
+        const base64String = Buffer.from(response.data).toString('base64');
+        return base64String;
+    } catch (e) {
+        throw new Error(`Не удалось скачать и конвертировать изображение: ${e.message}`);
+    }
+}
+
 async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
     const apiKey = process.env.KLING_API_KEY;
     if (!apiKey) {
@@ -9,19 +20,20 @@ async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
     }
 
     try {
-        // Формируем contents согласно документации Kling 3.0
-        const contents = [
+        let endpoint = `${BASE_URL}/image-to-video/kling-3.0`;
+        let contents = [
             {
                 type: 'prompt',
                 text: prompt
             }
         ];
 
-        // Если передана картинка, добавляем её как первый кадр (Image-to-Video)
+        // Если передана картинка (например, из Телеграма), конвертируем её в Base64
         if (imageUrl) {
+            const base64Image = await convertUrlToBase64(imageUrl);
             contents.push({
                 type: 'first_frame',
-                url: imageUrl
+                url: base64Image // Передаем base64 строку, как требует Kling для защищенных ссылок
             });
         }
 
@@ -40,8 +52,7 @@ async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
             }
         };
 
-        // Официальный эндпоинт Kling 3.0
-        const response = await axios.post(`${BASE_URL}/image-to-video/kling-3.0`, requestBody, {
+        const response = await axios.post(endpoint, requestBody, {
             headers: {
                 'Authorization': `Bearer ${apiKey}`,
                 'Content-Type': 'application/json'
@@ -63,7 +74,6 @@ async function generateKlingVideo(prompt, imageUrl = null, options = {}) {
             attempts++;
             await new Promise(resolve => setTimeout(resolve, 5000));
 
-            // Проверка статуса задачи по системному ID через GET /tasks
             const statusRes = await axios.get(`${BASE_URL}/tasks?task_ids=${taskId}`, {
                 headers: {
                     'Authorization': `Bearer ${apiKey}`,

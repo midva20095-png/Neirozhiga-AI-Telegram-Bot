@@ -449,7 +449,19 @@ async function startBot(app) {
 
             if (currentMode === 'kling') {
                 if (!klingPlugin) throw new Error('Плагин Kling AI не подключен');
-                const videoUrl = await klingPlugin.generateKlingVideo(prompt, { duration: '5', aspect_ratio: '16:9' });
+                
+                let imageUrl = null;
+                if (ctx.message?.photo && ctx.message.photo.length > 0) {
+                    const largestPhoto = ctx.message.photo[ctx.message.photo.length - 1];
+                    const file = await ctx.telegram.getFile(largestPhoto.file_id);
+                    imageUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
+                }
+
+                const videoUrl = await klingPlugin.generateKlingVideo(prompt || 'Анимируй это изображение', imageUrl, { 
+                    duration: 5, 
+                    resolution: '720p' 
+                });
+                
                 const videoResp = await axios.get(videoUrl, { responseType: 'arraybuffer' });
                 aiResult = {
                     type: 'video',
@@ -546,7 +558,22 @@ async function startBot(app) {
 
             if (currentMode === 'kling') {
                 if (!klingPlugin) throw new Error('Плагин Kling AI не подключен');
-                const videoUrl = await klingPlugin.generateKlingVideo(prompt, { duration: '5', aspect_ratio: '16:9' });
+                
+                let imageUrl = null;
+                for (const c of contexts) {
+                    if (c.message?.photo && c.message.photo.length > 0) {
+                        const largestPhoto = c.message.photo[c.message.photo.length - 1];
+                        const file = await firstCtx.telegram.getFile(largestPhoto.file_id);
+                        imageUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
+                        break;
+                    }
+                }
+
+                const videoUrl = await klingPlugin.generateKlingVideo(prompt || 'Анимируй это изображение', imageUrl, { 
+                    duration: 5, 
+                    resolution: '720p' 
+                });
+                
                 const videoResp = await axios.get(videoUrl, { responseType: 'arraybuffer' });
                 aiResult = {
                     type: 'video',
