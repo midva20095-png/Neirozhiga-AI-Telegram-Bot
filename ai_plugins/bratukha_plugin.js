@@ -2,7 +2,7 @@ const axios = require('axios');
 
 const BRATUKHA_API_URL = 'https://bratuha.ru/api/v1';
 
-async function processRequest({ prompt, fileBuffer, mimeType, modelKey }) {
+async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, modelKey }) {
     const apiKey = process.env.BRATUKHA_API_KEY;
     if (!apiKey) {
         throw new Error('❌ BRATUKHA_API_KEY не задан в переменных окружения');
@@ -13,14 +13,28 @@ async function processRequest({ prompt, fileBuffer, mimeType, modelKey }) {
         throw new Error('❌ Не указан slug модели для Братухи');
     }
 
-    const payload = {
-        tool: toolSlug,
-        input: {
-            prompt: prompt
-        }
+    // Формируем input в зависимости от того, переданы ли файлы/картинки
+    const inputData = {
+        prompt: prompt || ''
     };
 
-    console.log(`🚀 [Bratukha] Запуск задачи для модели: ${toolSlug}`);
+    // Если есть картинки (одна или несколько), конвертируем их в base64 и добавляем в массив images
+    const allBuffers = [];
+    if (fileBuffer) allBuffers.push(fileBuffer);
+    if (fileBuffers && Array.isArray(fileBuffers)) {
+        allBuffers.push(...fileBuffers);
+    }
+
+    if (allBuffers.length > 0) {
+        inputData.images = allBuffers.map(buf => `data:${mimeType || 'image/jpeg'};base64,${buf.toString('base64')}`);
+    }
+
+    const payload = {
+        tool: toolSlug,
+        input: inputData
+    };
+
+    console.log(`🚀 [Bratukha] Запуск задачи для модели: ${toolSlug} (файлов: ${allBuffers.length})`);
 
     try {
         // 1. Создаем операцию
@@ -39,7 +53,7 @@ async function processRequest({ prompt, fileBuffer, mimeType, modelKey }) {
         console.log(`⏳ [Bratukha] Задача создана. ID: ${operationId}. Ожидание результата...`);
 
         // 2. Цикл опроса (polling) статуса
-        const maxAttempts = 90;
+        const maxAttempts = 120; // Увеличили до 120 для видео
         const intervalMs = 3000;
 
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -72,7 +86,7 @@ async function processRequest({ prompt, fileBuffer, mimeType, modelKey }) {
                         return {
                             type: 'video',
                             buffer: Buffer.from(mediaRes.data),
-                            text: `🎬 Сгенерировано через ${toolslug}`
+                            text: `🎬 Сгенерировано через ${toolSlug}`
                         };
                     } else if (result && (result.text || typeof result === 'string')) {
                         return {
@@ -101,7 +115,6 @@ async function processRequest({ prompt, fileBuffer, mimeType, modelKey }) {
         throw new Error('⏱️ Превышено время ожидания ответа от нейросети (таймаут)');
 
     } catch (err) {
-        // Выводим в лог подробности ответа сервера Братухи, если они есть
         if (err.response) {
             console.error(`🚨 [Bratukha API Error] Status: ${err.response.status}`, JSON.stringify(err.response.data));
         } else {
