@@ -51,12 +51,12 @@ const MODEL_COSTS = {
     'flash_25': 1,
     'pro': 3,
     'nanobanana': 4,
-    'nanobanana_pro': 12,
-    'veo': 300,
+    'nanobanana_pro': 10,
+    'veo': 400,
 
     // Новые модели от Братухи (с учетом коэффициента x2.5)
-    'gpt-image-2-5': 25,
-    'deepseek-v3.2': 15,
+    'gpt-image-2-5': 2,
+    'deepseek-v3.2': 3,
     'qwen3.5-9b': 10
 };
 
