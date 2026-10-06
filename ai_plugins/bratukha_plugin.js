@@ -2,7 +2,7 @@ const axios = require('axios');
 
 const BRATUKHA_API_URL = 'https://bratuha.ru/api/v1';
 
-// Полный каталог актуальных моделей (без Google / Nano Banana)
+// Полный каталог актуальных моделей (нерабочая kling-1-5 исключена)
 const BRATUKHA_MODELS = [
     // 🎵 Аудио
     { slug: 'mureka-ai-v9-5', name: 'Mureka AI V9.5', category: 'audio', price: 60, unit: 'песня / трек' },
@@ -65,7 +65,7 @@ const MODELS_REQUIRING_IMAGE = [
 
 async function uploadBuffer(apiKey, buf, mimeType = 'image/jpeg', filename = 'input_file.jpg') {
     const contentType = mimeType || 'image/jpeg';
-    const directLimit = 10 * 1024 * 1024; // до 10 МБ через /uploads
+    const directLimit = 10 * 1024 * 1024;
 
     if (buf.length <= directLimit) {
         const res = await axios.post(
@@ -90,7 +90,6 @@ async function uploadBuffer(apiKey, buf, mimeType = 'image/jpeg', filename = 'in
         return res.data.url;
     }
 
-    // Presigned upload для крупных файлов
     const presignRes = await axios.post(
         `${BRATUKHA_API_URL}/uploads/presign`,
         {
@@ -151,14 +150,20 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         allBuffers.push(...fileBuffers);
     }
 
-    // Проверка: если модель требует картинку/файл, а пользователь отправил только текст
     if (MODELS_REQUIRING_IMAGE.includes(toolSlug) && allBuffers.length === 0) {
-        throw new Error('⚠️ Для выбранной модели обязательно требуется прикрепить изображение. Пожалуйста, отправьте фото вместе с запросом.');
+        throw new Error('⚠️️ Для выбранной модели обязательно требуется прикрепить изображение. Пожалуйста, отправьте фото вместе с запросом.');
     }
+
+    const foundModel = BRATUKHA_MODELS.find(m => m.slug === toolSlug);
+    const isAudioModel = foundModel?.category === 'audio' || toolSlug.includes('tts');
 
     const inputData = {};
     if (prompt) {
-        inputData.prompt = prompt;
+        if (isAudioModel) {
+            inputData.text = prompt; // Для аудио моделей передаем text
+        } else {
+            inputData.prompt = prompt;
+        }
     }
 
     if (allBuffers.length > 0) {
@@ -277,7 +282,6 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
     throw new Error('⏱️ Превышено время ожидания ответа от нейросети (таймаут операции)');
 }
 
-// Класс-обёртка для совместимости с ядром, ожидающим классы
 class BratukhaPlugin {
     constructor(config = {}) {
         this.config = config;
@@ -288,7 +292,6 @@ class BratukhaPlugin {
     }
 }
 
-// Двойной экспорт для полной стабильности при любых вариантах подключения в ядре
 module.exports = BratukhaPlugin;
 module.exports.BratukhaPlugin = BratukhaPlugin;
 module.exports.processRequest = processRequest;
