@@ -10,6 +10,10 @@ const TEXT_MODELS = [
     'claude-sonnet-5', 'gpt-6-luna', 'qwen3.5-9b', 'deepseek-v3.2', 'seed-2.0-mini'
 ];
 
+// Локальный кэш картинок из чата (живет 2 минуты для каждого чата/пользователя)
+const recentImageCache = new Map();
+const CACHE_TTL_MS = 2 * 60 * 1000; // 2 минуты
+
 // Парсер соотношения сторон из текста промпта (например: "9:16", "--ar 16:9", "ar 1:1")
 function parseAspectRatio(promptText) {
     if (!promptText) return null;
@@ -17,7 +21,8 @@ function parseAspectRatio(promptText) {
     return match ? match[1] : null;
 }
 
-async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, modelKey }) {
+async function processRequest(params) {
+    const { prompt, fileBuffer, fileBuffers, mimeType, modelKey, chatId, userId } = params || {};
     const apiKey = process.env.BRATUKHA_API_KEY;
     if (!apiKey) {
         throw new Error('❌ BRATUKHA_API_KEY не задан в переменных окружения');
@@ -32,25 +37,49 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
     if (toolSlug === 'qwen-3-5-9b') toolSlug = 'qwen3.5-9b';
     if (toolSlug === 'deepseek-v3-2') toolSlug = 'deepseek-v3.2';
 
-    // Собираем все входящие файлы (одиночный файл или альбом/несколько файлов)
-    const allBuffers = [];
+    // Ключ для кэша чата/пользователя
+    const cacheKey = chatId || userId || 'default_user';
+
+    // Собираем входящие файлы из текущего запроса
+    let allBuffers = [];
     if (fileBuffer) allBuffers.push(fileBuffer);
     if (fileBuffers && Array.isArray(fileBuffers)) {
         allBuffers.push(...fileBuffers);
+    }
+
+    let effectiveMimeType = mimeType || 'image/jpeg';
+
+    // Если картинки переданы в текущем сообщении — сохраняем их в кэш
+    if (allBuffers.length > 0) {
+        recentImageCache.set(cacheKey, {
+            buffers: allBuffers,
+            mimeType: effectiveMimeType,
+            timestamp: Date.now()
+        });
+        console.log(`📥 [Bratukha Cache] Сохранено ${allBuffers.length} изображений в кэш для чата/пользователя: ${cacheKey}`);
+    } else {
+        // Если в текущем сообщении картинок нет, проверяем кэш за последние 2 минуты
+        const cached = recentImageCache.get(cacheKey);
+        if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+            allBuffers = cached.buffers;
+            effectiveMimeType = cached.mimeType;
+            console.log(`📤 [Bratukha Cache] Автоматически подтянуто ${allBuffers.length} изображений из недавнего кэша чата!`);
+        }
     }
 
     // 1. Если это текстовая модель — отправляем в /chat/completions с поддержкой мультимодальности
     if (TEXT_MODELS.includes(toolSlug)) {
         console.log(`💬 [Bratukha Chat] Запрос к текстовой модели: ${toolSlug} (файлов: ${allBuffers.length})`);
 
-        const messages = [{ role: 'user', content: prompt || '' }];
+        const userText = prompt || (allBuffers.length > 0 ? 'Опиши это изображение' : 'Привет');
+        const messages = [{ role: 'user', content: userText }];
 
         if (allBuffers.length > 0) {
-            const contentParts = [{ type: 'text', text: prompt || '' }];
+            const contentParts = [{ type: 'text', text: userText }];
             allBuffers.forEach(buf => {
                 contentParts.push({
                     type: 'image_url',
-                    image_url: { url: `data:${mimeType || 'image/jpeg'};base64,${buf.toString('base64')}` }
+                    image_url: { url: `data:${effectiveMimeType};base64,${buf.toString('base64')}` }
                 });
             });
             messages[0].content = contentParts;
@@ -82,27 +111,28 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
     }
 
     // 2. Иначе — асинхронный эндпоинт операций (/operations) для медиа, генерации и редактирования картинок
-    const inputData = {};
-    if (prompt) {
-        inputData.prompt = prompt;
+    // ОБЯЗАТЕЛЬНОЕ ПОЛЕ «Задание» (prompt): если пользователь не написал текст, ставим дефолтный промпт, чтобы Братуха не ругалась 400-й ошибкой
+    const finalPrompt = (prompt && prompt.trim()) 
+        ? prompt.trim() 
+        : (allBuffers.length > 0 ? 'Обработай изображение' : 'Сгенерируй изображение');
+
+    const inputData = {
+        prompt: finalPrompt
+    };
         
-        // Автовыделение формата из текста для исключения белых полей по бокам
-        const aspectRatio = parseAspectRatio(prompt);
-        if (aspectRatio) {
-            inputData.aspect_ratio = aspectRatio;
-            inputData.ratio = aspectRatio;
-            inputData.ar = aspectRatio;
-        }
+    // Автовыделение формата из текста для исключения белых полей по бокам
+    const aspectRatio = parseAspectRatio(finalPrompt);
+    if (aspectRatio) {
+        inputData.aspect_ratio = aspectRatio;
+        inputData.ratio = aspectRatio;
+        inputData.ar = aspectRatio;
     }
 
-    // Передаем картинки так же полноценно, как в Nano Banana (массив + поименованные ключи)
+    // Упаковываем картинки во все возможные варианты параметров (матрёшка для Братухи)
     if (allBuffers.length > 0) {
-        const fileUrls = allBuffers.map(buf => `data:${mimeType || 'image/jpeg'};base64,${buf.toString('base64')}`);
+        const fileUrls = allBuffers.map(buf => `data:${effectiveMimeType};base64,${buf.toString('base64')}`);
         
-        // Основной массив изображений для мульти-инпутов и сшивания
         inputData.images = fileUrls;
-        
-        // Дублируем по разным стандартам именования параметров эндпоинтов Братухи
         inputData.image_url = fileUrls[0];
         inputData.source_image = fileUrls[0];
         
@@ -113,9 +143,9 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
             inputData.target_image = fileUrls[1];
         }
         
-        console.log(`🖼️ [Bratukha Operations] Передано изображений в запрос: ${fileUrls.length}`);
+        console.log(`🖼️ [Bratukha Operations] Передано изображений в запрос: ${fileUrls.length} с промптом: "${finalPrompt}"`);
     } else {
-        console.log(`⚠️ [Bratukha Operations] Изображения не переданы (чистый текстовый промпт для медиа-модели)`);
+        console.log(`⚠️ [Bratukha Operations] Изображения не переданы. Промпт: "${finalPrompt}"`);
     }
 
     const payload = {
@@ -159,7 +189,6 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                 if (opData.status === 'completed') {
                     const result = opData.result;
 
-                    // Извлекаем результат (картинку, видео или текст)
                     const imageUrl = result?.images?.[0] || result?.urls?.[0] || (result?.type === 'image' ? result?.url : null);
                     const videoUrl = result?.videos?.[0] || (result?.type === 'video' ? result?.url : null);
                     
