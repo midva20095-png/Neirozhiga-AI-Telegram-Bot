@@ -46,7 +46,7 @@ bot.use(async (ctx, next) => {
 });
 
 const MODEL_COSTS = {
-    // Гугловские
+    // Гугловские (не трогаем)
     'flash': 1,
     'flash_25': 1,
     'pro': 3,
@@ -54,14 +54,14 @@ const MODEL_COSTS = {
     'nanobanana_pro': 12,
     'veo': 300,
 
-    // Новые модели от Братухи
+    // Новые модели от Братухи (с учетом коэффициента x2.5)
     'gpt-image-2-5': 25,
     'deepseek-v3.2': 15,
     'qwen3.5-9b': 10
 };
 
 const MODEL_NAMES = {
-    // Гугловские
+    // Гугловские (не трогаем)
     'flash': 'Gemini 3.8 Flash ⚡️',
     'flash_25': 'Gemini 2.5 Flash 🚀',
     'pro': 'Gemini 3.1 Pro 🧠',
@@ -132,33 +132,10 @@ async function getTelegramFileBuffer(ctx, fileId) {
 }
 
 function getModelSelectionKeyboard(currentMode) {
-    const textModels = ['flash', 'flash_25', 'pro', 'deepseek-v3.2', 'qwen3.5-9b'];
-    const imageModels = ['nanobanana', 'nanobanana_pro', 'gpt-image-2-5'];
-    const videoModels = ['veo'];
-
-    const buttons = [];
-
-    // Текстовые модели
-    buttons.push([Markup.button.callback('💬 ─── ТЕКСТОВЫЕ МОДЕЛИ ───', 'noop_text')]);
-    textModels.forEach(key => {
+    const buttons = Object.keys(MODEL_NAMES).map(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
-        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
+        return [Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)];
     });
-
-    // Генерация картинок
-    buttons.push([Markup.button.callback('🎨 ─── ГЕНЕРАЦИЯ КАРТИНОК ───', 'noop_image')]);
-    imageModels.forEach(key => {
-        const isSelected = key === currentMode ? '✅ ' : '';
-        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
-    });
-
-    // Видео
-    buttons.push([Markup.button.callback('🎬 ─── ВИДЕО ───', 'noop_video')]);
-    videoModels.forEach(key => {
-        const isSelected = key === currentMode ? '✅ ' : '';
-        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
-    });
-
     return Markup.inlineKeyboard(buttons);
 }
 
@@ -203,7 +180,7 @@ async function startBot(app) {
         await bot.telegram.deleteWebhook({ drop_pending_updates: true });
         console.log('🧹 Старый вебхук сброшен, запущен Long Polling.');
     } catch (e) {
-        console.log('ℹ️️ Вебхук:', e.message);
+        console.log('ℹ️ Вебхук:', e.message);
     }
 
     if (app) {
@@ -310,10 +287,6 @@ async function startBot(app) {
         await ctx.editMessageText('❌ Обращение в поддержку отменено.');
     });
 
-    bot.action(/^noop_.+$/, async (ctx) => {
-        await ctx.answerCbQuery('Это название раздела, выберите модель ниже 👇');
-    });
-
     bot.hears(['ℹ Справка', 'ℹ️ Справка'], async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
@@ -371,7 +344,7 @@ async function startBot(app) {
         userAwaitingEmail.set(ctx.from.id, pkgKey);
 
         await ctx.reply(
-            `✉ Вы выбрали: *${pkg.title}* (${pkg.price} ₽).\n\n` +
+            `✉️️ Вы выбрали: *${pkg.title}* (${pkg.price} ₽).\n\n` +
             `Пожалуйста, введите ваш *Email* в ответном сообщении. На него будет отправлен электронный чек после оплаты:`,
             { parse_mode: 'Markdown' }
         );
@@ -386,7 +359,7 @@ async function startBot(app) {
         const userId = ctx.from.id;
         const stringUserId = String(userId);
 
-        if (stringUserId === ADMIN_ID && ctx.message?.reply_to_message) {
+        if (stringUserId === ADMIN_ID && ctx.message.reply_to_message) {
             const repliedText = ctx.message.reply_to_message.text || '';
             const match = repliedText.match(/ID:\s*`?(\d+)`?/);
             if (match && match[1]) {
@@ -466,7 +439,7 @@ async function startBot(app) {
         const MAX_PROMPT_LENGTH = 3500;
         if (prompt.length > MAX_PROMPT_LENGTH) {
             return ctx.reply(
-                `⚠️️ *Слишком длинный запрос!*\n\n` +
+                `⚠️ *Слишком длинный запрос!*\n\n` +
                 `Ваш текст содержит ${prompt.length} символов. Максимальный лимит — ${MAX_PROMPT_LENGTH} символов.\n` +
                 `Пожалуйста, разделите ваш текст на несколько частей.`
             );
@@ -499,30 +472,18 @@ async function startBot(app) {
             let fileBuffers = [];
             let mimeType = 'image/jpeg';
 
-            // Перехватываем фото со сжатием
             if (ctx.message?.photo && ctx.message.photo.length > 0) {
                 const largestPhoto = ctx.message.photo[ctx.message.photo.length - 1];
                 const buf = await getTelegramFileBuffer(ctx, largestPhoto.file_id);
                 if (buf) fileBuffers.push(buf);
-            } 
-            // Перехватываем фото, отправленное без сжатия (документом)
-            else if (ctx.message?.document && ctx.message.document.mime_type?.startsWith('image/')) {
-                const buf = await getTelegramFileBuffer(ctx, ctx.message.document.file_id);
-                if (buf) {
-                    fileBuffers.push(buf);
-                    mimeType = ctx.message.document.mime_type;
-                }
             }
 
-            // Передаем параметры И chatId + userId для работы кэша
             const aiResult = await activePlugin.processRequest({
                 prompt, 
                 fileBuffer: fileBuffers.length === 1 ? fileBuffers[0] : null,
                 fileBuffers: fileBuffers.length > 1 ? fileBuffers : undefined,
                 mimeType, 
-                modelKey: currentMode,
-                chatId: ctx.chat?.id,
-                userId: userId
+                modelKey: currentMode
             });
 
             await deductUserBalance(userId, cost);
@@ -605,24 +566,15 @@ async function startBot(app) {
                     const largestPhoto = c.message.photo[c.message.photo.length - 1];
                     const buf = await getTelegramFileBuffer(firstCtx, largestPhoto.file_id);
                     if (buf) fileBuffers.push(buf);
-                } else if (c.message?.document && c.message.document.mime_type?.startsWith('image/')) {
-                    const buf = await getTelegramFileBuffer(firstCtx, c.message.document.file_id);
-                    if (buf) {
-                        fileBuffers.push(buf);
-                        mimeType = c.message.document.mime_type;
-                    }
                 }
             }
 
-            // Передаем параметры И chatId + userId для работы кэша
             const aiResult = await activePlugin.processRequest({
                 prompt, 
                 fileBuffer: fileBuffers.length === 1 ? fileBuffers[0] : null,
                 fileBuffers: fileBuffers.length > 1 ? fileBuffers : undefined,
                 mimeType, 
-                modelKey: currentMode,
-                chatId: firstCtx.chat?.id,
-                userId: userId
+                modelKey: currentMode
             });
 
             await deductUserBalance(userId, cost);
@@ -651,7 +603,7 @@ async function startBot(app) {
         } catch (error) {
             console.error('❌ Ошибка генерации (скрыта от пользователя):', error.message || error);
             try { await firstCtx.deleteMessage(waitMessage.message_id); } catch(e){}
-            await firstCtx.reply(`⚠ Не удалось получить ответ от нейросети. Ваши кредиты не были списаны.`);
+            await firstCtx.reply(`⚠️️ Не удалось получить ответ от нейросети. Ваши кредиты не были списаны.`);
         } finally {
             userProcessing.delete(userId);
         }
@@ -659,13 +611,7 @@ async function startBot(app) {
 
     bot.on('text', handleAiRequest);
     
-    // Перехватываем и сжатые фото, и файлы-картинки
-    bot.on(['photo', 'document'], async (ctx, next) => {
-        // Если это файл и не картинка — пропускаем дальше
-        if (ctx.message?.document && !ctx.message.document.mime_type?.startsWith('image/')) {
-            return next();
-        }
-
+    bot.on('photo', async (ctx) => {
         const mediaGroupId = ctx.message?.media_group_id;
         if (mediaGroupId) {
             if (!mediaGroupBuffers.has(mediaGroupId)) {
