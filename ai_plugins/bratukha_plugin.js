@@ -32,16 +32,25 @@ async function uploadMediaToBratukha(buffer, mimeType, apiKey) {
         const extension = mimeType.split('/')[1] || 'jpg';
         const filename = `media_${Date.now()}.${extension}`;
         
+        // 1. Обязательно указываем knownLength (размер буфера)
         form.append('file', buffer, { 
             filename: filename, 
-            contentType: mimeType 
+            contentType: mimeType,
+            knownLength: buffer.length
         });
 
+        // 2. Явно собираем заголовки
+        const headers = form.getHeaders();
+        headers['Authorization'] = `Bearer ${apiKey}`;
+        // 3. ЖИЗНЕННО ВАЖНО: передаем точный размер файла, иначе сервер его "не увидит"
+        headers['Content-Length'] = form.getLengthSync();
+
+        console.log(`📤 [Bratukha Upload] Отправка файла: ${filename}, Размер: ${buffer.length} байт`);
+
         const res = await axios.post(`${BRATUKHA_API_URL}/uploads`, form, {
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                ...form.getHeaders()
-            }
+            headers: headers,
+            maxBodyLength: Infinity, // Отключаем ограничения axios на размер тела
+            maxContentLength: Infinity
         });
 
         // Ожидаем, что Братуха вернет { url: "https://..." }
