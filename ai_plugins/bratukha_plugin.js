@@ -2,7 +2,7 @@ const axios = require('axios');
 
 const BRATUKHA_API_URL = 'https://bratuha.ru/api/v1';
 
-// Полный каталог моделей (без Google / Nano Banana)
+// Полный каталог актуальных моделей (без Google / Nano Banana)
 const BRATUKHA_MODELS = [
     // 🎵 Аудио
     { slug: 'mureka-ai-v9-5', name: 'Mureka AI V9.5', category: 'audio', price: 60, unit: 'песня / трек' },
@@ -227,4 +227,49 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
             console.log(`✅ [Bratukha Success] Результат:`, JSON.stringify(result));
 
             const imageUrl = result?.images?.[0] || result?.urls?.[0] || result?.image_url || (result?.type === 'image' ? result?.url : null);
-            const videoUrl = result?.videos?.[0] || result?.video_url || (result?.type === 'video' ? result?.
+            const videoUrl = result?.videos?.[0] || result?.video_url || (result?.type === 'video' ? result?.url : null);
+            
+            if (imageUrl) {
+                const mediaRes = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+                return {
+                    type: 'image',
+                    buffer: Buffer.from(mediaRes.data),
+                    text: result?.caption || '' 
+                };
+            } else if (videoUrl) {
+                const mediaRes = await axios.get(videoUrl, { responseType: 'arraybuffer' });
+                return {
+                    type: 'video',
+                    buffer: Buffer.from(mediaRes.data),
+                    text: result?.caption || '' 
+                };
+            } else {
+                return {
+                    type: 'text',
+                    text: typeof result === 'object' ? (result.caption || JSON.stringify(result)) : String(result)
+                };
+            }
+        } else if (opData.status === 'failed') {
+            throw new Error(opData.error_message || opData.error?.message || 'Выполнение завершилось ошибкой на стороне нейросети');
+        }
+    }
+
+    throw new Error('⏱️ Превышено время ожидания ответа от нейросети (таймаут операции)');
+}
+
+// Класс-обёртка для совместимости с ядром, ожидающим классы
+class BratukhaPlugin {
+    constructor(config = {}) {
+        this.config = config;
+    }
+
+    async handleMessage(context) {
+        return await processRequest(context);
+    }
+}
+
+// Двойной экспорт для полной стабильности при любых вариантах подключения в ядре
+module.exports = BratukhaPlugin;
+module.exports.BratukhaPlugin = BratukhaPlugin;
+module.exports.processRequest = processRequest;
+module.exports.BRATUKHA_MODELS = BRATUKHA_MODELS;
