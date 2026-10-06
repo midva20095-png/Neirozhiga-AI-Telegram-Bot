@@ -2,7 +2,7 @@ require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 
-// Подключаем оба плагина
+// Подключаем плагины
 let googlePlugin = null;
 try {
     googlePlugin = require('../ai_plugins/google_gemini_plugin');
@@ -19,7 +19,7 @@ try {
     console.warn('⚠ Внимание: Плагин Братуха не найден!', e.message);
 }
 
-// Роутер для выбора нужного плагина в зависимости от модели
+// Роутер выбора плагина
 function getAiPlugin(modelKey) {
     if (['flash', 'flash_25', 'pro', 'nanobanana', 'nanobanana_pro', 'veo'].includes(modelKey)) {
         return googlePlugin;
@@ -27,7 +27,11 @@ function getAiPlugin(modelKey) {
     return bratukhaPlugin;
 }
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
+// Увеличиваем handlerTimeout до 5 минут (300 000 мс) для длительных генераций видео
+const bot = new Telegraf(process.env.BOT_TOKEN, {
+    handlerTimeout: 300000
+});
+
 const userActiveMode = new Map();
 const userAwaitingEmail = new Map();
 const userAwaitingSupport = new Map();
@@ -35,6 +39,19 @@ const userProcessing = new Set();
 const mediaGroupBuffers = new Map();
 
 const ADMIN_ID = '5943987954';
+
+// Модели, строго требующие наличия изображения
+const REQUIRES_IMAGE_MODELS = [
+    'pixverse-6-0', 'pixverse-5-5', 'pixverse-5-6', 'pixverse-lipsync',
+    'omnihuman-1-0', 'omnihuman-1-5', 'p-video-avatar',
+    'pruna-ai-p-video-animate', 'pruna-ai-p-video-edit',
+    'phota-enhance', 'p-image-upscale', 'recraft-creative-upscale', 'recraft-crisp-upscale'
+];
+
+// Модели, строго требующие наличие текста
+const REQUIRES_TEXT_MODELS = [
+    'qwen3-tts', 'qwen3-tts-flash', 'mureka-ai-v9-5', 'suno-v4', 'udio-v1-5'
+];
 
 bot.catch((err, ctx) => {
     console.error(`⚠️ Ошибка в Telegraf для ${ctx?.updateType || 'неизвестного события'}:`, err.message);
@@ -79,7 +96,7 @@ const MODEL_COSTS = {
     'midjourney-v6-1': 15,
     'ideogram-v2': 10,
 
-    // 🎬 Видео и Анимация (Братуха)
+    // 🎬 Видео и Анимация (Братуха) — kling-1-5 удалена
     'omnihuman-1-0': 40,
     'omnihuman-1-5': 70,
     'pika': 14,
@@ -102,7 +119,6 @@ const MODEL_COSTS = {
     'seedance-2-0-mini': 10,
     'seedance-2-5': 16,
     'sora-2': 50,
-    'kling-1-5': 25,
     'luma-dream-machine': 30
 };
 
@@ -140,7 +156,7 @@ const MODEL_NAMES = {
     'midjourney-v6-1': 'Midjourney v6.1 ✨',
     'ideogram-v2': 'Ideogram v2 🔤',
 
-    // 🎬 Видео и Анимация
+    // 🎬 Видео и Анимация — kling-1-5 удалена
     'omnihuman-1-0': 'OmniHuman 1.0 👤',
     'omnihuman-1-5': 'OmniHuman 1.5 👤',
     'pika': 'Pika 2.2 🎬',
@@ -163,7 +179,6 @@ const MODEL_NAMES = {
     'seedance-2-0-mini': 'Seedance 2.0 Mini 💃',
     'seedance-2-5': 'Seedance 2.5 💃',
     'sora-2': 'Sora 2.0 🌟',
-    'kling-1-5': 'Kling 1.5 🎬',
     'luma-dream-machine': 'Luma Dream Machine 🌌'
 };
 
@@ -245,33 +260,29 @@ function getModelSelectionKeyboard(currentMode) {
         'p-video-avatar', 'pruna-ai-p-video-2', 'pruna-ai-p-video-2-pro', 
         'pruna-ai-p-video-edit', 'runway-4-turbo', 'seedance-1-0', 
         'seedance-1-5-pro', 'seedance-2-0-apimart', 'seedance-2-0-mini', 
-        'seedance-2-5', 'sora-2', 'kling-1-5', 'luma-dream-machine'
+        'seedance-2-5', 'sora-2', 'luma-dream-machine'
     ];
 
     const buttons = [];
 
-    // Текстовые модельки
     buttons.push([Markup.button.callback('💬 ─── ТЕКСТОВЫЕ МОДЕЛИ ───', 'noop_text')]);
     textModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
         buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
     });
 
-    // Аудио модельки
     buttons.push([Markup.button.callback('🎵 ─── АУДИО И ГОЛОС ───', 'noop_audio')]);
     audioModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
         buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
     });
 
-    // Картинки, Апскейл и 3D
     buttons.push([Markup.button.callback('🎨 ─── КАРТИНКИ, 3D И АПСКЕЙЛ ───', 'noop_image')]);
     imageModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
         buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
     });
 
-    // Видео и Анимация
     buttons.push([Markup.button.callback('🎬 ─── ВИДЕО И АНИМАЦИЯ ───', 'noop_video')]);
     videoModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
@@ -429,7 +440,6 @@ async function startBot(app) {
         await ctx.editMessageText('❌ Обращение в поддержку отменено.');
     });
 
-    // Заголовки категорий меню
     bot.action(/^noop_.+$/, async (ctx) => {
         await ctx.answerCbQuery('Это название раздела, выберите модель ниже 👇');
     });
@@ -535,7 +545,7 @@ async function startBot(app) {
                 await ctx.reply('✅ Ваше сообщение отправлено в службу поддержки! Администратор ответит вам в ближайшее время.', { parse_mode: 'Markdown' });
             } catch (err) {
                 console.error('Ошибка отправки в поддержку:', err);
-                await ctx.reply('⚠️️ Не удалось отправить сообщение в поддержку. Попробуйте позже.');
+                await ctx.reply('⚠ Не удалось отправить сообщение в поддержку. Попробуйте позже.');
             }
             return;
         }
@@ -591,8 +601,26 @@ async function startBot(app) {
         }
 
         let currentMode = userActiveMode.get(userId) || 'flash';
-        const cost = MODEL_COSTS[currentMode] || 1;
 
+        // Валидация входных данных на стороне бота
+        let fileBuffers = [];
+        let mimeType = 'image/jpeg';
+
+        if (ctx.message?.photo && ctx.message.photo.length > 0) {
+            const largestPhoto = ctx.message.photo[ctx.message.photo.length - 1];
+            const buf = await getTelegramFileBuffer(ctx, largestPhoto.file_id);
+            if (buf) fileBuffers.push(buf);
+        }
+
+        if (REQUIRES_IMAGE_MODELS.includes(currentMode) && fileBuffers.length === 0) {
+            return ctx.reply('⚠️ *Ошибка:* Выбранная модель требует наличие изображения. Пожалуйста, отправьте картинку.');
+        }
+
+        if (REQUIRES_TEXT_MODELS.includes(currentMode) && !prompt.trim()) {
+            return ctx.reply('⚠️ *Ошибка:* Для выбранной модели требуется текст/описание.');
+        }
+
+        const cost = MODEL_COSTS[currentMode] || 1;
         const balance = await getUserBalance(userId);
         if (balance < cost) {
             return ctx.reply(
@@ -611,15 +639,6 @@ async function startBot(app) {
         const waitMessage = await ctx.reply(`⏳ *Генерирую ответ...* ${(currentMode === 'veo' || currentMode.includes('pixverse') || currentMode.includes('seedance') || currentMode.includes('runway')) ? '(Видео/Аудио создается около 1–3 минут, пожалуйста, подождите)' : ''}`, { parse_mode: 'Markdown' });
 
         try {
-            let fileBuffers = [];
-            let mimeType = 'image/jpeg';
-
-            if (ctx.message?.photo && ctx.message.photo.length > 0) {
-                const largestPhoto = ctx.message.photo[ctx.message.photo.length - 1];
-                const buf = await getTelegramFileBuffer(ctx, largestPhoto.file_id);
-                if (buf) fileBuffers.push(buf);
-            }
-
             const aiResult = await activePlugin.processRequest({
                 prompt, 
                 fileBuffer: fileBuffers.length === 1 ? fileBuffers[0] : null,
@@ -640,6 +659,11 @@ async function startBot(app) {
                 );
             } else if (aiResult.type === 'video' && aiResult.buffer) {
                 await ctx.replyWithVideo(
+                    { source: aiResult.buffer },
+                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
+                );
+            } else if (aiResult.type === 'audio' && aiResult.buffer) {
+                await ctx.replyWithAudio(
                     { source: aiResult.buffer },
                     { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
                 );
@@ -677,8 +701,23 @@ async function startBot(app) {
         }
 
         let currentMode = userActiveMode.get(userId) || 'flash';
-        const cost = MODEL_COSTS[currentMode] || 1;
 
+        let fileBuffers = [];
+        let mimeType = 'image/jpeg';
+
+        for (const c of contexts) {
+            if (c.message?.photo && c.message.photo.length > 0) {
+                const largestPhoto = c.message.photo[c.message.photo.length - 1];
+                const buf = await getTelegramFileBuffer(firstCtx, largestPhoto.file_id);
+                if (buf) fileBuffers.push(buf);
+            }
+        }
+
+        if (REQUIRES_IMAGE_MODELS.includes(currentMode) && fileBuffers.length === 0) {
+            return firstCtx.reply('⚠️ *Ошибка:* Выбранная модель требует наличие изображения.');
+        }
+
+        const cost = MODEL_COSTS[currentMode] || 1;
         const balance = await getUserBalance(userId);
         if (balance < cost) {
             return firstCtx.reply(
@@ -697,17 +736,6 @@ async function startBot(app) {
         const waitMessage = await firstCtx.reply(`⏳ *Генерирую ответ...*`, { parse_mode: 'Markdown' });
 
         try {
-            let fileBuffers = [];
-            let mimeType = 'image/jpeg';
-
-            for (const c of contexts) {
-                if (c.message?.photo && c.message.photo.length > 0) {
-                    const largestPhoto = c.message.photo[c.message.photo.length - 1];
-                    const buf = await getTelegramFileBuffer(firstCtx, largestPhoto.file_id);
-                    if (buf) fileBuffers.push(buf);
-                }
-            }
-
             const aiResult = await activePlugin.processRequest({
                 prompt, 
                 fileBuffer: fileBuffers.length === 1 ? fileBuffers[0] : null,

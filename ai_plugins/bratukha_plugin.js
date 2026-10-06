@@ -2,7 +2,7 @@ const axios = require('axios');
 
 const BRATUKHA_API_URL = 'https://bratuha.ru/api/v1';
 
-// Полный каталог актуальных моделей (без Google / Nano Banana)
+// Полный каталог актуальных моделей (без нерабочей kling-1-5 и Google / Nano Banana)
 const BRATUKHA_MODELS = [
     // 🎵 Аудио
     { slug: 'mureka-ai-v9-5', name: 'Mureka AI V9.5', category: 'audio', price: 60, unit: 'песня / трек' },
@@ -156,9 +156,17 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         throw new Error('⚠️ Для выбранной модели обязательно требуется прикрепить изображение. Пожалуйста, отправьте фото вместе с запросом.');
     }
 
+    // Определение параметров отправки (для TTS моделей используем поле text вместо prompt)
+    const foundModel = BRATUKHA_MODELS.find(m => m.slug === toolSlug);
+    const isAudioModel = foundModel?.category === 'audio' || toolSlug.includes('tts');
+
     const inputData = {};
     if (prompt) {
-        inputData.prompt = prompt;
+        if (isAudioModel) {
+            inputData.text = prompt; // Аудиомодели (TTS) требуют поле text
+        } else {
+            inputData.prompt = prompt;
+        }
     }
 
     if (allBuffers.length > 0) {
