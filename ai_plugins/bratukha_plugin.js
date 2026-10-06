@@ -25,34 +25,89 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         allBuffers.push(...fileBuffers);
     }
 
-    // 1. Загрузка файлов через /api/v1/uploads (согласно документации)
+    // Загрузка файлов через /uploads/presign или JSON/Base64 на /uploads
     if (allBuffers.length > 0) {
         const uploadedUrls = [];
         for (const buf of allBuffers) {
-            try {
-                const form = new FormData();
-                form.append('file', buf, {
-                    filename: 'input_file.jpg',
-                    contentType: mimeType || 'image/jpeg'
-                });
+            let fileUrl = null;
+            let lastErr = null;
 
-                console.log(`📤 [Bratukha Upload] Загрузка файла на сервер...`);
-                const uploadRes = await axios.post(`${BRATUKHA_API_URL}/uploads`, form, {
+            // 1. Попытка через /uploads/presign
+            try {
+                console.log(`📤 [Bratukha Upload] Запрос presign URL...`);
+                const presignRes = await axios.post(`${BRATUKHA_API_URL}/uploads/presign`, {
+                    filename: 'input_file.jpg',
+                    content_type: mimeType || 'image/jpeg'
+                }, {
                     headers: {
                         'Authorization': `Bearer ${apiKey}`,
-                        ...form.getHeaders()
+                        'Content-Type': 'application/json'
                     }
                 });
 
-                const fileUrl = uploadRes.data?.url || uploadRes.data?.file_url || uploadRes.data?.link || uploadRes.data?.path;
-                if (fileUrl) {
-                    uploadedUrls.push(fileUrl);
-                    console.log(`✅ [Bratukha Upload] Файл успешно загружен: ${fileUrl}`);
-                } else {
-                    console.warn(`⚠ [Bratukha Upload] Ответ сервера не содержал URL файла:`, JSON.stringify(uploadRes.data));
+                const { upload_url, url } = presignRes.data || {};
+                if (upload_url && url) {
+                    console.log(`📤 [Bratukha Upload] Отправка файла по presigned URL...`);
+                    await axios.put(upload_url, buf, {
+                        headers: {
+                            'Content-Type': mimeType || 'image/jpeg'
+                        }
+                    });
+                    fileUrl = url;
                 }
-            } catch (uploadErr) {
-                const errorDetails = uploadErr.response?.data ? JSON.stringify(uploadErr.response.data) : uploadErr.message;
+            } catch (err) {
+                lastErr = err;
+                console.warn(`⚠ [Bratukha Upload] /uploads/presign не удался:`, err.response?.data ? JSON.stringify(err.response.data) : err.message);
+            }
+
+            // 2. Попытка через JSON с base64 на /uploads
+            if (!fileUrl) {
+                try {
+                    console.log(`📤 [Bratukha Upload] Отправка файла через JSON (base64)...`);
+                    const uploadRes = await axios.post(`${BRATUKHA_API_URL}/uploads`, {
+                        file: buf.toString('base64'),
+                        filename: 'input_file.jpg',
+                        content_type: mimeType || 'image/jpeg'
+                    }, {
+                        headers: {
+                            'Authorization': `Bearer ${apiKey}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    fileUrl = uploadRes.data?.url || uploadRes.data?.file_url || uploadRes.data?.link || uploadRes.data?.path;
+                } catch (err) {
+                    lastErr = err;
+                    console.warn(`⚠ [Bratukha Upload] JSON upload не удался:`, err.response?.data ? JSON.stringify(err.response.data) : err.message);
+                }
+            }
+
+            // 3. Попытка через FormData с полем 'file'
+            if (!fileUrl) {
+                try {
+                    const form = new FormData();
+                    form.append('file', buf, {
+                        filename: 'input_file.jpg',
+                        contentType: mimeType || 'image/jpeg'
+                    });
+
+                    const uploadRes = await axios.post(`${BRATUKHA_API_URL}/uploads`, form, {
+                        headers: {
+                            'Authorization': `Bearer ${apiKey}`,
+                            ...form.getHeaders()
+                        }
+                    });
+                    fileUrl = uploadRes.data?.url || uploadRes.data?.file_url || uploadRes.data?.link || uploadRes.data?.path;
+                } catch (err) {
+                    lastErr = err;
+                }
+            }
+
+            if (fileUrl) {
+                uploadedUrls.push(fileUrl);
+                console.log(`✅ [Bratukha Upload] Файл успешно загружен: ${fileUrl}`);
+            } else {
+                const errorDetails = lastErr?.response?.data ? JSON.stringify(lastErr.response.data) : lastErr?.message;
                 console.error(`🚨 [Bratukha Upload Error Details]:`, errorDetails);
                 throw new Error(`Ошибка загрузки файла на сервер Братухи: ${errorDetails}`);
             }
@@ -66,7 +121,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         }
     }
 
-    // 2. Создание асинхронной операции через POST /api/v1/operations
+    // Создание операции через POST /api/v1/operations
     const payload = {
         tool: toolSlug,
         input: inputData
@@ -98,7 +153,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
 
     console.log(`⏳ [Bratukha] Операция создана. ID: ${operationId}. Статус: ${createRes.data.status}`);
 
-    // 3. Периодический опрос через GET /api/v1/operations/{id} (интервал 3 сек, согласно правилам API)
+    // Периодический опрос через GET /api/v1/operations/{id}
     const maxAttempts = 120;
     const intervalMs = 3000;
 
