@@ -1,8 +1,9 @@
 const axios = require('axios');
 
-const BRATUKHA_API_URL = 'https://bratuha.ru/api/v1';
+// Берем URL из переменных Railway или ставим рабочий дефолт
+const BRATUKHA_API_URL = process.env.BRATUKHA_API_URL || 'https://bratuha.ru/api/v1';
 
-// Полный каталог актуальных моделей (нерабочая kling-1-5 исключена)
+// Каталог актуальных моделей
 const BRATUKHA_MODELS = [
     // 🎵 Аудио
     { slug: 'mureka-ai-v9-5', name: 'Mureka AI V9.5', category: 'audio', price: 60, unit: 'песня / трек' },
@@ -48,8 +49,9 @@ const BRATUKHA_MODELS = [
     { slug: 'seedance-2-5', name: 'Seedance 2.5', category: 'video', price: 16, unit: 'сек. видео' }
 ];
 
-// Список моделей, для которых обязательно требуется входящее изображение
+// Модели, которые требуют картинку на вход
 const MODELS_REQUIRING_IMAGE = [
+    'seedance-2-0-mini',
     'phota-enhance',
     'p-image-upscale',
     'recraft-creative-upscale',
@@ -57,7 +59,11 @@ const MODELS_REQUIRING_IMAGE = [
     'pruna-ai-p-video-2',
     'pruna-ai-p-video-2-pro',
     'pruna-ai-p-video-edit',
+    'pruna-ai-p-video-animate',
     'p-video-avatar',
+    'pixverse-6-0',
+    'pixverse-5-5',
+    'pixverse-5-6',
     'pixverse-lipsync',
     'omnihuman-1-0',
     'omnihuman-1-5'
@@ -134,9 +140,10 @@ async function uploadBuffer(apiKey, buf, mimeType = 'image/jpeg', filename = 'in
 }
 
 async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, modelKey }) {
-    const apiKey = process.env.BRATUKHA_API_KEY;
+    // Автоматическое считывание из переменных Railway
+    const apiKey = process.env.BRATUKHA_API_KEY || process.env.BRATUKHA_TOKEN;
     if (!apiKey) {
-        throw new Error('❌ BRATUKHA_API_KEY не задан в переменных окружения');
+        throw new Error('❌ BRATUKHA_API_KEY не задан в переменных окружения Railway');
     }
 
     let toolSlug = modelKey;
@@ -151,19 +158,13 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
     }
 
     if (MODELS_REQUIRING_IMAGE.includes(toolSlug) && allBuffers.length === 0) {
-        throw new Error('⚠️️ Для выбранной модели обязательно требуется прикрепить изображение. Пожалуйста, отправьте фото вместе с запросом.');
+        throw new Error('⚠️ Для выбранной модели обязательно требуется прикрепить изображение.');
     }
-
-    const foundModel = BRATUKHA_MODELS.find(m => m.slug === toolSlug);
-    const isAudioModel = foundModel?.category === 'audio' || toolSlug.includes('tts');
 
     const inputData = {};
     if (prompt) {
-        if (isAudioModel) {
-            inputData.text = prompt; // Для аудио моделей передаем text
-        } else {
-            inputData.prompt = prompt;
-        }
+        inputData.prompt = prompt;
+        inputData.text = prompt; // Обязательный параметр для TTS
     }
 
     if (allBuffers.length > 0) {
@@ -179,6 +180,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         }
 
         if (uploadedUrls.length > 0) {
+            inputData.image = uploadedUrls[0];
             inputData.image_url = uploadedUrls[0];
             inputData.images = uploadedUrls;
             inputData.file_url = uploadedUrls[0];
@@ -191,7 +193,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         input: inputData
     };
 
-    console.log(`🚀 [Bratukha Operations] Создание операции для инструмента: ${toolSlug}`);
+    console.log(`🚀 [Bratukha Operations] Создание операции: ${toolSlug}`);
 
     let createRes;
     try {
@@ -211,12 +213,10 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         throw err;
     }
 
-    const operationId = createRes.data?.id;
+    const operationId = createRes.data?.id || createRes.data?.operation_id;
     if (!operationId) {
         throw new Error('❌ Не удалось получить ID операции от Братухи');
     }
-
-    console.log(`⏳ [Bratukha] Операция создана. ID: ${operationId}. Статус: ${createRes.data.status}`);
 
     const maxAttempts = 120;
     const intervalMs = 3000;
@@ -238,48 +238,40 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                 await new Promise(r => setTimeout(r, retryAfter * 1000));
                 continue;
             }
-            if (attempt === maxAttempts - 1) {
-                throw pollErr;
-            }
+            if (attempt === maxAttempts - 1) throw pollErr;
             continue;
         }
 
         const opData = statusRes.data;
-        console.log(`🔄 [Bratukha] Опрос [${operationId}]: статус — ${opData.status}`);
 
         if (opData.status === 'completed') {
-            const result = opData.result;
-            console.log(`✅ [Bratukha Success] Результат:`, JSON.stringify(result));
+            const result = opData.result || opData;
+            const resType = result?.type || '';
+            const urls = result?.urls || result?.files || result?.images || result?.videos || [];
+            const primaryUrl = urls[0] || result?.image_url || result?.video_url || result?.audio_url || result?.url;
 
-            const imageUrl = result?.images?.[0] || result?.urls?.[0] || result?.image_url || (result?.type === 'image' ? result?.url : null);
-            const videoUrl = result?.videos?.[0] || result?.video_url || (result?.type === 'video' ? result?.url : null);
-            
-            if (imageUrl) {
-                const mediaRes = await axios.get(imageUrl, { responseType: 'arraybuffer' });
-                return {
-                    type: 'image',
-                    buffer: Buffer.from(mediaRes.data),
-                    text: result?.caption || '' 
-                };
-            } else if (videoUrl) {
-                const mediaRes = await axios.get(videoUrl, { responseType: 'arraybuffer' });
-                return {
-                    type: 'video',
-                    buffer: Buffer.from(mediaRes.data),
-                    text: result?.caption || '' 
-                };
+            const isVideo = resType === 'video' || primaryUrl?.match(/\.(mp4|webm|mov)(\?.*)?$/i);
+            const isAudio = resType === 'audio' || primaryUrl?.match(/\.(mp3|wav|ogg|m4a)(\?.*)?$/i);
+            const isImage = resType === 'image' || primaryUrl?.match(/\.(png|jpg|jpeg|webp|gif)(\?.*)?$/i) || (!isVideo && !isAudio && primaryUrl);
+
+            if (primaryUrl && isVideo) {
+                const mediaRes = await axios.get(primaryUrl, { responseType: 'arraybuffer' });
+                return { type: 'video', buffer: Buffer.from(mediaRes.data), text: result?.caption || '' };
+            } else if (primaryUrl && isAudio) {
+                const mediaRes = await axios.get(primaryUrl, { responseType: 'arraybuffer' });
+                return { type: 'audio', buffer: Buffer.from(mediaRes.data), text: result?.caption || '' };
+            } else if (primaryUrl && isImage) {
+                const mediaRes = await axios.get(primaryUrl, { responseType: 'arraybuffer' });
+                return { type: 'image', buffer: Buffer.from(mediaRes.data), text: result?.caption || '' };
             } else {
-                return {
-                    type: 'text',
-                    text: typeof result === 'object' ? (result.caption || JSON.stringify(result)) : String(result)
-                };
+                return { type: 'text', text: typeof result === 'object' ? (result.caption || JSON.stringify(result)) : String(result) };
             }
         } else if (opData.status === 'failed') {
             throw new Error(opData.error_message || opData.error?.message || 'Выполнение завершилось ошибкой на стороне нейросети');
         }
     }
 
-    throw new Error('⏱️ Превышено время ожидания ответа от нейросети (таймаут операции)');
+    throw new Error('⏱️ Превышено время ожидания ответа от нейросети');
 }
 
 class BratukhaPlugin {
