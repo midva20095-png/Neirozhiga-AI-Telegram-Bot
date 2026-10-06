@@ -46,7 +46,7 @@ bot.use(async (ctx, next) => {
 });
 
 const MODEL_COSTS = {
-    // Гугловские (не трогаем)
+    // 🟢 Модели Google
     'flash': 1,
     'flash_25': 1,
     'pro': 3,
@@ -54,25 +54,117 @@ const MODEL_COSTS = {
     'nanobanana_pro': 10,
     'veo': 400,
 
-    // Новые модели от Братухи (с учетом коэффициента x2.5)
-    'gpt-image-2-5': 2,
-    'deepseek-v3.2': 3,
-    'qwen3.5-9b': 10
+    // 🎵 Аудио (Братуха)
+    'mureka-ai-v9-5': 60,
+    'qwen3-tts': 20,
+    'qwen3-tts-flash': 20,
+    'suno-v4': 35,
+    'udio-v1-5': 30,
+
+    // 🖼 Картинки, 3D и Апскейл (Братуха)
+    'phota-enhance': 44,
+    'pixal3d': 90,
+    'p-image-upscale': 2,
+    'qwen-image-2-1': 8,
+    'qwen-image-3-0': 9,
+    'recraft-creative-upscale': 80,
+    'recraft-crisp-upscale': 2,
+    'recraft-v4': 14,
+    'recraft-v4-1': 12,
+    'runway-gen4-image': 16,
+    'sam-3d': 8,
+    'seedream-4-0': 8,
+    'seedream-4-5': 10,
+    'flux-1-1-pro': 12,
+    'midjourney-v6-1': 15,
+    'ideogram-v2': 10,
+
+    // 🎬 Видео и Анимация (Братуха)
+    'omnihuman-1-0': 40,
+    'omnihuman-1-5': 70,
+    'pika': 14,
+    'pixverse-5-5': 45,
+    'pixverse-5-6': 112,
+    'pixverse-6-0': 10,
+    'pixverse-c1': 12,
+    'pixverse-lipsync': 14,
+    'pixverse-vibemv': 20,
+    'pruna-ai-p-video': 6,
+    'pruna-ai-p-video-animate': 10,
+    'p-video-avatar': 8,
+    'pruna-ai-p-video-2': 5,
+    'pruna-ai-p-video-2-pro': 4,
+    'pruna-ai-p-video-edit': 10,
+    'runway-4-turbo': 30,
+    'seedance-1-0': 20,
+    'seedance-1-5-pro': 14,
+    'seedance-2-0-apimart': 10,
+    'seedance-2-0-mini': 10,
+    'seedance-2-5': 16,
+    'sora-2': 50,
+    'kling-1-5': 25,
+    'luma-dream-machine': 30
 };
 
 const MODEL_NAMES = {
-    // Гугловские (не трогаем)
+    // 🟢 Модели Google
     'flash': 'Gemini 3.8 Flash ⚡️',
     'flash_25': 'Gemini 2.5 Flash 🚀',
     'pro': 'Gemini 3.1 Pro 🧠',
-    'nanobanana': 'Nano Banana 2 (Картинки) 🎨',
-    'nanobanana_pro': 'Nano Banana Pro (HQ) 💎',
-    'veo': 'Veo 3.1 Видео (VIP) 🎬',
+    'nanobanana': 'Nano Banana 2 🎨',
+    'nanobanana_pro': 'Nano Banana Pro 💎',
+    'veo': 'Veo 3.1 Видео 🎬',
 
-    // Новые модели от Братухи
-    'gpt-image-2-5': 'GPT Image 2.5 🎨',
-    'deepseek-v3.2': 'DeepSeek V3.2 🤖',
-    'qwen3.5-9b': 'Qwen 3.5 9B 💬'
+    // 🎵 Аудио
+    'mureka-ai-v9-5': 'Mureka AI V9.5 🎵',
+    'qwen3-tts': 'Qwen3 TTS 🗣',
+    'qwen3-tts-flash': 'Qwen3 TTS Flash ⚡️',
+    'suno-v4': 'Suno V4 🎶',
+    'udio-v1-5': 'Udio v1.5 🎧',
+
+    // 🖼 Картинки, 3D и Апскейл
+    'phota-enhance': 'Phota Enhance 🪄',
+    'pixal3d': 'Pixal3D 🧊',
+    'p-image-upscale': 'Pruna P-ImageUpscale 🔍',
+    'qwen-image-2-1': 'Qwen Image 2.1 🎨',
+    'qwen-image-3-0': 'Qwen Image 3.0 🎨',
+    'recraft-creative-upscale': 'Recraft Creative Upscale 🖼',
+    'recraft-crisp-upscale': 'Recraft Crisp Upscale 🔍',
+    'recraft-v4': 'Recraft V4 🎨',
+    'recraft-v4-1': 'Recraft V4.1 🎨',
+    'runway-gen4-image': 'Runway Gen4 Image 🖼',
+    'sam-3d': 'SAM 3D 🧊',
+    'seedream-4-0': 'Seedream 4.0 🌈',
+    'seedream-4-5': 'Seedream 4.5 🌈',
+    'flux-1-1-pro': 'FLUX 1.1 Pro 💎',
+    'midjourney-v6-1': 'Midjourney v6.1 ✨',
+    'ideogram-v2': 'Ideogram v2 🔤',
+
+    // 🎬 Видео и Анимация
+    'omnihuman-1-0': 'OmniHuman 1.0 👤',
+    'omnihuman-1-5': 'OmniHuman 1.5 👤',
+    'pika': 'Pika 2.2 🎬',
+    'pixverse-5-5': 'PixVerse 5.5 🎥',
+    'pixverse-5-6': 'PixVerse 5.6 🎥',
+    'pixverse-6-0': 'PixVerse 6.0 🎥',
+    'pixverse-c1': 'PixVerse C1 🎥',
+    'pixverse-lipsync': 'PixVerse Lipsync 👄',
+    'pixverse-vibemv': 'PixVerse VibeMV 🎶',
+    'pruna-ai-p-video': 'Pruna P-Video 📹',
+    'pruna-ai-p-video-animate': 'Pruna P-Video Animate 🎞',
+    'p-video-avatar': 'Pruna P-Video Avatar 🗣',
+    'pruna-ai-p-video-2': 'Pruna P-Video 2 📹',
+    'pruna-ai-p-video-2-pro': 'Pruna P-Video 2 Pro ⚡',
+    'pruna-ai-p-video-edit': 'Pruna P-Video Edit ✂',
+    'runway-4-turbo': 'Runway 4 Turbo 🚀',
+    'seedance-1-0': 'Seedance 1.0 💃',
+    'seedance-1-5-pro': 'Seedance 1.5 Pro 💃',
+    'seedance-2-0-apimart': 'Seedance 2.0 💃',
+    'seedance-2-0-mini': 'Seedance 2.0 Mini 💃',
+    'seedance-2-5': 'Seedance 2.5 💃',
+    'sora-2': 'Sora 2.0 🌟',
+    'kling-1-5': 'Kling 1.5 🎬',
+    'luma-dream-machine': 'Luma Dream Machine 🌌'
 };
 
 const CREDIT_PACKAGES = {
@@ -132,28 +224,55 @@ async function getTelegramFileBuffer(ctx, fileId) {
 }
 
 function getModelSelectionKeyboard(currentMode) {
-    const textModels = ['flash', 'flash_25', 'pro', 'deepseek-v3.2', 'qwen3.5-9b'];
-    const imageModels = ['nanobanana', 'nanobanana_pro', 'gpt-image-2-5'];
-    const videoModels = ['veo'];
+    const textModels = ['flash', 'flash_25', 'pro'];
+    
+    const audioModels = [
+        'mureka-ai-v9-5', 'qwen3-tts', 'qwen3-tts-flash', 'suno-v4', 'udio-v1-5'
+    ];
+    
+    const imageModels = [
+        'nanobanana', 'nanobanana_pro', 'phota-enhance', 'pixal3d', 
+        'p-image-upscale', 'qwen-image-2-1', 'qwen-image-3-0', 
+        'recraft-creative-upscale', 'recraft-crisp-upscale', 'recraft-v4', 
+        'recraft-v4-1', 'runway-gen4-image', 'sam-3d', 'seedream-4-0', 
+        'seedream-4-5', 'flux-1-1-pro', 'midjourney-v6-1', 'ideogram-v2'
+    ];
+    
+    const videoModels = [
+        'veo', 'omnihuman-1-0', 'omnihuman-1-5', 'pika', 'pixverse-5-5', 
+        'pixverse-5-6', 'pixverse-6-0', 'pixverse-c1', 'pixverse-lipsync', 
+        'pixverse-vibemv', 'pruna-ai-p-video', 'pruna-ai-p-video-animate', 
+        'p-video-avatar', 'pruna-ai-p-video-2', 'pruna-ai-p-video-2-pro', 
+        'pruna-ai-p-video-edit', 'runway-4-turbo', 'seedance-1-0', 
+        'seedance-1-5-pro', 'seedance-2-0-apimart', 'seedance-2-0-mini', 
+        'seedance-2-5', 'sora-2', 'kling-1-5', 'luma-dream-machine'
+    ];
 
     const buttons = [];
 
-    // Текстовые модели
+    // Текстовые модельки
     buttons.push([Markup.button.callback('💬 ─── ТЕКСТОВЫЕ МОДЕЛИ ───', 'noop_text')]);
     textModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
         buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
     });
 
-    // Генерация картинок
-    buttons.push([Markup.button.callback('🎨 ─── ГЕНЕРАЦИЯ КАРТИНОК ───', 'noop_image')]);
+    // Аудио модельки
+    buttons.push([Markup.button.callback('🎵 ─── АУДИО И ГОЛОС ───', 'noop_audio')]);
+    audioModels.forEach(key => {
+        const isSelected = key === currentMode ? '✅ ' : '';
+        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
+    });
+
+    // Картинки, Апскейл и 3D
+    buttons.push([Markup.button.callback('🎨 ─── КАРТИНКИ, 3D И АПСКЕЙЛ ───', 'noop_image')]);
     imageModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
         buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
     });
 
-    // Видео
-    buttons.push([Markup.button.callback('🎬 ─── ВИДЕО ───', 'noop_video')]);
+    // Видео и Анимация
+    buttons.push([Markup.button.callback('🎬 ─── ВИДЕО И АНИМАЦИЯ ───', 'noop_video')]);
     videoModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
         buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
@@ -252,7 +371,7 @@ async function startBot(app) {
         await ctx.reply(
             `🤖 *Главное меню бота*\n\n` +
             `💳 Ваш баланс: *${balance} кредитов*\n` +
-            `🎯 Текущая модель: *${MODEL_NAMES[currentMode]}*\n\n` +
+            `🎯 Текущая модель: *${MODEL_NAMES[currentMode] || currentMode}*\n\n` +
             `Отправьте текстовый запрос или фото:`,
             { parse_mode: 'Markdown', ...mainKeyboard }
         );
@@ -264,7 +383,7 @@ async function startBot(app) {
         const balance = await getUserBalance(ctx.from.id);
         const currentMode = userActiveMode.get(ctx.from.id) || 'flash';
         await ctx.reply(
-            `💳 *Баланс:* ${balance} кр.\nМодель: ${MODEL_NAMES[currentMode]}`,
+            `💳 *Баланс:* ${balance} кр.\nМодель: ${MODEL_NAMES[currentMode] || currentMode}`,
             {
                 parse_mode: 'Markdown',
                 ...Markup.inlineKeyboard([
@@ -310,7 +429,7 @@ async function startBot(app) {
         await ctx.editMessageText('❌ Обращение в поддержку отменено.');
     });
 
-    // Обработка кликов по неактивным заголовкам разделов в меню моделей
+    // Заголовки категорий меню
     bot.action(/^noop_.+$/, async (ctx) => {
         await ctx.answerCbQuery('Это название раздела, выберите модель ниже 👇');
     });
@@ -321,11 +440,11 @@ async function startBot(app) {
         await ctx.reply(
             `Здравствуйте! Я — универсальный ИИ-помощник.\n\n` +
             `Вот чем я могу вам помочь:\n` +
-            `• Работа с текстом и языками\n` +
-            `• Поиск информации и обучение\n` +
-            `• Программирование и отладка кода\n` +
-            `• Генерация идей и планирование\n\n` +
-            `Просто отправьте мне текстовый вопрос или фото!`,
+            `• Генерация текста, кодинг и аналитика\n` +
+            `• Создание изображений, апскейл и 3D-моделирование\n` +
+            `• Создание и анимация видеоклипов\n` +
+            `• Озвучка текста и генерация музыки\n\n` +
+            `Просто выберите нужную модель и отправьте текстовый запрос или файл!`,
             { parse_mode: 'Markdown' }
         );
     });
@@ -339,9 +458,7 @@ async function startBot(app) {
 
     bot.action(/^set_model_(.+)$/, async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
-        let selectedModel = ctx.match[1];
-        if (selectedModel === 'qwen-3-5-9b') selectedModel = 'qwen3.5-9b';
-        if (selectedModel === 'deepseek-v3-2') selectedModel = 'deepseek-v3.2';
+        const selectedModel = ctx.match[1];
 
         if (MODEL_NAMES[selectedModel]) {
             userActiveMode.set(ctx.from.id, selectedModel);
@@ -418,7 +535,7 @@ async function startBot(app) {
                 await ctx.reply('✅ Ваше сообщение отправлено в службу поддержки! Администратор ответит вам в ближайшее время.', { parse_mode: 'Markdown' });
             } catch (err) {
                 console.error('Ошибка отправки в поддержку:', err);
-                await ctx.reply('⚠️ Не удалось отправить сообщение в поддержку. Попробуйте позже.');
+                await ctx.reply('⚠️️ Не удалось отправить сообщение в поддержку. Попробуйте позже.');
             }
             return;
         }
@@ -474,9 +591,6 @@ async function startBot(app) {
         }
 
         let currentMode = userActiveMode.get(userId) || 'flash';
-        if (currentMode === 'qwen-3-5-9b') currentMode = 'qwen3.5-9b';
-        if (currentMode === 'deepseek-v3-2') currentMode = 'deepseek-v3.2';
-
         const cost = MODEL_COSTS[currentMode] || 1;
 
         const balance = await getUserBalance(userId);
@@ -494,7 +608,7 @@ async function startBot(app) {
         if (!activePlugin) return ctx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
 
         userProcessing.add(userId);
-        const waitMessage = await ctx.reply(`⏳ *Генерирую ответ...* ${currentMode === 'veo' ? '(Видео создается около 1–2 минут, пожалуйста, подождите)' : ''}`, { parse_mode: 'Markdown' });
+        const waitMessage = await ctx.reply(`⏳ *Генерирую ответ...* ${(currentMode === 'veo' || currentMode.includes('pixverse') || currentMode.includes('seedance') || currentMode.includes('runway')) ? '(Видео/Аудио создается около 1–3 минут, пожалуйста, подождите)' : ''}`, { parse_mode: 'Markdown' });
 
         try {
             let fileBuffers = [];
@@ -563,9 +677,6 @@ async function startBot(app) {
         }
 
         let currentMode = userActiveMode.get(userId) || 'flash';
-        if (currentMode === 'qwen-3-5-9b') currentMode = 'qwen3.5-9b';
-        if (currentMode === 'deepseek-v3-2') currentMode = 'deepseek-v3.2';
-
         const cost = MODEL_COSTS[currentMode] || 1;
 
         const balance = await getUserBalance(userId);
