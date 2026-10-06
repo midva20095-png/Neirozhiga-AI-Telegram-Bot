@@ -1,4 +1,5 @@
 const axios = require('axios');
+const FormData = require('form-data');
 
 const BRATUKHA_API_URL = 'https://bratuha.ru/api/v1';
 
@@ -25,7 +26,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
     if (toolSlug === 'qwen-3-5-9b') toolSlug = 'qwen3.5-9b';
     if (toolSlug === 'deepseek-v3-2') toolSlug = 'deepseek-v3.2';
 
-    // 1. Если это текстовая модель — отправляем в /chat/completions
+    // 1. Текстовые модели через /chat/completions
     if (TEXT_MODELS.includes(toolSlug)) {
         console.log(`💬 [Bratukha Chat] Запрос к текстовой модели: ${toolSlug}`);
 
@@ -71,7 +72,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         }
     }
 
-    // 2. Иначе — асинхронный эндпоинт операций (/operations) для медиа и видео
+    // 2. Медиа и видео модели через асинхронный эндпоинт /operations
     const inputData = {};
     if (prompt) {
         inputData.prompt = prompt;
@@ -83,10 +84,48 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         allBuffers.push(...fileBuffers);
     }
 
+    // Загружаем файлы через официальный эндпоинт /uploads для получения внешних URL
     if (allBuffers.length > 0) {
-        const fileUrls = allBuffers.map(buf => `data:${mimeType || 'image/jpeg'};base64,${buf.toString('base64')}`);
-        inputData.images = fileUrls;
-        inputData.image_url = fileUrls[0];
+        const uploadedUrls = [];
+        for (const buf of allBuffers) {
+            try {
+                const form = new FormData();
+                form.append('file', buf, {
+                    filename: 'input_media.jpg',
+                    contentType: mimeType || 'image/jpeg'
+                });
+
+                console.ℓ?.(`📤 [Bratukha Upload] Загрузка файла на сервер...`);
+                const uploadRes = await axios.post(`${BRATUKHA_API_URL}/uploads`, form, {
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        ...form.getHeaders()
+                    }
+                });
+
+                const fileUrl = uploadRes.data?.url || uploadRes.data?.file_url || uploadRes.data?.link;
+                if (fileUrl) {
+                    uploadedUrls.push(fileUrl);
+                    console.log(`✅ [Bratukha Upload] Файл успешно загружен: ${fileUrl}`);
+                }
+            } catch (uploadErr) {
+                console.error(`🚨 [Bratukha Upload Error]:`, uploadErr.response?.data || uploadErr.message);
+                throw new Error('Не удалось загрузить входной файл на сервер Братухи');
+            }
+        }
+
+        if (uploadedUrls.length > 0) {
+            inputData.images = uploadedUrls;
+            inputData.image_url = uploadedUrls[0];
+            inputData.image = uploadedUrls[0];
+            inputData.init_image = uploadedUrls[0];
+        }
+    }
+
+    // Обязательные параметры для видео-моделей (Veo, Kling, Sora и др.)
+    if (toolSlug.includes('veo') || toolSlug.includes('video') || toolSlug.includes('sora') || toolSlug.includes('kling') || toolSlug.includes('luma')) {
+        inputData.aspect_ratio = inputData.aspect_ratio || '16:9';
+        inputData.duration = inputData.duration || 5;
     }
 
     const payload = {
@@ -111,8 +150,8 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
 
         console.log(`⏳ [Bratukha] Операция создана. ID: ${operationId}. Статус: ${createRes.data.status}`);
 
-        const maxAttempts = 120;
-        const intervalMs = 3000;
+        const maxAttempts = 120; // Таймаут для тяжелых задач (видео/генерации)
+        const intervalMs = 3000; // Интервал опроса 3 секунды (соблюдаем лимит > 1 сек)
 
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
             await new Promise(resolve => setTimeout(resolve, intervalMs));
@@ -129,24 +168,24 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
 
                 if (opData.status === 'completed') {
                     const result = opData.result;
+                    console.log(`✅ [Bratukha Success] Результат:`, JSON.stringify(result));
 
-                    // Извлекаем URL картинки из всех возможных структур ответа (images, urls, url)
-                    const imageUrl = result?.images?.[0] || result?.urls?.[0] || (result?.type === 'image' ? result?.url : null);
-                    const videoUrl = result?.videos?.[0] || (result?.type === 'video' ? result?.url : null);
+                    const imageUrl = result?.images?.[0] || result?.urls?.[0] || result?.image_url || (result?.type === 'image' ? result?.url : null);
+                    const videoUrl = result?.videos?.[0] || result?.video_url || (result?.type === 'video' ? result?.url : null);
                     
                     if (imageUrl) {
                         const mediaRes = await axios.get(imageUrl, { responseType: 'arraybuffer' });
                         return {
                             type: 'image',
                             buffer: Buffer.from(mediaRes.data),
-                            text: '' // Текст пустой, чтобы ссылка не выводилась в чат
+                            text: '' 
                         };
                     } else if (videoUrl) {
                         const mediaRes = await axios.get(videoUrl, { responseType: 'arraybuffer' });
                         return {
                             type: 'video',
                             buffer: Buffer.from(mediaRes.data),
-                            text: '' // Текст пустой
+                            text: '' 
                         };
                     } else if (result && (result.text || typeof result === 'string')) {
                         return {
@@ -156,7 +195,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                     } else {
                         return {
                             type: 'text',
-                            text: typeof result === 'object' ? (result.caption || '') : String(result)
+                            text: typeof result === 'object' ? (result.caption || JSON.stringify(result)) : String(result)
                         };
                     }
                 } else if (opData.status === 'failed') {
@@ -180,7 +219,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         if (err.response) {
             const errData = err.response.data;
             console.error(`🚨 [Bratukha API Error] Status: ${err.response.status}`, JSON.stringify(errData));
-            throw new Error(errData.error?.message || `Ошибка API: статус ${err.response.status}`);
+            throw new Error(errData.error?.message || errData.message || `Ошибка API: статус ${err.response.status}`);
         } else {
             console.error(`🚨 [Bratukha Error]:`, err.message);
             throw err;
