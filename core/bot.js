@@ -46,7 +46,7 @@ bot.use(async (ctx, next) => {
 });
 
 const MODEL_COSTS = {
-    // Гугловские
+    // Гугловские (не трогаем)
     'flash': 1,
     'flash_25': 1,
     'pro': 3,
@@ -54,14 +54,14 @@ const MODEL_COSTS = {
     'nanobanana_pro': 12,
     'veo': 300,
 
-    // Модели от Братухи
+    // Новые модели от Братухи (с учетом коэффициента x2.5)
     'gpt-image-2-5': 25,
     'deepseek-v3.2': 15,
     'qwen3.5-9b': 10
 };
 
 const MODEL_NAMES = {
-    // Гугловские
+    // Гугловские (не трогаем)
     'flash': 'Gemini 3.8 Flash ⚡️',
     'flash_25': 'Gemini 2.5 Flash 🚀',
     'pro': 'Gemini 3.1 Pro 🧠',
@@ -69,7 +69,7 @@ const MODEL_NAMES = {
     'nanobanana_pro': 'Nano Banana Pro (HQ) 💎',
     'veo': 'Veo 3.1 Видео (VIP) 🎬',
 
-    // Модели от Братухи
+    // Новые модели от Братухи
     'gpt-image-2-5': 'GPT Image 2.5 🎨',
     'deepseek-v3.2': 'DeepSeek V3.2 🤖',
     'qwen3.5-9b': 'Qwen 3.5 9B 💬'
@@ -127,7 +127,6 @@ async function getTelegramFileBuffer(ctx, fileId) {
         const response = await axios.get(fileLink.href, { responseType: 'arraybuffer' });
         return Buffer.from(response.data);
     } catch (e) {
-        console.error('❌ Ошибка получения файла из Telegram:', e.message);
         return null;
     }
 }
@@ -311,6 +310,7 @@ async function startBot(app) {
         await ctx.editMessageText('❌ Обращение в поддержку отменено.');
     });
 
+    // Обработка кликов по неактивным заголовкам разделов в меню моделей
     bot.action(/^noop_.+$/, async (ctx) => {
         await ctx.answerCbQuery('Это название раздела, выберите модель ниже 👇');
     });
@@ -387,7 +387,7 @@ async function startBot(app) {
         const userId = ctx.from.id;
         const stringUserId = String(userId);
 
-        if (stringUserId === ADMIN_ID && ctx.message?.reply_to_message) {
+        if (stringUserId === ADMIN_ID && ctx.message.reply_to_message) {
             const repliedText = ctx.message.reply_to_message.text || '';
             const match = repliedText.match(/ID:\s*`?(\d+)`?/);
             if (match && match[1]) {
@@ -500,15 +500,8 @@ async function startBot(app) {
             let fileBuffers = [];
             let mimeType = 'image/jpeg';
 
-            // 1. Проверяем фото прямо в текущем сообщении
             if (ctx.message?.photo && ctx.message.photo.length > 0) {
                 const largestPhoto = ctx.message.photo[ctx.message.photo.length - 1];
-                const buf = await getTelegramFileBuffer(ctx, largestPhoto.file_id);
-                if (buf) fileBuffers.push(buf);
-            }
-            // 2. Проверяем фото в сообщении, на которое ответил пользователь (reply)
-            else if (ctx.message?.reply_to_message?.photo && ctx.message.reply_to_message.photo.length > 0) {
-                const largestPhoto = ctx.message.reply_to_message.photo[ctx.message.reply_to_message.photo.length - 1];
                 const buf = await getTelegramFileBuffer(ctx, largestPhoto.file_id);
                 if (buf) fileBuffers.push(buf);
             }
@@ -599,10 +592,6 @@ async function startBot(app) {
             for (const c of contexts) {
                 if (c.message?.photo && c.message.photo.length > 0) {
                     const largestPhoto = c.message.photo[c.message.photo.length - 1];
-                    const buf = await getTelegramFileBuffer(firstCtx, largestPhoto.file_id);
-                    if (buf) fileBuffers.push(buf);
-                } else if (c.message?.reply_to_message?.photo && c.message.reply_to_message.photo.length > 0) {
-                    const largestPhoto = c.message.reply_to_message.photo[c.message.reply_to_message.photo.length - 1];
                     const buf = await getTelegramFileBuffer(firstCtx, largestPhoto.file_id);
                     if (buf) fileBuffers.push(buf);
                 }
