@@ -17,24 +17,6 @@ function parseAspectRatio(promptText) {
     return match ? match[1] : null;
 }
 
-// Расчет конкретных пикселей по пропорциям для генераторов
-function getDimensionsFromRatio(ratioStr) {
-    if (!ratioStr) return null;
-    const [w, h] = ratioStr.split(':').map(Number);
-    if (!w || !h) return null;
-
-    if (w === h) return { width: 1024, height: 1024 };
-    if (w < h) {
-        const height = 1344;
-        const width = Math.round((w / h) * height);
-        return { width: Math.round(width / 64) * 64, height };
-    } else {
-        const width = 1344;
-        const height = Math.round((h / w) * width);
-        return { width, height: Math.round(height / 64) * 64 };
-    }
-}
-
 async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, modelKey }) {
     const apiKey = process.env.BRATUKHA_API_KEY;
     if (!apiKey) {
@@ -50,21 +32,17 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
     if (toolSlug === 'qwen-3-5-9b') toolSlug = 'qwen3.5-9b';
     if (toolSlug === 'deepseek-v3-2') toolSlug = 'deepseek-v3.2';
 
-    // Собираем все буферы изображений
-    const allBuffers = [];
-    if (fileBuffer) allBuffers.push(fileBuffer);
-    if (fileBuffers && Array.isArray(fileBuffers)) {
-        allBuffers.push(...fileBuffers);
-    }
-
     // 1. Если это текстовая модель — отправляем в /chat/completions
     if (TEXT_MODELS.includes(toolSlug)) {
         console.log(`💬 [Bratukha Chat] Запрос к текстовой модели: ${toolSlug}`);
 
         const messages = [{ role: 'user', content: prompt || '' }];
 
+        const allBuffers = [];
+        if (fileBuffer) allBuffers.push(fileBuffer);
+        if (fileBuffers && Array.isArray(fileBuffers)) allBuffers.push(...fileBuffers);
+
         if (allBuffers.length > 0) {
-            console.log(`📷 [Bratukha Chat] Прикреплено изображений: ${allBuffers.length}`);
             const contentParts = [{ type: 'text', text: prompt || '' }];
             allBuffers.forEach(buf => {
                 contentParts.push({
@@ -105,33 +83,25 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
     if (prompt) {
         inputData.prompt = prompt;
         
-        // Автовыделение формата из текста для исключения белых полей
+        // Автовыделение формата из текста для исключения белых полей по бокам
         const aspectRatio = parseAspectRatio(prompt);
         if (aspectRatio) {
             inputData.aspect_ratio = aspectRatio;
             inputData.ratio = aspectRatio;
             inputData.ar = aspectRatio;
-
-            const dimensions = getDimensionsFromRatio(aspectRatio);
-            if (dimensions) {
-                inputData.width = dimensions.width;
-                inputData.height = dimensions.height;
-            }
         }
     }
 
+    const allBuffers = [];
+    if (fileBuffer) allBuffers.push(fileBuffer);
+    if (fileBuffers && Array.isArray(fileBuffers)) {
+        allBuffers.push(...fileBuffers);
+    }
+
     if (allBuffers.length > 0) {
-        console.log(`📷 [Bratukha Operations] Передано изображений из чата: ${allBuffers.length}`);
         const fileUrls = allBuffers.map(buf => `data:${mimeType || 'image/jpeg'};base64,${buf.toString('base64')}`);
-        
-        // Заполняем ВСЕ возможные названия полей для картинки, которые могут требовать разные модели
-        inputData.image = fileUrls[0];
-        inputData.image_url = fileUrls[0];
-        inputData.input_image = fileUrls[0];
-        inputData.init_image = fileUrls[0];
         inputData.images = fileUrls;
-    } else {
-        console.warn(`⚠️ [Bratukha Operations] Изображение НЕ получено из чата (fileBuffer пуст)`);
+        inputData.image_url = fileUrls[0];
     }
 
     const payload = {
@@ -175,6 +145,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                 if (opData.status === 'completed') {
                     const result = opData.result;
 
+                    // Извлекаем URL картинки из всех возможных структур ответа (images, urls, url)
                     const imageUrl = result?.images?.[0] || result?.urls?.[0] || (result?.type === 'image' ? result?.url : null);
                     const videoUrl = result?.videos?.[0] || (result?.type === 'video' ? result?.url : null);
                     
@@ -183,14 +154,14 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                         return {
                             type: 'image',
                             buffer: Buffer.from(mediaRes.data),
-                            text: ''
+                            text: '' // Без текста и بدون ссылок в чате
                         };
                     } else if (videoUrl) {
                         const mediaRes = await axios.get(videoUrl, { responseType: 'arraybuffer' });
                         return {
                             type: 'video',
                             buffer: Buffer.from(mediaRes.data),
-                            text: ''
+                            text: '' // Без текста
                         };
                     } else if (result && (result.text || typeof result === 'string')) {
                         return {
