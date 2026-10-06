@@ -32,15 +32,18 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
     if (toolSlug === 'qwen-3-5-9b') toolSlug = 'qwen3.5-9b';
     if (toolSlug === 'deepseek-v3-2') toolSlug = 'deepseek-v3.2';
 
-    // 1. Если это текстовая модель — отправляем в /chat/completions
+    // Собираем все входящие файлы (одиночный файл или альбом/несколько файлов)
+    const allBuffers = [];
+    if (fileBuffer) allBuffers.push(fileBuffer);
+    if (fileBuffers && Array.isArray(fileBuffers)) {
+        allBuffers.push(...fileBuffers);
+    }
+
+    // 1. Если это текстовая модель — отправляем в /chat/completions с поддержкой мультимодальности
     if (TEXT_MODELS.includes(toolSlug)) {
-        console.log(`💬 [Bratukha Chat] Запрос к текстовой модели: ${toolSlug}`);
+        console.log(`💬 [Bratukha Chat] Запрос к текстовой модели: ${toolSlug} (файлов: ${allBuffers.length})`);
 
         const messages = [{ role: 'user', content: prompt || '' }];
-
-        const allBuffers = [];
-        if (fileBuffer) allBuffers.push(fileBuffer);
-        if (fileBuffers && Array.isArray(fileBuffers)) allBuffers.push(...fileBuffers);
 
         if (allBuffers.length > 0) {
             const contentParts = [{ type: 'text', text: prompt || '' }];
@@ -78,7 +81,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         }
     }
 
-    // 2. Иначе — асинхронный эндпоинт операций (/operations) для медиа и видео
+    // 2. Иначе — асинхронный эндпоинт операций (/operations) для медиа, генерации и редактирования картинок
     const inputData = {};
     if (prompt) {
         inputData.prompt = prompt;
@@ -92,16 +95,27 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         }
     }
 
-    const allBuffers = [];
-    if (fileBuffer) allBuffers.push(fileBuffer);
-    if (fileBuffers && Array.isArray(fileBuffers)) {
-        allBuffers.push(...fileBuffers);
-    }
-
+    // Передаем картинки так же полноценно, как в Nano Banana (массив + поименованные ключи)
     if (allBuffers.length > 0) {
         const fileUrls = allBuffers.map(buf => `data:${mimeType || 'image/jpeg'};base64,${buf.toString('base64')}`);
+        
+        // Основной массив изображений для мульти-инпутов и сшивания
         inputData.images = fileUrls;
+        
+        // Дублируем по разным стандартам именования параметров эндпоинтов Братухи
         inputData.image_url = fileUrls[0];
+        inputData.source_image = fileUrls[0];
+        
+        if (fileUrls.length > 1) {
+            inputData.image_url_1 = fileUrls[0];
+            inputData.image_url_2 = fileUrls[1];
+            inputData.second_image_url = fileUrls[1];
+            inputData.target_image = fileUrls[1];
+        }
+        
+        console.log(`🖼️ [Bratukha Operations] Передано изображений в запрос: ${fileUrls.length}`);
+    } else {
+        console.log(`⚠️ [Bratukha Operations] Изображения не переданы (чистый текстовый промпт для медиа-модели)`);
     }
 
     const payload = {
@@ -145,7 +159,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                 if (opData.status === 'completed') {
                     const result = opData.result;
 
-                    // Извлекаем URL картинки из всех возможных структур ответа (images, urls, url)
+                    // Извлекаем результат (картинку, видео или текст)
                     const imageUrl = result?.images?.[0] || result?.urls?.[0] || (result?.type === 'image' ? result?.url : null);
                     const videoUrl = result?.videos?.[0] || (result?.type === 'video' ? result?.url : null);
                     
@@ -154,14 +168,14 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                         return {
                             type: 'image',
                             buffer: Buffer.from(mediaRes.data),
-                            text: '' // Без текста и بدون ссылок в чате
+                            text: ''
                         };
                     } else if (videoUrl) {
                         const mediaRes = await axios.get(videoUrl, { responseType: 'arraybuffer' });
                         return {
                             type: 'video',
                             buffer: Buffer.from(mediaRes.data),
-                            text: '' // Без текста
+                            text: ''
                         };
                     } else if (result && (result.text || typeof result === 'string')) {
                         return {
@@ -178,8 +192,8 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                     throw new Error(opData.error_message || 'Выполнение завершилось ошибкой на стороне нейросети');
                 }
             } catch (pollErr) {
+                const retryAfter = Number(pollErr.response?.headers?.['retry-after']) || 2;
                 if (pollErr.response?.status === 429 || pollErr.response?.status === 503) {
-                    const retryAfter = pollErr.response.headers['retry-after'] || 2;
                     await new Promise(r => setTimeout(r, retryAfter * 1000));
                     continue;
                 }
