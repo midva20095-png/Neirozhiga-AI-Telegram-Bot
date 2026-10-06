@@ -84,15 +84,9 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
     }
 
     if (allBuffers.length > 0) {
-        const fileUrl = `data:${mimeType || 'image/jpeg'};base64,${allBuffers[0].toString('base64')}`;
         const fileUrls = allBuffers.map(buf => `data:${mimeType || 'image/jpeg'};base64,${buf.toString('base64')}`);
-        
-        // Дублируем во все возможные ключи, чтобы API гарантированно подхватило картинку
         inputData.images = fileUrls;
-        inputData.image_url = fileUrl;
-        inputData.image = fileUrl;
-        inputData.init_image = fileUrl;
-        inputData.input_image = fileUrl;
+        inputData.image_url = fileUrls[0];
     }
 
     const payload = {
