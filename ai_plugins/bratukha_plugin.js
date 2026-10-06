@@ -14,11 +14,14 @@ const TEXT_MODELS = [
 const recentImageCache = new Map();
 const CACHE_TTL_MS = 2 * 60 * 1000; // 2 минуты
 
-// Парсер соотношения сторон из текста промпта (например: "9:16", "--ar 16:9", "ar 1:1")
+// Парсер соотношения сторон (поддерживает "9:16", "9х16", "--ar 16:9")
 function parseAspectRatio(promptText) {
     if (!promptText) return null;
-    const match = promptText.match(/(?:--ar|ar|aspect[:\s]*ratio)?\s*(\d+:\d+)/i);
-    return match ? match[1] : null;
+    const match = promptText.match(/(?:--ar|ar|aspect[:\s]*ratio)?\s*(\d+[:хx]\d+)/i);
+    if (match && match[1]) {
+        return match[1].replace(/[хx]/i, ':');
+    }
+    return null;
 }
 
 async function processRequest(params) {
@@ -56,14 +59,14 @@ async function processRequest(params) {
             mimeType: effectiveMimeType,
             timestamp: Date.now()
         });
-        console.log(`📥 [Bratukha Cache] Сохранено ${allBuffers.length} изображений в кэш для чата/пользователя: ${cacheKey}`);
+        console.log(`📥 [Bratukha Cache] Сохранено ${allBuffers.length} изображений в кэш для чата: ${cacheKey}`);
     } else {
         // Если в текущем сообщении картинок нет, проверяем кэш за последние 2 минуты
         const cached = recentImageCache.get(cacheKey);
         if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
             allBuffers = cached.buffers;
             effectiveMimeType = cached.mimeType;
-            console.log(`📤 [Bratukha Cache] Автоматически подтянуто ${allBuffers.length} изображений из недавнего кэша чата!`);
+            console.log(`📤 [Bratukha Cache] Автоматически подтянуто ${allBuffers.length} изображений из недавнего кэша!`);
         }
     }
 
@@ -111,7 +114,6 @@ async function processRequest(params) {
     }
 
     // 2. Иначе — асинхронный эндпоинт операций (/operations) для медиа, генерации и редактирования картинок
-    // ОБЯЗАТЕЛЬНОЕ ПОЛЕ «Задание» (prompt): если пользователь не написал текст, ставим дефолтный промпт, чтобы Братуха не ругалась 400-й ошибкой
     const finalPrompt = (prompt && prompt.trim()) 
         ? prompt.trim() 
         : (allBuffers.length > 0 ? 'Обработай изображение' : 'Сгенерируй изображение');
@@ -120,7 +122,7 @@ async function processRequest(params) {
         prompt: finalPrompt
     };
         
-    // Автовыделение формата из текста для исключения белых полей по бокам
+    // Автовыделение соотношения сторон
     const aspectRatio = parseAspectRatio(finalPrompt);
     if (aspectRatio) {
         inputData.aspect_ratio = aspectRatio;
@@ -128,7 +130,7 @@ async function processRequest(params) {
         inputData.ar = aspectRatio;
     }
 
-    // Упаковываем картинки во все возможные варианты параметров (матрёшка для Братухи)
+    // Упаковываем картинки (матрёшка для Братухи)
     if (allBuffers.length > 0) {
         const fileUrls = allBuffers.map(buf => `data:${effectiveMimeType};base64,${buf.toString('base64')}`);
         
@@ -143,7 +145,7 @@ async function processRequest(params) {
             inputData.target_image = fileUrls[1];
         }
         
-        console.log(`🖼️ [Bratukha Operations] Передано изображений в запрос: ${fileUrls.length} с промптом: "${finalPrompt}"`);
+        console.log(`🖼️ [Bratukha Operations] Передано изображений: ${fileUrls.length} с промптом: "${finalPrompt}"`);
     } else {
         console.log(`⚠️ [Bratukha Operations] Изображения не переданы. Промпт: "${finalPrompt}"`);
     }
