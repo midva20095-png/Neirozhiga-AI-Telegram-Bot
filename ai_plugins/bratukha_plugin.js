@@ -1,5 +1,4 @@
 const axios = require('axios');
-const FormData = require('form-data'); // Убедитесь, что пакет установлен: npm install form-data
 
 const BRATUKHA_API_URL = 'https://bratuha.ru/api/v1';
 
@@ -25,40 +24,6 @@ function parseAspectRatio(promptText) {
     return null;
 }
 
-/**
- * Вспомогательная функция: загружает Buffer в хранилище Братухи
- * и возвращает публичную HTTP-ссылку на файл
- */
-async function uploadBufferToBratuha(buffer, mimeType, apiKey) {
-    try {
-        const formData = new FormData();
-        const extension = (mimeType || 'image/jpeg').split('/')[1] || 'jpg';
-        
-        formData.append('file', buffer, {
-            filename: `upload_${Date.now()}.${extension}`,
-            contentType: mimeType || 'image/jpeg'
-        });
-
-        const response = await axios.post(`${BRATUKHA_API_URL}/uploads`, formData, {
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                ...formData.getHeaders()
-            }
-        });
-
-        const uploadedUrl = response.data?.url || response.data?.file_url || response.data?.location;
-        if (!uploadedUrl) {
-            throw new Error('API Bratuha не вернуло URL загруженного файла');
-        }
-        
-        console.log(`☁️ [Bratukha Upload] Файл успешно загружен: ${uploadedUrl}`);
-        return uploadedUrl;
-    } catch (err) {
-        console.error('🚨 [Bratukha Upload Error]:', err.response?.data || err.message);
-        throw new Error(`Не удалось загрузить изображение на сервер Bratuha: ${err.message}`);
-    }
-}
-
 async function processRequest(params) {
     const { prompt, fileBuffer, fileBuffers, mimeType, modelKey, chatId, userId } = params || {};
     const apiKey = process.env.BRATUKHA_API_KEY;
@@ -75,7 +40,7 @@ async function processRequest(params) {
     if (toolSlug === 'qwen-3-5-9b') toolSlug = 'qwen3.5-9b';
     if (toolSlug === 'deepseek-v3-2') toolSlug = 'deepseek-v3.2';
 
-    // Ключ для кэша чата/пользователя
+    // Приводим ключ кэша строго к строке, чтобы кэш картинки не терялся
     const cacheKey = String(chatId || userId || 'default_user');
 
     // Собираем входящие файлы из текущего запроса
@@ -96,38 +61,28 @@ async function processRequest(params) {
         });
         console.log(`📥 [Bratukha Cache] Сохранено ${allBuffers.length} изображений в кэш для чата: ${cacheKey}`);
     } else {
-        // Если в текущем сообщении картинок нет, проверяем кэш за последние 2 минуты
+        // Если в текущем сообщении картинок нет, подтягиваем из кэша за последние 2 минуты
         const cached = recentImageCache.get(cacheKey);
         if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
             allBuffers = cached.buffers;
             effectiveMimeType = cached.mimeType;
-            console.log(`📤 [Bratukha Cache] Автоматически подтянуто ${allBuffers.length} изображений из недавнего кэша!`);
+            console.log(`📤 [Bratukha Cache] Автоматически подтянуто ${allBuffers.length} изображений из недавнего кэша чата ${cacheKey}!`);
         }
     }
 
-    // Загружаем все буферы на сервер Bratuha для получения публичных HTTP URL
-    const uploadedUrls = [];
-    if (allBuffers.length > 0) {
-        console.log(`⏳ [Bratukha Upload] Загрузка ${allBuffers.length} файлов на сервер Bratuha...`);
-        for (const buf of allBuffers) {
-            const publicUrl = await uploadBufferToBratuha(buf, effectiveMimeType, apiKey);
-            uploadedUrls.push(publicUrl);
-        }
-    }
-
-    // 1. Если это текстовая модель — отправляем в /chat/completions с поддержкой мультимодальности через HTTP URL
+    // 1. Если это текстовая модель — отправляем в /chat/completions с поддержкой мультимодальности
     if (TEXT_MODELS.includes(toolSlug)) {
-        console.log(`💬 [Bratukha Chat] Запрос к текстовой модели: ${toolSlug} (файлов: ${uploadedUrls.length})`);
+        console.log(`💬 [Bratukha Chat] Запрос к текстовой модели: ${toolSlug} (файлов: ${allBuffers.length})`);
 
-        const userText = prompt || (uploadedUrls.length > 0 ? 'Опиши это изображение' : 'Привет');
+        const userText = prompt || (allBuffers.length > 0 ? 'Опиши это изображение' : 'Привет');
         const messages = [{ role: 'user', content: userText }];
 
-        if (uploadedUrls.length > 0) {
+        if (allBuffers.length > 0) {
             const contentParts = [{ type: 'text', text: userText }];
-            uploadedUrls.forEach(url => {
+            allBuffers.forEach(buf => {
                 contentParts.push({
                     type: 'image_url',
-                    image_url: { url: url }
+                    image_url: { url: `data:${effectiveMimeType};base64,${buf.toString('base64')}` }
                 });
             });
             messages[0].content = contentParts;
@@ -158,10 +113,10 @@ async function processRequest(params) {
         }
     }
 
-    // 2. Иначе — асинхронный эндпоинт операций (/operations) для медиа, генерации и редактирования картинок
+    // 2. Иначе — асинхронный эндпоинт операций (/operations) для генерации и редактирования картинок
     const finalPrompt = (prompt && prompt.trim()) 
         ? prompt.trim() 
-        : (uploadedUrls.length > 0 ? 'Обработай изображение' : 'Сгенерируй изображение');
+        : (allBuffers.length > 0 ? 'Обработай изображение' : 'Сгенерируй изображение');
 
     const inputData = {
         prompt: finalPrompt
@@ -175,26 +130,27 @@ async function processRequest(params) {
         inputData.ar = aspectRatio;
     }
 
-    // Упаковываем публичные URL во все возможные вариации наименований полей API Братухи
-    if (uploadedUrls.length > 0) {
-        const primaryUrl = uploadedUrls[0];
-
-        // Покрываем возможные варианты JSON Schema разных инструментов
-        inputData.image = primaryUrl;
-        inputData.image_url = primaryUrl;
-        inputData.input_image = primaryUrl;
-        inputData.init_image = primaryUrl;
-        inputData.source_image = primaryUrl;
-        inputData.images = uploadedUrls;
+    // Упаковываем картинки во все стандартные имена полей
+    if (allBuffers.length > 0) {
+        const fileUrls = allBuffers.map(buf => `data:${effectiveMimeType};base64,${buf.toString('base64')}`);
+        const primaryImage = fileUrls[0];
         
-        if (uploadedUrls.length > 1) {
-            inputData.image_url_1 = uploadedUrls[0];
-            inputData.image_url_2 = uploadedUrls[1];
-            inputData.second_image_url = uploadedUrls[1];
-            inputData.target_image = uploadedUrls[1];
+        // Мапим картинку во все возможные параметры, которые могут требовать разные инструменты
+        inputData.image = primaryImage;
+        inputData.image_url = primaryImage;
+        inputData.input_image = primaryImage;
+        inputData.init_image = primaryImage;
+        inputData.source_image = primaryImage;
+        inputData.images = fileUrls;
+        
+        if (fileUrls.length > 1) {
+            inputData.image_url_1 = fileUrls[0];
+            inputData.image_url_2 = fileUrls[1];
+            inputData.second_image_url = fileUrls[1];
+            inputData.target_image = fileUrls[1];
         }
         
-        console.log(`🖼️ [Bratukha Operations] Передано URL изображений (${primaryUrl}) для инструмента ${toolSlug} с промптом: "${finalPrompt}"`);
+        console.log(`🖼️ [Bratukha Operations] Передано изображений: ${fileUrls.length} с промптом: "${finalPrompt}"`);
     } else {
         console.log(`⚠️ [Bratukha Operations] Изображения не переданы. Промпт: "${finalPrompt}"`);
     }
