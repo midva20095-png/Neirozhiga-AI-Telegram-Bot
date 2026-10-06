@@ -10,13 +10,6 @@ const TEXT_MODELS = [
     'claude-sonnet-5', 'gpt-6-luna', 'qwen3.5-9b', 'deepseek-v3.2', 'seed-2.0-mini'
 ];
 
-// Парсер соотношения сторон из текста промпта (например: "9:16", "--ar 16:9", "ar 1:1")
-function parseAspectRatio(promptText) {
-    if (!promptText) return null;
-    const match = promptText.match(/(?:--ar|ar|aspect[:\s]*ratio)?\s*(\d+:\d+)/i);
-    return match ? match[1] : null;
-}
-
 async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, modelKey }) {
     const apiKey = process.env.BRATUKHA_API_KEY;
     if (!apiKey) {
@@ -82,14 +75,6 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
     const inputData = {};
     if (prompt) {
         inputData.prompt = prompt;
-        
-        // Автовыделение формата из текста для исключения белых полей по бокам
-        const aspectRatio = parseAspectRatio(prompt);
-        if (aspectRatio) {
-            inputData.aspect_ratio = aspectRatio;
-            inputData.ratio = aspectRatio;
-            inputData.ar = aspectRatio;
-        }
     }
 
     const allBuffers = [];
@@ -154,14 +139,14 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                         return {
                             type: 'image',
                             buffer: Buffer.from(mediaRes.data),
-                            text: '' // Без текста и بدون ссылок в чате
+                            text: '' // Текст пустой, чтобы ссылка не выводилась в чат
                         };
                     } else if (videoUrl) {
                         const mediaRes = await axios.get(videoUrl, { responseType: 'arraybuffer' });
                         return {
                             type: 'video',
                             buffer: Buffer.from(mediaRes.data),
-                            text: '' // Без текста
+                            text: '' // Текст пустой
                         };
                     } else if (result && (result.text || typeof result === 'string')) {
                         return {
