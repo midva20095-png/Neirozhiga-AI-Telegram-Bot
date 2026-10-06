@@ -21,7 +21,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         throw new Error('❌ Не указан slug модели для Братухи');
     }
 
-    // Нормализуем имя модели (убираем дефисы в версиях, если пришли из старых кнопок)
+    // Нормализуем имя модели
     if (toolSlug === 'qwen-3-5-9b') toolSlug = 'qwen3.5-9b';
     if (toolSlug === 'deepseek-v3-2') toolSlug = 'deepseek-v3.2';
 
@@ -129,22 +129,24 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
 
                 if (opData.status === 'completed') {
                     const result = opData.result;
+
+                    // Извлекаем URL картинки из всех возможных структур ответа (images, urls, url)
+                    const imageUrl = result?.images?.[0] || result?.urls?.[0] || (result?.type === 'image' ? result?.url : null);
+                    const videoUrl = result?.videos?.[0] || (result?.type === 'video' ? result?.url : null);
                     
-                    if (result && result.images && result.images.length > 0) {
-                        const mediaUrl = result.images[0];
-                        const mediaRes = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
+                    if (imageUrl) {
+                        const mediaRes = await axios.get(imageUrl, { responseType: 'arraybuffer' });
                         return {
                             type: 'image',
                             buffer: Buffer.from(mediaRes.data),
-                            text: `✨ Сгенерировано через ${toolSlug}`
+                            text: '' // Текст пустой, чтобы ссылка не выводилась в чат
                         };
-                    } else if (result && result.videos && result.videos.length > 0) {
-                        const mediaUrl = result.videos[0];
-                        const mediaRes = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
+                    } else if (videoUrl) {
+                        const mediaRes = await axios.get(videoUrl, { responseType: 'arraybuffer' });
                         return {
                             type: 'video',
                             buffer: Buffer.from(mediaRes.data),
-                            text: `🎬 Сгенерировано через ${toolSlug}`
+                            text: '' // Текст пустой
                         };
                     } else if (result && (result.text || typeof result === 'string')) {
                         return {
@@ -154,7 +156,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                     } else {
                         return {
                             type: 'text',
-                            text: JSON.stringify(result, null, 2)
+                            text: typeof result === 'object' ? (result.caption || '') : String(result)
                         };
                     }
                 } else if (opData.status === 'failed') {
