@@ -10,22 +10,14 @@ const TEXT_MODELS = [
     'claude-sonnet-5', 'gpt-6-luna', 'qwen3.5-9b', 'deepseek-v3.2', 'seed-2.0-mini'
 ];
 
-// Локальный кэш картинок из чата (живет 2 минуты для каждого чата/пользователя)
-const recentImageCache = new Map();
-const CACHE_TTL_MS = 2 * 60 * 1000; // 2 минуты
-
-// Парсер соотношения сторон (поддерживает "9:16", "9х16", "--ar 16:9")
+// Парсер соотношения сторон из текста промпта (например: "9:16", "--ar 16:9", "ar 1:1")
 function parseAspectRatio(promptText) {
     if (!promptText) return null;
-    const match = promptText.match(/(?:--ar|ar|aspect[:\s]*ratio)?\s*(\d+[:хx]\d+)/i);
-    if (match && match[1]) {
-        return match[1].replace(/[хx]/i, ':');
-    }
-    return null;
+    const match = promptText.match(/(?:--ar|ar|aspect[:\s]*ratio)?\s*(\d+:\d+)/i);
+    return match ? match[1] : null;
 }
 
-async function processRequest(params) {
-    const { prompt, fileBuffer, fileBuffers, mimeType, modelKey, chatId, userId } = params || {};
+async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, modelKey }) {
     const apiKey = process.env.BRATUKHA_API_KEY;
     if (!apiKey) {
         throw new Error('❌ BRATUKHA_API_KEY не задан в переменных окружения');
@@ -40,49 +32,22 @@ async function processRequest(params) {
     if (toolSlug === 'qwen-3-5-9b') toolSlug = 'qwen3.5-9b';
     if (toolSlug === 'deepseek-v3-2') toolSlug = 'deepseek-v3.2';
 
-    // Ключ для кэша чата/пользователя
-    const cacheKey = chatId || userId || 'default_user';
-
-    // Собираем входящие файлы из текущего запроса
-    let allBuffers = [];
-    if (fileBuffer) allBuffers.push(fileBuffer);
-    if (fileBuffers && Array.isArray(fileBuffers)) {
-        allBuffers.push(...fileBuffers);
-    }
-
-    let effectiveMimeType = mimeType || 'image/jpeg';
-
-    // Если картинки переданы в текущем сообщении — сохраняем их в кэш
-    if (allBuffers.length > 0) {
-        recentImageCache.set(cacheKey, {
-            buffers: allBuffers,
-            mimeType: effectiveMimeType,
-            timestamp: Date.now()
-        });
-        console.log(`📥 [Bratukha Cache] Сохранено ${allBuffers.length} изображений в кэш для чата: ${cacheKey}`);
-    } else {
-        // Если в текущем сообщении картинок нет, проверяем кэш за последние 2 минуты
-        const cached = recentImageCache.get(cacheKey);
-        if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
-            allBuffers = cached.buffers;
-            effectiveMimeType = cached.mimeType;
-            console.log(`📤 [Bratukha Cache] Автоматически подтянуто ${allBuffers.length} изображений из недавнего кэша!`);
-        }
-    }
-
-    // 1. Если это текстовая модель — отправляем в /chat/completions с поддержкой мультимодальности
+    // 1. Если это текстовая модель — отправляем в /chat/completions
     if (TEXT_MODELS.includes(toolSlug)) {
-        console.log(`💬 [Bratukha Chat] Запрос к текстовой модели: ${toolSlug} (файлов: ${allBuffers.length})`);
+        console.log(`💬 [Bratukha Chat] Запрос к текстовой модели: ${toolSlug}`);
 
-        const userText = prompt || (allBuffers.length > 0 ? 'Опиши это изображение' : 'Привет');
-        const messages = [{ role: 'user', content: userText }];
+        const messages = [{ role: 'user', content: prompt || '' }];
+
+        const allBuffers = [];
+        if (fileBuffer) allBuffers.push(fileBuffer);
+        if (fileBuffers && Array.isArray(fileBuffers)) allBuffers.push(...fileBuffers);
 
         if (allBuffers.length > 0) {
-            const contentParts = [{ type: 'text', text: userText }];
+            const contentParts = [{ type: 'text', text: prompt || '' }];
             allBuffers.forEach(buf => {
                 contentParts.push({
                     type: 'image_url',
-                    image_url: { url: `data:${effectiveMimeType};base64,${buf.toString('base64')}` }
+                    image_url: { url: `data:${mimeType || 'image/jpeg'};base64,${buf.toString('base64')}` }
                 });
             });
             messages[0].content = contentParts;
@@ -113,41 +78,30 @@ async function processRequest(params) {
         }
     }
 
-    // 2. Иначе — асинхронный эндпоинт операций (/operations) для медиа, генерации и редактирования картинок
-    const finalPrompt = (prompt && prompt.trim()) 
-        ? prompt.trim() 
-        : (allBuffers.length > 0 ? 'Обработай изображение' : 'Сгенерируй изображение');
-
-    const inputData = {
-        prompt: finalPrompt
-    };
+    // 2. Иначе — асинхронный эндпоинт операций (/operations) для медиа и видео
+    const inputData = {};
+    if (prompt) {
+        inputData.prompt = prompt;
         
-    // Автовыделение соотношения сторон
-    const aspectRatio = parseAspectRatio(finalPrompt);
-    if (aspectRatio) {
-        inputData.aspect_ratio = aspectRatio;
-        inputData.ratio = aspectRatio;
-        inputData.ar = aspectRatio;
+        // Автовыделение формата из текста для исключения белых полей по бокам
+        const aspectRatio = parseAspectRatio(prompt);
+        if (aspectRatio) {
+            inputData.aspect_ratio = aspectRatio;
+            inputData.ratio = aspectRatio;
+            inputData.ar = aspectRatio;
+        }
     }
 
-    // Упаковываем картинки (матрёшка для Братухи)
+    const allBuffers = [];
+    if (fileBuffer) allBuffers.push(fileBuffer);
+    if (fileBuffers && Array.isArray(fileBuffers)) {
+        allBuffers.push(...fileBuffers);
+    }
+
     if (allBuffers.length > 0) {
-        const fileUrls = allBuffers.map(buf => `data:${effectiveMimeType};base64,${buf.toString('base64')}`);
-        
+        const fileUrls = allBuffers.map(buf => `data:${mimeType || 'image/jpeg'};base64,${buf.toString('base64')}`);
         inputData.images = fileUrls;
         inputData.image_url = fileUrls[0];
-        inputData.source_image = fileUrls[0];
-        
-        if (fileUrls.length > 1) {
-            inputData.image_url_1 = fileUrls[0];
-            inputData.image_url_2 = fileUrls[1];
-            inputData.second_image_url = fileUrls[1];
-            inputData.target_image = fileUrls[1];
-        }
-        
-        console.log(`🖼️ [Bratukha Operations] Передано изображений: ${fileUrls.length} с промптом: "${finalPrompt}"`);
-    } else {
-        console.log(`⚠️ [Bratukha Operations] Изображения не переданы. Промпт: "${finalPrompt}"`);
     }
 
     const payload = {
@@ -191,6 +145,7 @@ async function processRequest(params) {
                 if (opData.status === 'completed') {
                     const result = opData.result;
 
+                    // Извлекаем URL картинки из всех возможных структур ответа (images, urls, url)
                     const imageUrl = result?.images?.[0] || result?.urls?.[0] || (result?.type === 'image' ? result?.url : null);
                     const videoUrl = result?.videos?.[0] || (result?.type === 'video' ? result?.url : null);
                     
@@ -199,14 +154,14 @@ async function processRequest(params) {
                         return {
                             type: 'image',
                             buffer: Buffer.from(mediaRes.data),
-                            text: ''
+                            text: '' // Без текста и بدون ссылок в чате
                         };
                     } else if (videoUrl) {
                         const mediaRes = await axios.get(videoUrl, { responseType: 'arraybuffer' });
                         return {
                             type: 'video',
                             buffer: Buffer.from(mediaRes.data),
-                            text: ''
+                            text: '' // Без текста
                         };
                     } else if (result && (result.text || typeof result === 'string')) {
                         return {
@@ -223,8 +178,8 @@ async function processRequest(params) {
                     throw new Error(opData.error_message || 'Выполнение завершилось ошибкой на стороне нейросети');
                 }
             } catch (pollErr) {
-                const retryAfter = Number(pollErr.response?.headers?.['retry-after']) || 2;
                 if (pollErr.response?.status === 429 || pollErr.response?.status === 503) {
+                    const retryAfter = pollErr.response.headers['retry-after'] || 2;
                     await new Promise(r => setTimeout(r, retryAfter * 1000));
                     continue;
                 }
