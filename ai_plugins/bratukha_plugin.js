@@ -25,19 +25,24 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         allBuffers.push(...fileBuffers);
     }
 
-    // Загрузка файлов через /uploads/presign или JSON/Base64 на /uploads
+    // Загрузка файлов с расширенными параметрами (включая size)
     if (allBuffers.length > 0) {
         const uploadedUrls = [];
         for (const buf of allBuffers) {
             let fileUrl = null;
             let lastErr = null;
+            const fileSize = buf.length;
+            const fileMime = mimeType || 'image/jpeg';
 
-            // 1. Попытка через /uploads/presign
+            // 1. Попытка через /uploads/presign с передачей size и альтернативных полей
             try {
-                console.log(`📤 [Bratukha Upload] Запрос presign URL...`);
+                console.log(`📤 [Загрузка Братухи] Запрос /uploads/presign (размер: ${fileSize} байт)...`);
                 const presignRes = await axios.post(`${BRATUKHA_API_URL}/uploads/presign`, {
                     filename: 'input_file.jpg',
-                    content_type: mimeType || 'image/jpeg'
+                    file_name: 'input_file.jpg',
+                    size: fileSize,
+                    content_type: fileMime,
+                    mime_type: fileMime
                 }, {
                     headers: {
                         'Authorization': `Bearer ${apiKey}`,
@@ -47,27 +52,31 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
 
                 const { upload_url, url } = presignRes.data || {};
                 if (upload_url && url) {
-                    console.log(`📤 [Bratukha Upload] Отправка файла по presigned URL...`);
+                    console.log(`📤 [Загрузка Братухи] Отправка файла по presigned URL...`);
                     await axios.put(upload_url, buf, {
                         headers: {
-                            'Content-Type': mimeType || 'image/jpeg'
+                            'Content-Type': fileMime
                         }
                     });
                     fileUrl = url;
                 }
             } catch (err) {
                 lastErr = err;
-                console.warn(`⚠ [Bratukha Upload] /uploads/presign не удался:`, err.response?.data ? JSON.stringify(err.response.data) : err.message);
+                console.warn(`⚠ [Загрузка Братухи] /uploads/presign не удался:`, err.response?.data ? JSON.stringify(err.response.data) : err.message);
             }
 
             // 2. Попытка через JSON с base64 на /uploads
             if (!fileUrl) {
                 try {
-                    console.log(`📤 [Bratukha Upload] Отправка файла через JSON (base64)...`);
+                    console.log(`📤 [Загрузка Братухи] Отправка файла через JSON (base64)...`);
                     const uploadRes = await axios.post(`${BRATUKHA_API_URL}/uploads`, {
                         file: buf.toString('base64'),
+                        data: buf.toString('base64'),
                         filename: 'input_file.jpg',
-                        content_type: mimeType || 'image/jpeg'
+                        file_name: 'input_file.jpg',
+                        size: fileSize,
+                        content_type: fileMime,
+                        mime_type: fileMime
                     }, {
                         headers: {
                             'Authorization': `Bearer ${apiKey}`,
@@ -78,38 +87,43 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                     fileUrl = uploadRes.data?.url || uploadRes.data?.file_url || uploadRes.data?.link || uploadRes.data?.path;
                 } catch (err) {
                     lastErr = err;
-                    console.warn(`⚠ [Bratukha Upload] JSON upload не удался:`, err.response?.data ? JSON.stringify(err.response.data) : err.message);
+                    console.warn(`⚠ [Загрузка Братухи] Загрузка JSON не удалась:`, err.response?.data ? JSON.stringify(err.response.data) : err.message);
                 }
             }
 
-            // 3. Попытка через FormData с полем 'file'
+            // 3. Попытка через FormData с перебором полей
             if (!fileUrl) {
-                try {
-                    const form = new FormData();
-                    form.append('file', buf, {
-                        filename: 'input_file.jpg',
-                        contentType: mimeType || 'image/jpeg'
-                    });
+                const possibleFields = ['file', 'files', 'image', 'media', 'attachment'];
+                for (const fieldName of possibleFields) {
+                    try {
+                        const form = new FormData();
+                        form.append(fieldName, buf, {
+                            filename: 'input_file.jpg',
+                            contentType: fileMime
+                        });
+                        form.append('size', String(fileSize));
 
-                    const uploadRes = await axios.post(`${BRATUKHA_API_URL}/uploads`, form, {
-                        headers: {
-                            'Authorization': `Bearer ${apiKey}`,
-                            ...form.getHeaders()
-                        }
-                    });
-                    fileUrl = uploadRes.data?.url || uploadRes.data?.file_url || uploadRes.data?.link || uploadRes.data?.path;
-                } catch (err) {
-                    lastErr = err;
+                        const uploadRes = await axios.post(`${BRATUKHA_API_URL}/uploads`, form, {
+                            headers: {
+                                'Authorization': `Bearer ${apiKey}`,
+                                ...form.getHeaders()
+                            }
+                        });
+                        fileUrl = uploadRes.data?.url || uploadRes.data?.file_url || uploadRes.data?.link || uploadRes.data?.path;
+                        if (fileUrl) break;
+                    } catch (err) {
+                        lastErr = err;
+                    }
                 }
             }
 
             if (fileUrl) {
                 uploadedUrls.push(fileUrl);
-                console.log(`✅ [Bratukha Upload] Файл успешно загружен: ${fileUrl}`);
+                console.log(`✅ [Загрузка Братухи] Файл успешно загружен: ${fileUrl}`);
             } else {
                 const errorDetails = lastErr?.response?.data ? JSON.stringify(lastErr.response.data) : lastErr?.message;
-                console.error(`🚨 [Bratukha Upload Error Details]:`, errorDetails);
-                throw new Error(`Ошибка загрузки файла на сервер Братухи: ${errorDetails}`);
+                console.error(`🚨 [Подробности об ошибке загрузки Братухи]:`, errorDetails);
+                throw new Error(`Ошибка загрузки файла на сервере Братухи: ${errorDetails}`);
             }
         }
 
