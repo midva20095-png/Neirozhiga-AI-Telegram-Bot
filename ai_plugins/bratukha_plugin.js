@@ -10,6 +10,15 @@ const TEXT_MODELS = [
     'claude-sonnet-5', 'gpt-6-luna', 'qwen3.5-9b', 'deepseek-v3.2', 'seed-2.0-mini'
 ];
 
+// Вспомогательная функция для полного удаления ссылок из текста
+function stripUrls(text) {
+    if (!text) return '';
+    return text
+        .replace(/https?:\/\/\S+/gi, '') // Удаляем прямые ссылки http/https
+        .replace(/\[([^\]]+)\]\(\s*https?:\/\/\S+\s*\)/gi, '$1') // Превращаем markdown-ссылки [Текст](url) в чистый Текст
+        .trim();
+}
+
 async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, modelKey }) {
     const apiKey = process.env.BRATUKHA_API_KEY;
     if (!apiKey) {
@@ -21,22 +30,25 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         throw new Error('❌ Не указан slug модели для Братухи');
     }
 
-    // Нормализуем имя модели (убираем дефисы в версиях, если пришли из старых кнопок)
+    // Нормализуем имя модели
     if (toolSlug === 'qwen-3-5-9b') toolSlug = 'qwen3.5-9b';
     if (toolSlug === 'deepseek-v3-2') toolSlug = 'deepseek-v3.2';
 
-    // 1. Если это текстовая модель — отправляем в /chat/completions
+    // Собираем все буферы изображений
+    const allBuffers = [];
+    if (fileBuffer) allBuffers.push(fileBuffer);
+    if (fileBuffers && Array.isArray(fileBuffers)) {
+        allBuffers.push(...fileBuffers);
+    }
+
+    // 1. Если это текстовая/мультимодальная чат-модель — отправляем в /chat/completions
     if (TEXT_MODELS.includes(toolSlug)) {
         console.log(`💬 [Bratukha Chat] Запрос к текстовой модели: ${toolSlug}`);
 
         const messages = [{ role: 'user', content: prompt || '' }];
 
-        const allBuffers = [];
-        if (fileBuffer) allBuffers.push(fileBuffer);
-        if (fileBuffers && Array.isArray(fileBuffers)) allBuffers.push(...fileBuffers);
-
         if (allBuffers.length > 0) {
-            const contentParts = [{ type: 'text', text: prompt || '' }];
+            const contentParts = [{ type: 'text', text: prompt || 'Что на этом изображении?' }];
             allBuffers.forEach(buf => {
                 contentParts.push({
                     type: 'image_url',
@@ -57,7 +69,9 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                 }
             });
 
-            const replyText = chatRes.data?.choices?.[0]?.message?.content || 'Пустой ответ от модели';
+            let replyText = chatRes.data?.choices?.[0]?.message?.content || 'Пустой ответ от модели';
+            replyText = stripUrls(replyText);
+
             return {
                 type: 'text',
                 text: replyText
@@ -71,22 +85,23 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         }
     }
 
-    // 2. Иначе — асинхронный эндпоинт операций (/operations) для медиа и видео
+    // 2. Иначе — асинхронный эндпоинт операций (/operations) для медиа и картинок
     const inputData = {};
     if (prompt) {
         inputData.prompt = prompt;
     }
 
-    const allBuffers = [];
-    if (fileBuffer) allBuffers.push(fileBuffer);
-    if (fileBuffers && Array.isArray(fileBuffers)) {
-        allBuffers.push(...fileBuffers);
-    }
-
     if (allBuffers.length > 0) {
+        const firstBase64 = `data:${mimeType || 'image/jpeg'};base64,${allBuffers[0].toString('base64')}`;
         const fileUrls = allBuffers.map(buf => `data:${mimeType || 'image/jpeg'};base64,${buf.toString('base64')}`);
+
+        // Передаем изображение во все распространенные поля, которые может запрашивать API Братухи
+        inputData.image = firstBase64;
+        inputData.image_url = firstBase64;
+        inputData.init_image = firstBase64;
+        inputData.input_image = firstBase64;
         inputData.images = fileUrls;
-        inputData.image_url = fileUrls[0];
+        inputData.image_urls = fileUrls;
     }
 
     const payload = {
@@ -136,7 +151,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                         return {
                             type: 'image',
                             buffer: Buffer.from(mediaRes.data),
-                            text: `✨ Сгенерировано через ${toolSlug}`
+                            text: '' // Убраны любые подписи и ссылки на скачивание
                         };
                     } else if (result && result.videos && result.videos.length > 0) {
                         const mediaUrl = result.videos[0];
@@ -144,17 +159,18 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                         return {
                             type: 'video',
                             buffer: Buffer.from(mediaRes.data),
-                            text: `🎬 Сгенерировано через ${toolSlug}`
+                            text: ''
                         };
                     } else if (result && (result.text || typeof result === 'string')) {
+                        const rawText = typeof result === 'string' ? result : result.text;
                         return {
                             type: 'text',
-                            text: typeof result === 'string' ? result : result.text
+                            text: stripUrls(rawText)
                         };
                     } else {
                         return {
                             type: 'text',
-                            text: JSON.stringify(result, null, 2)
+                            text: stripUrls(JSON.stringify(result, null, 2))
                         };
                     }
                 } else if (opData.status === 'failed') {
