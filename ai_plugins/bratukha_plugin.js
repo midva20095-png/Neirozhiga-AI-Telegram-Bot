@@ -13,7 +13,7 @@ const TEXT_MODELS = [
 
 // Локальный кэш файлов (живет 2 минуты для каждого чата/пользователя)
 const recentImageCache = new Map();
-const CACHE_TTL_MS = 2 * 60 * 1000; // 2 минуты
+const CACHE_TTL_MS = 2 * 60 * 1000;
 
 // Парсер соотношения сторон
 function parseAspectRatio(promptText) {
@@ -25,45 +25,42 @@ function parseAspectRatio(promptText) {
     return null;
 }
 
-// Функция загрузки файлов на сервер Братухи (для генерации временных публичных ссылок)
+// Загрузка медиа с автоматическим фоллбэком на base64
 async function uploadMediaToBratukha(buffer, mimeType, apiKey) {
+    let effectiveMime = mimeType || 'image/jpeg';
+    if (effectiveMime === 'image/jpg') effectiveMime = 'image/jpeg';
+
     try {
         const form = new FormData();
-        const extension = mimeType.split('/')[1] || 'jpg';
-        const filename = `media_${Date.now()}.${extension}`;
-        
-        // 1. Обязательно указываем knownLength (размер буфера)
-        form.append('file', buffer, { 
-            filename: filename, 
-            contentType: mimeType,
-            knownLength: buffer.length
+        const ext = effectiveMime.split('/')[1] || 'jpeg';
+        const filename = `upload_${Date.now()}.${ext}`;
+
+        form.append('file', buffer, {
+            filename: filename,
+            contentType: effectiveMime
         });
 
-        // 2. Явно собираем заголовки
-        const headers = form.getHeaders();
-        headers['Authorization'] = `Bearer ${apiKey}`;
-        // 3. ЖИЗНЕННО ВАЖНО: передаем точный размер файла, иначе сервер его "не увидит"
-        headers['Content-Length'] = form.getLengthSync();
-
-        console.log(`📤 [Bratukha Upload] Отправка файла: ${filename}, Размер: ${buffer.length} байт`);
-
         const res = await axios.post(`${BRATUKHA_API_URL}/uploads`, form, {
-            headers: headers,
-            maxBodyLength: Infinity, // Отключаем ограничения axios на размер тела
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                ...form.getHeaders()
+            },
+            maxBodyLength: Infinity,
             maxContentLength: Infinity
         });
 
-        // Ожидаем, что Братуха вернет { url: "https://..." }
-        const fileUrl = res.data?.url || res.data?.file_url;
-        if (!fileUrl) {
-            throw new Error('Сервер загрузки не вернул публичный URL файла');
+        const fileUrl = res.data?.url || res.data?.file_url || res.data?.link;
+        if (fileUrl) {
+            console.log(`✅ [Bratukha Upload] Успешно загружено на сервер: ${fileUrl}`);
+            return fileUrl;
         }
-        console.log(`✅ [Bratukha Upload] Файл успешно загружен. URL: ${fileUrl}`);
-        return fileUrl;
     } catch (err) {
-        console.error(`🚨 [Bratukha Upload Error]:`, err.response?.data || err.message);
-        throw new Error('Ошибка при загрузке медиафайла на сервер: ' + (err.response?.data?.error?.message || err.message));
+        const errMsg = err.response?.data?.error?.message || err.message;
+        console.warn(`⚠️ [Bratukha Upload] Ошибка загрузки на /uploads (${errMsg}). Используем резервный Data URL...`);
     }
+
+    // Резервный вариант: если /uploads ругается, передаем base64 data:URL
+    return `data:${effectiveMime};base64,${buffer.toString('base64')}`;
 }
 
 async function processRequest(params) {
@@ -78,13 +75,11 @@ async function processRequest(params) {
         throw new Error('❌ Не указан slug модели для Братухи');
     }
 
-    // Нормализуем имена моделей
     if (toolSlug === 'qwen-3-5-9b') toolSlug = 'qwen3.5-9b';
     if (toolSlug === 'deepseek-v3-2') toolSlug = 'deepseek-v3.2';
 
     const cacheKey = chatId || userId || 'default_user';
 
-    // Собираем буферы
     let allBuffers = [];
     if (fileBuffer) allBuffers.push(fileBuffer);
     if (fileBuffers && Array.isArray(fileBuffers)) {
@@ -93,7 +88,6 @@ async function processRequest(params) {
 
     let effectiveMimeType = mimeType || 'image/jpeg';
 
-    // Обработка кэша
     if (allBuffers.length > 0) {
         recentImageCache.set(cacheKey, {
             buffers: allBuffers,
@@ -110,7 +104,7 @@ async function processRequest(params) {
         }
     }
 
-    // 1. Текстовые модели (здесь документация разрешает base64 в image_url)
+    // 1. Текстовые модели (/chat/completions)
     if (TEXT_MODELS.includes(toolSlug)) {
         console.log(`💬 [Bratukha Chat] Запрос к текстовой модели: ${toolSlug} (файлов: ${allBuffers.length})`);
 
@@ -148,7 +142,7 @@ async function processRequest(params) {
         }
     }
 
-    // 2. Эндпоинт /operations (для генерации и редактирования медиа — нужны ВНЕШНИЕ ССЫЛКИ)
+    // 2. Операции (/operations)
     const finalPrompt = (prompt && prompt.trim()) 
         ? prompt.trim() 
         : (allBuffers.length > 0 ? 'Обработай изображение' : 'Сгенерируй изображение');
@@ -162,20 +156,18 @@ async function processRequest(params) {
         inputData.ar = aspectRatio;
     }
 
-    // Если есть файлы, сначала загружаем их на публичный сервер Братухи
     if (allBuffers.length > 0) {
-        console.log(`⏳ [Bratukha Upload] Загрузка ${allBuffers.length} файлов на сервер API...`);
+        console.log(`⏳ [Bratukha Upload] Подготовка ${allBuffers.length} файлов...`);
         const fileUrls = [];
         for (const buf of allBuffers) {
-            const publicUrl = await uploadMediaToBratukha(buf, effectiveMimeType, apiKey);
-            fileUrls.push(publicUrl);
+            const fileUrl = await uploadMediaToBratukha(buf, effectiveMimeType, apiKey);
+            fileUrls.push(fileUrl);
         }
         
-        // Матрёшка ссылок под требования разных моделей Братухи
         inputData.images = fileUrls;
         inputData.image_url = fileUrls[0];
         inputData.source_image = fileUrls[0];
-        inputData.video_url = fileUrls[0]; // На будущее, если пришлешь видео
+        inputData.video_url = fileUrls[0];
         
         if (fileUrls.length > 1) {
             inputData.image_url_1 = fileUrls[0];
@@ -222,7 +214,6 @@ async function processRequest(params) {
                 if (opData.status === 'completed') {
                     const result = opData.result;
 
-                    // Парсинг результата (картинка, видео или текст)
                     const imageUrl = result?.images?.[0] || result?.urls?.[0] || (result?.type === 'image' ? result?.url : null);
                     const videoUrl = result?.videos?.[0] || (result?.type === 'video' ? result?.url : null);
                     
