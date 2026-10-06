@@ -37,7 +37,7 @@ const mediaGroupBuffers = new Map();
 const ADMIN_ID = '5943987954';
 
 bot.catch((err, ctx) => {
-    console.error(`⚠️️ Ошибка в Telegraf для ${ctx?.updateType || 'неизвестного события'}:`, err.message);
+    console.error(`⚠️ Ошибка в Telegraf для ${ctx?.updateType || 'неизвестного события'}:`, err.message);
 });
 
 bot.use(async (ctx, next) => {
@@ -46,7 +46,7 @@ bot.use(async (ctx, next) => {
 });
 
 const MODEL_COSTS = {
-    // Гугловские
+    // Гугловские (не трогаем)
     'flash': 1,
     'flash_25': 1,
     'pro': 3,
@@ -61,7 +61,7 @@ const MODEL_COSTS = {
 };
 
 const MODEL_NAMES = {
-    // Гугловские
+    // Гугловские (не трогаем)
     'flash': 'Gemini 3.8 Flash ⚡️',
     'flash_25': 'Gemini 2.5 Flash 🚀',
     'pro': 'Gemini 3.1 Pro 🧠',
@@ -310,6 +310,7 @@ async function startBot(app) {
         await ctx.editMessageText('❌ Обращение в поддержку отменено.');
     });
 
+    // Обработка кликов по неактивным заголовкам разделов в меню моделей
     bot.action(/^noop_.+$/, async (ctx) => {
         await ctx.answerCbQuery('Это название раздела, выберите модель ниже 👇');
     });
@@ -417,7 +418,7 @@ async function startBot(app) {
                 await ctx.reply('✅ Ваше сообщение отправлено в службу поддержки! Администратор ответит вам в ближайшее время.', { parse_mode: 'Markdown' });
             } catch (err) {
                 console.error('Ошибка отправки в поддержку:', err);
-                await ctx.reply('⚠️️ Не удалось отправить сообщение в поддержку. Попробуйте позже.');
+                await ctx.reply('⚠️ Не удалось отправить сообщение в поддержку. Попробуйте позже.');
             }
             return;
         }
@@ -499,15 +500,8 @@ async function startBot(app) {
             let fileBuffers = [];
             let mimeType = 'image/jpeg';
 
-            // 1. Извлекаем фото из текущего сообщения
             if (ctx.message?.photo && ctx.message.photo.length > 0) {
                 const largestPhoto = ctx.message.photo[ctx.message.photo.length - 1];
-                const buf = await getTelegramFileBuffer(ctx, largestPhoto.file_id);
-                if (buf) fileBuffers.push(buf);
-            } 
-            // 2. Если фото нет в текущем сообщении, проверяем reply (ответ на сообщение с фото)
-            else if (ctx.message?.reply_to_message?.photo && ctx.message.reply_to_message.photo.length > 0) {
-                const largestPhoto = ctx.message.reply_to_message.photo[ctx.message.reply_to_message.photo.length - 1];
                 const buf = await getTelegramFileBuffer(ctx, largestPhoto.file_id);
                 if (buf) fileBuffers.push(buf);
             }
@@ -525,19 +519,15 @@ async function startBot(app) {
 
             try { await ctx.deleteMessage(waitMessage.message_id); } catch(e){}
 
-            const captionText = aiResult.text && aiResult.text.trim()
-                ? `${aiResult.text.trim()}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.`
-                : `💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.`;
-
             if (aiResult.type === 'image' && aiResult.buffer) {
                 await ctx.replyWithPhoto(
                     { source: aiResult.buffer }, 
-                    { caption: captionText }
+                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
                 );
             } else if (aiResult.type === 'video' && aiResult.buffer) {
                 await ctx.replyWithVideo(
                     { source: aiResult.buffer },
-                    { caption: captionText }
+                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
                 );
             } else {
                 const fullText = `${aiResult.text}\n\n───────────────\n💳 *Списано:* ${cost} кр. | *Остаток:* ${remainingBalance} кр.`;
@@ -620,19 +610,15 @@ async function startBot(app) {
 
             try { await firstCtx.deleteMessage(waitMessage.message_id); } catch(e){}
 
-            const captionText = aiResult.text && aiResult.text.trim()
-                ? `${aiResult.text.trim()}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.`
-                : `💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.`;
-
             if (aiResult.type === 'image' && aiResult.buffer) {
                 await firstCtx.replyWithPhoto(
                     { source: aiResult.buffer }, 
-                    { caption: captionText }
+                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
                 );
             } else if (aiResult.type === 'video' && aiResult.buffer) {
                 await firstCtx.replyWithVideo(
                     { source: aiResult.buffer },
-                    { caption: captionText }
+                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
                 );
             } else {
                 const fullText = `${aiResult.text}\n\n───────────────\n💳 *Списано:* ${cost} кр. | *Остаток:* ${remainingBalance} кр.`;
