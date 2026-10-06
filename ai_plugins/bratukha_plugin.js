@@ -1,204 +1,132 @@
 const axios = require('axios');
 
-const BRATUKHA_API_URL = 'https://bratuha.ru/api/v1';
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Список текстовых моделей (OpenAI-совместимый эндпоинт /chat/completions)
-const TEXT_MODELS = [
-    'gpt-6-astra', 'gpt-6-sol', 'gpt-5.6-terra', 'claude-fable-5.1', 
-    'claude-opus-5-5', 'kimi-k3', 'gemini-3.8-flash', 'qwen3.8-max', 
-    'gemini-3.1-flash-lite-preview', 'minimax-m3', 
-    'claude-sonnet-5', 'gpt-6-luna', 'qwen3.5-9b', 'deepseek-v3.2', 'seed-2.0-mini'
-];
-
-// Вспомогательная функция для полного удаления ссылок из текста
-function stripUrls(text) {
-    if (!text) return '';
-    return text
-        .replace(/https?:\/\/\S+/gi, '') // Удаляем прямые ссылки http/https
-        .replace(/\[([^\]]+)\]\(\s*https?:\/\/\S+\s*\)/gi, '$1') // Превращаем markdown-ссылки [Текст](url) в чистый Текст
-        .trim();
+/**
+ * Вспомогательная функция: скачивает картинку по URL и превращает ее в Buffer
+ */
+async function downloadImageToBuffer(url) {
+    try {
+        const response = await axios.get(url, { responseType: 'arraybuffer' });
+        return Buffer.from(response.data);
+    } catch (error) {
+        console.error(`❌ Ошибка скачивания изображения по ссылке [${url}]:`, error.message);
+        throw new Error('Не удалось загрузить сгенерированную картинку');
+    }
 }
 
-async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, modelKey }) {
-    const apiKey = process.env.BRATUKHA_API_KEY;
-    if (!apiKey) {
-        throw new Error('❌ BRATUKHA_API_KEY не задан в переменных окружения');
+/**
+ * Вспомогательная функция: обрабатывает итоговый результат от API
+ */
+async function handleResult(resultData, modelKey) {
+    // 1. Извлекаем URL картинки из любых возможных структур ответа
+    let imageUrl = null;
+
+    if (Array.isArray(resultData.urls) && resultData.urls.length > 0) {
+        imageUrl = resultData.urls[0];
+    } else if (typeof resultData.urls === 'string') {
+        imageUrl = resultData.urls;
+    } else if (resultData.url) {
+        imageUrl = resultData.url;
+    } else if (resultData.image_url) {
+        imageUrl = resultData.image_url;
     }
 
-    let toolSlug = modelKey;
-    if (!toolSlug) {
-        throw new Error('❌ Не указан slug модели для Братухи');
-    }
-
-    // Нормализуем имя модели
-    if (toolSlug === 'qwen-3-5-9b') toolSlug = 'qwen3.5-9b';
-    if (toolSlug === 'deepseek-v3-2') toolSlug = 'deepseek-v3.2';
-
-    // Собираем все буферы изображений
-    const allBuffers = [];
-    if (fileBuffer) allBuffers.push(fileBuffer);
-    if (fileBuffers && Array.isArray(fileBuffers)) {
-        allBuffers.push(...fileBuffers);
-    }
-
-    // 1. Если это текстовая/мультимодальная чат-модель — отправляем в /chat/completions
-    if (TEXT_MODELS.includes(toolSlug)) {
-        console.log(`💬 [Bratukha Chat] Запрос к текстовой модели: ${toolSlug}`);
-
-        const messages = [{ role: 'user', content: prompt || '' }];
-
-        if (allBuffers.length > 0) {
-            const contentParts = [{ type: 'text', text: prompt || 'Что на этом изображении?' }];
-            allBuffers.forEach(buf => {
-                contentParts.push({
-                    type: 'image_url',
-                    image_url: { url: `data:${mimeType || 'image/jpeg'};base64,${buf.toString('base64')}` }
-                });
-            });
-            messages[0].content = contentParts;
-        }
-
-        try {
-            const chatRes = await axios.post(`${BRATUKHA_API_URL}/chat/completions`, {
-                model: toolSlug,
-                messages: messages
-            }, {
-                headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            let replyText = chatRes.data?.choices?.[0]?.message?.content || 'Пустой ответ от модели';
-            replyText = stripUrls(replyText);
+    // 2. Если нашли URL или тип ответа — изображение, скачиваем его в Buffer
+    if (imageUrl || resultData.type === 'image' || modelKey === 'gpt-image-2-5') {
+        if (imageUrl) {
+            console.log(`📥 Скачивание сгенерированного изображения: ${imageUrl}`);
+            const buffer = await downloadImageToBuffer(imageUrl);
 
             return {
-                type: 'text',
-                text: replyText
+                type: 'image',
+                buffer: buffer,
+                text: resultData.caption || ''
             };
-        } catch (err) {
-            if (err.response) {
-                console.error(`🚨 [Bratukha Chat Error] Status: ${err.response.status}`, JSON.stringify(err.response.data));
-                throw new Error(err.response.data.error?.message || `Ошибка чат-апи: статус ${err.response.status}`);
-            }
-            throw err;
         }
     }
 
-    // 2. Иначе — асинхронный эндпоинт операций (/operations) для медиа и картинок
-    const inputData = {};
-    if (prompt) {
-        inputData.prompt = prompt;
-    }
+    // 3. Если ответ текстовый (DeepSeek, Qwen и др.)
+    const textOutput = resultData.text || 
+                        resultData.content || 
+                        resultData.choices?.[0]?.message?.content || 
+                        (typeof resultData === 'string' ? resultData : JSON.stringify(resultData));
 
-    if (allBuffers.length > 0) {
-        const firstBase64 = `data:${mimeType || 'image/jpeg'};base64,${allBuffers[0].toString('base64')}`;
-        const fileUrls = allBuffers.map(buf => `data:${mimeType || 'image/jpeg'};base64,${buf.toString('base64')}`);
-
-        // Передаем изображение во все распространенные поля, которые может запрашивать API Братухи
-        inputData.image = firstBase64;
-        inputData.image_url = firstBase64;
-        inputData.init_image = firstBase64;
-        inputData.input_image = firstBase64;
-        inputData.images = fileUrls;
-        inputData.image_urls = fileUrls;
-    }
-
-    const payload = {
-        tool: toolSlug,
-        input: inputData
+    return {
+        type: 'text',
+        text: textOutput
     };
+}
 
-    console.log(`🚀 [Bratukha Operations] Создание операции для инструмента: ${toolSlug}`);
-
+/**
+ * Основной метод плагина
+ */
+async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, modelKey }) {
     try {
-        const createRes = await axios.post(`${BRATUKHA_API_URL}/operations`, payload, {
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json'
-            }
-        });
+        const apiUrl = process.env.BRATUKHA_API_URL || 'https://api.bratukha.ai/v1';
+        const headers = {
+            'Authorization': `Bearer ${process.env.BRATUKHA_API_KEY || ''}`,
+            'Content-Type': 'application/json'
+        };
 
-        const operationId = createRes.data?.id;
+        const payload = {
+            model: modelKey,
+            prompt: prompt || ''
+        };
+
+        // Если передано фото (например, для редактирования/Inpainting)
+        if (fileBuffer) {
+            payload.image = `data:${mimeType || 'image/jpeg'};base64,${fileBuffer.toString('base64')}`;
+        }
+
+        // Создаем задачу в API
+        const createRes = await axios.post(`${apiUrl}/generate`, payload, { headers });
+        const responseData = createRes.data;
+
+        // Если API отдал результат сразу без polling
+        if (responseData.urls || responseData.url || responseData.text) {
+            return await handleResult(responseData, modelKey);
+        }
+
+        const operationId = responseData.id || responseData.operation_id || responseData.taskId;
         if (!operationId) {
-            throw new Error('❌ Не удалось получить ID операции от Братухи');
+            throw new Error('API Братуха не вернул ID операции');
         }
 
-        console.log(`⏳ [Bratukha] Операция создана. ID: ${operationId}. Статус: ${createRes.data.status}`);
+        console.log(`⏳ [Bratukha] Операция создана. ID: ${operationId}. Статус: queued`);
 
-        const maxAttempts = 120;
-        const intervalMs = 3000;
+        // Цикл ожидания готовности (Polling)
+        let isCompleted = false;
+        let finalResult = null;
+        let attempts = 0;
+        const maxAttempts = 60; // До 3 минут ожидания
 
-        for (let attempt = 0; attempt < maxAttempts; attempt++) {
-            await new Promise(resolve => setTimeout(resolve, intervalMs));
+        while (!isCompleted && attempts < maxAttempts) {
+            await delay(3000);
+            attempts++;
 
-            try {
-                const statusRes = await axios.get(`${BRATUKHA_API_URL}/operations/${operationId}`, {
-                    headers: {
-                        'Authorization': `Bearer ${apiKey}`
-                    }
-                });
+            const pollRes = await axios.get(`${apiUrl}/operations/${operationId}`, { headers });
+            const status = pollRes.data.status;
 
-                const opData = statusRes.data;
-                console.log(`🔄 [Bratukha] Опрос [${operationId}]: статус — ${opData.status}`);
+            console.log(`🔄 [Bratukha] Опрос [${operationId}]: статус — ${status}`);
 
-                if (opData.status === 'completed') {
-                    const result = opData.result;
-                    
-                    if (result && result.images && result.images.length > 0) {
-                        const mediaUrl = result.images[0];
-                        const mediaRes = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
-                        return {
-                            type: 'image',
-                            buffer: Buffer.from(mediaRes.data),
-                            text: '' // Убраны любые подписи и ссылки на скачивание
-                        };
-                    } else if (result && result.videos && result.videos.length > 0) {
-                        const mediaUrl = result.videos[0];
-                        const mediaRes = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
-                        return {
-                            type: 'video',
-                            buffer: Buffer.from(mediaRes.data),
-                            text: ''
-                        };
-                    } else if (result && (result.text || typeof result === 'string')) {
-                        const rawText = typeof result === 'string' ? result : result.text;
-                        return {
-                            type: 'text',
-                            text: stripUrls(rawText)
-                        };
-                    } else {
-                        return {
-                            type: 'text',
-                            text: stripUrls(JSON.stringify(result, null, 2))
-                        };
-                    }
-                } else if (opData.status === 'failed') {
-                    throw new Error(opData.error_message || 'Выполнение завершилось ошибкой на стороне нейросети');
-                }
-            } catch (pollErr) {
-                if (pollErr.response?.status === 429 || pollErr.response?.status === 503) {
-                    const retryAfter = pollErr.response.headers['retry-after'] || 2;
-                    await new Promise(r => setTimeout(r, retryAfter * 1000));
-                    continue;
-                }
-                if (attempt === maxAttempts - 1) {
-                    throw pollErr;
-                }
+            if (status === 'completed' || status === 'SUCCESS' || status === 'succeeded') {
+                isCompleted = true;
+                finalResult = pollRes.data.result || pollRes.data;
+            } else if (status === 'failed' || status === 'error') {
+                throw new Error(`Ошибка генерации: ${pollRes.data.error || 'Неизвестная ошибка'}`);
             }
         }
 
-        throw new Error('⏱️ Превышено время ожидания ответа от нейросети (таймаут операции)');
-
-    } catch (err) {
-        if (err.response) {
-            const errData = err.response.data;
-            console.error(`🚨 [Bratukha API Error] Status: ${err.response.status}`, JSON.stringify(errData));
-            throw new Error(errData.error?.message || `Ошибка API: статус ${err.response.status}`);
-        } else {
-            console.error(`🚨 [Bratukha Error]:`, err.message);
-            throw err;
+        if (!isCompleted || !finalResult) {
+            throw new Error('Превышено время ожидания ответа от сервера');
         }
+
+        return await handleResult(finalResult, modelKey);
+
+    } catch (error) {
+        console.error('❌ Ошибка в bratukha_plugin:', error.response?.data || error.message);
+        throw error;
     }
 }
 
