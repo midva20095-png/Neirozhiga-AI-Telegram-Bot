@@ -1,4 +1,5 @@
 const axios = require('axios');
+const FormData = require('form-data'); // Убедитесь, что пакет установлен: npm install form-data
 
 const BRATUKHA_API_URL = 'https://bratuha.ru/api/v1';
 
@@ -24,6 +25,40 @@ function parseAspectRatio(promptText) {
     return null;
 }
 
+/**
+ * Вспомогательная функция: загружает Buffer в хранилище Братухи
+ * и возвращает публичную HTTP-ссылку на файл
+ */
+async function uploadBufferToBratuha(buffer, mimeType, apiKey) {
+    try {
+        const formData = new FormData();
+        const extension = (mimeType || 'image/jpeg').split('/')[1] || 'jpg';
+        
+        formData.append('file', buffer, {
+            filename: `upload_${Date.now()}.${extension}`,
+            contentType: mimeType || 'image/jpeg'
+        });
+
+        const response = await axios.post(`${BRATUKHA_API_URL}/uploads`, formData, {
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                ...formData.getHeaders()
+            }
+        });
+
+        const uploadedUrl = response.data?.url || response.data?.file_url || response.data?.location;
+        if (!uploadedUrl) {
+            throw new Error('API Bratuha не вернуло URL загруженного файла');
+        }
+        
+        console.log(`☁️ [Bratukha Upload] Файл успешно загружен: ${uploadedUrl}`);
+        return uploadedUrl;
+    } catch (err) {
+        console.error('🚨 [Bratukha Upload Error]:', err.response?.data || err.message);
+        throw new Error(`Не удалось загрузить изображение на сервер Bratuha: ${err.message}`);
+    }
+}
+
 async function processRequest(params) {
     const { prompt, fileBuffer, fileBuffers, mimeType, modelKey, chatId, userId } = params || {};
     const apiKey = process.env.BRATUKHA_API_KEY;
@@ -41,7 +76,7 @@ async function processRequest(params) {
     if (toolSlug === 'deepseek-v3-2') toolSlug = 'deepseek-v3.2';
 
     // Ключ для кэша чата/пользователя
-    const cacheKey = chatId || userId || 'default_user';
+    const cacheKey = String(chatId || userId || 'default_user');
 
     // Собираем входящие файлы из текущего запроса
     let allBuffers = [];
@@ -70,19 +105,29 @@ async function processRequest(params) {
         }
     }
 
-    // 1. Если это текстовая модель — отправляем в /chat/completions с поддержкой мультимодальности
-    if (TEXT_MODELS.includes(toolSlug)) {
-        console.log(`💬 [Bratukha Chat] Запрос к текстовой модели: ${toolSlug} (файлов: ${allBuffers.length})`);
+    // Загружаем все буферы на сервер Bratuha для получения публичных HTTP URL
+    const uploadedUrls = [];
+    if (allBuffers.length > 0) {
+        console.log(`⏳ [Bratukha Upload] Загрузка ${allBuffers.length} файлов на сервер Bratuha...`);
+        for (const buf of allBuffers) {
+            const publicUrl = await uploadBufferToBratuha(buf, effectiveMimeType, apiKey);
+            uploadedUrls.push(publicUrl);
+        }
+    }
 
-        const userText = prompt || (allBuffers.length > 0 ? 'Опиши это изображение' : 'Привет');
+    // 1. Если это текстовая модель — отправляем в /chat/completions с поддержкой мультимодальности через HTTP URL
+    if (TEXT_MODELS.includes(toolSlug)) {
+        console.log(`💬 [Bratukha Chat] Запрос к текстовой модели: ${toolSlug} (файлов: ${uploadedUrls.length})`);
+
+        const userText = prompt || (uploadedUrls.length > 0 ? 'Опиши это изображение' : 'Привет');
         const messages = [{ role: 'user', content: userText }];
 
-        if (allBuffers.length > 0) {
+        if (uploadedUrls.length > 0) {
             const contentParts = [{ type: 'text', text: userText }];
-            allBuffers.forEach(buf => {
+            uploadedUrls.forEach(url => {
                 contentParts.push({
                     type: 'image_url',
-                    image_url: { url: `data:${effectiveMimeType};base64,${buf.toString('base64')}` }
+                    image_url: { url: url }
                 });
             });
             messages[0].content = contentParts;
@@ -116,7 +161,7 @@ async function processRequest(params) {
     // 2. Иначе — асинхронный эндпоинт операций (/operations) для медиа, генерации и редактирования картинок
     const finalPrompt = (prompt && prompt.trim()) 
         ? prompt.trim() 
-        : (allBuffers.length > 0 ? 'Обработай изображение' : 'Сгенерируй изображение');
+        : (uploadedUrls.length > 0 ? 'Обработай изображение' : 'Сгенерируй изображение');
 
     const inputData = {
         prompt: finalPrompt
@@ -130,22 +175,26 @@ async function processRequest(params) {
         inputData.ar = aspectRatio;
     }
 
-    // Упаковываем картинки (матрёшка для Братухи)
-    if (allBuffers.length > 0) {
-        const fileUrls = allBuffers.map(buf => `data:${effectiveMimeType};base64,${buf.toString('base64')}`);
+    // Упаковываем публичные URL во все возможные вариации наименований полей API Братухи
+    if (uploadedUrls.length > 0) {
+        const primaryUrl = uploadedUrls[0];
+
+        // Покрываем возможные варианты JSON Schema разных инструментов
+        inputData.image = primaryUrl;
+        inputData.image_url = primaryUrl;
+        inputData.input_image = primaryUrl;
+        inputData.init_image = primaryUrl;
+        inputData.source_image = primaryUrl;
+        inputData.images = uploadedUrls;
         
-        inputData.images = fileUrls;
-        inputData.image_url = fileUrls[0];
-        inputData.source_image = fileUrls[0];
-        
-        if (fileUrls.length > 1) {
-            inputData.image_url_1 = fileUrls[0];
-            inputData.image_url_2 = fileUrls[1];
-            inputData.second_image_url = fileUrls[1];
-            inputData.target_image = fileUrls[1];
+        if (uploadedUrls.length > 1) {
+            inputData.image_url_1 = uploadedUrls[0];
+            inputData.image_url_2 = uploadedUrls[1];
+            inputData.second_image_url = uploadedUrls[1];
+            inputData.target_image = uploadedUrls[1];
         }
         
-        console.log(`🖼️ [Bratukha Operations] Передано изображений: ${fileUrls.length} с промптом: "${finalPrompt}"`);
+        console.log(`🖼️ [Bratukha Operations] Передано URL изображений (${primaryUrl}) для инструмента ${toolSlug} с промптом: "${finalPrompt}"`);
     } else {
         console.log(`⚠️ [Bratukha Operations] Изображения не переданы. Промпт: "${finalPrompt}"`);
     }
