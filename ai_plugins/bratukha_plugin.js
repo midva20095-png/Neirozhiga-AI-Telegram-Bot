@@ -95,7 +95,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                     contentType: mimeType || 'image/jpeg'
                 });
 
-                console.ℓ?.(`📤 [Bratukha Upload] Загрузка файла на сервер...`);
+                console.log(`📤 [Bratukha Upload] Загрузка файла на сервер...`);
                 const uploadRes = await axios.post(`${BRATUKHA_API_URL}/uploads`, form, {
                     headers: {
                         'Authorization': `Bearer ${apiKey}`,
@@ -107,10 +107,13 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
                 if (fileUrl) {
                     uploadedUrls.push(fileUrl);
                     console.log(`✅ [Bratukha Upload] Файл успешно загружен: ${fileUrl}`);
+                } else {
+                    console.warn(`⚠ [Bratukha Upload] Ответ сервера не содержал URL файла:`, JSON.stringify(uploadRes.data));
                 }
             } catch (uploadErr) {
-                console.error(`🚨 [Bratukha Upload Error]:`, uploadErr.response?.data || uploadErr.message);
-                throw new Error('Не удалось загрузить входной файл на сервер Братухи');
+                const errorDetails = uploadErr.response?.data ? JSON.stringify(uploadErr.response.data) : uploadErr.message;
+                console.error(`🚨 [Bratukha Upload Error Details]:`, errorDetails);
+                throw new Error(`Ошибка загрузки файла на сервер Братухи: ${errorDetails}`);
             }
         }
 
@@ -122,7 +125,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         }
     }
 
-    // Обязательные параметры для видео-моделей (Veo, Kling, Sora и др.)
+    // Обязательные параметры для видео-моделей
     if (toolSlug.includes('veo') || toolSlug.includes('video') || toolSlug.includes('sora') || toolSlug.includes('kling') || toolSlug.includes('luma')) {
         inputData.aspect_ratio = inputData.aspect_ratio || '16:9';
         inputData.duration = inputData.duration || 5;
@@ -150,8 +153,8 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
 
         console.log(`⏳ [Bratukha] Операция создана. ID: ${operationId}. Статус: ${createRes.data.status}`);
 
-        const maxAttempts = 120; // Таймаут для тяжелых задач (видео/генерации)
-        const intervalMs = 3000; // Интервал опроса 3 секунды (соблюдаем лимит > 1 сек)
+        const maxAttempts = 120;
+        const intervalMs = 3000;
 
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
             await new Promise(resolve => setTimeout(resolve, intervalMs));
