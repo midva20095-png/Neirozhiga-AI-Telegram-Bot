@@ -46,7 +46,7 @@ bot.use(async (ctx, next) => {
 });
 
 const MODEL_COSTS = {
-    // Гугловские
+    // Гугловские (не трогаем)
     'flash': 1,
     'flash_25': 1,
     'pro': 3,
@@ -54,14 +54,14 @@ const MODEL_COSTS = {
     'nanobanana_pro': 12,
     'veo': 300,
 
-    // Новые модели от Братухи
+    // Новые модели от Братухи (с учетом коэффициента x2.5)
     'gpt-image-2-5': 25,
     'deepseek-v3.2': 15,
     'qwen3.5-9b': 10
 };
 
 const MODEL_NAMES = {
-    // Гугловские
+    // Гугловские (не трогаем)
     'flash': 'Gemini 3.8 Flash ⚡️',
     'flash_25': 'Gemini 2.5 Flash 🚀',
     'pro': 'Gemini 3.1 Pro 🧠',
@@ -310,6 +310,7 @@ async function startBot(app) {
         await ctx.editMessageText('❌ Обращение в поддержку отменено.');
     });
 
+    // Обработка кликов по неактивным заголовкам разделов в меню моделей
     bot.action(/^noop_.+$/, async (ctx) => {
         await ctx.answerCbQuery('Это название раздела, выберите модель ниже 👇');
     });
@@ -337,9 +338,6 @@ async function startBot(app) {
     });
 
     bot.action(/^set_model_(.+)$/, async (ctx) => {
-        if (userProcessing.has(ctx.from.id)) {
-            return ctx.answerCbQuery('⏳ Пожалуйста, дождитесь завершения текущего запроса!');
-        }
         userAwaitingEmail.delete(ctx.from.id);
         let selectedModel = ctx.match[1];
         if (selectedModel === 'qwen-3-5-9b') selectedModel = 'qwen3.5-9b';
@@ -425,7 +423,6 @@ async function startBot(app) {
             return;
         }
 
-        // ЖЕСТКИЙ БЛОКИРОВЩИК ПАРАЛЛЕЛЬНЫХ ЗАПРОСОВ
         if (userProcessing.has(userId)) {
             return ctx.reply('⏳ *Подождите...* Нейросеть еще отвечает на ваш предыдущий запрос. Пожалуйста, дождитесь завершения генерации.', { parse_mode: 'Markdown' });
         }
@@ -496,7 +493,6 @@ async function startBot(app) {
         const activePlugin = getAiPlugin(currentMode);
         if (!activePlugin) return ctx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
 
-        // Вешаем блокировку
         userProcessing.add(userId);
         const waitMessage = await ctx.reply(`⏳ *Генерирую ответ...* ${currentMode === 'veo' ? '(Видео создается около 1–2 минут, пожалуйста, подождите)' : ''}`, { parse_mode: 'Markdown' });
 
@@ -546,7 +542,6 @@ async function startBot(app) {
             try { await ctx.deleteMessage(waitMessage.message_id); } catch(e){}
             await ctx.reply(`⚠️ Не удалось получить ответ от нейросети. Ваши кредиты не были списаны.`);
         } finally {
-            // Снимаем блокировку
             userProcessing.delete(userId);
         }
     };
@@ -554,6 +549,10 @@ async function startBot(app) {
     const handleAlbumRequest = async (contexts) => {
         const firstCtx = contexts[0];
         const userId = firstCtx.from.id;
+
+        if (userProcessing.has(userId)) {
+            return firstCtx.reply('⏳ *Подождите...* Нейросеть еще отвечает на ваш предыдущий запрос. Пожалуйста, дождитесь завершения генерации.', { parse_mode: 'Markdown' });
+        }
 
         let prompt = '';
         for (const c of contexts) {
@@ -571,7 +570,6 @@ async function startBot(app) {
 
         const balance = await getUserBalance(userId);
         if (balance < cost) {
-            userProcessing.delete(userId);
             return firstCtx.reply(
                 `❌ *Недостаточно кредитов!*\nВаш баланс: ${balance} кр. Требуется: ${cost} кр.`,
                 {
@@ -582,11 +580,9 @@ async function startBot(app) {
         }
 
         const activePlugin = getAiPlugin(currentMode);
-        if (!activePlugin) {
-            userProcessing.delete(userId);
-            return firstCtx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
-        }
+        if (!activePlugin) return firstCtx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
 
+        userProcessing.add(userId);
         const waitMessage = await firstCtx.reply(`⏳ *Генерирую ответ...*`, { parse_mode: 'Markdown' });
 
         try {
@@ -637,7 +633,6 @@ async function startBot(app) {
             try { await firstCtx.deleteMessage(waitMessage.message_id); } catch(e){}
             await firstCtx.reply(`⚠ Не удалось получить ответ от нейросети. Ваши кредиты не были списаны.`);
         } finally {
-            // Гарантированный сброс блокировки после альбома
             userProcessing.delete(userId);
         }
     };
@@ -645,18 +640,8 @@ async function startBot(app) {
     bot.on('text', handleAiRequest);
     
     bot.on('photo', async (ctx) => {
-        const userId = ctx.from.id;
-
-        // Проверяем блокировку до таймера
-        if (userProcessing.has(userId)) {
-            return ctx.reply('⏳ *Подождите...* Нейросеть еще отвечает на ваш предыдущий запрос. Пожалуйста, дождитесь завершения генерации.', { parse_mode: 'Markdown' });
-        }
-
         const mediaGroupId = ctx.message?.media_group_id;
         if (mediaGroupId) {
-            // Моментально ставим блокировку на юзера при получении первого медиа файла из альбома
-            userProcessing.add(userId);
-
             if (!mediaGroupBuffers.has(mediaGroupId)) {
                 mediaGroupBuffers.set(mediaGroupId, {
                     contexts: [ctx],
