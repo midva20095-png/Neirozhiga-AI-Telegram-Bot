@@ -2,12 +2,14 @@ const axios = require('axios');
 
 const BRATUKHA_API_URL = 'https://bratuha.ru/api/v1';
 
-// Полный каталог актуальных моделей (без Google / Nano Banana)
+// Полный каталог актуальных моделей (без Google)
 const BRATUKHA_MODELS = [
     // 🎵 Аудио
     { slug: 'mureka-ai-v9-5', name: 'Mureka AI V9.5', category: 'audio', price: 60, unit: 'песня / трек' },
     { slug: 'qwen3-tts', name: 'Qwen3 TTS', category: 'audio', price: 20, unit: '1000 символов' },
     { slug: 'qwen3-tts-flash', name: 'Qwen3 TTS Flash', category: 'audio', price: 20, unit: '1000 символов' },
+    { slug: 'suno-v4', name: 'Suno V4', category: 'audio', price: 35, unit: 'трек' },
+    { slug: 'udio-v1-5', name: 'Udio v1.5', category: 'audio', price: 30, unit: 'трек' },
     
     // 🖼 Картинки и апскейл
     { slug: 'phota-enhance', name: 'Phota Enhance', category: 'image', price: 44, unit: 'запуск' },
@@ -23,6 +25,9 @@ const BRATUKHA_MODELS = [
     { slug: 'sam-3d', name: 'SAM 3D', category: 'image-3d', price: 8, unit: 'изображение' },
     { slug: 'seedream-4-0', name: 'Seedream 4.0', category: 'image', price: 8, unit: 'изображение' },
     { slug: 'seedream-4-5', name: 'Seedream 4.5', category: 'image', price: 10, unit: 'изображение' },
+    { slug: 'flux-1-1-pro', name: 'FLUX 1.1 Pro', category: 'image', price: 12, unit: 'изображение' },
+    { slug: 'midjourney-v6-1', name: 'Midjourney v6.1', category: 'image', price: 15, unit: 'изображение' },
+    { slug: 'ideogram-v2', name: 'Ideogram v2', category: 'image', price: 10, unit: 'изображение' },
 
     // 🎬 Видео и анимация
     { slug: 'omnihuman-1-0', name: 'OmniHuman 1.0', category: 'video', price: 40, unit: 'сек. видео' },
@@ -45,7 +50,10 @@ const BRATUKHA_MODELS = [
     { slug: 'seedance-1-5-pro', name: 'Seedance 1.5 Pro', category: 'video', price: 14, unit: 'видео' },
     { slug: 'seedance-2-0-apimart', name: 'Seedance 2.0', category: 'video', price: 10, unit: 'сек. видео' },
     { slug: 'seedance-2-0-mini', name: 'Seedance 2.0 Mini', category: 'video', price: 10, unit: 'сек. видео' },
-    { slug: 'seedance-2-5', name: 'Seedance 2.5', category: 'video', price: 16, unit: 'сек. видео' }
+    { slug: 'seedance-2-5', name: 'Seedance 2.5', category: 'video', price: 16, unit: 'сек. видео' },
+    { slug: 'sora-2', name: 'Sora 2.0', category: 'video', price: 50, unit: 'генерация' },
+    { slug: 'kling-1-5', name: 'Kling 1.5', category: 'video', price: 25, unit: 'генерация' },
+    { slug: 'luma-dream-machine', name: 'Luma Dream Machine', category: 'video', price: 30, unit: 'генерация' }
 ];
 
 async function uploadBuffer(apiKey, buf, mimeType = 'image/jpeg', filename = 'input_file.jpg') {
