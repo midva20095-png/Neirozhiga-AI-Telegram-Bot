@@ -105,20 +105,20 @@ const MODEL_COSTS = {
     'qwen-image-3-0': 9,
     'recraft-creative-upscale': 80,
     'recraft-crisp-upscale': 2,
-    'recraft-v4': 14,
-    'recraft-v4-1': 12,
+    'recraft-v4': 3,
+    'recraft-v4-1': 4,
     'runway-gen4-image': 16,
     'sam-3d': 8,
-    'seedream-4-0': 8,
-    'seedream-4-5': 10,
+    'seedream-4-0': 3,
+    'seedream-4-5': 4,
 
     // 🎬 Видео и Анимация
     'veo': 400,
-    'sora-2': 50,
+    'sora-2': 30,
     'seedance-1-0': 20,
-    'seedance-1-5-pro': 14,
-    'seedance-2-0-apimart': 10,
-    'pruna-ai-p-video-2-pro': 4
+    'seedance-1-5-pro': 24,
+    'seedance-2-0-apimart': 20,
+    'pruna-ai-p-video-2-pro': 14
 };
 
 // 🏷 Названия моделей с емким описанием
@@ -158,7 +158,7 @@ const MODEL_NAMES = {
 };
 
 const CREDIT_PACKAGES = {
-    'pack_50': { credits: 50, price: 250, title: '50 кредитов' },
+    'pack_50': { credits: 50, price: 1, title: '50 кредитов' },
     'pack_150': { credits: 150, price: 750, title: '150 кредитов' },
     'pack_500': { credits: 500, price: 2500, title: '500 кредитов' }
 };
