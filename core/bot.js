@@ -1,4 +1,3 @@
-require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 
@@ -42,9 +41,6 @@ const ADMIN_ID = '5943987954';
 
 // Модели, строго требующие наличия изображения
 const REQUIRES_IMAGE_MODELS = [
-    'pixverse-6-0', 'pixverse-5-5', 'pixverse-5-6', 'pixverse-lipsync',
-    'omnihuman-1-0', 'omnihuman-1-5', 'p-video-avatar',
-    'pruna-ai-p-video-animate', 'pruna-ai-p-video-edit',
     'phota-enhance', 'p-image-upscale', 'recraft-creative-upscale', 'recraft-crisp-upscale'
 ];
 
@@ -96,30 +92,13 @@ const MODEL_COSTS = {
     'midjourney-v6-1': 15,
     'ideogram-v2': 10,
 
-    // 🎬 Видео и Анимация (Братуха) — kling-1-5 удалена
-    'omnihuman-1-0': 40,
-    'omnihuman-1-5': 70,
-    'pika': 14,
-    'pixverse-5-5': 45,
-    'pixverse-5-6': 112,
-    'pixverse-6-0': 10,
-    'pixverse-c1': 12,
-    'pixverse-lipsync': 14,
-    'pixverse-vibemv': 20,
-    'pruna-ai-p-video': 6,
-    'pruna-ai-p-video-animate': 10,
-    'p-video-avatar': 8,
-    'pruna-ai-p-video-2': 5,
-    'pruna-ai-p-video-2-pro': 4,
-    'pruna-ai-p-video-edit': 10,
-    'runway-4-turbo': 30,
+    // 🎬 Видео и Анимация (Актуальные рабочие модели)
+    'veo': 400,
+    'sora-2': 50,
     'seedance-1-0': 20,
     'seedance-1-5-pro': 14,
     'seedance-2-0-apimart': 10,
-    'seedance-2-0-mini': 10,
-    'seedance-2-5': 16,
-    'sora-2': 50,
-    'luma-dream-machine': 30
+    'pruna-ai-p-video-2-pro': 4
 };
 
 const MODEL_NAMES = {
@@ -156,30 +135,13 @@ const MODEL_NAMES = {
     'midjourney-v6-1': 'Midjourney v6.1 ✨',
     'ideogram-v2': 'Ideogram v2 🔤',
 
-    // 🎬 Видео и Анимация — kling-1-5 удалена
-    'omnihuman-1-0': 'OmniHuman 1.0 👤',
-    'omnihuman-1-5': 'OmniHuman 1.5 👤',
-    'pika': 'Pika 2.2 🎬',
-    'pixverse-5-5': 'PixVerse 5.5 🎥',
-    'pixverse-5-6': 'PixVerse 5.6 🎥',
-    'pixverse-6-0': 'PixVerse 6.0 🎥',
-    'pixverse-c1': 'PixVerse C1 🎥',
-    'pixverse-lipsync': 'PixVerse Lipsync 👄',
-    'pixverse-vibemv': 'PixVerse VibeMV 🎶',
-    'pruna-ai-p-video': 'Pruna P-Video 📹',
-    'pruna-ai-p-video-animate': 'Pruna P-Video Animate 🎞',
-    'p-video-avatar': 'Pruna P-Video Avatar 🗣',
-    'pruna-ai-p-video-2': 'Pruna P-Video 2 📹',
-    'pruna-ai-p-video-2-pro': 'Pruna P-Video 2 Pro ⚡',
-    'pruna-ai-p-video-edit': 'Pruna P-Video Edit ✂',
-    'runway-4-turbo': 'Runway 4 Turbo 🚀',
+    // 🎬 Видео и Анимация (Актуальные рабочие модели)
+    'veo': 'Veo 3.1 Видео 🎬',
+    'sora-2': 'Sora 2.0 🌟',
     'seedance-1-0': 'Seedance 1.0 💃',
     'seedance-1-5-pro': 'Seedance 1.5 Pro 💃',
     'seedance-2-0-apimart': 'Seedance 2.0 💃',
-    'seedance-2-0-mini': 'Seedance 2.0 Mini 💃',
-    'seedance-2-5': 'Seedance 2.5 💃',
-    'sora-2': 'Sora 2.0 🌟',
-    'luma-dream-machine': 'Luma Dream Machine 🌌'
+    'pruna-ai-p-video-2-pro': 'Pruna P-Video 2 Pro ⚡'
 };
 
 const CREDIT_PACKAGES = {
@@ -254,13 +216,8 @@ function getModelSelectionKeyboard(currentMode) {
     ];
     
     const videoModels = [
-        'veo', 'omnihuman-1-0', 'omnihuman-1-5', 'pika', 'pixverse-5-5', 
-        'pixverse-5-6', 'pixverse-6-0', 'pixverse-c1', 'pixverse-lipsync', 
-        'pixverse-vibemv', 'pruna-ai-p-video', 'pruna-ai-p-video-animate', 
-        'p-video-avatar', 'pruna-ai-p-video-2', 'pruna-ai-p-video-2-pro', 
-        'pruna-ai-p-video-edit', 'runway-4-turbo', 'seedance-1-0', 
-        'seedance-1-5-pro', 'seedance-2-0-apimart', 'seedance-2-0-mini', 
-        'seedance-2-5', 'sora-2', 'luma-dream-machine'
+        'veo', 'sora-2', 'seedance-1-0', 'seedance-1-5-pro', 
+        'seedance-2-0-apimart', 'pruna-ai-p-video-2-pro'
     ];
 
     const buttons = [];
@@ -613,7 +570,7 @@ async function startBot(app) {
         }
 
         if (REQUIRES_IMAGE_MODELS.includes(currentMode) && fileBuffers.length === 0) {
-            return ctx.reply('⚠️ *Ошибка:* Выбранная модель требует наличие изображения. Пожалуйста, отправьте картинку.');
+            return ctx.reply('⚠️️ *Ошибка:* Выбранная модель требует наличие изображения. Пожалуйста, отправьте картинку.');
         }
 
         if (REQUIRES_TEXT_MODELS.includes(currentMode) && !prompt.trim()) {
@@ -636,7 +593,7 @@ async function startBot(app) {
         if (!activePlugin) return ctx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
 
         userProcessing.add(userId);
-        const waitMessage = await ctx.reply(`⏳ *Генерирую ответ...* ${(currentMode === 'veo' || currentMode.includes('pixverse') || currentMode.includes('seedance') || currentMode.includes('runway')) ? '(Видео/Аудио создается около 1–3 минут, пожалуйста, подождите)' : ''}`, { parse_mode: 'Markdown' });
+        const waitMessage = await ctx.reply(`⏳ *Генерирую ответ...* ${(currentMode === 'veo' || currentMode.includes('seedance') || currentMode.includes('sora')) ? '(Видео/Аудио создается около 1–3 минут, пожалуйста, подождите)' : ''}`, { parse_mode: 'Markdown' });
 
         try {
             const aiResult = await activePlugin.processRequest({
@@ -678,7 +635,7 @@ async function startBot(app) {
         } catch (error) {
             console.error('❌ Ошибка генерации (скрыта от пользователя):', error.message || error);
             try { await ctx.deleteMessage(waitMessage.message_id); } catch(e){}
-            await ctx.reply(`⚠️ Не удалось получить ответ от нейросети. Ваши кредиты не были списаны.`);
+            await ctx.reply(`⚠️️ Не удалось получить ответ от нейросети. Ваши кредиты не были списаны.`);
         } finally {
             userProcessing.delete(userId);
         }
@@ -797,13 +754,7 @@ async function startBot(app) {
             }
             return;
         }
-        return handleAiRequest(ctx);
-    });
-
-    bot.launch().then(() => {
-        console.log('🤖 Ядро бота успешно запущено!');
-    }).catch((err) => {
-        console.error('⚠ Ошибка при запуске Telegram polling:', err.message);
+        await handleAiRequest(ctx);
     });
 }
 
