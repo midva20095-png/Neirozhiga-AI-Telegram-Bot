@@ -27,7 +27,6 @@ function getAiPlugin(modelKey) {
     return bratukhaPlugin;
 }
 
-// Увеличиваем handlerTimeout до 5 минут (300 000 мс) для длительных генераций видео
 const bot = new Telegraf(process.env.BOT_TOKEN, {
     handlerTimeout: 300000
 });
@@ -40,29 +39,31 @@ const mediaGroupBuffers = new Map();
 
 const ADMIN_ID = '5943987954';
 
-// Модели, строго требующие наличия изображения (veo полностью исключен)
+// 🛑 Модели, СТРОГО ТРЕБУЮЩИЕ наличия исходного изображения (Апскейлеры, 3D и Все Видео кроме Veo)
 const REQUIRES_IMAGE_MODELS = [
-    'sora-2',
-    'phota-enhance', 
-    'p-image-upscale', 
-    'recraft-creative-upscale', 
-    'recraft-crisp-upscale',
-    'pixverse-6-0', 
-    'pixverse-5-5', 
-    'pixverse-5-6', 
-    'pixverse-lipsync',
-    'omnihuman-1-0', 
-    'omnihuman-1-5', 
-    'p-video-avatar',
-    'pruna-ai-p-video-animate', 
-    'pruna-ai-p-video-edit'
+    // 🔍 Апскейлеры и улучшение
+    'phota-enhance', 'p-image-upscale', 'recraft-creative-upscale', 'recraft-crisp-upscale',
+    
+    // 🧊 3D-моделирование
+    'pixal3d', 'sam-3d',
+
+    // 🎬 Видео-модели (Все, кроме Veo — требуют картинку-ориентир + промпт)
+    'sora-2', 
+    'seedance-1-0', 
+    'seedance-1-5-pro', 
+    'seedance-2-0-apimart', 
+    'pruna-ai-p-video-2-pro',
+    'pixverse-6-0', 'pixverse-5-5', 'pixverse-5-6', 'pixverse-lipsync', 
+    'omnihuman-1-0', 'omnihuman-1-5', 'p-video-avatar', 
+    'pruna-ai-p-video-animate', 'pruna-ai-p-video-edit'
 ];
 
-// Модели, строго требующие наличие текста (veo полностью исключен)
+// 📝 Модели, СТРОГО ТРЕБУЮЩИЕ наличия текстового описания (Промпта)
 const REQUIRES_TEXT_MODELS = [
-    'qwen3-tts', 
-    'qwen3-tts-flash',
-    'sora-2'
+    'flash', 'flash_25', 'pro',
+    'qwen3-tts', 'qwen3-tts-flash',
+    'qwen-image-2-1', 'qwen-image-3-0', 'recraft-v4', 'recraft-v4-1', 
+    'runway-gen4-image', 'seedream-4-0', 'seedream-4-5'
 ];
 
 bot.catch((err, ctx) => {
@@ -74,20 +75,20 @@ bot.use(async (ctx, next) => {
     return next();
 });
 
+// 💰 Стоимость моделей по подразделам (в кредитах)
 const MODEL_COSTS = {
-    // 🟢 Модели Google
+    // 🟢 Текстовые и Мультимодальные Google
     'flash': 1,
     'flash_25': 1,
     'pro': 3,
     'nanobanana': 4,
     'nanobanana_pro': 10,
-    'veo': 400,
 
-    // 🎵 Аудио (Братуха)
+    // 🎵 Аудио и голос
     'qwen3-tts': 20,
     'qwen3-tts-flash': 20,
 
-    // 🖼 Картинки, 3D и Апскейл (Братуха)
+    // 🖼 Картинки, 3D и Апскейл
     'phota-enhance': 44,
     'pixal3d': 90,
     'p-image-upscale': 2,
@@ -102,7 +103,8 @@ const MODEL_COSTS = {
     'seedream-4-0': 8,
     'seedream-4-5': 10,
 
-    // 🎬 Видео и Анимация 
+    // 🎬 Видео и Анимация
+    'veo': 400,
     'sora-2': 50,
     'seedance-1-0': 20,
     'seedance-1-5-pro': 14,
@@ -110,40 +112,41 @@ const MODEL_COSTS = {
     'pruna-ai-p-video-2-pro': 4
 };
 
+// 🏷 Точные названия моделей с детальной маркировкой возможностей
 const MODEL_NAMES = {
-    // 🟢 Модели Google
-    'flash': 'Gemini 3.8 Flash ⚡️',
-    'flash_25': 'Gemini 2.5 Flash 🚀',
-    'pro': 'Gemini 3.1 Pro 🧠',
-    'nanobanana': 'Nano Banana 2 🎨',
-    'nanobanana_pro': 'Nano Banana Pro 💎',
-    'veo': 'Veo 3.1 Видео 🎬',
+    // 🟢 Текстовые
+    'flash': 'Gemini 3.8 Flash ⚡️ 📝 [текст]',
+    'flash_25': 'Gemini 2.5 Flash 🚀 📝 [текст]',
+    'pro': 'Gemini 3.1 Pro 🧠 📝 [текст]',
 
     // 🎵 Аудио
-    'qwen3-tts': 'Qwen3 TTS 🗣',
-    'qwen3-tts-flash': 'Qwen3 TTS Flash ⚡️',
+    'qwen3-tts': 'Qwen3 TTS 🗣 📝 [текст]',
+    'qwen3-tts-flash': 'Qwen3 TTS Flash ⚡️ 📝 [текст]',
 
     // 🖼 Картинки, 3D и Апскейл
-    'phota-enhance': 'Phota Enhance 🪄',
-    'pixal3d': 'Pixal3D 🧊',
-    'p-image-upscale': 'Pruna P-ImageUpscale 🔍',
-    'qwen-image-2-1': 'Qwen Image 2.1 🎨',
-    'qwen-image-3-0': 'Qwen Image 3.0 🎨',
-    'recraft-creative-upscale': 'Recraft Creative Upscale 🖼',
-    'recraft-crisp-upscale': 'Recraft Crisp Upscale 🔍',
-    'recraft-v4': 'Recraft V4 🎨',
-    'recraft-v4-1': 'Recraft V4.1 🎨',
-    'runway-gen4-image': 'Runway Gen4 Image 🖼',
-    'sam-3d': 'SAM 3D 🧊',
-    'seedream-4-0': 'Seedream 4.0 🌈',
-    'seedream-4-5': 'Seedream 4.5 🌈',
+    'nanobanana': 'Nano Banana 2 🎨 📝/📷 [текст / фото]',
+    'nanobanana_pro': 'Nano Banana Pro 💎 📝/📷 [текст / фото]',
+    'phota-enhance': 'Phota Enhance 🪄 📷+📝 [фото обязат.]',
+    'pixal3d': 'Pixal3D 🧊 📷+📝 [фото обязат.]',
+    'p-image-upscale': 'Pruna P-ImageUpscale 🔍 📷+📝 [фото обязат.]',
+    'qwen-image-2-1': 'Qwen Image 2.1 🎨 📝/📷 [текст / фото]',
+    'qwen-image-3-0': 'Qwen Image 3.0 🎨 📝/📷 [текст / фото]',
+    'recraft-creative-upscale': 'Recraft Creative Upscale 🖼 📷+📝 [фото обязат.]',
+    'recraft-crisp-upscale': 'Recraft Crisp Upscale 🔍 📷+📝 [фото обязат.]',
+    'recraft-v4': 'Recraft V4 🎨 📝/📷 [текст / фото]',
+    'recraft-v4-1': 'Recraft V4.1 🎨 📝/📷 [текст / фото]',
+    'runway-gen4-image': 'Runway Gen4 Image 🖼 📝/📷 [текст / фото]',
+    'sam-3d': 'SAM 3D 🧊 📷+📝 [фото обязат.]',
+    'seedream-4-0': 'Seedream 4.0 🌈 📝/📷 [текст / фото]',
+    'seedream-4-5': 'Seedream 4.5 🌈 📝/📷 [текст / фото]',
 
-    // 🎬 Видео и Анимация 
-    'sora-2': 'Sora 2.0 🌟',
-    'seedance-1-0': 'Seedance 1.0 💃',
-    'seedance-1-5-pro': 'Seedance 1.5 Pro 💃',
-    'seedance-2-0-apimart': 'Seedance 2.0 💃',
-    'pruna-ai-p-video-2-pro': 'Pruna P-Video 2 Pro ⚡'
+    // 🎬 Видео и Анимация
+    'veo': 'Veo 3.1 Видео 🎬 📝/📷/🎥 [мультимодальная]',
+    'sora-2': 'Sora 2.0 🌟 📷+📝 [фото обязат.]',
+    'seedance-1-0': 'Seedance 1.0 💃 📷+📝 [фото обязат.]',
+    'seedance-1-5-pro': 'Seedance 1.5 Pro 💃 📷+📝 [фото обязат.]',
+    'seedance-2-0-apimart': 'Seedance 2.0 💃 📷+📝 [фото обязат.]',
+    'pruna-ai-p-video-2-pro': 'Pruna P-Video 2 Pro ⚡ 📷+📝 [фото обязат.]'
 };
 
 const CREDIT_PACKAGES = {
@@ -205,9 +208,7 @@ async function getTelegramFileBuffer(ctx, fileId) {
 function getModelSelectionKeyboard(currentMode) {
     const textModels = ['flash', 'flash_25', 'pro'];
     
-    const audioModels = [
-        'qwen3-tts', 'qwen3-tts-flash'
-    ];
+    const audioModels = ['qwen3-tts', 'qwen3-tts-flash'];
     
     const imageModels = [
         'nanobanana', 'nanobanana_pro', 'phota-enhance', 'pixal3d', 
@@ -224,25 +225,29 @@ function getModelSelectionKeyboard(currentMode) {
 
     const buttons = [];
 
+    // Блок 1: Текстовые модели
     buttons.push([Markup.button.callback('💬 ─── ТЕКСТОВЫЕ МОДЕЛИ ───', 'noop_text')]);
     textModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
         buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
     });
 
+    // Блок 2: Аудио и голос
     buttons.push([Markup.button.callback('🎵 ─── АУДИО И ГОЛОС ───', 'noop_audio')]);
     audioModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
         buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
     });
 
+    // Блок 3: Картинки, 3D и апскейл
     buttons.push([Markup.button.callback('🎨 ─── КАРТИНКИ, 3D И АПСКЕЙЛ ───', 'noop_image')]);
     imageModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
         buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
     });
 
-    buttons.push([Markup.button.callback('🎬 ─── ВИДЕО И АНИМАЦИЯ (только проверенные рабочие) ───', 'noop_video')]);
+    // Блок 4: Видео и анимация
+    buttons.push([Markup.button.callback('🎬 ─── ВИДЕО И АНИМАЦИЯ ───', 'noop_video')]);
     videoModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
         buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
@@ -570,24 +575,23 @@ async function startBot(app) {
             if (buf) fileBuffers.push(buf);
         }
 
-        // ПРОВЕРКА: Требование картинки
+        // 🛑 ПЕРЕХВАТ: Модель строго требует наличие изображения (видео кроме veo, апскейлеры, 3D)
         if (REQUIRES_IMAGE_MODELS.includes(currentMode) && fileBuffers.length === 0) {
             return ctx.reply(
-                `⚠️ *Ошибка ввода!*\n\n` +
-                `Выбранная модель *${MODEL_NAMES[currentMode] || currentMode}* требует наличия картинки.\n\n` +
-                `Пожалуйста, отправьте изображение вместе с вашим запросом.`,
+                '⚠️ *Ошибка:* Выбранная модель требует обязательного наличия *изображения*.\n\n' +
+                '📸 Пожалуйста, прикрепите фото и напишите текстовое описание (промпт) в подписи к нему.', 
                 { parse_mode: 'Markdown' }
             );
         }
 
-        // ПРОВЕРКА: Требование текста
+        // 🛑 ПЕРЕХВАТ: Модель строго требует наличие текста
         if (REQUIRES_TEXT_MODELS.includes(currentMode) && !prompt.trim()) {
-            return ctx.reply(
-                `⚠️ *Ошибка ввода!*\n\n` +
-                `Выбранная модель *${MODEL_NAMES[currentMode] || currentMode}* требует текстового описания.\n\n` +
-                `Пожалуйста, добавьте текстовый запрос или подпись к файлу.`,
-                { parse_mode: 'Markdown' }
-            );
+            return ctx.reply('⚠️ *Ошибка:* Для выбранной модели требуется текстовое описание.');
+        }
+
+        // Общая проверка на пустой запрос
+        if (!prompt.trim() && fileBuffers.length === 0) {
+            return ctx.reply('⚠️ *Ошибка:* Пожалуйста, отправьте текстовое описание или прикрепите фото.');
         }
 
         const cost = MODEL_COSTS[currentMode] || 1;
@@ -606,7 +610,10 @@ async function startBot(app) {
         if (!activePlugin) return ctx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
 
         userProcessing.add(userId);
-        const waitMessage = await ctx.reply(`⏳ *Генерирую ответ...* ${(currentMode === 'veo' || currentMode.includes('sora') || currentMode.includes('seedance') || currentMode.includes('pruna')) ? '(Видео/Аудио создается около 1–3 минут, пожалуйста, подождите)' : ''}`, { parse_mode: 'Markdown' });
+        const waitMessage = await ctx.reply(
+            `⏳ *Генерирую ответ...* ${(currentMode === 'veo' || currentMode.includes('sora') || currentMode.includes('seedance') || currentMode.includes('pruna')) ? '(Видео создается около 1–3 минут, пожалуйста, подождите)' : ''}`, 
+            { parse_mode: 'Markdown' }
+        );
 
         try {
             const aiResult = await activePlugin.processRequest({
@@ -683,22 +690,10 @@ async function startBot(app) {
             }
         }
 
-        // ПРОВЕРКА: Требование картинки
         if (REQUIRES_IMAGE_MODELS.includes(currentMode) && fileBuffers.length === 0) {
             return firstCtx.reply(
-                `⚠️ *Ошибка ввода!*\n\n` +
-                `Выбранная модель *${MODEL_NAMES[currentMode] || currentMode}* требует наличия картинки.\n\n` +
-                `Пожалуйста, отправьте изображение с вашим запросом.`,
-                { parse_mode: 'Markdown' }
-            );
-        }
-
-        // ПРОВЕРКА: Требование текста
-        if (REQUIRES_TEXT_MODELS.includes(currentMode) && !prompt.trim()) {
-            return firstCtx.reply(
-                `⚠️ *Ошибка ввода!*\n\n` +
-                `Выбранная модель *${MODEL_NAMES[currentMode] || currentMode}* требует текстового описания.\n\n` +
-                `Пожалуйста, добавьте подпись к вашему альбому.`,
+                '⚠️ *Ошибка:* Выбранная модель требует обязательного наличия *изображения*.\n\n' +
+                '📸 Пожалуйста, прикрепите фото и напишите текстовое описание (промпт) в подписи к нему.', 
                 { parse_mode: 'Markdown' }
             );
         }
@@ -789,7 +784,6 @@ async function startBot(app) {
     bot.on('video', handleAiRequest);
     bot.on('audio', handleAiRequest);
 
-    // 🚀 Запуск бота (Long Polling) и корректная обработка остановки процесса
     try {
         await bot.launch();
         console.log('🤖 Бот успешно запущен и работает в режиме Long Polling!');
