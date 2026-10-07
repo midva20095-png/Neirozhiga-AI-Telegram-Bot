@@ -45,7 +45,7 @@ const REQUIRES_IMAGE_MODELS = [
     'phota-enhance', 'p-image-upscale', 'recraft-creative-upscale', 'recraft-crisp-upscale',
     
     // 🧊 3D-моделирование
-    'pixal3d', 'sam-3d',
+    'sam-3d',
 
     // 🎬 Видео-модели (Все, кроме Veo — требуют картинку-ориентир + промпт)
     'sora-2', 
@@ -90,7 +90,6 @@ const MODEL_COSTS = {
 
     // 🖼 Картинки, 3D и Апскейл
     'phota-enhance': 44,
-    'pixal3d': 90,
     'p-image-upscale': 2,
     'qwen-image-2-1': 8,
     'qwen-image-3-0': 9,
@@ -127,7 +126,6 @@ const MODEL_NAMES = {
     'nanobanana': 'Nano Banana 2 🎨 (Генерация/арт) 📝/📷',
     'nanobanana_pro': 'Nano Banana Pro 💎 (Про-фото) 📝/📷',
     'phota-enhance': 'Phota Enhance 🪄 (Улучшение) 📷!',
-    'pixal3d': 'Pixal3D 🧊 (3D из фото) 📷!',
     'p-image-upscale': 'Pruna Upscale 🔍 (Резкость фото) 📷!',
     'qwen-image-2-1': 'Qwen Image 2.1 🎨 (Арт/фото) 📝/📷',
     'qwen-image-3-0': 'Qwen Image 3.0 🎨 (Арт/фото) 📝/📷',
@@ -211,7 +209,7 @@ function getModelSelectionKeyboard(currentMode) {
     const audioModels = ['qwen3-tts', 'qwen3-tts-flash'];
     
     const imageModels = [
-        'nanobanana', 'nanobanana_pro', 'phota-enhance', 'pixal3d', 
+        'nanobanana', 'nanobanana_pro', 'phota-enhance', 
         'p-image-upscale', 'qwen-image-2-1', 'qwen-image-3-0', 
         'recraft-creative-upscale', 'recraft-crisp-upscale', 'recraft-v4', 
         'recraft-v4-1', 'runway-gen4-image', 'sam-3d', 'seedream-4-0', 
@@ -595,7 +593,6 @@ async function startBot(app) {
             if (buf) fileBuffers.push(buf);
         }
 
-        // 🛑 ПЕРЕХВАТ: Модель строго требует наличие изображения
         if (REQUIRES_IMAGE_MODELS.includes(currentMode) && fileBuffers.length === 0) {
             return ctx.reply(
                 '⚠️ *Ошибка:* Выбранная модель требует обязательного наличия *изображения*.\n\n' +
@@ -604,12 +601,10 @@ async function startBot(app) {
             );
         }
 
-        // 🛑 ПЕРЕХВАТ: Модель строго требует наличие текста
         if (REQUIRES_TEXT_MODELS.includes(currentMode) && !prompt.trim()) {
             return ctx.reply('⚠️ *Ошибка:* Для выбранной модели требуется текстовое описание.');
         }
 
-        // Общая проверка на пустой запрос
         if (!prompt.trim() && fileBuffers.length === 0) {
             return ctx.reply('⚠️ *Ошибка:* Пожалуйста, отправьте текстовое описание или прикрепите фото.');
         }
@@ -797,22 +792,15 @@ async function startBot(app) {
                 mediaGroupBuffers.get(mediaGroupId).contexts.push(ctx);
             }
         } else {
-            await handleAiRequest(ctx);
+            return handleAiRequest(ctx);
         }
     });
 
-    bot.on('video', handleAiRequest);
-    bot.on('audio', handleAiRequest);
-
-    try {
-        await bot.launch();
-        console.log('🤖 Бот успешно запущен и работает в режиме Long Polling!');
-    } catch (err) {
-        console.error('❌ Ошибка при запуске bot.launch():', err);
-    }
-
-    process.once('SIGINT', () => bot.stop('SIGINT'));
-    process.once('SIGTERM', () => bot.stop('SIGTERM'));
+    bot.launch().then(() => {
+        console.log('🤖 Бот успешно запущен!');
+    }).catch(err => {
+        console.error('❌ Ошибка запуска бота:', err);
+    });
 }
 
 module.exports = { startBot };
