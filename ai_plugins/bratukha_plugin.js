@@ -7,7 +7,6 @@ const BRATUKHA_API_URL = process.env.BRATUKHA_API_URL || 'https://bratuha.ru/api
 // Каталог актуальных моделей (видео строго ограничены вашим списком)
 const BRATUKHA_MODELS = [
     // 🎵 Аудио
-    { slug: 'mureka-ai-v9-5', name: 'Mureka AI V9.5', category: 'audio', price: 60, unit: 'песня / трек' },
     { slug: 'qwen3-tts', name: 'Qwen3 TTS', category: 'audio', price: 20, unit: '1000 символов' },
     { slug: 'qwen3-tts-flash', name: 'Qwen3 TTS Flash', category: 'audio', price: 20, unit: '1000 символов' },
     

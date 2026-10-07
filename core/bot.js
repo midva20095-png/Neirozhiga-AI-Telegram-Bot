@@ -50,7 +50,7 @@ const REQUIRES_IMAGE_MODELS = [
 
 // Модели, строго требующие наличие текста
 const REQUIRES_TEXT_MODELS = [
-    'qwen3-tts', 'qwen3-tts-flash', 'mureka-ai-v9-5', 'suno-v4', 'udio-v1-5'
+    'qwen3-tts', 'qwen3-tts-flash'
 ];
 
 bot.catch((err, ctx) => {
@@ -72,11 +72,8 @@ const MODEL_COSTS = {
     'veo': 400,
 
     // 🎵 Аудио (Братуха)
-    'mureka-ai-v9-5': 60,
     'qwen3-tts': 20,
     'qwen3-tts-flash': 20,
-    'suno-v4': 35,
-    'udio-v1-5': 30,
 
     // 🖼 Картинки, 3D и Апскейл (Братуха)
     'phota-enhance': 44,
@@ -112,11 +109,8 @@ const MODEL_NAMES = {
     'veo': 'Veo 3.1 Видео 🎬',
 
     // 🎵 Аудио
-    'mureka-ai-v9-5': 'Mureka AI V9.5 🎵',
     'qwen3-tts': 'Qwen3 TTS 🗣',
     'qwen3-tts-flash': 'Qwen3 TTS Flash ⚡️',
-    'suno-v4': 'Suno V4 🎶',
-    'udio-v1-5': 'Udio v1.5 🎧',
 
     // 🖼 Картинки, 3D и Апскейл
     'phota-enhance': 'Phota Enhance 🪄',
@@ -202,7 +196,7 @@ function getModelSelectionKeyboard(currentMode) {
     const textModels = ['flash', 'flash_25', 'pro'];
     
     const audioModels = [
-        'mureka-ai-v9-5', 'qwen3-tts', 'qwen3-tts-flash', 'suno-v4', 'udio-v1-5'
+        'qwen3-tts', 'qwen3-tts-flash'
     ];
     
     const imageModels = [
