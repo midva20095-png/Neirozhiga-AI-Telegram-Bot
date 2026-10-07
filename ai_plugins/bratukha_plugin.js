@@ -138,10 +138,21 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         inputData.text = prompt; // Обязательный параметр для TTS
     }
 
-    // Добавляем размер / соотношение сторон, если передан пользователем
+    // Передаем соотношение сторон во все возможные параметры + дублируем в промпт
     if (aspectRatio && aspectRatio !== 'auto') {
         inputData.aspect_ratio = aspectRatio;
         inputData.ratio = aspectRatio;
+        inputData.ar = aspectRatio;
+        inputData.image_size = aspectRatio;
+        inputData.size = aspectRatio;
+
+        // Жесткая вставка в промпт, чтобы модель точно сменила формат, если бэкенд не мапит поле
+        if (inputData.prompt && !inputData.prompt.includes(aspectRatio)) {
+            inputData.prompt = `${inputData.prompt}, aspect ratio ${aspectRatio}`;
+        }
+        if (inputData.text && !inputData.text.includes(aspectRatio)) {
+            inputData.text = `${inputData.text}, aspect ratio ${aspectRatio}`;
+        }
     }
 
     if (allBuffers.length > 0) {
