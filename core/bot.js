@@ -112,41 +112,41 @@ const MODEL_COSTS = {
     'pruna-ai-p-video-2-pro': 4
 };
 
-// 🏷 Названия моделей с полным описанием их возможностей на кнопках
+// 🏷 Названия моделей с емким описанием
 const MODEL_NAMES = {
     // 🟢 Текстовые
-    'flash': 'Gemini 3.8 Flash ⚡️ (Текст, код, ответы) 📝',
+    'flash': 'Gemini 3.8 Flash ⚡️ (Текст/код) 📝',
     'flash_25': 'Gemini 2.5 Flash 🚀 (Быстрый текст) 📝',
-    'pro': 'Gemini 3.1 Pro 🧠 (Сложная аналитика и код) 📝',
+    'pro': 'Gemini 3.1 Pro 🧠 (Аналитика/код) 📝',
 
     // 🎵 Аудио
-    'qwen3-tts': 'Qwen3 TTS 🗣 (Озвучка текста в голос) 📝',
+    'qwen3-tts': 'Qwen3 TTS 🗣 (Озвучка текста) 📝',
     'qwen3-tts-flash': 'Qwen3 TTS Flash ⚡️ (Быстрая озвучка) 📝',
 
     // 🖼 Картинки, 3D и Апскейл
-    'nanobanana': 'Nano Banana 2 🎨 (Генерация и стилизация) 📝/📷',
-    'nanobanana_pro': 'Nano Banana Pro 💎 (Про-генерация фото) 📝/📷',
-    'phota-enhance': 'Phota Enhance 🪄 (Улучшение и реставрация) 📷!',
-    'pixal3d': 'Pixal3D 🧊 (Создание 3D по фото) 📷!',
-    'p-image-upscale': 'Pruna P-ImageUpscale 🔍 (Увеличение резкости) 📷!',
-    'qwen-image-2-1': 'Qwen Image 2.1 🎨 (Генерация и обработка) 📝/📷',
-    'qwen-image-3-0': 'Qwen Image 3.0 🎨 (Генерация текста/фото) 📝/📷',
-    'recraft-creative-upscale': 'Recraft Creative 🖼 (Творческий апскейл) 📷!',
-    'recraft-crisp-upscale': 'Recraft Crisp 🔍 (Чистый апскейл) 📷!',
-    'recraft-v4': 'Recraft V4 🎨 (Вектор и растр) 📝/📷',
-    'recraft-v4-1': 'Recraft V4.1 🎨 (Улучшенный Recraft V4) 📝/📷',
-    'runway-gen4-image': 'Runway Gen4 Image 🖼 (Реалистичные фото) 📝/📷',
-    'sam-3d': 'SAM 3D 🧊 (Превращение фото в 3D) 📷!',
-    'seedream-4-0': 'Seedream 4.0 🌈 (Генерация по тексту/фото) 📝/📷',
-    'seedream-4-5': 'Seedream 4.5 🌈 (Продвинутая генерация) 📝/📷',
+    'nanobanana': 'Nano Banana 2 🎨 (Генерация/арт) 📝/📷',
+    'nanobanana_pro': 'Nano Banana Pro 💎 (Про-фото) 📝/📷',
+    'phota-enhance': 'Phota Enhance 🪄 (Улучшение) 📷!',
+    'pixal3d': 'Pixal3D 🧊 (3D из фото) 📷!',
+    'p-image-upscale': 'Pruna Upscale 🔍 (Резкость фото) 📷!',
+    'qwen-image-2-1': 'Qwen Image 2.1 🎨 (Арт/фото) 📝/📷',
+    'qwen-image-3-0': 'Qwen Image 3.0 🎨 (Арт/фото) 📝/📷',
+    'recraft-creative-upscale': 'Recraft Creative 🖼 (Креатив апскейл) 📷!',
+    'recraft-crisp-upscale': 'Recraft Crisp 🔍 (Четкий апскейл) 📷!',
+    'recraft-v4': 'Recraft V4 🎨 (Вектор/растр) 📝/📷',
+    'recraft-v4-1': 'Recraft V4.1 🎨 (Улучшенный V4) 📝/📷',
+    'runway-gen4-image': 'Runway Gen4 🖼 (Реализм фото) 📝/📷',
+    'sam-3d': 'SAM 3D 🧊 (Фото в 3D) 📷!',
+    'seedream-4-0': 'Seedream 4.0 🌈 (Генерация фото) 📝/📷',
+    'seedream-4-5': 'Seedream 4.5 🌈 (Продвинутый арт) 📝/📷',
 
     // 🎬 Видео и Анимация
-    'veo': 'Veo 3.1 🎬 (Видео по тексту, фото или видео) 📝/📷/🎥',
-    'sora-2': 'Sora 2.0 🌟 (Анимация видео по фото) 📷!',
-    'seedance-1-0': 'Seedance 1.0 💃 (Анимация персонажа) 📷!',
-    'seedance-1-5-pro': 'Seedance 1.5 Pro 💃 (Улучшенное видео) 📷!',
-    'seedance-2-0-apimart': 'Seedance 2.0 💃 (Быстрое видео по фото) 📷!',
-    'pruna-ai-p-video-2-pro': 'Pruna P-Video 2 Pro ⚡ (Генерация видео) 📷!'
+    'veo': 'Veo 3.1 🎬 (Видео по тексту/фото) 📝/📷/🎥',
+    'sora-2': 'Sora 2.0 🌟 (Анимация фото) 📷!',
+    'seedance-1-0': 'Seedance 1.0 💃 (Анимация тела) 📷!',
+    'seedance-1-5-pro': 'Seedance 1.5 Pro 💃 (Видео из фото) 📷!',
+    'seedance-2-0-apimart': 'Seedance 2.0 💃 (Быстрое видео) 📷!',
+    'pruna-ai-p-video-2-pro': 'Pruna Video 2 Pro ⚡ (Генерация видео) 📷!'
 };
 
 const CREDIT_PACKAGES = {
@@ -229,28 +229,32 @@ function getModelSelectionKeyboard(currentMode) {
     buttons.push([Markup.button.callback('💬 ─── ТЕКСТОВЫЕ МОДЕЛИ ───', 'noop_text')]);
     textModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
-        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} — ${MODEL_COSTS[key]} кр.`, `set_model_${key}`)]);
+        const cost = MODEL_COSTS[key];
+        buttons.push([Markup.button.callback(`${isSelected}[${cost} кр] ${MODEL_NAMES[key]}`, `set_model_${key}`)]);
     });
 
     // Блок 2: Аудио и голос
     buttons.push([Markup.button.callback('🎵 ─── АУДИО И ГОЛОС ───', 'noop_audio')]);
     audioModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
-        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} — ${MODEL_COSTS[key]} кр.`, `set_model_${key}`)]);
+        const cost = MODEL_COSTS[key];
+        buttons.push([Markup.button.callback(`${isSelected}[${cost} кр] ${MODEL_NAMES[key]}`, `set_model_${key}`)]);
     });
 
     // Блок 3: Картинки, 3D и апскейл
     buttons.push([Markup.button.callback('🎨 ─── КАРТИНКИ, 3D И АПСКЕЙЛ ───', 'noop_image')]);
     imageModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
-        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} — ${MODEL_COSTS[key]} кр.`, `set_model_${key}`)]);
+        const cost = MODEL_COSTS[key];
+        buttons.push([Markup.button.callback(`${isSelected}[${cost} кр] ${MODEL_NAMES[key]}`, `set_model_${key}`)]);
     });
 
     // Блок 4: Видео и анимация
     buttons.push([Markup.button.callback('🎬 ─── ВИДЕО И АНИМАЦИЯ ───', 'noop_video')]);
     videoModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
-        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} — ${MODEL_COSTS[key]} кр.`, `set_model_${key}`)]);
+        const cost = MODEL_COSTS[key];
+        buttons.push([Markup.button.callback(`${isSelected}[${cost} кр] ${MODEL_NAMES[key]}`, `set_model_${key}`)]);
     });
 
     return Markup.inlineKeyboard(buttons);
@@ -591,7 +595,7 @@ async function startBot(app) {
             if (buf) fileBuffers.push(buf);
         }
 
-        // 🛑 ПЕРЕХВАТ: Модель строго требует наличие изображения (видео кроме veo, апскейлеры, 3D)
+        // 🛑 ПЕРЕХВАТ: Модель строго требует наличие изображения
         if (REQUIRES_IMAGE_MODELS.includes(currentMode) && fileBuffers.length === 0) {
             return ctx.reply(
                 '⚠️ *Ошибка:* Выбранная модель требует обязательного наличия *изображения*.\n\n' +
