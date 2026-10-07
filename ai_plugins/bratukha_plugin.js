@@ -42,31 +42,6 @@ const MODELS_REQUIRING_IMAGE = [
     'recraft-crisp-upscale'
 ];
 
-/**
- * Извлекает соотношение сторон из промпта
- */
-function extractAspectRatio(userPrompt) {
-    if (!userPrompt || typeof userPrompt !== 'string') {
-        return { aspectRatio: null };
-    }
-    
-    // Ищем популярные форматы кадра
-    const match = userPrompt.match(/\b(9:16|16:9|1:1|4:3|3:4|2:3|3:2|4:5|5:4|21:9)\b/i);
-    return { aspectRatio: match ? match[1] : null };
-}
-
-/**
- * Безопасно извлекает URL из ответа (защита от ошибок с .match на нестроковых типах)
- */
-function extractUrlString(val) {
-    if (!val) return '';
-    if (typeof val === 'string') return val;
-    if (typeof val === 'object') {
-        return val.url || val.src || val.file_url || val.href || '';
-    }
-    return String(val);
-}
-
 async function uploadBuffer(apiKey, buf, mimeType = 'image/jpeg', filename = 'input_file.jpg') {
     const contentType = mimeType || 'image/jpeg';
     const directLimit = 10 * 1024 * 1024;
@@ -137,7 +112,7 @@ async function uploadBuffer(apiKey, buf, mimeType = 'image/jpeg', filename = 'in
     return publicUrl;
 }
 
-async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, modelKey, aspectRatio: explicitAspectRatio }) {
+async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, modelKey }) {
     const apiKey = process.env.BRATUKHA_API_KEY || process.env.BRATUKHA_TOKEN;
     if (!apiKey) {
         throw new Error('❌ BRATUKHA_API_KEY не задан в переменных окружения Railway');
@@ -160,27 +135,8 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
 
     const inputData = {};
     if (prompt) {
-        // Оставляем промпт полностью нетронутым (сохраняем указание 9:16 внутри текста для моделей, читающих текст)
         inputData.prompt = prompt;
         inputData.text = prompt; // Обязательный параметр для TTS
-
-        // Вычленяем формат кадра из промпта
-        const { aspectRatio: parsedRatio } = extractAspectRatio(prompt);
-        const finalRatio = explicitAspectRatio || parsedRatio;
-
-        if (finalRatio) {
-            // МЫ ИСПРАВИЛИ ЭТОТ БЛОК:
-            // Ошибка API 400 validation_error четко говорит, что оно ждет одну из строк: «16:9», «9:16» и т.д.
-            // Мы передаем ТОЛЬКО текстовое обозначение в aspect_ratio / ratio.
-            // Мы ПРЕКРАЩАЕМ отправлять числовые размеры (width/height/size),
-            // так как бэкенд seedream-4-5 считает их невалидными данными, вызывая ошибку.
-            inputData.aspect_ratio = finalRatio;
-            inputData.ratio = finalRatio;
-        }
-    } else if (explicitAspectRatio) {
-        // МЫ ИСПРАВИЛИ ЭТОТ БЛОК: Отправляем только текстовую строку формата.
-        inputData.aspect_ratio = explicitAspectRatio;
-        inputData.ratio = explicitAspectRatio;
     }
 
     if (allBuffers.length > 0) {
@@ -264,14 +220,11 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
             const result = opData.result || opData;
             const resType = result?.type || '';
             const urls = result?.urls || result?.files || result?.images || result?.videos || [];
-            
-            // Безопасно получаем URL в виде строки
-            const rawUrlCandidate = urls[0] || result?.image_url || result?.video_url || result?.audio_url || result?.url;
-            const primaryUrl = extractUrlString(rawUrlCandidate);
+            const primaryUrl = urls[0] || result?.image_url || result?.video_url || result?.audio_url || result?.url;
 
-            const isVideo = resType === 'video' || (typeof primaryUrl === 'string' && Boolean(primaryUrl.match(/\.(mp4|webm|mov)(\?.*)?$/i)));
-            const isAudio = resType === 'audio' || (typeof primaryUrl === 'string' && Boolean(primaryUrl.match(/\.(mp3|wav|ogg|m4a)(\?.*)?$/i)));
-            const isImage = resType === 'image' || (typeof primaryUrl === 'string' && Boolean(primaryUrl.match(/\.(png|jpg|jpeg|webp|gif)(\?.*)?$/i))) || (!isVideo && !isAudio && primaryUrl);
+            const isVideo = resType === 'video' || primaryUrl?.match(/\.(mp4|webm|mov)(\?.*)?$/i);
+            const isAudio = resType === 'audio' || primaryUrl?.match(/\.(mp3|wav|ogg|m4a)(\?.*)?$/i);
+            const isImage = resType === 'image' || primaryUrl?.match(/\.(png|jpg|jpeg|webp|gif)(\?.*)?$/i) || (!isVideo && !isAudio && primaryUrl);
 
             if (primaryUrl && isVideo) {
                 const mediaRes = await axios.get(primaryUrl, { responseType: 'arraybuffer' });
