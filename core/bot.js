@@ -92,9 +92,6 @@ const MODEL_COSTS = {
     'sam-3d': 8,
     'seedream-4-0': 8,
     'seedream-4-5': 10,
-    'flux-1-1-pro': 12,
-    'midjourney-v6-1': 15,
-    'ideogram-v2': 10,
 
     // 🎬 Видео и Анимация (только проверенные рабочие)
     'veo': 400,
@@ -135,9 +132,6 @@ const MODEL_NAMES = {
     'sam-3d': 'SAM 3D 🧊',
     'seedream-4-0': 'Seedream 4.0 🌈',
     'seedream-4-5': 'Seedream 4.5 🌈',
-    'flux-1-1-pro': 'FLUX 1.1 Pro 💎',
-    'midjourney-v6-1': 'Midjourney v6.1 ✨',
-    'ideogram-v2': 'Ideogram v2 🔤',
 
     // 🎬 Видео и Анимация (только проверенные рабочие)
     'veo': 'Veo 3.1 Видео 🎬',
@@ -216,7 +210,7 @@ function getModelSelectionKeyboard(currentMode) {
         'p-image-upscale', 'qwen-image-2-1', 'qwen-image-3-0', 
         'recraft-creative-upscale', 'recraft-crisp-upscale', 'recraft-v4', 
         'recraft-v4-1', 'runway-gen4-image', 'sam-3d', 'seedream-4-0', 
-        'seedream-4-5', 'flux-1-1-pro', 'midjourney-v6-1', 'ideogram-v2'
+        'seedream-4-5'
     ];
     
     const videoModels = [
