@@ -112,41 +112,41 @@ const MODEL_COSTS = {
     'pruna-ai-p-video-2-pro': 4
 };
 
-// 🏷 Точные названия моделей с детальной маркировкой возможностей
+// 🏷 Названия моделей с полным описанием их возможностей на кнопках
 const MODEL_NAMES = {
     // 🟢 Текстовые
-    'flash': 'Gemini 3.8 Flash ⚡️ 📝 [текст]',
-    'flash_25': 'Gemini 2.5 Flash 🚀 📝 [текст]',
-    'pro': 'Gemini 3.1 Pro 🧠 📝 [текст]',
+    'flash': 'Gemini 3.8 Flash ⚡️ (Текст, код, ответы) 📝',
+    'flash_25': 'Gemini 2.5 Flash 🚀 (Быстрый текст) 📝',
+    'pro': 'Gemini 3.1 Pro 🧠 (Сложная аналитика и код) 📝',
 
     // 🎵 Аудио
-    'qwen3-tts': 'Qwen3 TTS 🗣 📝 [текст]',
-    'qwen3-tts-flash': 'Qwen3 TTS Flash ⚡️ 📝 [текст]',
+    'qwen3-tts': 'Qwen3 TTS 🗣 (Озвучка текста в голос) 📝',
+    'qwen3-tts-flash': 'Qwen3 TTS Flash ⚡️ (Быстрая озвучка) 📝',
 
     // 🖼 Картинки, 3D и Апскейл
-    'nanobanana': 'Nano Banana 2 🎨 📝/📷 [текст / фото]',
-    'nanobanana_pro': 'Nano Banana Pro 💎 📝/📷 [текст / фото]',
-    'phota-enhance': 'Phota Enhance 🪄 📷+📝 [фото обязат.]',
-    'pixal3d': 'Pixal3D 🧊 📷+📝 [фото обязат.]',
-    'p-image-upscale': 'Pruna P-ImageUpscale 🔍 📷+📝 [фото обязат.]',
-    'qwen-image-2-1': 'Qwen Image 2.1 🎨 📝/📷 [текст / фото]',
-    'qwen-image-3-0': 'Qwen Image 3.0 🎨 📝/📷 [текст / фото]',
-    'recraft-creative-upscale': 'Recraft Creative Upscale 🖼 📷+📝 [фото обязат.]',
-    'recraft-crisp-upscale': 'Recraft Crisp Upscale 🔍 📷+📝 [фото обязат.]',
-    'recraft-v4': 'Recraft V4 🎨 📝/📷 [текст / фото]',
-    'recraft-v4-1': 'Recraft V4.1 🎨 📝/📷 [текст / фото]',
-    'runway-gen4-image': 'Runway Gen4 Image 🖼 📝/📷 [текст / фото]',
-    'sam-3d': 'SAM 3D 🧊 📷+📝 [фото обязат.]',
-    'seedream-4-0': 'Seedream 4.0 🌈 📝/📷 [текст / фото]',
-    'seedream-4-5': 'Seedream 4.5 🌈 📝/📷 [текст / фото]',
+    'nanobanana': 'Nano Banana 2 🎨 (Генерация и стилизация) 📝/📷',
+    'nanobanana_pro': 'Nano Banana Pro 💎 (Про-генерация фото) 📝/📷',
+    'phota-enhance': 'Phota Enhance 🪄 (Улучшение и реставрация) 📷!',
+    'pixal3d': 'Pixal3D 🧊 (Создание 3D по фото) 📷!',
+    'p-image-upscale': 'Pruna P-ImageUpscale 🔍 (Увеличение резкости) 📷!',
+    'qwen-image-2-1': 'Qwen Image 2.1 🎨 (Генерация и обработка) 📝/📷',
+    'qwen-image-3-0': 'Qwen Image 3.0 🎨 (Генерация текста/фото) 📝/📷',
+    'recraft-creative-upscale': 'Recraft Creative 🖼 (Творческий апскейл) 📷!',
+    'recraft-crisp-upscale': 'Recraft Crisp 🔍 (Чистый апскейл) 📷!',
+    'recraft-v4': 'Recraft V4 🎨 (Вектор и растр) 📝/📷',
+    'recraft-v4-1': 'Recraft V4.1 🎨 (Улучшенный Recraft V4) 📝/📷',
+    'runway-gen4-image': 'Runway Gen4 Image 🖼 (Реалистичные фото) 📝/📷',
+    'sam-3d': 'SAM 3D 🧊 (Превращение фото в 3D) 📷!',
+    'seedream-4-0': 'Seedream 4.0 🌈 (Генерация по тексту/фото) 📝/📷',
+    'seedream-4-5': 'Seedream 4.5 🌈 (Продвинутая генерация) 📝/📷',
 
     // 🎬 Видео и Анимация
-    'veo': 'Veo 3.1 Видео 🎬 📝/📷/🎥 [мультимодальная]',
-    'sora-2': 'Sora 2.0 🌟 📷+📝 [фото обязат.]',
-    'seedance-1-0': 'Seedance 1.0 💃 📷+📝 [фото обязат.]',
-    'seedance-1-5-pro': 'Seedance 1.5 Pro 💃 📷+📝 [фото обязат.]',
-    'seedance-2-0-apimart': 'Seedance 2.0 💃 📷+📝 [фото обязат.]',
-    'pruna-ai-p-video-2-pro': 'Pruna P-Video 2 Pro ⚡ 📷+📝 [фото обязат.]'
+    'veo': 'Veo 3.1 🎬 (Видео по тексту, фото или видео) 📝/📷/🎥',
+    'sora-2': 'Sora 2.0 🌟 (Анимация видео по фото) 📷!',
+    'seedance-1-0': 'Seedance 1.0 💃 (Анимация персонажа) 📷!',
+    'seedance-1-5-pro': 'Seedance 1.5 Pro 💃 (Улучшенное видео) 📷!',
+    'seedance-2-0-apimart': 'Seedance 2.0 💃 (Быстрое видео по фото) 📷!',
+    'pruna-ai-p-video-2-pro': 'Pruna P-Video 2 Pro ⚡ (Генерация видео) 📷!'
 };
 
 const CREDIT_PACKAGES = {
@@ -229,28 +229,28 @@ function getModelSelectionKeyboard(currentMode) {
     buttons.push([Markup.button.callback('💬 ─── ТЕКСТОВЫЕ МОДЕЛИ ───', 'noop_text')]);
     textModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
-        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
+        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} — ${MODEL_COSTS[key]} кр.`, `set_model_${key}`)]);
     });
 
     // Блок 2: Аудио и голос
     buttons.push([Markup.button.callback('🎵 ─── АУДИО И ГОЛОС ───', 'noop_audio')]);
     audioModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
-        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
+        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} — ${MODEL_COSTS[key]} кр.`, `set_model_${key}`)]);
     });
 
     // Блок 3: Картинки, 3D и апскейл
     buttons.push([Markup.button.callback('🎨 ─── КАРТИНКИ, 3D И АПСКЕЙЛ ───', 'noop_image')]);
     imageModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
-        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
+        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} — ${MODEL_COSTS[key]} кр.`, `set_model_${key}`)]);
     });
 
     // Блок 4: Видео и анимация
     buttons.push([Markup.button.callback('🎬 ─── ВИДЕО И АНИМАЦИЯ ───', 'noop_video')]);
     videoModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
-        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
+        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} — ${MODEL_COSTS[key]} кр.`, `set_model_${key}`)]);
     });
 
     return Markup.inlineKeyboard(buttons);
@@ -372,7 +372,15 @@ async function startBot(app) {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
         const currentMode = userActiveMode.get(ctx.from.id) || 'flash';
-        await ctx.reply(`🤖 *Выберите модель:*`, { parse_mode: 'Markdown', ...getModelSelectionKeyboard(currentMode) });
+        
+        const menuHeader = 
+            `🤖 *Выберите нейросеть для работы:*\n\n` +
+            `💡 *Маркировка требований на кнопках:*\n` +
+            `• 📝 — нужен только текст (промпт)\n` +
+            `• 📝/📷 — можно отправить текст или фото\n` +
+            `• 📷! — **обязательно** прикрепить фото`;
+
+        await ctx.reply(menuHeader, { parse_mode: 'Markdown', ...getModelSelectionKeyboard(currentMode) });
     });
 
     bot.hears('💰 Пополнить баланс', async (ctx) => {
@@ -427,7 +435,15 @@ async function startBot(app) {
         userAwaitingEmail.delete(ctx.from.id);
         await ctx.answerCbQuery();
         const currentMode = userActiveMode.get(ctx.from.id) || 'flash';
-        await ctx.reply(`🤖 *Выберите ИИ-модель:*`, { parse_mode: 'Markdown', ...getModelSelectionKeyboard(currentMode) });
+        
+        const menuHeader = 
+            `🤖 *Выберите нейросеть для работы:*\n\n` +
+            `💡 *Маркировка требований на кнопках:*\n` +
+            `• 📝 — нужен только текст (промпт)\n` +
+            `• 📝/📷 — можно отправить текст или фото\n` +
+            `• 📷! — **обязательно** прикрепить фото`;
+
+        await ctx.reply(menuHeader, { parse_mode: 'Markdown', ...getModelSelectionKeyboard(currentMode) });
     });
 
     bot.action(/^set_model_(.+)$/, async (ctx) => {
@@ -437,7 +453,7 @@ async function startBot(app) {
         if (MODEL_NAMES[selectedModel]) {
             userActiveMode.set(ctx.from.id, selectedModel);
             await ctx.answerCbQuery(`Выбрано: ${MODEL_NAMES[selectedModel]}`);
-            await ctx.reply(`✅ Модель изменена на *${MODEL_NAMES[selectedModel]}*`, { parse_mode: 'Markdown' });
+            await ctx.reply(`✅ Выбрана модель: *${MODEL_NAMES[selectedModel]}*`, { parse_mode: 'Markdown' });
         }
     });
 
