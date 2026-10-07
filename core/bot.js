@@ -689,7 +689,7 @@ async function startBot(app) {
 
         if (REQUIRES_IMAGE_MODELS.includes(currentMode) && fileBuffers.length === 0) {
             return ctx.reply(
-                '⚠️ *Ошибка:* Выбранная модель требует обязательного наличия *изображения*.\n\n` +
+                '⚠️ *Ошибка:* Выбранная модель требует обязательного наличия *изображения*.\n\n' +
                 '📸 Пожалуйста, прикрепите фото и напишите текстовое описание (промпт) в подписи к нему.', 
                 { parse_mode: 'Markdown' }
             );
@@ -760,20 +760,20 @@ async function startBot(app) {
             if (aiResult.type === 'image' && aiResult.buffer) {
                 await ctx.replyWithPhoto(
                     { source: aiResult.buffer }, 
-                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. \vert{} Остаток: ${remainingBalance} кр.` }
+                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
                 );
             } else if (aiResult.type === 'video' && aiResult.buffer) {
                 await ctx.replyWithVideo(
                     { source: aiResult.buffer },
-                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. \vert{} Остаток: ${remainingBalance} кр.` }
+                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
                 );
             } else if (aiResult.type === 'audio' && aiResult.buffer) {
                 await ctx.replyWithAudio(
                     { source: aiResult.buffer },
-                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. \vert{} Остаток: ${remainingBalance} кр.` }
+                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
                 );
             } else {
-                const fullText = `${aiResult.text}\n\n───────────────\n💳 *Списано:* ${cost} кр. \vert{} *Остаток:* ${remainingBalance} кр.`;
+                const fullText = `${aiResult.text}\n\n───────────────\n💳 *Списано:* ${cost} кр. | *Остаток:* ${remainingBalance} кр.`;
                 try {
                     await ctx.reply(fullText, { parse_mode: 'Markdown' });
                 } catch (mdErr) {
@@ -820,7 +820,7 @@ async function startBot(app) {
 
         if (REQUIRES_IMAGE_MODELS.includes(currentMode) && fileBuffers.length === 0) {
             return firstCtx.reply(
-                '⚠️ *Ошибка:* Выбранная модель требует обязательного наличия *изображения*.\n\n` +
+                '⚠️ *Ошибка:* Выбранная модель требует обязательного наличия *изображения*.\n\n' +
                 '📸 Пожалуйста, прикрепите фото и напишите текстовое описание (промпт) в подписи к нему.', 
                 { parse_mode: 'Markdown' }
             );
