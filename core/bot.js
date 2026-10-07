@@ -37,6 +37,16 @@ const userAwaitingSupport = new Map();
 const userProcessing = new Set();
 const mediaGroupBuffers = new Map();
 
+// Хранилище отложенных запросов Братухи, ожидающих выбор размера
+const userPendingBratukhaRequests = new Map();
+
+// Модели Братухи, для которых запрашивается выбор соотношения сторон (размера)
+const BRATUKHA_RATIO_MODELS = [
+    'qwen-image-2-1', 'qwen-image-3-0', 'recraft-v4', 'recraft-v4-1', 
+    'runway-gen4-image', 'seedream-4-0', 'seedream-4-5',
+    'sora-2', 'seedance-1-0', 'seedance-1-5-pro', 'seedance-2-0-apimart', 'pruna-ai-p-video-2-pro'
+];
+
 const ADMIN_ID = '5943987954';
 
 // 🛑 Модели, СТРОГО ТРЕБУЮЩИЕ наличия исходного изображения (Апскейлеры, 3D и Все Видео кроме Veo)
@@ -205,9 +215,7 @@ async function getTelegramFileBuffer(ctx, fileId) {
 
 function getModelSelectionKeyboard(currentMode) {
     const textModels = ['flash', 'flash_25', 'pro'];
-    
     const audioModels = ['qwen3-tts', 'qwen3-tts-flash'];
-    
     const imageModels = [
         'nanobanana', 'nanobanana_pro', 'phota-enhance', 
         'p-image-upscale', 'qwen-image-2-1', 'qwen-image-3-0', 
@@ -215,7 +223,6 @@ function getModelSelectionKeyboard(currentMode) {
         'recraft-v4-1', 'runway-gen4-image', 'sam-3d', 'seedream-4-0', 
         'seedream-4-5'
     ];
-    
     const videoModels = [
         'veo', 'sora-2', 'seedance-1-0', 'seedance-1-5-pro', 
         'seedance-2-0-apimart', 'pruna-ai-p-video-2-pro'
@@ -223,7 +230,6 @@ function getModelSelectionKeyboard(currentMode) {
 
     const buttons = [];
 
-    // Блок 1: Текстовые модели
     buttons.push([Markup.button.callback('💬 ─── ТЕКСТОВЫЕ МОДЕЛИ ───', 'noop_text')]);
     textModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
@@ -231,7 +237,6 @@ function getModelSelectionKeyboard(currentMode) {
         buttons.push([Markup.button.callback(`${isSelected}[${cost} кр] ${MODEL_NAMES[key]}`, `set_model_${key}`)]);
     });
 
-    // Блок 2: Аудио и голос
     buttons.push([Markup.button.callback('🎵 ─── АУДИО И ГОЛОС ───', 'noop_audio')]);
     audioModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
@@ -239,7 +244,6 @@ function getModelSelectionKeyboard(currentMode) {
         buttons.push([Markup.button.callback(`${isSelected}[${cost} кр] ${MODEL_NAMES[key]}`, `set_model_${key}`)]);
     });
 
-    // Блок 3: Картинки, 3D и апскейл
     buttons.push([Markup.button.callback('🎨 ─── КАРТИНКИ, 3D И АПСКЕЙЛ ───', 'noop_image')]);
     imageModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
@@ -247,7 +251,6 @@ function getModelSelectionKeyboard(currentMode) {
         buttons.push([Markup.button.callback(`${isSelected}[${cost} кр] ${MODEL_NAMES[key]}`, `set_model_${key}`)]);
     });
 
-    // Блок 4: Видео и анимация
     buttons.push([Markup.button.callback('🎬 ─── ВИДЕО И АНИМАЦИЯ ───', 'noop_video')]);
     videoModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
@@ -339,6 +342,7 @@ async function startBot(app) {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
         userProcessing.delete(ctx.from.id);
+        userPendingBratukhaRequests.delete(ctx.from.id);
         if (!userActiveMode.has(ctx.from.id)) {
             userActiveMode.set(ctx.from.id, 'flash');
         }
@@ -487,6 +491,96 @@ async function startBot(app) {
         );
     });
 
+    // 📐 Обработчик кнопок выбора соотношения сторон (размера) для Братухи
+    bot.action(/^brat_ratio_(.+)$/, async (ctx) => {
+        const userId = ctx.from.id;
+        const ratio = ctx.match[1];
+
+        if (ratio === 'cancel') {
+            userPendingBratukhaRequests.delete(userId);
+            await ctx.answerCbQuery('Отменено');
+            await ctx.editMessageText('❌ Генерация отменена.');
+            return;
+        }
+
+        const pending = userPendingBratukhaRequests.get(userId);
+        if (!pending) {
+            await ctx.answerCbQuery('⚠️ Запрос не найден или устарел.');
+            await ctx.editMessageText('⚠️ Время ожидания запроса истекло. Отправьте запрос заново.');
+            return;
+        }
+
+        userPendingBratukhaRequests.delete(userId);
+        await ctx.answerCbQuery(`Выбран размер: ${ratio}`);
+        try {
+            await ctx.deleteMessage();
+        } catch (e) {}
+
+        const { prompt, fileBuffers, currentMode, cost } = pending;
+        const balance = await getUserBalance(userId);
+        if (balance < cost) {
+            return ctx.reply(
+                `❌ *Недостаточно кредитов!*\nВаш баланс: ${balance} кр. Требуется: ${cost} кр.`,
+                {
+                    parse_mode: 'Markdown',
+                    ...Markup.inlineKeyboard([[Markup.button.callback('💰 Пополнить баланс', 'action_buy_credits')]])
+                }
+            );
+        }
+
+        userProcessing.add(userId);
+        const waitMessage = await ctx.reply(
+            `⏳ *Генерирую ответ (формат: ${ratio})...* (Видео/сложные генерации могут занять 1–3 минуты)`, 
+            { parse_mode: 'Markdown' }
+        );
+
+        try {
+            const aiResult = await bratukhaPlugin.processRequest({
+                prompt,
+                fileBuffer: fileBuffers.length === 1 ? fileBuffers[0] : null,
+                fileBuffers: fileBuffers.length > 1 ? fileBuffers : undefined,
+                mimeType: 'image/jpeg',
+                modelKey: currentMode,
+                aspectRatio: ratio
+            });
+
+            await deductUserBalance(userId, cost);
+            const remainingBalance = await getUserBalance(userId);
+
+            try { await ctx.deleteMessage(waitMessage.message_id); } catch(e){}
+
+            if (aiResult.type === 'image' && aiResult.buffer) {
+                await ctx.replyWithPhoto(
+                    { source: aiResult.buffer }, 
+                    { caption: `${aiResult.text || ''}\n\n📐 Размер: ${ratio} | 💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
+                );
+            } else if (aiResult.type === 'video' && aiResult.buffer) {
+                await ctx.replyWithVideo(
+                    { source: aiResult.buffer },
+                    { caption: `${aiResult.text || ''}\n\n📐 Размер: ${ratio} | 💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
+                );
+            } else if (aiResult.type === 'audio' && aiResult.buffer) {
+                await ctx.replyWithAudio(
+                    { source: aiResult.buffer },
+                    { caption: `${aiResult.text || ''}\n\n📐 Размер: ${ratio} | 💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
+                );
+            } else {
+                const fullText = `${aiResult.text}\n\n───────────────\n📐 *Размер:* ${ratio} | 💳 *Списано:* ${cost} кр. | *Остаток:* ${remainingBalance} кр.`;
+                try {
+                    await ctx.reply(fullText, { parse_mode: 'Markdown' });
+                } catch (mdErr) {
+                    await ctx.reply(fullText);
+                }
+            }
+        } catch (error) {
+            console.error('❌ Ошибка генерации (скрыта от пользователя):', error.message || error);
+            try { await ctx.deleteMessage(waitMessage.message_id); } catch(e){}
+            await ctx.reply(`⚠️ Не удалось получить ответ от нейросети. Ваши кредиты не были списаны.`);
+        } finally {
+            userProcessing.delete(userId);
+        }
+    });
+
     const handleAiRequest = async (ctx) => {
         const text = ctx.message?.text || '';
         if (['🤖 Выбрать модель ИИ', '💳 Мой баланс', '💰 Пополнить баланс', '💬 Поддержка', 'ℹ Справка', 'ℹ️ Справка', '🤖 Модели', '💳 Баланс'].includes(text)) {
@@ -595,7 +689,7 @@ async function startBot(app) {
 
         if (REQUIRES_IMAGE_MODELS.includes(currentMode) && fileBuffers.length === 0) {
             return ctx.reply(
-                '⚠️ *Ошибка:* Выбранная модель требует обязательного наличия *изображения*.\n\n' +
+                '⚠️ *Ошибка:* Выбранная модель требует обязательного наличия *изображения*.\n\n` +
                 '📸 Пожалуйста, прикрепите фото и напишите текстовое описание (промпт) в подписи к нему.', 
                 { parse_mode: 'Markdown' }
             );
@@ -624,9 +718,28 @@ async function startBot(app) {
         const activePlugin = getAiPlugin(currentMode);
         if (!activePlugin) return ctx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
 
+        // 📐 Если модель Братухи поддерживает соотношение сторон — запрашиваем размер кнопками
+        if (activePlugin === bratukhaPlugin && BRATUKHA_RATIO_MODELS.includes(currentMode)) {
+            userPendingBratukhaRequests.set(userId, { prompt, fileBuffers, currentMode, cost });
+
+            const ratioKeyboard = Markup.inlineKeyboard([
+                [Markup.button.callback('1:1', 'brat_ratio_1:1'), Markup.button.callback('16:9', 'brat_ratio_16:9'), Markup.button.callback('9:16', 'brat_ratio_9:16')],
+                [Markup.button.callback('4:3', 'brat_ratio_4:3'), Markup.button.callback('3:4', 'brat_ratio_3:4'), Markup.button.callback('3:2', 'brat_ratio_3:2')],
+                [Markup.button.callback('2:3', 'brat_ratio_2:3'), Markup.button.callback('21:9', 'brat_ratio_21:9'), Markup.button.callback('9:21', 'brat_ratio_9:21')],
+                [Markup.button.callback('🤖 Auto (По умолчанию)', 'brat_ratio_auto')],
+                [Markup.button.callback('❌ Отмена', 'brat_ratio_cancel')]
+            ]);
+
+            return ctx.reply(
+                `📐 *Выберите соотношение сторон (размер) для модели ${MODEL_NAMES[currentMode] || currentMode}:*`,
+                { parse_mode: 'Markdown', ...ratioKeyboard }
+            );
+        }
+
+        // Обычная логика выполнения (для Google, аудио, апскейлеров и 3D)
         userProcessing.add(userId);
         const waitMessage = await ctx.reply(
-            `⏳ *Генерирую ответ...* ${(currentMode === 'veo' || currentMode.includes('sora') || currentMode.includes('seedance') || currentMode.includes('pruna')) ? '(Видео создается около 1–3 минут, пожалуйста, подождите)' : ''}`, 
+            `⏳ *Генерирую ответ...*`, 
             { parse_mode: 'Markdown' }
         );
 
@@ -647,20 +760,20 @@ async function startBot(app) {
             if (aiResult.type === 'image' && aiResult.buffer) {
                 await ctx.replyWithPhoto(
                     { source: aiResult.buffer }, 
-                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
+                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. \vert{} Остаток: ${remainingBalance} кр.` }
                 );
             } else if (aiResult.type === 'video' && aiResult.buffer) {
                 await ctx.replyWithVideo(
                     { source: aiResult.buffer },
-                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
+                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. \vert{} Остаток: ${remainingBalance} кр.` }
                 );
             } else if (aiResult.type === 'audio' && aiResult.buffer) {
                 await ctx.replyWithAudio(
                     { source: aiResult.buffer },
-                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. | Остаток: ${remainingBalance} кр.` }
+                    { caption: `${aiResult.text || ''}\n\n💳 Списано: ${cost} кр. \vert{} Остаток: ${remainingBalance} кр.` }
                 );
             } else {
-                const fullText = `${aiResult.text}\n\n───────────────\n💳 *Списано:* ${cost} кр. | *Остаток:* ${remainingBalance} кр.`;
+                const fullText = `${aiResult.text}\n\n───────────────\n💳 *Списано:* ${cost} кр. \vert{} *Остаток:* ${remainingBalance} кр.`;
                 try {
                     await ctx.reply(fullText, { parse_mode: 'Markdown' });
                 } catch (mdErr) {
@@ -707,7 +820,7 @@ async function startBot(app) {
 
         if (REQUIRES_IMAGE_MODELS.includes(currentMode) && fileBuffers.length === 0) {
             return firstCtx.reply(
-                '⚠️ *Ошибка:* Выбранная модель требует обязательного наличия *изображения*.\n\n' +
+                '⚠️ *Ошибка:* Выбранная модель требует обязательного наличия *изображения*.\n\n` +
                 '📸 Пожалуйста, прикрепите фото и напишите текстовое описание (промпт) в подписи к нему.', 
                 { parse_mode: 'Markdown' }
             );
@@ -727,6 +840,24 @@ async function startBot(app) {
 
         const activePlugin = getAiPlugin(currentMode);
         if (!activePlugin) return firstCtx.reply('⚠️ Сервис временно недоступен. Попробуйте позже.');
+
+        // 📐 Если модель Братухи поддерживает соотношение сторон — запрашиваем размер кнопками для альбомов
+        if (activePlugin === bratukhaPlugin && BRATUKHA_RATIO_MODELS.includes(currentMode)) {
+            userPendingBratukhaRequests.set(userId, { prompt, fileBuffers, currentMode, cost });
+
+            const ratioKeyboard = Markup.inlineKeyboard([
+                [Markup.button.callback('1:1', 'brat_ratio_1:1'), Markup.button.callback('16:9', 'brat_ratio_16:9'), Markup.button.callback('9:16', 'brat_ratio_9:16')],
+                [Markup.button.callback('4:3', 'brat_ratio_4:3'), Markup.button.callback('3:4', 'brat_ratio_3:4'), Markup.button.callback('3:2', 'brat_ratio_3:2')],
+                [Markup.button.callback('2:3', 'brat_ratio_2:3'), Markup.button.callback('21:9', 'brat_ratio_21:9'), Markup.button.callback('9:21', 'brat_ratio_9:21')],
+                [Markup.button.callback('🤖 Auto (По умолчанию)', 'brat_ratio_auto')],
+                [Markup.button.callback('❌ Отмена', 'brat_ratio_cancel')]
+            ]);
+
+            return firstCtx.reply(
+                `📐 *Выберите соотношение сторон (размер) для модели ${MODEL_NAMES[currentMode] || currentMode}:*`,
+                { parse_mode: 'Markdown', ...ratioKeyboard }
+            );
+        }
 
         userProcessing.add(userId);
         const waitMessage = await firstCtx.reply(`⏳ *Генерирую ответ...*`, { parse_mode: 'Markdown' });

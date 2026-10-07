@@ -111,7 +111,7 @@ async function uploadBuffer(apiKey, buf, mimeType = 'image/jpeg', filename = 'in
     return publicUrl;
 }
 
-async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, modelKey }) {
+async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, modelKey, aspectRatio }) {
     const apiKey = process.env.BRATUKHA_API_KEY || process.env.BRATUKHA_TOKEN;
     if (!apiKey) {
         throw new Error('❌ BRATUKHA_API_KEY не задан в переменных окружения Railway');
@@ -136,6 +136,12 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
     if (prompt) {
         inputData.prompt = prompt;
         inputData.text = prompt; // Обязательный параметр для TTS
+    }
+
+    // Добавляем размер / соотношение сторон, если передан пользователем
+    if (aspectRatio && aspectRatio !== 'auto') {
+        inputData.aspect_ratio = aspectRatio;
+        inputData.ratio = aspectRatio;
     }
 
     if (allBuffers.length > 0) {
@@ -164,7 +170,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         input: inputData
     };
 
-    console.log(`🚀 [Bratukha Operations] Создание операции: ${toolSlug}`);
+    console.log(`🚀 [Bratukha Operations] Создание операции: ${toolSlug} ${aspectRatio ? `(формат: ${aspectRatio})` : ''}`);
 
     let createRes;
     try {
