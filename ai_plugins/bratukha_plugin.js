@@ -3,7 +3,7 @@ const axios = require('axios');
 // Берем URL из переменных Railway или ставим рабочий дефолт
 const BRATUKHA_API_URL = process.env.BRATUKHA_API_URL || 'https://bratuha.ru/api/v1';
 
-// Каталог актуальных моделей
+// Каталог актуальных моделей (аудио, картинки не тронуты, в видео — только проверенные рабочие)
 const BRATUKHA_MODELS = [
     // 🎵 Аудио
     { slug: 'mureka-ai-v9-5', name: 'Mureka AI V9.5', category: 'audio', price: 60, unit: 'песня / трек' },
@@ -25,48 +25,20 @@ const BRATUKHA_MODELS = [
     { slug: 'seedream-4-0', name: 'Seedream 4.0', category: 'image', price: 8, unit: 'изображение' },
     { slug: 'seedream-4-5', name: 'Seedream 4.5', category: 'image', price: 10, unit: 'изображение' },
 
-    // 🎬 Видео и анимация
-    { slug: 'omnihuman-1-0', name: 'OmniHuman 1.0', category: 'video', price: 40, unit: 'сек. видео' },
-    { slug: 'omnihuman-1-5', name: 'OmniHuman 1.5', category: 'video', price: 70, unit: 'сек. видео' },
-    { slug: 'pika', name: 'Pika 2.2', category: 'video', price: 14, unit: 'сек. видео' },
-    { slug: 'pixverse-5-5', name: 'PixVerse 5.5', category: 'video', price: 45, unit: 'генерация' },
-    { slug: 'pixverse-5-6', name: 'PixVerse 5.6', category: 'video', price: 112, unit: 'видео' },
-    { slug: 'pixverse-6-0', name: 'PixVerse 6.0', category: 'video', price: 10, unit: 'сек. видео' },
-    { slug: 'pixverse-c1', name: 'PixVerse C1', category: 'video', price: 12, unit: 'сек. видео' },
-    { slug: 'pixverse-lipsync', name: 'PixVerse Lipsync', category: 'video', price: 14, unit: 'сек. аудио' },
-    { slug: 'pixverse-vibemv', name: 'PixVerse VibeMV', category: 'video', price: 20, unit: 'сек. видео' },
-    { slug: 'pruna-ai-p-video', name: 'Pruna AI P-Video', category: 'video', price: 6, unit: 'сек. видео' },
-    { slug: 'pruna-ai-p-video-animate', name: 'Pruna AI P-Video Animate', category: 'video', price: 10, unit: 'сек. видео' },
-    { slug: 'p-video-avatar', name: 'PrunaAI P-Video Avatar', category: 'video', price: 8, unit: 'сек. видео' },
-    { slug: 'pruna-ai-p-video-2', name: 'Pruna P-Video 2', category: 'video', price: 5, unit: 'сек. видео' },
-    { slug: 'pruna-ai-p-video-2-pro', name: 'Pruna P-Video 2 Pro', category: 'video', price: 4, unit: 'сек. видео' },
-    { slug: 'pruna-ai-p-video-edit', name: 'Pruna P-Video Edit', category: 'video', price: 10, unit: 'сек. видео' },
-    { slug: 'runway-4-turbo', name: 'Runway 4 Turbo', category: 'video', price: 30, unit: 'видео' },
+    // 🎬 Видео и анимация (только проверенные рабочие модели)
+    { slug: 'sora-2', name: 'Sora 2.0', category: 'video', price: 50, unit: 'генерация' },
     { slug: 'seedance-1-0', name: 'Seedance 1.0', category: 'video', price: 20, unit: 'генерация' },
     { slug: 'seedance-1-5-pro', name: 'Seedance 1.5 Pro', category: 'video', price: 14, unit: 'видео' },
     { slug: 'seedance-2-0-apimart', name: 'Seedance 2.0', category: 'video', price: 10, unit: 'сек. видео' },
-    { slug: 'seedance-2-0-mini', name: 'Seedance 2.0 Mini', category: 'video', price: 10, unit: 'сек. видео' },
-    { slug: 'seedance-2-5', name: 'Seedance 2.5', category: 'video', price: 16, unit: 'сек. видео' }
+    { slug: 'pruna-ai-p-video-2-pro', name: 'Pruna P-Video 2 Pro', category: 'video', price: 4, unit: 'сек. видео' }
 ];
 
-// Модели, которые требуют картинку на вход
+// Модели, которые требуют картинку на вход (очищено от удаленных видеомоделей)
 const MODELS_REQUIRING_IMAGE = [
-    'seedance-2-0-mini',
     'phota-enhance',
     'p-image-upscale',
     'recraft-creative-upscale',
-    'recraft-crisp-upscale',
-    'pruna-ai-p-video-2',
-    'pruna-ai-p-video-2-pro',
-    'pruna-ai-p-video-edit',
-    'pruna-ai-p-video-animate',
-    'p-video-avatar',
-    'pixverse-6-0',
-    'pixverse-5-5',
-    'pixverse-5-6',
-    'pixverse-lipsync',
-    'omnihuman-1-0',
-    'omnihuman-1-5'
+    'recraft-crisp-upscale'
 ];
 
 async function uploadBuffer(apiKey, buf, mimeType = 'image/jpeg', filename = 'input_file.jpg') {
@@ -208,7 +180,18 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         if (err.response) {
             const errData = err.response.data;
             console.error(`🚨 [Bratukha API Error] Status: ${err.response.status}`, JSON.stringify(errData));
-            throw new Error(errData.error?.message || errData.message || `Ошибка API: статус ${err.response.status}`);
+            
+            const apiMsg = errData.error?.message || errData.message || '';
+            const errorCode = errData.error?.code || '';
+
+            // Инструкция и понятная ошибка для пользователя в случае проблем
+            if (errorCode === 'insufficient_funds' || apiMsg.includes('Недостаточно средств')) {
+                throw new Error('💰 Недостаточно средств на балансе. Пожалуйста, пополните баланс для выполнения этой операции.');
+            } else if (errorCode === 'validation_error' || apiMsg.includes('обязательно') || apiMsg.includes('референс')) {
+                throw new Error(`⚠️ Ошибка запроса: ${apiMsg}\n\n💡 Инструкция: Для этой модели проверьте правильность введенного запроса или прикрепите необходимые файлы.`);
+            } else {
+                throw new Error(apiMsg || `Ошибка API: статус ${err.response.status}`);
+            }
         }
         throw err;
     }
