@@ -762,6 +762,17 @@ async function startBot(app) {
 
     bot.on('video', handleAiRequest);
     bot.on('audio', handleAiRequest);
+
+    // 🚀 Запуск бота (Long Polling) и корректная обработка остановки процесса
+    try {
+        await bot.launch();
+        console.log('🤖 Бот успешно запущен и работает в режиме Long Polling!');
+    } catch (err) {
+        console.error('❌ Ошибка при запуске bot.launch():', err);
+    }
+
+    process.once('SIGINT', () => bot.stop('SIGINT'));
+    process.once('SIGTERM', () => bot.stop('SIGTERM'));
 }
 
 module.exports = { startBot };
