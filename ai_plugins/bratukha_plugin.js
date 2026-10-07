@@ -12,7 +12,6 @@ const BRATUKHA_MODELS = [
     
     // 🖼 Картинки и апскейл
     { slug: 'phota-enhance', name: 'Phota Enhance', category: 'image', price: 44, unit: 'запуск' },
-    { slug: 'pixal3d', name: 'Pixal3D', category: 'image-3d', price: 90, unit: 'изображение' },
     { slug: 'p-image-upscale', name: 'Pruna AI P-ImageUpscale', category: 'image', price: 1.5, unit: 'МП' },
     { slug: 'qwen-image-2-1', name: 'Qwen Image 2.1', category: 'image', price: 8, unit: 'изображение' },
     { slug: 'qwen-image-3-0', name: 'Qwen Image 3.0', category: 'image', price: 9, unit: 'изображение' },
