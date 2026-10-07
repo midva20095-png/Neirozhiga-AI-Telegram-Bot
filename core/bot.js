@@ -40,17 +40,29 @@ const mediaGroupBuffers = new Map();
 
 const ADMIN_ID = '5943987954';
 
-// Модели, строго требующие наличия изображения
+// Модели, строго требующие наличия изображения (veo полностью исключен)
 const REQUIRES_IMAGE_MODELS = [
-    'pixverse-6-0', 'pixverse-5-5', 'pixverse-5-6', 'pixverse-lipsync',
-    'omnihuman-1-0', 'omnihuman-1-5', 'p-video-avatar',
-    'pruna-ai-p-video-animate', 'pruna-ai-p-video-edit',
-    'phota-enhance', 'p-image-upscale', 'recraft-creative-upscale', 'recraft-crisp-upscale'
+    'sora-2',
+    'phota-enhance', 
+    'p-image-upscale', 
+    'recraft-creative-upscale', 
+    'recraft-crisp-upscale',
+    'pixverse-6-0', 
+    'pixverse-5-5', 
+    'pixverse-5-6', 
+    'pixverse-lipsync',
+    'omnihuman-1-0', 
+    'omnihuman-1-5', 
+    'p-video-avatar',
+    'pruna-ai-p-video-animate', 
+    'pruna-ai-p-video-edit'
 ];
 
-// Модели, строго требующие наличие текста
+// Модели, строго требующие наличие текста (veo полностью исключен)
 const REQUIRES_TEXT_MODELS = [
-    'qwen3-tts', 'qwen3-tts-flash'
+    'qwen3-tts', 
+    'qwen3-tts-flash',
+    'sora-2'
 ];
 
 bot.catch((err, ctx) => {
@@ -91,7 +103,6 @@ const MODEL_COSTS = {
     'seedream-4-5': 10,
 
     // 🎬 Видео и Анимация 
-    'veo': 400,
     'sora-2': 50,
     'seedance-1-0': 20,
     'seedance-1-5-pro': 14,
@@ -128,7 +139,6 @@ const MODEL_NAMES = {
     'seedream-4-5': 'Seedream 4.5 🌈',
 
     // 🎬 Видео и Анимация 
-    'veo': 'Veo 3.1 Видео 🎬',
     'sora-2': 'Sora 2.0 🌟',
     'seedance-1-0': 'Seedance 1.0 💃',
     'seedance-1-5-pro': 'Seedance 1.5 Pro 💃',
@@ -560,12 +570,24 @@ async function startBot(app) {
             if (buf) fileBuffers.push(buf);
         }
 
+        // ПРОВЕРКА: Требование картинки
         if (REQUIRES_IMAGE_MODELS.includes(currentMode) && fileBuffers.length === 0) {
-            return ctx.reply('⚠️ *Ошибка:* Выбранная модель требует наличие изображения. Пожалуйста, отправьте картинку.');
+            return ctx.reply(
+                `⚠️ *Ошибка ввода!*\n\n` +
+                `Выбранная модель *${MODEL_NAMES[currentMode] || currentMode}* требует наличия картинки.\n\n` +
+                `Пожалуйста, отправьте изображение вместе с вашим запросом.`,
+                { parse_mode: 'Markdown' }
+            );
         }
 
+        // ПРОВЕРКА: Требование текста
         if (REQUIRES_TEXT_MODELS.includes(currentMode) && !prompt.trim()) {
-            return ctx.reply('⚠️ *Ошибка:* Для выбранной модели требуется текст/описание.');
+            return ctx.reply(
+                `⚠️ *Ошибка ввода!*\n\n` +
+                `Выбранная модель *${MODEL_NAMES[currentMode] || currentMode}* требует текстового описания.\n\n` +
+                `Пожалуйста, добавьте текстовый запрос или подпись к файлу.`,
+                { parse_mode: 'Markdown' }
+            );
         }
 
         const cost = MODEL_COSTS[currentMode] || 1;
@@ -661,8 +683,24 @@ async function startBot(app) {
             }
         }
 
+        // ПРОВЕРКА: Требование картинки
         if (REQUIRES_IMAGE_MODELS.includes(currentMode) && fileBuffers.length === 0) {
-            return firstCtx.reply('⚠️ *Ошибка:* Выбранная модель требует наличие изображения.');
+            return firstCtx.reply(
+                `⚠️ *Ошибка ввода!*\n\n` +
+                `Выбранная модель *${MODEL_NAMES[currentMode] || currentMode}* требует наличия картинки.\n\n` +
+                `Пожалуйста, отправьте изображение с вашим запросом.`,
+                { parse_mode: 'Markdown' }
+            );
+        }
+
+        // ПРОВЕРКА: Требование текста
+        if (REQUIRES_TEXT_MODELS.includes(currentMode) && !prompt.trim()) {
+            return firstCtx.reply(
+                `⚠️ *Ошибка ввода!*\n\n` +
+                `Выбранная модель *${MODEL_NAMES[currentMode] || currentMode}* требует текстового описания.\n\n` +
+                `Пожалуйста, добавьте подпись к вашему альбому.`,
+                { parse_mode: 'Markdown' }
+            );
         }
 
         const cost = MODEL_COSTS[currentMode] || 1;
