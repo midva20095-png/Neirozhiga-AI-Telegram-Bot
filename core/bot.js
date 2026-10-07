@@ -62,6 +62,7 @@ bot.use(async (ctx, next) => {
     return next();
 });
 
+// 💰 Стоимость моделей по подразделам (в кредитах)
 const MODEL_COSTS = {
     // 🟢 Модели Google
     'flash': 1,
@@ -71,7 +72,7 @@ const MODEL_COSTS = {
     'nanobanana_pro': 10,
     'veo': 400,
 
-    // 🎵 Аудио (Братуха)
+    // 🎵 Аудио и голос (Братуха)
     'qwen3-tts': 20,
     'qwen3-tts-flash': 20,
 
@@ -91,7 +92,6 @@ const MODEL_COSTS = {
     'seedream-4-5': 10,
 
     // 🎬 Видео и Анимация 
-    'veo': 400,
     'sora-2': 50,
     'seedance-1-0': 20,
     'seedance-1-5-pro': 14,
@@ -99,6 +99,7 @@ const MODEL_COSTS = {
     'pruna-ai-p-video-2-pro': 4
 };
 
+// 🏷 Названия моделей для интерфейса с подсказками
 const MODEL_NAMES = {
     // 🟢 Модели Google
     'flash': 'Gemini 3.8 Flash ⚡️',
@@ -127,8 +128,7 @@ const MODEL_NAMES = {
     'seedream-4-0': 'Seedream 4.0 🌈',
     'seedream-4-5': 'Seedream 4.5 🌈',
 
-    // 🎬 Видео и Анимация (только проверенные рабочие)
-    'veo': 'Veo 3.1 Видео 🎬',
+    // 🎬 Видео и Анимация
     'sora-2': 'Sora 2.0 🌟',
     'seedance-1-0': 'Seedance 1.0 💃',
     'seedance-1-5-pro': 'Seedance 1.5 Pro 💃',
@@ -142,10 +142,16 @@ const CREDIT_PACKAGES = {
     'pack_500': { credits: 500, price: 2500, title: '500 кредитов' }
 };
 
+// Главные кнопки с разделением по подразделам
 const mainKeyboard = Markup.keyboard([
-    ['🤖 Выбрать модель ИИ', '💳 Мой баланс'],
-    ['💰 Пополнить баланс', '💬 Поддержка'],
-    ['ℹ Справка']
+    // 🤖 Блок нейросетей
+    ['🤖 Выбрать модель ИИ'],
+    
+    // 💳 Финансовый блок
+    ['💳 Мой баланс', '💰 Пополнить баланс'],
+    
+    // ℹ️ Блок поддержки и информации
+    ['💬 Поддержка', 'ℹ️ Справка']
 ]).resize();
 
 async function getUserBalance(userId) {
@@ -214,28 +220,35 @@ function getModelSelectionKeyboard(currentMode) {
 
     const buttons = [];
 
+    // Блок 1: Текст
     buttons.push([Markup.button.callback('💬 ─── ТЕКСТОВЫЕ МОДЕЛИ ───', 'noop_text')]);
     textModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
         buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
     });
 
+    // Блок 2: Аудио (с подсказкой о тексте)
     buttons.push([Markup.button.callback('🎵 ─── АУДИО И ГОЛОС ───', 'noop_audio')]);
     audioModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
-        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
+        const hint = REQUIRES_TEXT_MODELS.includes(key) ? ' 📝[текст]' : '';
+        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]}${hint} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
     });
 
+    // Блок 3: Картинки (с подсказкой о фото)
     buttons.push([Markup.button.callback('🎨 ─── КАРТИНКИ, 3D И АПСКЕЙЛ ───', 'noop_image')]);
     imageModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
-        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
+        const hint = REQUIRES_IMAGE_MODELS.includes(key) ? ' 📷[фото]' : '';
+        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]}${hint} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
     });
 
-    buttons.push([Markup.button.callback('🎬 ─── ВИДЕО И АНИМАЦИЯ (только проверенные рабочие) ───', 'noop_video')]);
+    // Блок 4: Видео (с подсказкой о фото)
+    buttons.push([Markup.button.callback('🎬 ─── ВИДЕО И АНИМАЦИЯ ───', 'noop_video')]);
     videoModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
-        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
+        const hint = REQUIRES_IMAGE_MODELS.includes(key) ? ' 📷[фото]' : '';
+        buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]}${hint} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
     });
 
     return Markup.inlineKeyboard(buttons);
