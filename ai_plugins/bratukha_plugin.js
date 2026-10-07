@@ -42,20 +42,6 @@ const MODELS_REQUIRING_IMAGE = [
     'recraft-crisp-upscale'
 ];
 
-// Таблица соответствия соотношений сторон точным пиксельным размерам
-const ASPECT_RATIOS_MAP = {
-    '9:16': { width: 768, height: 1344, size: '768x1344' },
-    '16:9': { width: 1344, height: 768, size: '1344x768' },
-    '1:1':  { width: 1024, height: 1024, size: '1024x1024' },
-    '4:3':  { width: 1152, height: 864,  size: '1152x864' },
-    '3:4':  { width: 864,  height: 1152, size: '864x1152' },
-    '2:3':  { width: 864,  height: 1296, size: '864x1296' },
-    '3:2':  { width: 1296, height: 864,  size: '1296x864' },
-    '4:5':  { width: 864,  height: 1080, size: '864x1080' },
-    '5:4':  { width: 1080, height: 864,  size: '1080x864' },
-    '21:9': { width: 1536, height: 656,  size: '1536x656' }
-};
-
 /**
  * Извлекает соотношение сторон из промпта
  */
@@ -183,29 +169,18 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         const finalRatio = explicitAspectRatio || parsedRatio;
 
         if (finalRatio) {
-            // Передаем все возможные комбинации имен параметров для максимальной совместимости с любыми API
+            // МЫ ИСПРАВИЛИ ЭТОТ БЛОК:
+            // Ошибка API 400 validation_error четко говорит, что оно ждет одну из строк: «16:9», «9:16» и т.д.
+            // Мы передаем ТОЛЬКО текстовое обозначение в aspect_ratio / ratio.
+            // Мы ПРЕКРАЩАЕМ отправлять числовые размеры (width/height/size),
+            // так как бэкенд seedream-4-5 считает их невалидными данными, вызывая ошибку.
             inputData.aspect_ratio = finalRatio;
             inputData.ratio = finalRatio;
-
-            if (ASPECT_RATIOS_MAP[finalRatio]) {
-                const dim = ASPECT_RATIOS_MAP[finalRatio];
-                inputData.width = dim.width;
-                inputData.height = dim.height;
-                inputData.size = dim.size;
-                inputData.image_size = dim.size;
-            }
         }
     } else if (explicitAspectRatio) {
+        // МЫ ИСПРАВИЛИ ЭТОТ БЛОК: Отправляем только текстовую строку формата.
         inputData.aspect_ratio = explicitAspectRatio;
         inputData.ratio = explicitAspectRatio;
-
-        if (ASPECT_RATIOS_MAP[explicitAspectRatio]) {
-            const dim = ASPECT_RATIOS_MAP[explicitAspectRatio];
-            inputData.width = dim.width;
-            inputData.height = dim.height;
-            inputData.size = dim.size;
-            inputData.image_size = dim.size;
-        }
     }
 
     if (allBuffers.length > 0) {
