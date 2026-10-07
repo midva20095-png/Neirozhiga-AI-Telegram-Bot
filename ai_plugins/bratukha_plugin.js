@@ -1,9 +1,10 @@
+require('dotenv').config();
 const axios = require('axios');
 
 // Берем URL из переменных Railway или ставим рабочий дефолт
 const BRATUKHA_API_URL = process.env.BRATUKHA_API_URL || 'https://bratuha.ru/api/v1';
 
-// Каталог актуальных моделей (аудио, картинки не тронуты, в видео — только проверенные рабочие)
+// Каталог актуальных моделей (видео строго ограничены вашим списком)
 const BRATUKHA_MODELS = [
     // 🎵 Аудио
     { slug: 'mureka-ai-v9-5', name: 'Mureka AI V9.5', category: 'audio', price: 60, unit: 'песня / трек' },
@@ -25,7 +26,8 @@ const BRATUKHA_MODELS = [
     { slug: 'seedream-4-0', name: 'Seedream 4.0', category: 'image', price: 8, unit: 'изображение' },
     { slug: 'seedream-4-5', name: 'Seedream 4.5', category: 'image', price: 10, unit: 'изображение' },
 
-    // 🎬 Видео и анимация (только проверенные рабочие модели)
+    // 🎬 Видео и анимация (строго ваш список)
+    { slug: 'veo', name: 'Veo 3.1 Видео', category: 'video', price: 400, unit: 'генерация' },
     { slug: 'sora-2', name: 'Sora 2.0', category: 'video', price: 50, unit: 'генерация' },
     { slug: 'seedance-1-0', name: 'Seedance 1.0', category: 'video', price: 20, unit: 'генерация' },
     { slug: 'seedance-1-5-pro', name: 'Seedance 1.5 Pro', category: 'video', price: 14, unit: 'видео' },
@@ -33,7 +35,7 @@ const BRATUKHA_MODELS = [
     { slug: 'pruna-ai-p-video-2-pro', name: 'Pruna P-Video 2 Pro', category: 'video', price: 4, unit: 'сек. видео' }
 ];
 
-// Модели, которые требуют картинку на вход (очищено от удаленных видеомоделей)
+// Модели, которые требуют картинку на вход
 const MODELS_REQUIRING_IMAGE = [
     'phota-enhance',
     'p-image-upscale',
@@ -112,7 +114,6 @@ async function uploadBuffer(apiKey, buf, mimeType = 'image/jpeg', filename = 'in
 }
 
 async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, modelKey }) {
-    // Автоматическое считывание из переменных Railway
     const apiKey = process.env.BRATUKHA_API_KEY || process.env.BRATUKHA_TOKEN;
     if (!apiKey) {
         throw new Error('❌ BRATUKHA_API_KEY не задан в переменных окружения Railway');
@@ -180,18 +181,7 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
         if (err.response) {
             const errData = err.response.data;
             console.error(`🚨 [Bratukha API Error] Status: ${err.response.status}`, JSON.stringify(errData));
-            
-            const apiMsg = errData.error?.message || errData.message || '';
-            const errorCode = errData.error?.code || '';
-
-            // Инструкция и понятная ошибка для пользователя в случае проблем
-            if (errorCode === 'insufficient_funds' || apiMsg.includes('Недостаточно средств')) {
-                throw new Error('💰 Недостаточно средств на балансе. Пожалуйста, пополните баланс для выполнения этой операции.');
-            } else if (errorCode === 'validation_error' || apiMsg.includes('обязательно') || apiMsg.includes('референс')) {
-                throw new Error(`⚠️ Ошибка запроса: ${apiMsg}\n\n💡 Инструкция: Для этой модели проверьте правильность введенного запроса или прикрепите необходимые файлы.`);
-            } else {
-                throw new Error(apiMsg || `Ошибка API: статус ${err.response.status}`);
-            }
+            throw new Error(errData.error?.message || errData.message || `Ошибка API: статус ${err.response.status}`);
         }
         throw err;
     }
