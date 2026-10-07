@@ -42,28 +42,31 @@ const MODELS_REQUIRING_IMAGE = [
     'recraft-crisp-upscale'
 ];
 
+// Таблица соответствия соотношений сторон точным пиксельным размерам
+const ASPECT_RATIOS_MAP = {
+    '9:16': { width: 768, height: 1344, size: '768x1344' },
+    '16:9': { width: 1344, height: 768, size: '1344x768' },
+    '1:1':  { width: 1024, height: 1024, size: '1024x1024' },
+    '4:3':  { width: 1152, height: 864,  size: '1152x864' },
+    '3:4':  { width: 864,  height: 1152, size: '864x1152' },
+    '2:3':  { width: 864,  height: 1296, size: '864x1296' },
+    '3:2':  { width: 1296, height: 864,  size: '1296x864' },
+    '4:5':  { width: 864,  height: 1080, size: '864x1080' },
+    '5:4':  { width: 1080, height: 864,  size: '1080x864' },
+    '21:9': { width: 1536, height: 656,  size: '1536x656' }
+};
+
 /**
- * Автоматически извлекает соотношение сторон из промпта (например "9:16", "16:9", "1:1")
+ * Извлекает соотношение сторон из промпта
  */
 function extractAspectRatio(userPrompt) {
     if (!userPrompt || typeof userPrompt !== 'string') {
-        return { aspectRatio: null, cleanPrompt: userPrompt || '' };
+        return { aspectRatio: null };
     }
     
     // Ищем популярные форматы кадра
     const match = userPrompt.match(/\b(9:16|16:9|1:1|4:3|3:4|2:3|3:2|4:5|5:4|21:9)\b/i);
-    if (!match) {
-        return { aspectRatio: null, cleanPrompt: userPrompt };
-    }
-
-    const aspectRatio = match[1];
-    // Очищаем текст промпта от указания формата
-    const cleanPrompt = userPrompt
-        .replace(/\b(9:16|16:9|1:1|4:3|3:4|2:3|3:2|4:5|5:4|21:9)\b/gi, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-    return { aspectRatio, cleanPrompt };
+    return { aspectRatio: match ? match[1] : null };
 }
 
 /**
@@ -171,20 +174,38 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
 
     const inputData = {};
     if (prompt) {
-        // Парсим соотношение сторон из промпта
-        const { aspectRatio: parsedRatio, cleanPrompt } = extractAspectRatio(prompt);
-        const finalRatio = explicitAspectRatio || parsedRatio;
-
-        inputData.prompt = cleanPrompt || prompt;
+        // Оставляем промпт полностью нетронутым (сохраняем указание 9:16 внутри текста для моделей, читающих текст)
+        inputData.prompt = prompt;
         inputData.text = prompt; // Обязательный параметр для TTS
 
+        // Вычленяем формат кадра из промпта
+        const { aspectRatio: parsedRatio } = extractAspectRatio(prompt);
+        const finalRatio = explicitAspectRatio || parsedRatio;
+
         if (finalRatio) {
+            // Передаем все возможные комбинации имен параметров для максимальной совместимости с любыми API
             inputData.aspect_ratio = finalRatio;
             inputData.ratio = finalRatio;
+
+            if (ASPECT_RATIOS_MAP[finalRatio]) {
+                const dim = ASPECT_RATIOS_MAP[finalRatio];
+                inputData.width = dim.width;
+                inputData.height = dim.height;
+                inputData.size = dim.size;
+                inputData.image_size = dim.size;
+            }
         }
     } else if (explicitAspectRatio) {
         inputData.aspect_ratio = explicitAspectRatio;
         inputData.ratio = explicitAspectRatio;
+
+        if (ASPECT_RATIOS_MAP[explicitAspectRatio]) {
+            const dim = ASPECT_RATIOS_MAP[explicitAspectRatio];
+            inputData.width = dim.width;
+            inputData.height = dim.height;
+            inputData.size = dim.size;
+            inputData.image_size = dim.size;
+        }
     }
 
     if (allBuffers.length > 0) {
