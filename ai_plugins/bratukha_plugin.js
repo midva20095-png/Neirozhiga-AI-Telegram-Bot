@@ -42,6 +42,42 @@ const MODELS_REQUIRING_IMAGE = [
     'recraft-crisp-upscale'
 ];
 
+/**
+ * Автоматически извлекает соотношение сторон из промпта (например "9:16", "16:9", "1:1")
+ */
+function extractAspectRatio(userPrompt) {
+    if (!userPrompt || typeof userPrompt !== 'string') {
+        return { aspectRatio: null, cleanPrompt: userPrompt || '' };
+    }
+    
+    // Ищем популярные форматы кадра
+    const match = userPrompt.match(/\b(9:16|16:9|1:1|4:3|3:4|2:3|3:2|4:5|5:4|21:9)\b/i);
+    if (!match) {
+        return { aspectRatio: null, cleanPrompt: userPrompt };
+    }
+
+    const aspectRatio = match[1];
+    // Очищаем текст промпта от указания формата
+    const cleanPrompt = userPrompt
+        .replace(/\b(9:16|16:9|1:1|4:3|3:4|2:3|3:2|4:5|5:4|21:9)\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    return { aspectRatio, cleanPrompt };
+}
+
+/**
+ * Безопасно извлекает URL из ответа (защита от ошибок с .match на нестроковых типах)
+ */
+function extractUrlString(val) {
+    if (!val) return '';
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object') {
+        return val.url || val.src || val.file_url || val.href || '';
+    }
+    return String(val);
+}
+
 async function uploadBuffer(apiKey, buf, mimeType = 'image/jpeg', filename = 'input_file.jpg') {
     const contentType = mimeType || 'image/jpeg';
     const directLimit = 10 * 1024 * 1024;
@@ -112,7 +148,7 @@ async function uploadBuffer(apiKey, buf, mimeType = 'image/jpeg', filename = 'in
     return publicUrl;
 }
 
-async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, modelKey }) {
+async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, modelKey, aspectRatio: explicitAspectRatio }) {
     const apiKey = process.env.BRATUKHA_API_KEY || process.env.BRATUKHA_TOKEN;
     if (!apiKey) {
         throw new Error('❌ BRATUKHA_API_KEY не задан в переменных окружения Railway');
@@ -135,8 +171,20 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
 
     const inputData = {};
     if (prompt) {
-        inputData.prompt = prompt;
+        // Парсим соотношение сторон из промпта
+        const { aspectRatio: parsedRatio, cleanPrompt } = extractAspectRatio(prompt);
+        const finalRatio = explicitAspectRatio || parsedRatio;
+
+        inputData.prompt = cleanPrompt || prompt;
         inputData.text = prompt; // Обязательный параметр для TTS
+
+        if (finalRatio) {
+            inputData.aspect_ratio = finalRatio;
+            inputData.ratio = finalRatio;
+        }
+    } else if (explicitAspectRatio) {
+        inputData.aspect_ratio = explicitAspectRatio;
+        inputData.ratio = explicitAspectRatio;
     }
 
     if (allBuffers.length > 0) {
@@ -220,11 +268,14 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, model
             const result = opData.result || opData;
             const resType = result?.type || '';
             const urls = result?.urls || result?.files || result?.images || result?.videos || [];
-            const primaryUrl = urls[0] || result?.image_url || result?.video_url || result?.audio_url || result?.url;
+            
+            // Безопасно получаем URL в виде строки
+            const rawUrlCandidate = urls[0] || result?.image_url || result?.video_url || result?.audio_url || result?.url;
+            const primaryUrl = extractUrlString(rawUrlCandidate);
 
-            const isVideo = resType === 'video' || primaryUrl?.match(/\.(mp4|webm|mov)(\?.*)?$/i);
-            const isAudio = resType === 'audio' || primaryUrl?.match(/\.(mp3|wav|ogg|m4a)(\?.*)?$/i);
-            const isImage = resType === 'image' || primaryUrl?.match(/\.(png|jpg|jpeg|webp|gif)(\?.*)?$/i) || (!isVideo && !isAudio && primaryUrl);
+            const isVideo = resType === 'video' || (typeof primaryUrl === 'string' && Boolean(primaryUrl.match(/\.(mp4|webm|mov)(\?.*)?$/i)));
+            const isAudio = resType === 'audio' || (typeof primaryUrl === 'string' && Boolean(primaryUrl.match(/\.(mp3|wav|ogg|m4a)(\?.*)?$/i)));
+            const isImage = resType === 'image' || (typeof primaryUrl === 'string' && Boolean(primaryUrl.match(/\.(png|jpg|jpeg|webp|gif)(\?.*)?$/i))) || (!isVideo && !isAudio && primaryUrl);
 
             if (primaryUrl && isVideo) {
                 const mediaRes = await axios.get(primaryUrl, { responseType: 'arraybuffer' });
