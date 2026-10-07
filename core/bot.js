@@ -42,19 +42,15 @@ const ADMIN_ID = '5943987954';
 
 // Модели, строго требующие наличия изображения
 const REQUIRES_IMAGE_MODELS = [
-    'phota-enhance', 'pixal3d', 'p-image-upscale', 'recraft-creative-upscale', 
-    'recraft-crisp-upscale', 'sam-3d', 'pixverse-6-0', 'pixverse-5-5', 
-    'pixverse-5-6', 'pixverse-lipsync', 'omnihuman-1-0', 'omnihuman-1-5', 
-    'p-video-avatar', 'pruna-ai-p-video-animate', 'pruna-ai-p-video-edit'
+    'pixverse-6-0', 'pixverse-5-5', 'pixverse-5-6', 'pixverse-lipsync',
+    'omnihuman-1-0', 'omnihuman-1-5', 'p-video-avatar',
+    'pruna-ai-p-video-animate', 'pruna-ai-p-video-edit',
+    'phota-enhance', 'p-image-upscale', 'recraft-creative-upscale', 'recraft-crisp-upscale'
 ];
 
 // Модели, строго требующие наличие текста
 const REQUIRES_TEXT_MODELS = [
-    'flash', 'flash_25', 'pro',
-    'qwen3-tts', 'qwen3-tts-flash',
-    'nanobanana', 'nanobanana_pro', 'qwen-image-2-1', 'qwen-image-3-0',
-    'recraft-v4', 'recraft-v4-1', 'runway-gen4-image', 'seedream-4-0', 'seedream-4-5',
-    'veo', 'sora-2', 'seedance-1-0', 'seedance-1-5-pro', 'seedance-2-0-apimart', 'pruna-ai-p-video-2-pro'
+    'qwen3-tts', 'qwen3-tts-flash'
 ];
 
 bot.catch((err, ctx) => {
@@ -66,7 +62,6 @@ bot.use(async (ctx, next) => {
     return next();
 });
 
-// 💰 Стоимость моделей по подразделам (в кредитах)
 const MODEL_COSTS = {
     // 🟢 Модели Google
     'flash': 1,
@@ -74,8 +69,9 @@ const MODEL_COSTS = {
     'pro': 3,
     'nanobanana': 4,
     'nanobanana_pro': 10,
+    'veo': 400,
 
-    // 🎵 Аудио и голос (Братуха)
+    // 🎵 Аудио (Братуха)
     'qwen3-tts': 20,
     'qwen3-tts-flash': 20,
 
@@ -94,7 +90,7 @@ const MODEL_COSTS = {
     'seedream-4-0': 8,
     'seedream-4-5': 10,
 
-    // 🎬 Видео и Анимация
+    // 🎬 Видео и Анимация 
     'veo': 400,
     'sora-2': 50,
     'seedance-1-0': 20,
@@ -103,41 +99,41 @@ const MODEL_COSTS = {
     'pruna-ai-p-video-2-pro': 4
 };
 
-// 🏷 Названия моделей для интерфейса (с явным указанием типа ввода)
 const MODEL_NAMES = {
     // 🟢 Модели Google
-    'flash': 'Gemini 3.8 Flash ⚡️ 📝[текст]',
-    'flash_25': 'Gemini 2.5 Flash 🚀 📝[текст]',
-    'pro': 'Gemini 3.1 Pro 🧠 📝[текст]',
-    'nanobanana': 'Nano Banana 2 🎨 📝[текст]',
-    'nanobanana_pro': 'Nano Banana Pro 💎 📝[текст]',
+    'flash': 'Gemini 3.8 Flash ⚡️',
+    'flash_25': 'Gemini 2.5 Flash 🚀',
+    'pro': 'Gemini 3.1 Pro 🧠',
+    'nanobanana': 'Nano Banana 2 🎨',
+    'nanobanana_pro': 'Nano Banana Pro 💎',
+    'veo': 'Veo 3.1 Видео 🎬',
 
     // 🎵 Аудио
-    'qwen3-tts': 'Qwen3 TTS 🗣 📝[текст]',
-    'qwen3-tts-flash': 'Qwen3 TTS Flash ⚡️ 📝[текст]',
+    'qwen3-tts': 'Qwen3 TTS 🗣',
+    'qwen3-tts-flash': 'Qwen3 TTS Flash ⚡️',
 
     // 🖼 Картинки, 3D и Апскейл
-    'phota-enhance': 'Phota Enhance 🪄 📷[фото]',
-    'pixal3d': 'Pixal3D 🧊 📷[фото]',
-    'p-image-upscale': 'Pruna P-ImageUpscale 🔍 📷[фото]',
-    'qwen-image-2-1': 'Qwen Image 2.1 🎨 📝[текст]',
-    'qwen-image-3-0': 'Qwen Image 3.0 🎨 📝[текст]',
-    'recraft-creative-upscale': 'Recraft Creative Upscale 🖼 📷[фото]',
-    'recraft-crisp-upscale': 'Recraft Crisp Upscale 🔍 📷[фото]',
-    'recraft-v4': 'Recraft V4 🎨 📝[текст]',
-    'recraft-v4-1': 'Recraft V4.1 🎨 📝[текст]',
-    'runway-gen4-image': 'Runway Gen4 Image 🖼 📝[текст]',
-    'sam-3d': 'SAM 3D 🧊 📷[фото]',
-    'seedream-4-0': 'Seedream 4.0 🌈 📝[текст]',
-    'seedream-4-5': 'Seedream 4.5 🌈 📝[текст]',
+    'phota-enhance': 'Phota Enhance 🪄',
+    'pixal3d': 'Pixal3D 🧊',
+    'p-image-upscale': 'Pruna P-ImageUpscale 🔍',
+    'qwen-image-2-1': 'Qwen Image 2.1 🎨',
+    'qwen-image-3-0': 'Qwen Image 3.0 🎨',
+    'recraft-creative-upscale': 'Recraft Creative Upscale 🖼',
+    'recraft-crisp-upscale': 'Recraft Crisp Upscale 🔍',
+    'recraft-v4': 'Recraft V4 🎨',
+    'recraft-v4-1': 'Recraft V4.1 🎨',
+    'runway-gen4-image': 'Runway Gen4 Image 🖼',
+    'sam-3d': 'SAM 3D 🧊',
+    'seedream-4-0': 'Seedream 4.0 🌈',
+    'seedream-4-5': 'Seedream 4.5 🌈',
 
-    // 🎬 Видео и Анимация
-    'veo': 'Veo 3.1 Видео 🎬 📝[текст]',
-    'sora-2': 'Sora 2.0 🌟 📝[текст]',
-    'seedance-1-0': 'Seedance 1.0 💃 📝[текст]',
-    'seedance-1-5-pro': 'Seedance 1.5 Pro 💃 📝[текст]',
-    'seedance-2-0-apimart': 'Seedance 2.0 💃 📝[текст]',
-    'pruna-ai-p-video-2-pro': 'Pruna P-Video 2 Pro ⚡ 📝[текст]'
+    // 🎬 Видео и Анимация 
+    'veo': 'Veo 3.1 Видео 🎬',
+    'sora-2': 'Sora 2.0 🌟',
+    'seedance-1-0': 'Seedance 1.0 💃',
+    'seedance-1-5-pro': 'Seedance 1.5 Pro 💃',
+    'seedance-2-0-apimart': 'Seedance 2.0 💃',
+    'pruna-ai-p-video-2-pro': 'Pruna P-Video 2 Pro ⚡'
 };
 
 const CREDIT_PACKAGES = {
@@ -197,7 +193,6 @@ async function getTelegramFileBuffer(ctx, fileId) {
 }
 
 function getModelSelectionKeyboard(currentMode) {
-    // Подразделы моделей по категориям
     const textModels = ['flash', 'flash_25', 'pro'];
     
     const audioModels = [
@@ -219,29 +214,25 @@ function getModelSelectionKeyboard(currentMode) {
 
     const buttons = [];
 
-    // Блок 1: Текстовые модели
     buttons.push([Markup.button.callback('💬 ─── ТЕКСТОВЫЕ МОДЕЛИ ───', 'noop_text')]);
     textModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
         buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
     });
 
-    // Блок 2: Аудио и голос
     buttons.push([Markup.button.callback('🎵 ─── АУДИО И ГОЛОС ───', 'noop_audio')]);
     audioModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
         buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
     });
 
-    // Блок 3: Картинки, 3D и апскейл
     buttons.push([Markup.button.callback('🎨 ─── КАРТИНКИ, 3D И АПСКЕЙЛ ───', 'noop_image')]);
     imageModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
         buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
     });
 
-    // Блок 4: Видео и анимация
-    buttons.push([Markup.button.callback('🎬 ─── ВИДЕО И АНИМАЦИЯ ───', 'noop_video')]);
+    buttons.push([Markup.button.callback('🎬 ─── ВИДЕО И АНИМАЦИЯ (только проверенные рабочие) ───', 'noop_video')]);
     videoModels.forEach(key => {
         const isSelected = key === currentMode ? '✅ ' : '';
         buttons.push([Markup.button.callback(`${isSelected}${MODEL_NAMES[key]} (${MODEL_COSTS[key]} кр.)`, `set_model_${key}`)]);
@@ -768,7 +759,7 @@ async function startBot(app) {
         console.error('❌ Ошибка при запуске bot.launch():', err);
     }
 
-    processonce('SIGINT', () => bot.stop('SIGINT'));
+    process.once('SIGINT', () => bot.stop('SIGINT'));
     process.once('SIGTERM', () => bot.stop('SIGTERM'));
 }
 
