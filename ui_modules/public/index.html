@@ -2,74 +2,46 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>AI Studio Mini App</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Личный кабинет</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="style.css">
+    <style>
+        body { font-family: Arial, sans-serif; background: #0f172a; color: #fff; padding: 20px; text-align: center; }
+        .card { background: #1e293b; padding: 20px; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        button { background: #3b82f6; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-size: 16px; cursor: pointer; width: 100%; margin-top: 10px; }
+        button:active { background: #2563eb; }
+        select { width: 100%; padding: 10px; border-radius: 8px; background: #334155; color: white; border: none; margin-top: 10px; }
+    </style>
 </head>
 <body>
-    <div id="app">
-        <header class="header">
-            <span id="user-name">Загрузка...</span>
-            <div class="balance-badge">💎 <span id="user-balance">0</span> кр.</div>
-        </header>
-
-        <nav class="nav-tabs">
-            <button class="tab-btn active" onclick="switchTab('templates', event)">🎨 Шаблоны</button>
-            <button class="tab-btn" onclick="switchTab('generate', event)">⚡ Студия</button>
-            <button class="tab-btn" onclick="switchTab('models', event)">🧠 Модели</button>
-        </nav>
-
-        <!-- Вкладка 1: Шаблоны -->
-        <section id="tab-templates" class="tab-content active">
-            <div class="section-header">
-                <h3>Шаблоны</h3>
-                <button class="btn-sm" onclick="openModal()">+ Создать</button>
-            </div>
-            <div id="templates-list" class="grid"></div>
-        </section>
-
-        <!-- Вкладка 2: Генерация -->
-        <section id="tab-generate" class="tab-content">
-            <form onsubmit="handleGenerate(event)">
-                <label>Модель:</label>
-                <select id="model-select" class="input-field"></select>
-
-                <label>Пропорции:</label>
-                <div class="ratios">
-                    <button type="button" class="ratio-btn active" onclick="setRatio('1:1', event)">1:1</button>
-                    <button type="button" class="ratio-btn" onclick="setRatio('16:9', event)">16:9</button>
-                    <button type="button" class="ratio-btn" onclick="setRatio('9:16', event)">9:16</button>
-                </div>
-
-                <label>Промпт:</label>
-                <textarea id="prompt-input" class="input-field" rows="4"></textarea>
-
-                <label>Фото-референс:</label>
-                <input type="file" id="image-upload" accept="image/*" class="input-field">
-
-                <button type="submit" class="btn-primary" id="btn-submit">Сгенерировать</button>
-            </form>
-            <div id="result-box" style="display:none; margin-top:12px;"></div>
-        </section>
-
-        <!-- Вкладка 3: Модели -->
-        <section id="tab-models" class="tab-content">
-            <div id="models-list"></div>
-        </section>
+    <h1>Личный кабинет 📱</h1>
+    
+    <div class="card">
+        <h3>Ваш баланс</h3>
+        <p style="font-size: 24px; font-weight: bold; color: #10b981;">1,500 кредитов</p>
+        <button onclick="buyTokens()">💳 Пополнить баланс</button>
     </div>
 
-    <!-- Модалка добавления шаблона -->
-    <div id="modal" class="modal" style="display:none;">
-        <div class="modal-body">
-            <h4>Новый шаблон</h4>
-            <input type="text" id="tpl-title" placeholder="Название" class="input-field">
-            <textarea id="tpl-pattern" placeholder="Промпт с переменными {subject}" class="input-field"></textarea>
-            <button class="btn-primary" onclick="saveTemplate()">Сохранить</button>
-            <button class="btn-secondary" onclick="closeModal()">Отмена</button>
-        </div>
+    <div class="card">
+        <h3>Выбор нейросети</h3>
+        <select id="aiModel" onchange="saveModel()">
+            <option value="gemini">Google Gemini 2.5 Flash</option>
+            <option value="other">Другая модель (Скоро)</option>
+        </select>
     </div>
 
-    <script src="app.js"></script>
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+
+        function buyTokens() {
+            alert("Здесь будет переход на оплату ЮKassa");
+        }
+
+        function saveModel() {
+            const selected = document.getElementById('aiModel').value;
+            tg.sendData(JSON.stringify({ action: "set_model", model: selected }));
+        }
+    </script>
 </body>
 </html>
