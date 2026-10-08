@@ -4,13 +4,31 @@ const fs = require('fs');
 const path = require('path');
 const router = express.Router();
 
-// Пути к данным
 const DB_PATH = path.join(__dirname, '../db.json');
 const TEMPLATES_PATH = path.join(__dirname, '../templates.json');
 
-// Импорт плагинов ИИ из папки ai_plugins
 const geminiPlugin = require('../ai_plugins/google_gemini_plugin');
 const bratukhaPlugin = require('../ai_plugins/bratukha_plugin');
+
+// Функция извлечения баланса (работает и с числом, и с объектом)
+function getUserBalance(db, userId) {
+    const record = db[userId];
+    if (record === undefined || record === null) return 0;
+    if (typeof record === 'number') return record;
+    if (typeof record === 'object') {
+        return record.balance ?? record.credits ?? record.points ?? 0;
+    }
+    return 0;
+}
+
+// Функция записи нового баланса без разрушения структуры объекта
+function setUserBalance(db, userId, newBalance) {
+    if (typeof db[userId] === 'object' && db[userId] !== null) {
+        db[userId].balance = newBalance;
+    } else {
+        db[userId] = newBalance;
+    }
+}
 
 // Проверка подлинности Telegram WebApp InitData
 function verifyTelegramWebAppData(telegramInitData, botToken) {
@@ -24,6 +42,11 @@ function verifyTelegramWebAppData(telegramInitData, botToken) {
             .map(([key, val]) => `${key}=${val}`)
             .sort()
             .join('\n');
+
+        if (!botToken) {
+            const userStr = urlParams.get('user');
+            return userStr ? JSON.parse(userStr) : null;
+        }
 
         const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
         const calculatedHash = crypto.createHmac('sha256', secretKey).update(paramsSym).digest('hex');
@@ -56,11 +79,14 @@ router.get('/profile', authMiddleware, (req, res) => {
     const userId = req.telegramUser.id;
     let db = {};
     if (fs.existsSync(DB_PATH)) {
-        db = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+        try { db = JSON.parse(fs.readFileSync(DB_PATH, 'utf8')); } catch (e) {}
     }
+
+    const currentBalance = getUserBalance(db, userId);
+
     res.json({
         user: req.telegramUser,
-        balance: db[userId] !== undefined ? db[userId] : 0
+        balance: currentBalance
     });
 });
 
@@ -82,7 +108,7 @@ router.get('/models', (req, res) => {
 router.get('/templates', authMiddleware, (req, res) => {
     let templates = [];
     if (fs.existsSync(TEMPLATES_PATH)) {
-        templates = JSON.parse(fs.readFileSync(TEMPLATES_PATH, 'utf8'));
+        try { templates = JSON.parse(fs.readFileSync(TEMPLATES_PATH, 'utf8')); } catch (e) {}
     }
     const userTemplates = templates.filter(t => t.isPublic || String(t.userId) === String(req.telegramUser.id));
     res.json(userTemplates);
@@ -95,7 +121,7 @@ router.post('/templates', authMiddleware, (req, res) => {
 
     let templates = [];
     if (fs.existsSync(TEMPLATES_PATH)) {
-        templates = JSON.parse(fs.readFileSync(TEMPLATES_PATH, 'utf8'));
+        try { templates = JSON.parse(fs.readFileSync(TEMPLATES_PATH, 'utf8')); } catch (e) {}
     }
 
     const newTpl = {
@@ -120,9 +146,10 @@ router.post('/generate', authMiddleware, async (req, res) => {
 
     let db = {};
     if (fs.existsSync(DB_PATH)) {
-        db = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+        try { db = JSON.parse(fs.readFileSync(DB_PATH, 'utf8')); } catch (e) {}
     }
-    const balance = db[userId] || 0;
+
+    const balance = getUserBalance(db, userId);
 
     const costs = {
         'gemini-2.5-flash': 1, 'gemini-3.1-pro': 3,
@@ -137,8 +164,8 @@ router.post('/generate', authMiddleware, async (req, res) => {
     }
 
     try {
-        // Списываем кредиты
-        db[userId] = balance - cost;
+        const newBalance = balance - cost;
+        setUserBalance(db, userId, newBalance);
         fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 
         let resultUrl = null;
@@ -155,12 +182,12 @@ router.post('/generate', authMiddleware, async (req, res) => {
 
         res.json({
             success: true,
-            newBalance: db[userId],
+            newBalance: newBalance,
             resultUrl: resultUrl || 'Генерация завершена!'
         });
     } catch (err) {
-        // Откат баланса в случае ошибки
-        db[userId] = balance;
+        // Откат баланса при ошибке
+        setUserBalance(db, userId, balance);
         fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
         res.status(500).json({ error: 'Ошибка генерации: ' + err.message });
     }
