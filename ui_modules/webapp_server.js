@@ -12,7 +12,12 @@ function startWebApp() {
     // 1. Раздача фронтенда из папки public
     app.use(express.static(path.join(__dirname, '../public')));
 
-    // 2. Подключение API роутов
+    // 2. При открытии главной страницы отдаем index.html
+    app.get('/', (req, res) => {
+        res.sendFile(path.join(__dirname, '../public/index.html'));
+    });
+
+    // 3. Подключение API роутов
     app.use('/api', apiRoutes);
 
     const PORT = process.env.PORT || 10000;
