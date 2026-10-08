@@ -8,9 +8,9 @@ const router = express.Router();
 const DB_PATH = path.join(__dirname, '../db.json');
 const TEMPLATES_PATH = path.join(__dirname, '../templates.json');
 
-// Импорт плагинов ИИ
-const geminiPlugin = require('../google_gemini_plugin');
-const bratukhaPlugin = require('../bratukha_plugin');
+// Импорт плагинов ИИ из папки ai_plugins
+const geminiPlugin = require('../ai_plugins/google_gemini_plugin');
+const bratukhaPlugin = require('../ai_plugins/bratukha_plugin');
 
 // Проверка подлинности Telegram WebApp InitData
 function verifyTelegramWebAppData(telegramInitData, botToken) {
