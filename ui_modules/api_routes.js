@@ -3,6 +3,19 @@ const express = require('express');
 const router = express.Router();
 const { getBalanceFromSheets, changeBalanceInSheets } = require('../core/sheets');
 
+// Промежуточный обработчик (middleware) авторизации/получения ID пользователя
+const authMiddleware = (req, res, next) => {
+    // Извлекаем userId из заголовка x-user-id, query-параметров или тела запроса
+    const userId = req.headers['x-user-id'] || req.query.userId || req.body?.userId;
+
+    if (!userId) {
+        return res.status(401).json({ error: 'Необходим userId' });
+    }
+
+    req.telegramUser = { id: userId };
+    next();
+};
+
 // 1. Получение профиля и баланса из Google Таблицы
 router.get('/profile', authMiddleware, async (req, res) => {
     const userId = req.telegramUser.id;
