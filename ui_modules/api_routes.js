@@ -10,23 +10,28 @@ const TEMPLATES_PATH = path.join(__dirname, '../templates.json');
 const geminiPlugin = require('../ai_plugins/google_gemini_plugin');
 const bratukhaPlugin = require('../ai_plugins/bratukha_plugin');
 
-// Функция извлечения баланса (работает и с числом, и с объектом)
+// Извлечение баланса с поддержкой любого формата в db.json
 function getUserBalance(db, userId) {
-    const record = db[userId];
+    const key = String(userId);
+    const record = db[key];
+    
     if (record === undefined || record === null) return 0;
     if (typeof record === 'number') return record;
     if (typeof record === 'object') {
-        return record.balance ?? record.credits ?? record.points ?? 0;
+        if (typeof record.balance === 'number') return record.balance;
+        if (typeof record.credits === 'number') return record.credits;
+        if (typeof record.points === 'number') return record.points;
     }
     return 0;
 }
 
-// Функция записи нового баланса без разрушения структуры объекта
+// Запись баланса без разрушения структуры объекта пользователя
 function setUserBalance(db, userId, newBalance) {
-    if (typeof db[userId] === 'object' && db[userId] !== null) {
-        db[userId].balance = newBalance;
+    const key = String(userId);
+    if (typeof db[key] === 'object' && db[key] !== null) {
+        db[key].balance = newBalance;
     } else {
-        db[userId] = newBalance;
+        db[key] = { balance: newBalance };
     }
 }
 
