@@ -1,167 +1,157 @@
 const tg = window.Telegram.WebApp;
-tg.expand();
+tg.expand(); // Развернуть на весь экран
 
+const API_BASE = '/api';
 let selectedRatio = '1:1';
-let templatesCache = [];
+let userProfile = null;
 
+// Инициализация при запуске
 document.addEventListener('DOMContentLoaded', async () => {
+    initTelegramTheme();
     await loadProfile();
     await loadModels();
     await loadTemplates();
+
+    // Настройка выбора соотношения сторон
+    document.querySelectorAll('.ratio-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.ratio-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            selectedRatio = e.target.dataset.ratio;
+        });
+    });
 });
 
-async function api(path, method = 'GET', body = null) {
-    try {
-        const res = await fetch('/api' + path, {
-            method,
-            headers: { 
-                'Content-Type': 'application/json', 
-                'x-telegram-init-data': tg.initData || '' 
-            },
-            body: body ? JSON.stringify(body) : null
-        });
-        return await res.json();
-    } catch (err) {
-        console.error('API Error:', err);
-        return { error: 'Ошибка сети' };
-    }
+function initTelegramTheme() {
+    document.body.style.setProperty('--bg-color', tg.themeParams.bg_color || '#18222d');
+    document.body.style.setProperty('--text-color', tg.themeParams.text_color || '#ffffff');
+    document.body.style.setProperty('--button-color', tg.themeParams.button_color || '#2ea6ff');
+}
+
+// Запрос с передачей initData Telegram
+async function apiRequest(endpoint, method = 'GET', body = null) {
+    const headers = {
+        'Content-Type': 'application/json',
+        'x-telegram-init-data': tg.initData
+    };
+    const options = { method, headers };
+    if (body) options.body = JSON.stringify(body);
+
+    const res = await fetch(API_BASE + endpoint, options);
+    return await res.json();
 }
 
 async function loadProfile() {
-    const res = await api('/profile');
-    if (res && res.user) {
-        const nameEl = document.getElementById('user-name');
-        const balanceEl = document.getElementById('user-balance');
-
-        if (nameEl) nameEl.innerText = res.user.first_name || 'Пользователь';
-
-        if (balanceEl) {
-            let b = res.balance;
-            if (typeof b === 'object' && b !== null) {
-                b = b.balance ?? b.credits ?? 0;
-            }
-            balanceEl.innerText = b;
-        }
+    const data = await apiRequest('/profile');
+    if (data.user) {
+        userProfile = data;
+        document.getElementById('user-name').innerText = data.user.first_name;
+        document.getElementById('user-balance').innerText = data.balance;
     }
 }
 
 async function loadModels() {
-    const models = await api('/models');
-    if (!Array.isArray(models)) return;
-
+    const models = await apiRequest('/models');
     const select = document.getElementById('model-select');
     const list = document.getElementById('models-list');
-    if (select) select.innerHTML = ''; 
-    if (list) list.innerHTML = '';
 
-    models.forEach(m => {
-        if (select) select.innerHTML += `<option value="${m.id}">${m.name} (${m.cost} кр.)</option>`;
-        if (list) list.innerHTML += `<div class="card"><strong>${m.name}</strong> (${m.cost} кр.)<p style="font-size:12px; opacity:0.7; margin:4px 0 0 0;">${m.desc}</p></div>`;
-    });
-}
-
-async function loadTemplates() {
-    const res = await api('/templates');
-    templatesCache = Array.isArray(res) ? res : [];
-    const list = document.getElementById('templates-list');
-    if (!list) return;
+    select.innerHTML = '';
     list.innerHTML = '';
 
-    templatesCache.forEach(t => {
+    models.forEach(m => {
+        // Опция в селект
+        select.innerHTML += `<option value="${m.id}">${m.name} (${m.cost} кр.)</option>`;
+
+        // Карточка в каталог моделей
         list.innerHTML += `
-            <div class="card">
-                <strong>${t.title}</strong>
-                <p style="font-size:12px; opacity:0.7;">${t.promptPattern}</p>
-                <button class="btn-primary" onclick="useTemplate('${t.id}')">Применить</button>
+            <div class="model-card">
+                <div>
+                    <strong>${m.name}</strong>
+                    <p>${m.desc}</p>
+                </div>
+                <div class="model-cost">${m.cost} кр.</div>
             </div>
         `;
     });
 }
 
-function useTemplate(id) {
-    const tpl = templatesCache.find(t => t.id === id);
-    if (!tpl) return;
+async function loadTemplates() {
+    const templates = await apiRequest('/templates');
+    const container = document.getElementById('templates-list');
+    container.innerHTML = '';
 
-    let p = tpl.promptPattern;
-    if (tpl.variables && tpl.variables.length > 0) {
-        tpl.variables.forEach(v => {
-            const val = prompt(`Значение для {${v}}:`, 'котик');
-            if (val) p = p.replace(new RegExp(`\\{${v}\\}`, 'g'), val);
-        });
-    }
-
-    const promptInput = document.getElementById('prompt-input');
-    if (promptInput) promptInput.value = p;
-    switchTab('generate');
+    templates.forEach(t => {
+        container.innerHTML += `
+            <div class="template-card" onclick="useTemplate('${t.id}')">
+                <h4>${t.title}</h4>
+                <p class="template-pattern">${t.promptPattern}</p>
+                <button class="btn-sm">Использовать</button>
+            </div>
+        `;
+    });
 }
 
-function switchTab(name, event) {
-    document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
-    document.querySelectorAll('.tab-btn').forEach(e => e.classList.remove('active'));
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
 
-    const tabEl = document.getElementById(`tab-${name}`);
-    if (tabEl) tabEl.classList.add('active');
-
-    if (event && event.target) {
-        event.target.classList.add('active');
-    } else {
-        const btn = document.querySelector(`.tab-btn[onclick*="'${name}'"]`);
-        if (btn) btn.classList.add('active');
-    }
+    document.getElementById(`tab-${tabName}`).classList.add('active');
+    event.target.classList.add('active');
 }
 
-function setRatio(r, event) {
-    document.querySelectorAll('.ratio-btn').forEach(b => b.classList.remove('active'));
-    if (event && event.target) event.target.classList.add('active');
-    selectedRatio = r;
+function openCreateTemplateModal() {
+    document.getElementById('template-modal').style.display = 'flex';
 }
 
-function openModal() { 
-    const m = document.getElementById('modal');
-    if (m) m.style.display = 'flex'; 
-}
-
-function closeModal() { 
-    const m = document.getElementById('modal');
-    if (m) m.style.display = 'none'; 
+function closeModal() {
+    document.getElementById('template-modal').style.display = 'none';
 }
 
 async function saveTemplate() {
     const title = document.getElementById('tpl-title').value;
     const promptPattern = document.getElementById('tpl-pattern').value;
-    const matches = promptPattern.match(/\{([^}]+)\}/g) || [];
-    const variables = matches.map(m => m.replace(/[\{\}]/g, ''));
+    const varsStr = document.getElementById('tpl-vars').value;
+    const variables = varsStr.split(',').map(v => v.trim());
 
-    await api('/templates', 'POST', { title, promptPattern, variables });
+    if (!title || !promptPattern) {
+        tg.showAlert('Заполните все поля!');
+        return;
+    }
+
+    await apiRequest('/templates', 'POST', { title, promptPattern, variables });
     closeModal();
+    tg.showAlert('Шаблон успешно сохранен!');
     loadTemplates();
 }
 
 async function handleGenerate(e) {
-    if (e) e.preventDefault();
-    const btn = document.getElementById('btn-submit');
-    if (btn) { btn.disabled = true; btn.innerText = 'Генерация...'; }
+    e.preventDefault();
+    const modelId = document.getElementById('model-select').value;
+    const prompt = document.getElementById('prompt-input').value;
 
-    const res = await api('/generate', 'POST', {
-        modelId: document.getElementById('model-select').value,
-        prompt: document.getElementById('prompt-input').value,
+    if (!prompt) {
+        tg.showAlert('Введите промпт!');
+        return;
+    }
+
+    const btn = document.getElementById('btn-generate');
+    btn.disabled = true;
+    btn.innerText = 'Генерация...';
+
+    const res = await apiRequest('/generate', 'POST', {
+        modelId,
+        prompt,
         aspectRatio: selectedRatio
     });
 
-    if (btn) { btn.disabled = false; btn.innerText = 'Сгенерировать'; }
+    btn.disabled = false;
+    btn.innerText = 'Сгенерировать';
 
-    if (res && res.success) {
-        const balanceEl = document.getElementById('user-balance');
-        if (balanceEl) balanceEl.innerText = res.newBalance;
-
-        const box = document.getElementById('result-box');
-        if (box) {
-            box.style.display = 'block';
-            box.innerHTML = typeof res.resultUrl === 'string' && res.resultUrl.startsWith('http')
-                ? `<img src="${res.resultUrl}" style="width:100%; border-radius:8px;" />`
-                : `<p>${res.resultUrl}</p>`;
-        }
+    if (res.success) {
+        document.getElementById('generation-result').style.display = 'block';
+        document.getElementById('result-content').innerHTML = `<p>🚀 ${res.message}. ID задачи: ${res.jobId}</p>`;
+        loadProfile(); // Обновить баланс
     } else {
-        alert((res && res.error) ? res.error : 'Ошибка генерации');
+        tg.showAlert(res.error || 'Ошибка при генерации');
     }
 }
