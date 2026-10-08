@@ -5,20 +5,21 @@ const apiRoutes = require('./api_routes');
 function startWebApp() {
     const app = express();
 
-    // Поддержка загрузки картинок (base64)
     app.use(express.json({ limit: '50mb' }));
     app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-    // 1. Раздача фронтенда из папки public
-    app.use(express.static(path.join(__dirname, '../public')));
+    const publicPath = path.join(__dirname, '../public');
 
-    // 2. При открытии главной страницы отдаем index.html
-    app.get('/', (req, res) => {
-        res.sendFile(path.join(__dirname, '../public/index.html'));
-    });
+    // 1. Раздача статических файлов (CSS, JS)
+    app.use(express.static(publicPath));
 
-    // 3. Подключение API роутов
+    // 2. Роуты API
     app.use('/api', apiRoutes);
+
+    // 3. Явная отдача index.html на любой главный запрос
+    app.get('/', (req, res) => {
+        res.sendFile(path.join(publicPath, 'index.html'));
+    });
 
     const PORT = process.env.PORT || 10000;
     app.listen(PORT, () => {
