@@ -163,11 +163,16 @@ const CREDIT_PACKAGES = {
     'pack_500': { credits: 500, price: 2500, title: '500 кредитов' }
 };
 
-const mainKeyboard = Markup.keyboard([
-    ['🤖 Выбрать модель ИИ', '💳 Мой баланс'],
-    ['💰 Пополнить баланс', '💬 Поддержка'],
-    ['ℹ Справка']
-]).resize();
+function getMainKeyboard() {
+    const buttons = [];
+    if (process.env.WEBAPP_URL) {
+        buttons.push([Markup.button.webApp('🚀 Открыть Студию ИИ', process.env.WEBAPP_URL)]);
+    }
+    buttons.push(['🤖 Выбрать модель ИИ', '💳 Мой баланс']);
+    buttons.push(['💰 Пополнить баланс', '💬 Поддержка']);
+    buttons.push(['ℹ Справка']);
+    return Markup.keyboard(buttons).resize();
+}
 
 async function getUserBalance(userId) {
     try {
@@ -349,18 +354,47 @@ async function startBot(app) {
         const currentMode = userActiveMode.get(ctx.from.id);
         const balance = await getUserBalance(ctx.from.id);
 
+        const inlineButtons = [];
+        if (process.env.WEBAPP_URL) {
+            inlineButtons.push([Markup.button.webApp('🚀 Открыть Студию ИИ', process.env.WEBAPP_URL)]);
+        }
+        inlineButtons.push([Markup.button.callback('💳 Баланс', 'check_balance')]);
+
         await ctx.reply(
-            `🤖 *Главное меню бота*\n\n` +
+            `Привет, ${ctx.from.first_name || 'друг'}! 👋\n\n` +
+            `Запускай Mini App для генерации по шаблонам, выбора всех ИИ-моделей и просмотра баланса!\n\n` +
             `💳 Ваш баланс: *${balance} кредитов*\n` +
-            `🎯 Текущая модель: *${MODEL_NAMES[currentMode] || currentMode}*\n\n` +
-            `Отправьте текстовый запрос или фото:`,
-            { parse_mode: 'Markdown', ...mainKeyboard }
+            `🎯 Текущая модель: *${MODEL_NAMES[currentMode] || currentMode}*`,
+            {
+                parse_mode: 'Markdown',
+                ...getMainKeyboard()
+            }
+        );
+
+        await ctx.reply(
+            `🚀 Быстрый доступ к сервисам:`,
+            Markup.inlineKeyboard(inlineButtons)
         );
     });
 
     bot.hears(['💳 Мой баланс', '💳 Баланс'], async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
+        const balance = await getUserBalance(ctx.from.id);
+        const currentMode = userActiveMode.get(ctx.from.id) || 'flash';
+        await ctx.reply(
+            `💳 *Баланс:* ${balance} кр.\nМодель: ${MODEL_NAMES[currentMode] || currentMode}`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.callback('💰 Пополнить баланс', 'action_buy_credits')]
+                ])
+            }
+        );
+    });
+
+    bot.action('check_balance', async (ctx) => {
+        await ctx.answerCbQuery();
         const balance = await getUserBalance(ctx.from.id);
         const currentMode = userActiveMode.get(ctx.from.id) || 'flash';
         await ctx.reply(
@@ -928,7 +962,7 @@ async function startBot(app) {
     });
 
     bot.launch().then(() => {
-        console.log('🤖 Бот успешно запущен!');
+        console.log('🤖 Ядро бота успешно запущено!');
     }).catch(err => {
         console.error('❌ Ошибка запуска бота:', err);
     });

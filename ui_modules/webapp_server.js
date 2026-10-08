@@ -1,22 +1,26 @@
 const express = require('express');
 const path = require('path');
+const apiRoutes = require('./api_routes');
 
 function startWebApp() {
     const app = express();
 
-    // Парсер JSON для приёма уведомлений от ЮKassa
-    app.use(express.json());
-    app.use(express.urlencoded({ extended: true }));
+    // Поддержка загрузки картинок (base64)
+    app.use(express.json({ limit: '50mb' }));
+    app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-    // Обслуживание файлов мини-приложения
+    // 1. Раздача фронтенда из папки public
     app.use(express.static(path.join(__dirname, '../public')));
+
+    // 2. Подключение API роутов
+    app.use('/api', apiRoutes);
 
     const PORT = process.env.PORT || 10000;
     app.listen(PORT, () => {
-        console.log(`📱 Интерфейс и Мини-приложение запущены на порту ${PORT}`);
+        console.log(`📱 WebApp сервер запущен на порту ${PORT}`);
     });
 
-    return app; // 👈 Главное: отдаём сервер дальше
+    return app;
 }
 
 module.exports = { startWebApp };
