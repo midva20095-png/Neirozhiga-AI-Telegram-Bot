@@ -162,8 +162,8 @@ const CREDIT_PACKAGES = {
 };
 
 const mainKeyboard = Markup.keyboard([
-    ['🤖 Выбрать модель ИИ', '💳 Мой баланс'],
-    ['💰 Пополнить баланс', '💬 Поддержка'],
+    ['🤖 Модель', '💳 Баланс'],
+    ['💰 Пополнить', '💬 Поддержка'],
     ['ℹ Справка']
 ]).resize();
 
@@ -172,7 +172,7 @@ async function getUserBalance(userId) {
         const response = await axios.get(`${process.env.GOOGLE_SCRIPT_URL}?action=get&userId=${userId}`);
         return response.data && response.data.balance !== undefined ? parseInt(response.data.balance) : 0;
     } catch (error) {
-        console.error("❌ Ошибка чтения баланса:", error.message);
+        console.error('❌ Ошибка чтения баланса:', error.message);
         return 0;
     }
 }
@@ -184,7 +184,7 @@ async function deductUserBalance(userId, cost) {
         });
         return response.data && response.data.balance !== undefined;
     } catch (error) {
-        console.error("❌ Ошибка списания:", error.message);
+        console.error('❌ Ошибка списания:', error.message);
         return false;
     }
 }
@@ -196,7 +196,7 @@ async function addUserBalance(userId, amount) {
         });
         return response.data && response.data.balance !== undefined;
     } catch (error) {
-        console.error("❌ Ошибка начисления:", error.message);
+        console.error('❌ Ошибка начисления:', error.message);
         return false;
     }
 }
@@ -211,53 +211,78 @@ async function getTelegramFileBuffer(ctx, fileId) {
     }
 }
 
-function getModelSelectionKeyboard(currentMode) {
-    const textModels = ['flash', 'flash_25', 'pro'];
-    const audioModels = ['qwen3-tts', 'qwen3-tts-flash'];
-    const imageModels = [
-        'nanobanana', 'nanobanana_pro', 'phota-enhance', 
-        'p-image-upscale', 'qwen-image-2-1', 'qwen-image-3-0', 
-        'recraft-creative-upscale', 'recraft-crisp-upscale', 'recraft-v4', 
-        'recraft-v4-1', 'runway-gen4-image', 'sam-3d', 'seedream-4-0', 
-        'seedream-4-5'
-    ];
-    const videoModels = [
-        'sora-2', 'seedance-1-0', 'seedance-1-5-pro', 
+const MODEL_GROUPS = {
+    text: ['flash', 'flash_25', 'pro'],
+    audio: ['qwen3-tts', 'qwen3-tts-flash'],
+    image: [
+        'nanobanana', 'nanobanana_pro', 'qwen-image-2-1', 'qwen-image-3-0',
+        'recraft-v4', 'recraft-v4-1', 'runway-gen4-image', 'seedream-4-0', 'seedream-4-5'
+    ],
+    fix: [
+        'phota-enhance', 'p-image-upscale', 'recraft-creative-upscale',
+        'recraft-crisp-upscale', 'sam-3d'
+    ],
+    video: [
+        'sora-2', 'seedance-1-0', 'seedance-1-5-pro',
         'seedance-2-0-apimart', 'pruna-ai-p-video-2-pro'
-    ];
+    ]
+};
 
-    const buttons = [];
+const MODEL_SHORT = {
+    flash: 'Flash', flash_25: 'Flash 2.5', pro: 'Pro',
+    'qwen3-tts': 'Озвучка', 'qwen3-tts-flash': 'Озвучка быстрая',
+    nanobanana: 'Nano Banana', nanobanana_pro: 'Nano Pro',
+    'qwen-image-2-1': 'Qwen 2.1', 'qwen-image-3-0': 'Qwen 3.0',
+    'recraft-v4': 'Recraft 4', 'recraft-v4-1': 'Recraft 4.1',
+    'runway-gen4-image': 'Runway', 'seedream-4-0': 'Seedream 4', 'seedream-4-5': 'Seedream 4.5',
+    'phota-enhance': 'Улучшить фото', 'p-image-upscale': 'Резкость',
+    'recraft-creative-upscale': 'Апскейл креатив', 'recraft-crisp-upscale': 'Апскейл чёткий',
+    'sam-3d': 'Фото в 3D',
+    'sora-2': 'Sora 2', 'seedance-1-0': 'Seedance 1', 'seedance-1-5-pro': 'Seedance 1.5',
+    'seedance-2-0-apimart': 'Seedance 2', 'pruna-ai-p-video-2-pro': 'Pruna Video'
+};
 
-    buttons.push([Markup.button.callback('💬 ─── ТЕКСТОВЫЕ МОДЕЛИ ───', 'noop_text')]);
-    textModels.forEach(key => {
-        const isSelected = key === currentMode ? '✅ ' : '';
-        const cost = MODEL_COSTS[key];
-        buttons.push([Markup.button.callback(`${isSelected}[${cost} кр] ${MODEL_NAMES[key]}`, `set_model_${key}`)]);
-    });
-
-    buttons.push([Markup.button.callback('🎵 ─── АУДИО И ГОЛОС ───', 'noop_audio')]);
-    audioModels.forEach(key => {
-        const isSelected = key === currentMode ? '✅ ' : '';
-        const cost = MODEL_COSTS[key];
-        buttons.push([Markup.button.callback(`${isSelected}[${cost} кр] ${MODEL_NAMES[key]}`, `set_model_${key}`)]);
-    });
-
-    buttons.push([Markup.button.callback('🎨 ─── КАРТИНКИ, 3D И АПСКЕЙЛ ───', 'noop_image')]);
-    imageModels.forEach(key => {
-        const isSelected = key === currentMode ? '✅ ' : '';
-        const cost = MODEL_COSTS[key];
-        buttons.push([Markup.button.callback(`${isSelected}[${cost} кр] ${MODEL_NAMES[key]}`, `set_model_${key}`)]);
-    });
-
-    buttons.push([Markup.button.callback('🎬 ─── ВИДЕО И АНИМАЦИЯ ───', 'noop_video')]);
-    videoModels.forEach(key => {
-        const isSelected = key === currentMode ? '✅ ' : '';
-        const cost = MODEL_COSTS[key];
-        buttons.push([Markup.button.callback(`${isSelected}[${cost} кр] ${MODEL_NAMES[key]}`, `set_model_${key}`)]);
-    });
-
-    return Markup.inlineKeyboard(buttons);
+function modelButton(key, currentMode) {
+    const mark = key === currentMode ? '✅ ' : '';
+    const cost = MODEL_COSTS[key];
+    const title = MODEL_SHORT[key] || key;
+    return Markup.button.callback(`${mark}${cost} кр · ${title}`, `set_model_${key}`);
 }
+
+function rowsOf(keys, currentMode) {
+    const rows = [];
+    for (let i = 0; i < keys.length; i += 2) {
+        const row = [modelButton(keys[i], currentMode)];
+        if (keys[i + 1]) row.push(modelButton(keys[i + 1], currentMode));
+        rows.push(row);
+    }
+    return rows;
+}
+
+function getModelSelectionKeyboard(currentMode) {
+    const now = MODEL_SHORT[currentMode] || currentMode;
+    const cost = MODEL_COSTS[currentMode] || '';
+    return Markup.inlineKeyboard([
+        [Markup.button.callback('💬 Текст', 'models_text'), Markup.button.callback('🎵 Голос', 'models_audio')],
+        [Markup.button.callback('🎨 Картинки', 'models_image'), Markup.button.callback('✨ Улучшить', 'models_fix')],
+        [Markup.button.callback('🎬 Видео', 'models_video')],
+        [Markup.button.callback(`Сейчас: ${now} · ${cost} кр`, 'noop_current')]
+    ]);
+}
+
+function getGroupKeyboard(group, currentMode) {
+    const rows = rowsOf(MODEL_GROUPS[group] || [], currentMode);
+    rows.push([Markup.button.callback('← Разделы', 'models_home')]);
+    return Markup.inlineKeyboard(rows);
+}
+
+const GROUP_TITLES = {
+    text: '💬 Текст',
+    audio: '🎵 Голос',
+    image: '🎨 Картинки',
+    fix: '✨ Улучшить фото',
+    video: '🎬 Видео'
+};
 
 async function createYookassaPayment(amount, description, email, metadata) {
     try {
@@ -356,7 +381,7 @@ async function startBot(app) {
         );
     });
 
-    bot.hears(['💳 Мой баланс', '💳 Баланс'], async (ctx) => {
+    bot.hears(['💳 Баланс', '💳 Мой баланс', '💳 Баланс'], async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
         const balance = await getUserBalance(ctx.from.id);
@@ -372,22 +397,25 @@ async function startBot(app) {
         );
     });
 
-    bot.hears(['🤖 Выбрать модель ИИ', '🤖 Модели'], async (ctx) => {
+    bot.hears(['🤖 Модель', '🤖 Выбрать модель ИИ', '🤖 Модели'], async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
         const currentMode = userActiveMode.get(ctx.from.id) || 'flash';
-        
-        const menuHeader = 
-            `🤖 *Выберите нейросеть для работы:*\n\n` +
-            `💡 *Маркировка требований на кнопках:*\n` +
-            `• 📝 — нужен только текст (промпт)\n` +
-            `• 📝/📷 — можно отправить текст или фото\n` +
-            `• 📷! — **обязательно** прикрепить фото`;
-
-        await ctx.reply(menuHeader, { parse_mode: 'Markdown', ...getModelSelectionKeyboard(currentMode) });
+        await ctx.reply('Выберите раздел, потом модель.', getModelSelectionKeyboard(currentMode));
     });
 
-    bot.hears('💰 Пополнить баланс', async (ctx) => {
+    bot.action(/^models_(text|audio|image|fix|video|home)$/, async (ctx) => {
+        const group = ctx.match[1];
+        const currentMode = userActiveMode.get(ctx.from.id) || 'flash';
+        await ctx.answerCbQuery();
+        const title = group === 'home' ? 'Выберите раздел, потом модель.' : (GROUP_TITLES[group] || 'Модели');
+        const kb = group === 'home' ? getModelSelectionKeyboard(currentMode) : getGroupKeyboard(group, currentMode);
+        try {
+            await ctx.editMessageText(title, kb);
+        } catch (e) {}
+    });
+
+    bot.hears(['💰 Пополнить', '💰 Пополнить баланс'], async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
         const keyboard = Object.keys(CREDIT_PACKAGES).map(pkgKey => {
@@ -439,15 +467,7 @@ async function startBot(app) {
         userAwaitingEmail.delete(ctx.from.id);
         await ctx.answerCbQuery();
         const currentMode = userActiveMode.get(ctx.from.id) || 'flash';
-        
-        const menuHeader = 
-            `🤖 *Выберите нейросеть для работы:*\n\n` +
-            `💡 *Маркировка требований на кнопках:*\n` +
-            `• 📝 — нужен только текст (промпт)\n` +
-            `• 📝/📷 — можно отправить текст или фото\n` +
-            `• 📷! — **обязательно** прикрепить фото`;
-
-        await ctx.reply(menuHeader, { parse_mode: 'Markdown', ...getModelSelectionKeyboard(currentMode) });
+        await ctx.reply('Выберите раздел, потом модель.', getModelSelectionKeyboard(currentMode));
     });
 
     bot.action(/^set_model_(.+)$/, async (ctx) => {
@@ -456,8 +476,13 @@ async function startBot(app) {
 
         if (MODEL_NAMES[selectedModel]) {
             userActiveMode.set(ctx.from.id, selectedModel);
-            await ctx.answerCbQuery(`Выбрано: ${MODEL_NAMES[selectedModel]}`);
-            await ctx.reply(`✅ Выбрана модель: *${MODEL_NAMES[selectedModel]}*`, { parse_mode: 'Markdown' });
+            await ctx.answerCbQuery(`Выбрано: ${MODEL_SHORT[selectedModel] || selectedModel}`);
+            const done = `Выбрано: ${MODEL_SHORT[selectedModel] || selectedModel} · ${MODEL_COSTS[selectedModel]} кр. Можно писать запрос.`;
+            try {
+                await ctx.editMessageText(done, getModelSelectionKeyboard(selectedModel));
+            } catch (e) {
+                await ctx.reply(done);
+            }
         }
     });
 
@@ -581,7 +606,7 @@ async function startBot(app) {
 
     const handleAiRequest = async (ctx) => {
         const text = ctx.message?.text || '';
-        if (['🤖 Выбрать модель ИИ', '💳 Мой баланс', '💰 Пополнить баланс', '💬 Поддержка', 'ℹ Справка', 'ℹ️ Справка', '🤖 Модели', '💳 Баланс'].includes(text)) {
+        if (['🤖 Модель', '🤖 Выбрать модель ИИ', '💳 Мой баланс', '💳 Баланс', '💰 Пополнить', '💰 Пополнить баланс', '💬 Поддержка', 'ℹ Справка', 'ℹ️ Справка', '🤖 Модели'].includes(text)) {
             return;
         }
 
