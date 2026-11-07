@@ -21,7 +21,7 @@ try {
 
 // Роутер выбора плагина
 function getAiPlugin(modelKey) {
-    if (['flash', 'flash_25', 'pro', 'nanobanana', 'nanobanana_pro', 'veo'].includes(modelKey)) {
+    if (['flash', 'flash_25', 'pro', 'nanobanana', 'nanobanana_pro'].includes(modelKey)) {
         return googlePlugin;
     }
     return bratukhaPlugin;
@@ -85,40 +85,38 @@ bot.use(async (ctx, next) => {
     return next();
 });
 
-// 💰 Стоимость моделей по подразделам (в кредитах)
+// 💰 Стоимость моделей в кредитах. 1 кредит = 1 ₽, как на сайте.
+// Google-модели — те же цифры, что в CREDIT_COSTS сайта.
+// Остальные модели на сайте не продаются: цифра умножена на 5,
+// потому что раньше 1 кредит бота стоил 5 ₽, и цена в рублях не должна упасть.
 const MODEL_COSTS = {
-    // 🟢 Текстовые и Мультимодальные Google
-    'flash': 1,
-    'flash_25': 1,
-    'pro': 3,
-    'nanobanana': 4,
-    'nanobanana_pro': 10,
+    'flash': 4,
+    'flash_25': 4,
+    'pro': 15,
+    'nanobanana': 20,
+    'nanobanana_pro': 50,
 
-    // 🎵 Аудио и голос
-    'qwen3-tts': 20,
-    'qwen3-tts-flash': 20,
+    'qwen3-tts': 100,
+    'qwen3-tts-flash': 100,
 
-    // 🖼 Картинки, 3D и Апскейл
-    'phota-enhance': 44,
-    'p-image-upscale': 2,
-    'qwen-image-2-1': 8,
-    'qwen-image-3-0': 9,
-    'recraft-creative-upscale': 80,
-    'recraft-crisp-upscale': 2,
-    'recraft-v4': 3,
-    'recraft-v4-1': 4,
-    'runway-gen4-image': 16,
-    'sam-3d': 8,
-    'seedream-4-0': 3,
-    'seedream-4-5': 4,
+    'phota-enhance': 220,
+    'p-image-upscale': 10,
+    'qwen-image-2-1': 40,
+    'qwen-image-3-0': 45,
+    'recraft-creative-upscale': 400,
+    'recraft-crisp-upscale': 10,
+    'recraft-v4': 15,
+    'recraft-v4-1': 20,
+    'runway-gen4-image': 80,
+    'sam-3d': 40,
+    'seedream-4-0': 15,
+    'seedream-4-5': 20,
 
-    // 🎬 Видео и Анимация
-    'veo': 400,
-    'sora-2': 30,
-    'seedance-1-0': 20,
-    'seedance-1-5-pro': 24,
-    'seedance-2-0-apimart': 20,
-    'pruna-ai-p-video-2-pro': 14
+    'sora-2': 150,
+    'seedance-1-0': 100,
+    'seedance-1-5-pro': 120,
+    'seedance-2-0-apimart': 100,
+    'pruna-ai-p-video-2-pro': 70
 };
 
 // 🏷 Названия моделей с емким описанием
@@ -149,7 +147,6 @@ const MODEL_NAMES = {
     'seedream-4-5': 'Seedream 4.5 🌈 (Продвинутый арт) 📝/📷',
 
     // 🎬 Видео и Анимация
-    'veo': 'Veo 3.1 🎬 (Видео по тексту/фото) 📝/📷/🎥',
     'sora-2': 'Sora 2.0 🌟 (Анимация фото) 📷!',
     'seedance-1-0': 'Seedance 1.0 💃 (Анимация тела) 📷!',
     'seedance-1-5-pro': 'Seedance 1.5 Pro 💃 (Видео из фото) 📷!',
@@ -158,9 +155,10 @@ const MODEL_NAMES = {
 };
 
 const CREDIT_PACKAGES = {
-    'pack_50': { credits: 50, price: 250, title: '50 кредитов' },
-    'pack_150': { credits: 150, price: 750, title: '150 кредитов' },
-    'pack_500': { credits: 500, price: 2500, title: '500 кредитов' }
+    'pack_100': { credits: 100, price: 100, title: '100 кредитов' },
+    'pack_500': { credits: 500, price: 500, title: '500 кредитов' },
+    'pack_1000': { credits: 1000, price: 1000, title: '1000 кредитов' },
+    'pack_2500': { credits: 2500, price: 2500, title: '2500 кредитов' }
 };
 
 const mainKeyboard = Markup.keyboard([
@@ -224,7 +222,7 @@ function getModelSelectionKeyboard(currentMode) {
         'seedream-4-5'
     ];
     const videoModels = [
-        'veo', 'sora-2', 'seedance-1-0', 'seedance-1-5-pro', 
+        'sora-2', 'seedance-1-0', 'seedance-1-5-pro', 
         'seedance-2-0-apimart', 'pruna-ai-p-video-2-pro'
     ];
 
@@ -677,6 +675,10 @@ async function startBot(app) {
         }
 
         let currentMode = userActiveMode.get(userId) || 'flash';
+        if (currentMode === 'veo' || !MODEL_NAMES[currentMode]) {
+            currentMode = 'flash';
+            userActiveMode.set(userId, 'flash');
+        }
 
         let fileBuffers = [];
         let mimeType = 'image/jpeg';
@@ -806,6 +808,10 @@ async function startBot(app) {
         }
 
         let currentMode = userActiveMode.get(userId) || 'flash';
+        if (currentMode === 'veo' || !MODEL_NAMES[currentMode]) {
+            currentMode = 'flash';
+            userActiveMode.set(userId, 'flash');
+        }
 
         let fileBuffers = [];
         let mimeType = 'image/jpeg';
