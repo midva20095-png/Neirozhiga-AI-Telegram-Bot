@@ -47,7 +47,6 @@ button{cursor:pointer}
 </head>
 <body>
 <div class="app">
-  <a href="/Neirozhiga-bot.zip" download="Neirozhiga-bot.zip" style="display:block;text-align:center;text-decoration:none;background:linear-gradient(135deg,#00ffe0,#b366ff 55%,#ff2d95);color:#fff;font-weight:800;border-radius:14px;padding:14px;margin-bottom:12px">Скачать архив бота</a>
   <div class="top">
     <div class="logo">НейроЯга AI</div>
     <a class="site" href="https://babayagaland.ru" target="_blank" rel="noopener">На сайт</a>
@@ -98,18 +97,24 @@ let userId = null;
 function tg(){ return window.Telegram && window.Telegram.WebApp; }
 function parseUser(raw){
   if (!raw) return null;
-  try {
-    const p = new URLSearchParams(raw);
-    const u = JSON.parse(p.get('user') || 'null');
-    return u && u.id ? u.id : null;
-  } catch (e) { return null; }
+  const attempts = [raw];
+  try { attempts.push(decodeURIComponent(raw)); } catch (e) {}
+  for (const src of attempts) {
+    try {
+      const p = new URLSearchParams(src);
+      const u = JSON.parse(p.get('user') || 'null');
+      if (u && u.id) return u.id;
+    } catch (e) {}
+  }
+  return null;
 }
 function detectUser(){
   const w = tg();
   if (w && w.initDataUnsafe && w.initDataUnsafe.user && w.initDataUnsafe.user.id) return w.initDataUnsafe.user.id;
   if (w && w.initData) { const id = parseUser(w.initData); if (id) return id; }
-  const hash = new URLSearchParams((location.hash || '').replace(/^#/, ''));
-  const fromHash = parseUser(hash.get('tgWebAppData') || '');
+  const hash = (location.hash || '').replace(/^#/, '');
+  const hp = new URLSearchParams(hash);
+  const fromHash = parseUser(hp.get('tgWebAppData') || hash);
   if (fromHash) return fromHash;
   const q = new URLSearchParams(location.search);
   if (q.get('userId')) return q.get('userId');
@@ -243,8 +248,12 @@ document.getElementById('tabs').onclick = function(e){
 };
 const w = tg();
 if (w) { try { w.ready(); w.expand(); w.setHeaderColor('#0b0614'); w.setBackgroundColor('#0b0614'); } catch(e){} }
-load();
-setTimeout(load, 400);
+let tries = 0;
+function boot(){
+  load();
+  if (!userId && tries < 15) { tries++; setTimeout(boot, 300); }
+}
+boot();
 </script>
 </body>
 </html>
