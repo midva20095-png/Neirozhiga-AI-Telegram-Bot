@@ -62,6 +62,15 @@ async function initDB() {
       );
     }
   }
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS gigachat_usage (
+      user_id BIGINT NOT NULL,
+      model TEXT NOT NULL,
+      day DATE NOT NULL,
+      count INTEGER DEFAULT 0,
+      PRIMARY KEY (user_id, model, day)
+    )
+  `);
   console.log('✅ Таблица users готова (PostgreSQL)');
 }
 
@@ -187,6 +196,27 @@ async function deleteTemplate(id) {
   await pool.query('DELETE FROM templates WHERE id = $1', [id]);
 }
 
+const GIGA_LIMITS = { 'giga-lite': 30, 'giga-pro': 10, 'giga-max': 5, 'giga-ultra': 5 };
+
+async function checkGigaLimit(userId, model) {
+  const limit = GIGA_LIMITS[model] || 10;
+  const res = await pool.query(
+    `SELECT count FROM gigachat_usage WHERE user_id=$1 AND model=$2 AND day=CURRENT_DATE`,
+    [String(userId), model]
+  );
+  const used = res.rows[0] ? res.rows[0].count : 0;
+  return { ok: used < limit, used, limit };
+}
+
+async function addGigaUse(userId, model) {
+  await pool.query(
+    `INSERT INTO gigachat_usage (user_id, model, day, count)
+     VALUES ($1, $2, CURRENT_DATE, 1)
+     ON CONFLICT (user_id, model, day) DO UPDATE SET count = gigachat_usage.count + 1`,
+    [String(userId), model]
+  );
+}
+
 module.exports = {
   initDB,
   getUser,
@@ -200,5 +230,8 @@ module.exports = {
   listTemplates,
   saveTemplate,
   deleteTemplate,
+  checkGigaLimit,
+  addGigaUse,
+  GIGA_LIMITS,
   pool,
 };
