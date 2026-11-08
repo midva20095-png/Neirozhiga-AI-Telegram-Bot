@@ -162,12 +162,12 @@ const CREDIT_PACKAGES = {
     'pack_2500': { credits: 2500, price: 2500, title: '2500 кредитов' }
 };
 
-const WEBAPP_URL = process.env.WEBAPP_URL || process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null;
+const WEBAPP_URL = process.env.WEBAPP_URL || 'https://neurozhiga-ai-telegram-bot-production.up.railway.app';
 
 const mainKeyboard = Markup.keyboard([
     ['🤖 Модель', '💳 Баланс'],
     ['💰 Пополнить', '💬 Поддержка'],
-    WEBAPP_URL ? [Markup.button.webApp('📱 Личный кабинет', WEBAPP_URL)] : [],
+    [Markup.button.webApp('📱 Личный кабинет', WEBAPP_URL)],
     ['ℹ Справка']
 ]).resize();
 

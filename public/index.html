@@ -6,124 +6,151 @@
     <title>Личный кабинет</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
+        :root {
+            --bg: #0f0f0f;
+            --card: #1c1c1e;
+            --accent: #8b5cf6;
+            --text: #ffffff;
+            --text-secondary: #8e8e93;
+            --success: #30d158;
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--tg-theme-bg-color, #0f172a);
-            color: var(--tg-theme-text-color, #ffffff);
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+            background: var(--bg);
+            color: var(--text);
             padding: 16px;
             min-height: 100vh;
         }
+        .header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        .header h1 {
+            font-size: 22px;
+            font-weight: 700;
+        }
         .card {
-            background: var(--tg-theme-secondary-bg-color, #1e293b);
+            background: var(--card);
             border-radius: 16px;
             padding: 20px;
             margin-bottom: 16px;
         }
-        h1 { font-size: 22px; margin-bottom: 8px; text-align: center; }
-        h3 { font-size: 16px; margin-bottom: 12px; opacity: 0.9; }
-        .balance {
-            font-size: 32px;
+        .balance-value {
+            font-size: 40px;
             font-weight: 700;
-            color: #10b981;
+            color: var(--success);
             text-align: center;
-            margin: 8px 0 16px;
+            margin: 8px 0 4px;
+        }
+        .balance-label {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 16px;
         }
         button {
-            background: var(--tg-theme-button-color, #3b82f6);
-            color: var(--tg-theme-button-text-color, #fff);
+            background: var(--accent);
+            color: white;
             border: none;
-            padding: 14px 20px;
+            padding: 14px;
             border-radius: 12px;
             font-size: 16px;
             font-weight: 600;
+            width: 100%;
             cursor: pointer;
-            width: 100%;
-            margin-top: 10px;
         }
-        button:active { opacity: 0.85; }
-        select, .model-list {
-            width: 100%;
-            padding: 12px;
-            border-radius: 12px;
-            background: #334155;
-            color: #fff;
-            border: none;
-            font-size: 15px;
-            margin-top: 8px;
+        button:active { opacity: 0.8; }
+        .section-title {
+            font-size: 13px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
         }
         .model-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 12px;
-            background: #334155;
-            border-radius: 10px;
-            margin-top: 8px;
+            padding: 14px 16px;
+            background: #2c2c2e;
+            border-radius: 12px;
+            margin-bottom: 8px;
             cursor: pointer;
+            transition: background 0.15s;
         }
-        .model-item.active { background: #3b82f6; }
-        .loading { text-align: center; opacity: 0.7; padding: 20px; }
+        .model-item.active {
+            background: var(--accent);
+        }
+        .model-name { font-weight: 600; }
+        .model-cost { color: var(--text-secondary); font-size: 14px; }
+        .model-item.active .model-cost { color: rgba(255,255,255,0.8); }
+        .loading { text-align: center; color: var(--text-secondary); padding: 40px 0; }
     </style>
 </head>
 <body>
-    <h1>📱 Личный кабинет</h1>
-
-    <div class="card">
-        <h3>Баланс</h3>
-        <div class="balance" id="balance">Загрузка...</div>
-        <button onclick="openBuy()">💳 Пополнить баланс</button>
+    <div class="header">
+        <h1>Личный кабинет</h1>
     </div>
 
     <div class="card">
-        <h3>Текущая модель</h3>
-        <div id="currentModel" style="text-align:center; font-size:18px; margin-bottom:12px;">—</div>
-        <div id="models"></div>
+        <div class="section-title">Баланс</div>
+        <div class="balance-value" id="balance">—</div>
+        <div class="balance-label">кредитов</div>
+        <button onclick="buyCredits()">Пополнить баланс</button>
     </div>
 
-    <div class="card" style="text-align:center; opacity:0.7; font-size:13px;">
-        Данные синхронизируются с ботом
+    <div class="card">
+        <div class="section-title">Текущая модель</div>
+        <div id="models" class="loading">Загрузка...</div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.ready();
         tg.expand();
+        tg.setHeaderColor('#0f0f0f');
+        tg.setBackgroundColor('#0f0f0f');
 
-        const user = tg.initDataUnsafe?.user || {};
-        const userId = user.id;
+        const user = tg.initDataUnsafe?.user;
+        const userId = user?.id;
 
         const MODELS = [
-            { key: 'flash', name: 'Gemini Flash ⚡️', cost: 4 },
-            { key: 'pro', name: 'Gemini Pro 🧠', cost: 15 },
-            { key: 'nanobanana', name: 'Nano Banana 🎨', cost: 20 },
-            { key: 'nanobanana_pro', name: 'Nano Banana Pro 💎', cost: 50 },
-            { key: 'qwen-image-3-0', name: 'Qwen Image 3.0 🎨', cost: 45 },
-            { key: 'sora-2', name: 'Sora 2.0 🌟', cost: 150 },
+            { key: 'flash', name: 'Gemini Flash', cost: 4, desc: 'Быстрый текст' },
+            { key: 'pro', name: 'Gemini Pro', cost: 15, desc: 'Аналитика' },
+            { key: 'nanobanana', name: 'Nano Banana', cost: 20, desc: 'Картинки' },
+            { key: 'nanobanana_pro', name: 'Nano Banana Pro', cost: 50, desc: 'Про-фото' },
+            { key: 'qwen-image-3-0', name: 'Qwen Image 3.0', cost: 45, desc: 'Арт' },
+            { key: 'sora-2', name: 'Sora 2.0', cost: 150, desc: 'Видео' },
         ];
 
-        async function loadProfile() {
+        async function load() {
             if (!userId) {
-                document.getElementById('balance').textContent = 'Откройте через бота';
+                document.getElementById('balance').textContent = '0';
+                document.getElementById('models').innerHTML = '<div style="text-align:center;color:#8e8e93">Откройте через бота</div>';
                 return;
             }
+
             try {
                 const res = await fetch(`/api/me?userId=${userId}`);
                 const data = await res.json();
-                document.getElementById('balance').textContent = `${data.balance} кредитов`;
-                document.getElementById('currentModel').textContent = data.current_model || 'flash';
-                renderModels(data.current_model);
+                document.getElementById('balance').textContent = data.balance ?? 0;
+                renderModels(data.current_model || 'flash');
             } catch (e) {
-                document.getElementById('balance').textContent = 'Ошибка загрузки';
+                document.getElementById('balance').textContent = '0';
+                document.getElementById('models').innerHTML = '<div style="text-align:center;color:#ff453a">Ошибка загрузки</div>';
             }
         }
 
         function renderModels(current) {
-            const container = document.getElementById('models');
-            container.innerHTML = MODELS.map(m => `
+            const el = document.getElementById('models');
+            el.innerHTML = MODELS.map(m => `
                 <div class="model-item ${m.key === current ? 'active' : ''}" onclick="setModel('${m.key}')">
-                    <span>${m.name}</span>
-                    <span>${m.cost} кр</span>
+                    <div>
+                        <div class="model-name">${m.name}</div>
+                        <div style="font-size:12px;opacity:0.7">${m.desc}</div>
+                    </div>
+                    <div class="model-cost">${m.cost} кр</div>
                 </div>
             `).join('');
         }
@@ -136,22 +163,19 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ userId, model })
                 });
-                tg.showAlert(`Модель изменена на ${model}`);
-                loadProfile();
-                // Можно отправить данные боту
-                tg.sendData(JSON.stringify({ action: 'set_model', model }));
+                tg.HapticFeedback.notificationOccurred('success');
+                load();
             } catch (e) {
                 tg.showAlert('Не удалось сменить модель');
             }
         }
 
-        function openBuy() {
-            // Можно открыть ссылку на оплату или отправить боту команду
+        function buyCredits() {
             tg.sendData(JSON.stringify({ action: 'buy_credits' }));
             tg.close();
         }
 
-        loadProfile();
+        load();
     </script>
 </body>
 </html>
