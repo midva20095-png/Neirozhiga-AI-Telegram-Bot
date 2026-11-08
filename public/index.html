@@ -148,6 +148,7 @@ async function load(){
     draw();
     return;
   }
+  if (!userId) { draw(); return; }
   try {
     const r = await fetch('/api/me?userId=' + encodeURIComponent(userId));
     me = await r.json();
@@ -167,7 +168,7 @@ function draw(){
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === tab));
   const box = document.getElementById('view');
   if (!userId) {
-    box.innerHTML = '<div class="card"><div class="k">Кабинет</div><p class="empty">Откройте кабинет кнопкой «Личный кабинет» внутри бота — так Telegram передаёт ваш аккаунт.</p><a class="btn" style="display:block;text-align:center;text-decoration:none" href="https://babayagaland.ru/kabinet">Кабинет на сайте</a></div>';
+    box.innerHTML = '<div class="card"><div class="k">Кабинет</div><p class="empty">Нажмите кнопку «Открыть кабинет» под сообщением /start. Нижнее меню аккаунт не передаёт.</p><a class="btn" style="display:block;text-align:center;text-decoration:none" href="https://babayagaland.ru/kabinet">Кабинет на сайте</a></div>';
     return;
   }
   if (me && me.blocked) {

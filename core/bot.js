@@ -162,12 +162,11 @@ const CREDIT_PACKAGES = {
     'pack_2500': { credits: 2500, price: 2500, title: '2500 кредитов' }
 };
 
-const WEBAPP_URL = (process.env.WEBAPP_URL || 'https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app').replace(/\/$/, '') + '?v=4';
+const WEBAPP_URL = (process.env.WEBAPP_URL || 'https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app').replace(/\/$/, '') + '?v=5';
 
 const mainKeyboard = Markup.keyboard([
     ['🤖 Модель', '💳 Баланс'],
     ['💰 Пополнить', '💬 Поддержка'],
-    [Markup.button.webApp('📱 Личный кабинет', WEBAPP_URL)],
     ['ℹ Справка']
 ]).resize();
 

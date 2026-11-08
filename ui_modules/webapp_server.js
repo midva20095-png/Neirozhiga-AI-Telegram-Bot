@@ -20,7 +20,7 @@ function startWebApp() {
     app.get('/api/me', async (req, res) => {
         try {
             const userId = req.query.userId || req.headers['x-telegram-user-id'];
-            if (!userId) return res.status(400).json({ error: 'userId required' });
+            if (!userId || !/^\d+$/.test(String(userId))) return res.status(400).json({ error: 'userId required' });
             const user = await db.getUser(userId);
             const history = await db.listHistory(userId, 40);
             res.json({
@@ -89,7 +89,7 @@ function startWebApp() {
     app.post('/api/admin/block', async (req, res) => {
         try {
             const { userId, blocked } = req.body;
-            if (!userId) return res.status(400).json({ error: 'userId required' });
+            if (!userId || !/^\d+$/.test(String(userId))) return res.status(400).json({ error: 'userId required' });
             let next = blocked;
             if (typeof next !== 'boolean') {
                 const user = await db.getUser(userId);
