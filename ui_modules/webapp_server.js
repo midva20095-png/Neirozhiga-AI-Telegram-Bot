@@ -89,6 +89,21 @@ function startWebApp() {
         }
     });
 
+    app.post('/api/admin/block', async (req, res) => {
+        try {
+            const { userId } = req.body;
+            if (!userId) return res.status(400).json({ error: 'userId required' });
+            // Простая блокировка через поле blocked (нужно добавить колонку)
+            await db.pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked BOOLEAN DEFAULT false`);
+            const cur = await db.pool.query(`SELECT blocked FROM users WHERE user_id = $1`, [userId]);
+            const newBlocked = !(cur.rows[0]?.blocked);
+            await db.pool.query(`UPDATE users SET blocked = $1 WHERE user_id = $2`, [newBlocked, userId]);
+            res.json({ ok: true, blocked: newBlocked });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     const PORT = process.env.PORT || 10000;
     app.listen(PORT, '0.0.0.0', () => {
         console.log(`📱 Интерфейс и Мини-приложение запущены на порту ${PORT}`);

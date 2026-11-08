@@ -1,181 +1,182 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Личный кабинет</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        :root {
-            --bg: #0f0f0f;
-            --card: #1c1c1e;
-            --accent: #8b5cf6;
-            --text: #ffffff;
-            --text-secondary: #8e8e93;
-            --success: #30d158;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            padding: 16px;
-            min-height: 100vh;
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 24px;
-        }
-        .header h1 {
-            font-size: 22px;
-            font-weight: 700;
-        }
-        .card {
-            background: var(--card);
-            border-radius: 16px;
-            padding: 20px;
-            margin-bottom: 16px;
-        }
-        .balance-value {
-            font-size: 40px;
-            font-weight: 700;
-            color: var(--success);
-            text-align: center;
-            margin: 8px 0 4px;
-        }
-        .balance-label {
-            text-align: center;
-            color: var(--text-secondary);
-            font-size: 14px;
-            margin-bottom: 16px;
-        }
-        button {
-            background: var(--accent);
-            color: white;
-            border: none;
-            padding: 14px;
-            border-radius: 12px;
-            font-size: 16px;
-            font-weight: 600;
-            width: 100%;
-            cursor: pointer;
-        }
-        button:active { opacity: 0.8; }
-        .section-title {
-            font-size: 13px;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 12px;
-        }
-        .model-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 14px 16px;
-            background: #2c2c2e;
-            border-radius: 12px;
-            margin-bottom: 8px;
-            cursor: pointer;
-            transition: background 0.15s;
-        }
-        .model-item.active {
-            background: var(--accent);
-        }
-        .model-name { font-weight: 600; }
-        .model-cost { color: var(--text-secondary); font-size: 14px; }
-        .model-item.active .model-cost { color: rgba(255,255,255,0.8); }
-        .loading { text-align: center; color: var(--text-secondary); padding: 40px 0; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Личный кабинет · НейроЯга</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Unbounded:wght@600;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b0614;
+  --card: #140c24;
+  --accent: #b366ff;
+  --pink: #ff2d95;
+  --cyan: #00ffe0;
+  --text: #f3efff;
+  --mut: #a79cc4;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Manrope', -apple-system, sans-serif;
+  background: radial-gradient(circle at 10% 0%, rgba(179,102,255,.15), transparent 40%),
+              radial-gradient(circle at 90% 0%, rgba(255,45,149,.12), transparent 40%),
+              var(--bg);
+  color: var(--text);
+  padding: 16px;
+  min-height: 100vh;
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.logo {
+  font-family: 'Unbounded', sans-serif;
+  font-weight: 800;
+  font-size: 20px;
+  background: linear-gradient(135deg, #00ffe0, #b366ff, #ff2d95);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.site-btn {
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.12);
+  color: var(--text);
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 13px;
+  text-decoration: none;
+}
+.card {
+  background: var(--card);
+  border-radius: 18px;
+  padding: 18px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(255,255,255,.06);
+}
+.balance {
+  font-family: 'Unbounded', sans-serif;
+  font-size: 48px;
+  font-weight: 800;
+  text-align: center;
+  background: linear-gradient(135deg, #00ffe0, #b366ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin: 6px 0;
+}
+.sub { text-align: center; color: var(--mut); font-size: 13px; margin-bottom: 14px; }
+button.main {
+  width: 100%;
+  background: linear-gradient(135deg, #b366ff, #ff2d95);
+  color: white;
+  border: 0;
+  padding: 14px;
+  border-radius: 14px;
+  font-weight: 800;
+  font-size: 15px;
+}
+.section { font-size: 12px; color: var(--mut); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 10px; }
+.model {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #1c1233;
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.model.active { background: linear-gradient(135deg, #b366ff, #9d4dff); }
+.model b { font-weight: 700; }
+.model span { color: var(--mut); font-size: 13px; }
+.model.active span { color: rgba(255,255,255,.75); }
+</style>
 </head>
 <body>
-    <div class="header">
-        <h1>Личный кабинет</h1>
+<div class="header">
+  <div class="logo">НейроЯга AI</div>
+  <a class="site-btn" href="https://babayagaland.ru" target="_blank">На сайт</a>
+</div>
+
+<div class="card">
+  <div class="section">Баланс</div>
+  <div class="balance" id="balance">0</div>
+  <div class="sub">кредитов</div>
+  <button class="main" onclick="buy()">Пополнить баланс</button>
+</div>
+
+<div class="card">
+  <div class="section">Текущая модель</div>
+  <div id="models"></div>
+</div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+const MODELS = [
+  { key: 'flash', name: 'Gemini Flash', cost: 4, desc: 'Быстрый текст' },
+  { key: 'pro', name: 'Gemini Pro', cost: 15, desc: 'Аналитика' },
+  { key: 'nanobanana', name: 'Nano Banana', cost: 20, desc: 'Картинки' },
+  { key: 'nanobanana_pro', name: 'Nano Banana Pro', cost: 50, desc: 'Про-фото' },
+  { key: 'qwen-image-3-0', name: 'Qwen Image', cost: 45, desc: 'Арт' },
+  { key: 'sora-2', name: 'Sora 2.0', cost: 150, desc: 'Видео' },
+];
+
+const userId = tg?.initDataUnsafe?.user?.id;
+
+async function load() {
+  if (!userId) {
+    document.getElementById('models').innerHTML = '<div style="text-align:center;color:var(--mut);padding:20px">Откройте через бота</div>';
+    return;
+  }
+  try {
+    const r = await fetch(`/api/me?userId=${userId}`);
+    const d = await r.json();
+    document.getElementById('balance').textContent = d.balance ?? 0;
+    render(d.current_model || 'flash');
+  } catch {
+    document.getElementById('models').innerHTML = '<div style="text-align:center;color:#ff6b8a">Ошибка загрузки</div>';
+  }
+}
+
+function render(current) {
+  document.getElementById('models').innerHTML = MODELS.map(m => `
+    <div class="model ${m.key===current?'active':''}" onclick="setModel('${m.key}')">
+      <div>
+        <b>${m.name}</b><br>
+        <span>${m.desc}</span>
+      </div>
+      <span>${m.cost} кр</span>
     </div>
+  `).join('');
+}
 
-    <div class="card">
-        <div class="section-title">Баланс</div>
-        <div class="balance-value" id="balance">—</div>
-        <div class="balance-label">кредитов</div>
-        <button onclick="buyCredits()">Пополнить баланс</button>
-    </div>
+async function setModel(model) {
+  if (!userId) return;
+  await fetch('/api/set-model', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ userId, model })
+  });
+  if (tg) tg.HapticFeedback.notificationOccurred('success');
+  load();
+}
 
-    <div class="card">
-        <div class="section-title">Текущая модель</div>
-        <div id="models" class="loading">Загрузка...</div>
-    </div>
+function buy() {
+  if (tg) {
+    tg.sendData(JSON.stringify({ action: 'buy_credits' }));
+    tg.close();
+  } else {
+    window.open('https://babayagaland.ru/kabinet?pay=1', '_blank');
+  }
+}
 
-    <script>
-        const tg = window.Telegram.WebApp;
-        tg.ready();
-        tg.expand();
-        tg.setHeaderColor('#0f0f0f');
-        tg.setBackgroundColor('#0f0f0f');
-
-        const user = tg.initDataUnsafe?.user;
-        const userId = user?.id;
-
-        const MODELS = [
-            { key: 'flash', name: 'Gemini Flash', cost: 4, desc: 'Быстрый текст' },
-            { key: 'pro', name: 'Gemini Pro', cost: 15, desc: 'Аналитика' },
-            { key: 'nanobanana', name: 'Nano Banana', cost: 20, desc: 'Картинки' },
-            { key: 'nanobanana_pro', name: 'Nano Banana Pro', cost: 50, desc: 'Про-фото' },
-            { key: 'qwen-image-3-0', name: 'Qwen Image 3.0', cost: 45, desc: 'Арт' },
-            { key: 'sora-2', name: 'Sora 2.0', cost: 150, desc: 'Видео' },
-        ];
-
-        async function load() {
-            if (!userId) {
-                document.getElementById('balance').textContent = '0';
-                document.getElementById('models').innerHTML = '<div style="text-align:center;color:#8e8e93">Откройте через бота</div>';
-                return;
-            }
-
-            try {
-                const res = await fetch(`/api/me?userId=${userId}`);
-                const data = await res.json();
-                document.getElementById('balance').textContent = data.balance ?? 0;
-                renderModels(data.current_model || 'flash');
-            } catch (e) {
-                document.getElementById('balance').textContent = '0';
-                document.getElementById('models').innerHTML = '<div style="text-align:center;color:#ff453a">Ошибка загрузки</div>';
-            }
-        }
-
-        function renderModels(current) {
-            const el = document.getElementById('models');
-            el.innerHTML = MODELS.map(m => `
-                <div class="model-item ${m.key === current ? 'active' : ''}" onclick="setModel('${m.key}')">
-                    <div>
-                        <div class="model-name">${m.name}</div>
-                        <div style="font-size:12px;opacity:0.7">${m.desc}</div>
-                    </div>
-                    <div class="model-cost">${m.cost} кр</div>
-                </div>
-            `).join('');
-        }
-
-        async function setModel(model) {
-            if (!userId) return;
-            try {
-                await fetch('/api/set-model', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId, model })
-                });
-                tg.HapticFeedback.notificationOccurred('success');
-                load();
-            } catch (e) {
-                tg.showAlert('Не удалось сменить модель');
-            }
-        }
-
-        function buyCredits() {
-            tg.sendData(JSON.stringify({ action: 'buy_credits' }));
-            tg.close();
-        }
-
-        load();
-    </script>
+load();
+</script>
 </body>
 </html>
