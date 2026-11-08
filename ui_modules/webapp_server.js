@@ -8,12 +8,22 @@ function startWebApp() {
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
 
-    // Статика мини-приложения
-    app.use(express.static(path.join(__dirname, '../public')));
+    const publicPath = path.join(__dirname, '../public');
 
-    // Явно отдаём index.html на корне
+    // Статика
+    app.use(express.static(publicPath));
+
+    // Главная страница — мини-приложение
     app.get('/', (req, res) => {
-        res.sendFile(path.join(__dirname, '../public/index.html'));
+        res.sendFile(path.join(publicPath, 'index.html'));
+    });
+
+    // Админка
+    app.get('/admin', (req, res) => {
+        res.sendFile(path.join(publicPath, 'admin.html'));
+    });
+    app.get('/admin.html', (req, res) => {
+        res.sendFile(path.join(publicPath, 'admin.html'));
     });
 
     // API для мини-приложения
@@ -50,10 +60,10 @@ function startWebApp() {
         }
     });
 
-    // Админка
+    // Админка API
     app.get('/api/admin/users', async (req, res) => {
         try {
-            const q = req.query.q || '';
+            const q = (req.query.q || '').toString();
             const result = await db.pool.query(
                 `SELECT user_id, balance, current_model, created_at 
                  FROM users 
@@ -70,17 +80,17 @@ function startWebApp() {
 
     app.post('/api/admin/balance', async (req, res) => {
         try {
-            const { userId, delta, reason } = req.body;
+            const { userId, delta } = req.body;
             if (!userId || delta === undefined) return res.status(400).json({ error: 'userId and delta required' });
-            const newBalance = await db.updateBalance(userId, delta);
-            res.json({ ok: true, balance: newBalance, reason });
+            const newBalance = await db.updateBalance(userId, Number(delta));
+            res.json({ ok: true, balance: newBalance });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
     });
 
     const PORT = process.env.PORT || 10000;
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
         console.log(`📱 Интерфейс и Мини-приложение запущены на порту ${PORT}`);
     });
 
