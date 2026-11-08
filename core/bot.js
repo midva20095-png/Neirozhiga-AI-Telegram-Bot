@@ -162,7 +162,7 @@ const CREDIT_PACKAGES = {
     'pack_2500': { credits: 2500, price: 2500, title: '2500 кредитов' }
 };
 
-const WEBAPP_URL = process.env.WEBAPP_URL || 'https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app';
+const WEBAPP_URL = (process.env.WEBAPP_URL || 'https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app').replace(/\/$/, '') + '?v=4';
 
 const mainKeyboard = Markup.keyboard([
     ['🤖 Модель', '💳 Баланс'],
@@ -383,9 +383,15 @@ async function startBot(app) {
             `🤖 *Главное меню бота*\n\n` +
             `💳 Ваш баланс: *${balance} кредитов*\n` +
             `🎯 Текущая модель: *${MODEL_NAMES[currentMode] || currentMode}*\n\n` +
-            `Отправьте текстовый запрос или фото:`,
-            { parse_mode: 'Markdown', ...mainKeyboard }
+            `Кабинет открывается кнопкой под этим сообщением или кнопкой «Кабинет» слева от поля ввода.`,
+            {
+                parse_mode: 'Markdown',
+                ...Markup.inlineKeyboard([
+                    [Markup.button.webApp('📱 Открыть кабинет', WEBAPP_URL)]
+                ])
+            }
         );
+        await ctx.reply('Меню:', mainKeyboard);
     });
 
     bot.hears(['💳 Баланс', '💳 Мой баланс', '💳 Баланс'], async (ctx) => {
