@@ -336,9 +336,6 @@ async function startBot(app) {
     }
 
     if (app) {
-        app.get('/', (req, res) => {
-            res.status(200).send('🤖 Telegram AI Bot is running and healthy!');
-        });
         app.get('/health', (req, res) => {
             res.status(200).send('OK');
         });
