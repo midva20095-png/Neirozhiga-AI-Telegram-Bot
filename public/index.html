@@ -226,12 +226,13 @@ function bind(){
   document.querySelectorAll('[data-tpl]').forEach(b => b.onclick = () => runTpl(Number(b.dataset.tpl)));
 }
 async function setModel(model){
-  if (userId !== 'demo') {
-    await fetch('/api/set-model', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({userId, model})});
-  }
   if (me) me.current_model = model;
   toastHaptic();
   draw();
+  if (userId === 'demo') return;
+  try {
+    await fetch('/api/set-model', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({userId: String(userId), model})});
+  } catch (e) {}
 }
 function runTpl(id){
   const t = templates.find(x => x.id === id);

@@ -162,9 +162,10 @@ const CREDIT_PACKAGES = {
     'pack_2500': { credits: 2500, price: 2500, title: '2500 кредитов' }
 };
 
-const WEBAPP_URL = (process.env.WEBAPP_URL || 'https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app').replace(/\/$/, '') + '?v=5';
+const WEBAPP_URL = (process.env.WEBAPP_URL || 'https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app').replace(/\/$/, '') + '?v=6';
 
 const mainKeyboard = Markup.keyboard([
+    [Markup.button.webApp('📱 Кабинет', WEBAPP_URL)],
     ['🤖 Модель', '💳 Баланс'],
     ['💰 Пополнить', '💬 Поддержка'],
     ['ℹ Справка']
@@ -391,6 +392,12 @@ async function startBot(app) {
             }
         );
         await ctx.reply('Меню:', mainKeyboard);
+        try {
+            await ctx.telegram.setChatMenuButton({
+                chat_id: ctx.chat.id,
+                menu_button: { type: 'web_app', text: 'Кабинет', web_app: { url: WEBAPP_URL } }
+            });
+        } catch (e) {}
     });
 
     bot.hears(['💳 Баланс', '💳 Мой баланс', '💳 Баланс'], async (ctx) => {
@@ -716,10 +723,12 @@ async function startBot(app) {
             );
         }
 
-        let currentMode = userActiveMode.get(userId) || 'flash';
+        let currentMode = await db.getCurrentModel(userId) || userActiveMode.get(userId) || 'flash';
+        userActiveMode.set(userId, currentMode);
         if (currentMode === 'veo' || !MODEL_NAMES[currentMode]) {
             currentMode = 'flash';
             userActiveMode.set(userId, 'flash');
+            await db.setCurrentModel(userId, 'flash');
         }
 
         let fileBuffers = [];
@@ -852,10 +861,12 @@ async function startBot(app) {
             }
         }
 
-        let currentMode = userActiveMode.get(userId) || 'flash';
+        let currentMode = await db.getCurrentModel(userId) || userActiveMode.get(userId) || 'flash';
+        userActiveMode.set(userId, currentMode);
         if (currentMode === 'veo' || !MODEL_NAMES[currentMode]) {
             currentMode = 'flash';
             userActiveMode.set(userId, 'flash');
+            await db.setCurrentModel(userId, 'flash');
         }
 
         let fileBuffers = [];
