@@ -12,21 +12,18 @@ try {
     console.warn('⚠ Внимание: Плагин Google Gemini не найден!', e.message);
 }
 
-let gigaPlugin = null;
+let bratukhaPlugin = null;
 try {
-    gigaPlugin = require('../ai_plugins/gigachat_plugin');
-    console.log('✅ Плагин GigaChat успешно подключен к ядру');
+    bratukhaPlugin = require('../ai_plugins/bratukha_plugin');
+    console.log('✅ Плагин Братуха успешно подключен к ядру');
 } catch (e) {
-    console.warn('⚠ Плагин GigaChat не найден', e.message);
+    console.warn('⚠ Внимание: Плагин Братуха не найден!', e.message);
 }
 
 // Роутер выбора плагина
 function getAiPlugin(modelKey) {
     if (['flash', 'flash_25', 'pro', 'nanobanana', 'nanobanana_pro'].includes(modelKey)) {
         return googlePlugin;
-    }
-    if (['giga-lite', 'giga-pro', 'giga-max', 'giga-ultra'].includes(modelKey)) {
-        return gigaPlugin;
     }
     return bratukhaPlugin;
 }
@@ -120,12 +117,7 @@ const MODEL_COSTS = {
     'seedance-1-0': 100,
     'seedance-1-5-pro': 120,
     'seedance-2-0-apimart': 100,
-    'pruna-ai-p-video-2-pro': 70,
-
-    'giga-lite': 0,
-    'giga-pro': 0,
-    'giga-max': 0,
-    'giga-ultra': 0
+    'pruna-ai-p-video-2-pro': 70
 };
 
 // 🏷 Названия моделей с емким описанием
@@ -134,10 +126,6 @@ const MODEL_NAMES = {
     'flash': 'Gemini 3.8 Flash ⚡️ (Текст/код) 📝',
     'flash_25': 'Gemini 2.5 Flash 🚀 (Быстрый текст) 📝',
     'pro': 'Gemini 3.1 Pro 🧠 (Аналитика/код) 📝',
-    'giga-lite': 'GigaChat 2 Lite · бесплатно',
-    'giga-pro': 'GigaChat 2 Pro · бесплатно',
-    'giga-max': 'GigaChat 2 Max · бесплатно',
-    'giga-ultra': 'GigaChat 3 Ultra · бесплатно',
 
     // 🎵 Аудио
     'qwen3-tts': 'Qwen3 TTS 🗣 (Озвучка текста) 📝',
@@ -174,7 +162,7 @@ const CREDIT_PACKAGES = {
     'pack_2500': { credits: 2500, price: 2500, title: '2500 кредитов' }
 };
 
-const WEBAPP_URL = (process.env.WEBAPP_URL || 'https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app').replace(/\/$/, '') + '?v=8';
+const WEBAPP_URL = (process.env.WEBAPP_URL || 'https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app').replace(/\/$/, '') + '?v=7';
 
 function mainKeyboard(currentMode) {
     const model = MODEL_SHORT[currentMode] || currentMode || 'Flash';
@@ -226,7 +214,7 @@ async function getTelegramFileBuffer(ctx, fileId) {
 }
 
 const MODEL_GROUPS = {
-    text: ['flash', 'flash_25', 'pro', 'giga-lite', 'giga-pro', 'giga-max', 'giga-ultra'],
+    text: ['flash', 'flash_25', 'pro'],
     audio: ['qwen3-tts', 'qwen3-tts-flash'],
     image: [
         'nanobanana', 'nanobanana_pro', 'qwen-image-2-1', 'qwen-image-3-0',
@@ -244,7 +232,6 @@ const MODEL_GROUPS = {
 
 const MODEL_SHORT = {
     flash: 'Flash', flash_25: 'Flash 2.5', pro: 'Pro',
-    'giga-lite': 'Giga Lite', 'giga-pro': 'Giga Pro', 'giga-max': 'Giga Max', 'giga-ultra': 'Giga Ultra',
     'qwen3-tts': 'Озвучка', 'qwen3-tts-flash': 'Озвучка быстрая',
     nanobanana: 'Nano Banana', nanobanana_pro: 'Nano Pro',
     'qwen-image-2-1': 'Qwen 2.1', 'qwen-image-3-0': 'Qwen 3.0',
@@ -601,7 +588,6 @@ async function startBot(app) {
             });
 
             await deductUserBalance(userId, cost);
-            if (String(currentMode).startsWith('giga-')) await db.addGigaUse(userId, currentMode);
             const remainingBalance = await getUserBalance(userId);
 
             try { await ctx.deleteMessage(waitMessage.message_id); } catch(e){}
@@ -772,12 +758,6 @@ async function startBot(app) {
         }
 
         const cost = MODEL_COSTS[currentMode] || 1;
-        if (String(currentMode).startsWith('giga-')) {
-            const lim = await db.checkGigaLimit(userId, currentMode);
-            if (!lim.ok) {
-                return ctx.reply(`Лимит бесплатной модели на сегодня исчерпан: ${lim.used}/${lim.limit}. Завтра счётчик обнулится.`);
-            }
-        }
         const balance = await getUserBalance(userId);
         if (balance < cost) {
             return ctx.reply(
@@ -827,7 +807,6 @@ async function startBot(app) {
             });
 
             await deductUserBalance(userId, cost);
-            if (String(currentMode).startsWith('giga-')) await db.addGigaUse(userId, currentMode);
             const remainingBalance = await getUserBalance(userId);
 
             try { await ctx.deleteMessage(waitMessage.message_id); } catch(e){}
@@ -956,7 +935,6 @@ async function startBot(app) {
             });
 
             await deductUserBalance(userId, cost);
-            if (String(currentMode).startsWith('giga-')) await db.addGigaUse(userId, currentMode);
             const remainingBalance = await getUserBalance(userId);
 
             try { await firstCtx.deleteMessage(waitMessage.message_id); } catch(e){}

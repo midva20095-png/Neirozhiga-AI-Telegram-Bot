@@ -2,12 +2,11 @@ const db = require('./db');
 
 let googlePlugin = null;
 try { googlePlugin = require('../ai_plugins/google_gemini_plugin'); } catch (e) {}
-let gigaPlugin = null;
-try { gigaPlugin = require('../ai_plugins/gigachat_plugin'); } catch (e) {}
+let bratukhaPlugin = null;
+try { bratukhaPlugin = require('../ai_plugins/bratukha_plugin'); } catch (e) {}
 
 function getPlugin(modelKey) {
   if (['flash', 'flash_25', 'pro', 'nanobanana', 'nanobanana_pro'].includes(modelKey)) return googlePlugin;
-  if (['giga-lite', 'giga-pro', 'giga-max', 'giga-ultra'].includes(modelKey)) return gigaPlugin;
   return bratukhaPlugin;
 }
 
@@ -17,8 +16,7 @@ const COSTS = {
   'phota-enhance': 220, 'p-image-upscale': 10,
   'qwen-image-2-1': 40, 'qwen-image-3-0': 45,
   'recraft-v4': 15, 'recraft-v4-1': 20, 'runway-gen4-image': 80,
-  'seedream-4-0': 15, 'seedream-4-5': 20, 'sam-3d': 40,
-  'giga-lite': 0, 'giga-pro': 0, 'giga-max': 0, 'giga-ultra': 0
+  'seedream-4-0': 15, 'seedream-4-5': 20, 'sam-3d': 40
 };
 
 const NAMES = {
@@ -26,9 +24,7 @@ const NAMES = {
   nanobanana: 'Nano Banana', nanobanana_pro: 'Nano Banana Pro',
   'qwen-image-3-0': 'Qwen Image 3.0', 'seedream-4-5': 'Seedream 4.5',
   'recraft-v4-1': 'Recraft V4.1', 'runway-gen4-image': 'Runway Gen4',
-  'qwen3-tts-flash': 'Озвучка',
-  'giga-lite': 'GigaChat 2 Lite', 'giga-pro': 'GigaChat 2 Pro',
-  'giga-max': 'GigaChat 2 Max', 'giga-ultra': 'GigaChat 3 Ultra'
+  'qwen3-tts-flash': 'Озвучка'
 };
 
 async function generate({ userId, prompt, model }) {
@@ -38,15 +34,10 @@ async function generate({ userId, prompt, model }) {
   const cost = COSTS[key] || 4;
   const user = await db.getUser(userId);
   if (user.blocked) throw new Error('Аккаунт в чёрном списке');
-  if (String(key).startsWith('giga-')) {
-    const lim = await db.checkGigaLimit(userId, key);
-    if (!lim.ok) throw new Error(`Лимит на сегодня: ${lim.used}/${lim.limit}`);
-  }
   if (user.balance < cost) throw new Error(`Недостаточно кредитов: ${user.balance}, нужно ${cost}`);
 
   const result = await plugin.processRequest({ prompt, modelKey: key });
   const balance = await db.updateBalance(userId, -cost, `Генерация · ${NAMES[key] || key}`);
-  if (String(key).startsWith('giga-')) await db.addGigaUse(userId, key);
   await db.setCurrentModel(userId, key);
 
   const out = { type: result.type || 'text', text: result.text || '', cost, balance, model: key };
