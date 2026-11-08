@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Личный кабинет</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--tg-theme-bg-color, #0f172a);
+            color: var(--tg-theme-text-color, #ffffff);
+            padding: 16px;
+            min-height: 100vh;
+        }
+        .card {
+            background: var(--tg-theme-secondary-bg-color, #1e293b);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+        h1 { font-size: 22px; margin-bottom: 8px; text-align: center; }
+        h3 { font-size: 16px; margin-bottom: 12px; opacity: 0.9; }
+        .balance {
+            font-size: 32px;
+            font-weight: 700;
+            color: #10b981;
+            text-align: center;
+            margin: 8px 0 16px;
+        }
+        button {
+            background: var(--tg-theme-button-color, #3b82f6);
+            color: var(--tg-theme-button-text-color, #fff);
+            border: none;
+            padding: 14px 20px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+        }
+        button:active { opacity: 0.85; }
+        select, .model-list {
+            width: 100%;
+            padding: 12px;
+            border-radius: 12px;
+            background: #334155;
+            color: #fff;
+            border: none;
+            font-size: 15px;
+            margin-top: 8px;
+        }
+        .model-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: #334155;
+            border-radius: 10px;
+            margin-top: 8px;
+            cursor: pointer;
+        }
+        .model-item.active { background: #3b82f6; }
+        .loading { text-align: center; opacity: 0.7; padding: 20px; }
+    </style>
+</head>
+<body>
+    <h1>📱 Личный кабинет</h1>
+
+    <div class="card">
+        <h3>Баланс</h3>
+        <div class="balance" id="balance">Загрузка...</div>
+        <button onclick="openBuy()">💳 Пополнить баланс</button>
+    </div>
+
+    <div class="card">
+        <h3>Текущая модель</h3>
+        <div id="currentModel" style="text-align:center; font-size:18px; margin-bottom:12px;">—</div>
+        <div id="models"></div>
+    </div>
+
+    <div class="card" style="text-align:center; opacity:0.7; font-size:13px;">
+        Данные синхронизируются с ботом
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+
+        const user = tg.initDataUnsafe?.user || {};
+        const userId = user.id;
+
+        const MODELS = [
+            { key: 'flash', name: 'Gemini Flash ⚡️', cost: 4 },
+            { key: 'pro', name: 'Gemini Pro 🧠', cost: 15 },
+            { key: 'nanobanana', name: 'Nano Banana 🎨', cost: 20 },
+            { key: 'nanobanana_pro', name: 'Nano Banana Pro 💎', cost: 50 },
+            { key: 'qwen-image-3-0', name: 'Qwen Image 3.0 🎨', cost: 45 },
+            { key: 'sora-2', name: 'Sora 2.0 🌟', cost: 150 },
+        ];
+
+        async function loadProfile() {
+            if (!userId) {
+                document.getElementById('balance').textContent = 'Откройте через бота';
+                return;
+            }
+            try {
+                const res = await fetch(`/api/me?userId=${userId}`);
+                const data = await res.json();
+                document.getElementById('balance').textContent = `${data.balance} кредитов`;
+                document.getElementById('currentModel').textContent = data.current_model || 'flash';
+                renderModels(data.current_model);
+            } catch (e) {
+                document.getElementById('balance').textContent = 'Ошибка загрузки';
+            }
+        }
+
+        function renderModels(current) {
+            const container = document.getElementById('models');
+            container.innerHTML = MODELS.map(m => `
+                <div class="model-item ${m.key === current ? 'active' : ''}" onclick="setModel('${m.key}')">
+                    <span>${m.name}</span>
+                    <span>${m.cost} кр</span>
+                </div>
+            `).join('');
+        }
+
+        async function setModel(model) {
+            if (!userId) return;
+            try {
+                await fetch('/api/set-model', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId, model })
+                });
+                tg.showAlert(`Модель изменена на ${model}`);
+                loadProfile();
+                // Можно отправить данные боту
+                tg.sendData(JSON.stringify({ action: 'set_model', model }));
+            } catch (e) {
+                tg.showAlert('Не удалось сменить модель');
+            }
+        }
+
+        function openBuy() {
+            // Можно открыть ссылку на оплату или отправить боту команду
+            tg.sendData(JSON.stringify({ action: 'buy_credits' }));
+            tg.close();
+        }
+
+        loadProfile();
+    </script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
+const db = require('./db');
 
 // Подключаем плагины
 let googlePlugin = null;
@@ -161,16 +162,18 @@ const CREDIT_PACKAGES = {
     'pack_2500': { credits: 2500, price: 2500, title: '2500 кредитов' }
 };
 
+const WEBAPP_URL = process.env.WEBAPP_URL || process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null;
+
 const mainKeyboard = Markup.keyboard([
     ['🤖 Модель', '💳 Баланс'],
     ['💰 Пополнить', '💬 Поддержка'],
+    WEBAPP_URL ? [Markup.button.webApp('📱 Личный кабинет', WEBAPP_URL)] : [],
     ['ℹ Справка']
 ]).resize();
 
 async function getUserBalance(userId) {
     try {
-        const response = await axios.get(`${process.env.GOOGLE_SCRIPT_URL}?action=get&userId=${userId}`);
-        return response.data && response.data.balance !== undefined ? parseInt(response.data.balance) : 0;
+        return await db.getUserBalance(userId);
     } catch (error) {
         console.error('❌ Ошибка чтения баланса:', error.message);
         return 0;
@@ -179,10 +182,8 @@ async function getUserBalance(userId) {
 
 async function deductUserBalance(userId, cost) {
     try {
-        const response = await axios.post(process.env.GOOGLE_SCRIPT_URL, {
-            action: 'update', userId: userId, amount: -cost
-        });
-        return response.data && response.data.balance !== undefined;
+        const newBalance = await db.updateBalance(userId, -cost);
+        return newBalance !== null;
     } catch (error) {
         console.error('❌ Ошибка списания:', error.message);
         return false;
@@ -191,10 +192,8 @@ async function deductUserBalance(userId, cost) {
 
 async function addUserBalance(userId, amount) {
     try {
-        const response = await axios.post(process.env.GOOGLE_SCRIPT_URL, {
-            action: 'update', userId: userId, amount: amount
-        });
-        return response.data && response.data.balance !== undefined;
+        const newBalance = await db.updateBalance(userId, amount);
+        return newBalance !== null;
     } catch (error) {
         console.error('❌ Ошибка начисления:', error.message);
         return false;
@@ -321,6 +320,14 @@ async function createYookassaPayment(amount, description, email, metadata) {
 }
 
 async function startBot(app) {
+    try {
+        await db.initDB();
+        console.log('✅ База данных PostgreSQL инициализирована');
+    } catch (e) {
+        console.error('❌ Критическая ошибка инициализации БД:', e.message);
+        // Можно продолжить работу, но балансы будут 0
+    }
+
     try {
         await bot.telegram.deleteWebhook({ drop_pending_updates: true });
         console.log('🧹 Старый вебхук сброшен, запущен Long Polling.');
