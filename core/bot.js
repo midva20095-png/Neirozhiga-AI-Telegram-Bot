@@ -162,14 +162,17 @@ const CREDIT_PACKAGES = {
     'pack_2500': { credits: 2500, price: 2500, title: '2500 кредитов' }
 };
 
-const WEBAPP_URL = (process.env.WEBAPP_URL || 'https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app').replace(/\/$/, '') + '?v=6';
+const WEBAPP_URL = (process.env.WEBAPP_URL || 'https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app').replace(/\/$/, '') + '?v=7';
 
-const mainKeyboard = Markup.keyboard([
-    [Markup.button.webApp('📱 Кабинет', WEBAPP_URL)],
-    ['🤖 Модель', '💳 Баланс'],
-    ['💰 Пополнить', '💬 Поддержка'],
-    ['ℹ Справка']
-]).resize();
+function mainKeyboard(currentMode) {
+    const model = MODEL_SHORT[currentMode] || currentMode || 'Flash';
+    return Markup.keyboard([
+        [Markup.button.webApp('📱 Кабинет', WEBAPP_URL)],
+        [`✅ ${model}`, '💳 Баланс'],
+        ['🤖 Сменить модель', '💰 Пополнить'],
+        ['💬 Поддержка', 'ℹ Справка']
+    ]).resize();
+}
 
 async function getUserBalance(userId) {
     try {
@@ -391,7 +394,7 @@ async function startBot(app) {
                 ])
             }
         );
-        await ctx.reply('Меню:', mainKeyboard);
+        await ctx.reply('Меню:', mainKeyboard(currentMode));
         try {
             await ctx.telegram.setChatMenuButton({
                 chat_id: ctx.chat.id,
@@ -416,7 +419,7 @@ async function startBot(app) {
         );
     });
 
-    bot.hears(['🤖 Модель', '🤖 Выбрать модель ИИ', '🤖 Модели'], async (ctx) => {
+    bot.hears(['🤖 Модель', '🤖 Выбрать модель ИИ', '🤖 Модели', '🤖 Сменить модель'], async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
         const currentMode = userActiveMode.get(ctx.from.id) || 'flash';
@@ -495,13 +498,11 @@ async function startBot(app) {
 
         if (MODEL_NAMES[selectedModel]) {
             userActiveMode.set(ctx.from.id, selectedModel);
+            await db.setCurrentModel(ctx.from.id, selectedModel);
             await ctx.answerCbQuery(`Выбрано: ${MODEL_SHORT[selectedModel] || selectedModel}`);
-            const done = `Выбрано: ${MODEL_SHORT[selectedModel] || selectedModel} · ${MODEL_COSTS[selectedModel]} кр. Можно писать запрос.`;
-            try {
-                await ctx.editMessageText(done, getModelSelectionKeyboard(selectedModel));
-            } catch (e) {
-                await ctx.reply(done);
-            }
+            const done = `✅ ${MODEL_SHORT[selectedModel] || selectedModel} · ${MODEL_COSTS[selectedModel]} кр. Пишите запрос.`;
+            try { await ctx.editMessageText(done); } catch (e) {}
+            await ctx.reply('Меню:', mainKeyboard(selectedModel));
         }
     });
 
@@ -625,7 +626,7 @@ async function startBot(app) {
 
     const handleAiRequest = async (ctx) => {
         const text = ctx.message?.text || '';
-        if (['🤖 Модель', '🤖 Выбрать модель ИИ', '💳 Мой баланс', '💳 Баланс', '💰 Пополнить', '💰 Пополнить баланс', '💬 Поддержка', 'ℹ Справка', 'ℹ️ Справка', '🤖 Модели'].includes(text)) {
+        if (['🤖 Модель', '🤖 Выбрать модель ИИ', '🤖 Сменить модель', '💳 Мой баланс', '💳 Баланс', '💰 Пополнить', '💰 Пополнить баланс', '💬 Поддержка', 'ℹ Справка', 'ℹ️ Справка', '🤖 Модели'].includes(text) || text.startsWith('✅ ')) {
             return;
         }
 

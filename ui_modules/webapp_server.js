@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const db = require('../core/db');
+const { generate } = require('../core/generate');
 
 function startWebApp() {
     const app = express();
@@ -55,6 +56,19 @@ function startWebApp() {
             res.json({ success: !!ok, model });
         } catch (e) {
             res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.post('/api/generate', async (req, res) => {
+        try {
+            const { userId, prompt, model } = req.body || {};
+            if (!userId || !/^\d+$/.test(String(userId))) return res.status(400).json({ error: 'userId required' });
+            if (!prompt || !String(prompt).trim()) return res.status(400).json({ error: 'Введите промпт' });
+            const result = await generate({ userId, prompt: String(prompt).trim(), model });
+            res.json(result);
+        } catch (e) {
+            console.error('API /api/generate error:', e.message);
+            res.status(400).json({ error: e.message || 'Ошибка генерации' });
         }
     });
 
