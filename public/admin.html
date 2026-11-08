@@ -4,109 +4,129 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Админ · НейроЯга Бот</title>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700&family=Unbounded:wght@700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Unbounded:wght@700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0b0614;--card:#140c24;--text:#f3efff;--mut:#a79cc4;--accent:#b366ff;--pink:#ff2d95}
+:root{--bg:#0b0614;--card:#140c24;--text:#f3efff;--mut:#a79cc4;--line:rgba(255,255,255,.1)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 Manrope,sans-serif;padding:16px}
-h1{font-family:Unbounded,sans-serif;font-size:20px;margin:0 0 16px}
-.card{background:var(--card);border-radius:16px;padding:16px;margin-bottom:14px;border:1px solid rgba(255,255,255,.06)}
-input,button{font:inherit;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#1c1233;color:inherit}
-button{background:linear-gradient(135deg,#b366ff,#ff2d95);border:0;font-weight:700;cursor:pointer}
+h1{font-family:Unbounded,sans-serif;font-size:22px;margin:0 0 8px}
+h1 i{font-style:normal;background:linear-gradient(135deg,#00ffe0,#b366ff,#ff2d95);-webkit-background-clip:text;background-clip:text;color:transparent}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+input,select,textarea,button{font:inherit;color:inherit}
+input,select,textarea{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:#1c1233;outline:none}
+textarea{min-height:80px}
+button{cursor:pointer;border:0;border-radius:12px;padding:10px 14px;font-weight:800;background:linear-gradient(135deg,#b366ff,#ff2d95);color:#fff}
+.ghost{background:transparent;border:1px solid var(--line)}
+.danger{background:transparent;border:1px solid rgba(255,80,120,.5);color:#ffb3c7}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.row > *{flex:1;min-width:120px}
 table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{text-align:left;padding:8px 6px;border-bottom:1px solid rgba(255,255,255,.06)}
+th,td{text-align:left;padding:8px 4px;border-bottom:1px solid var(--line);vertical-align:top}
 th{color:var(--mut);font-size:12px}
-.row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-.row input{flex:1;min-width:120px}
-.ok{color:#3ee08f}
-.bad{color:#ff6b8a}
+.tabs{display:flex;gap:6px;margin:12px 0}
+.tabs button.on{outline:2px solid #fff}
+.ok{color:#3ee08f;font-weight:800}.bad{color:#ff8fb0;font-weight:800}
+.note{color:var(--mut);font-size:13px}
 </style>
 </head>
 <body>
-<h1>Админ-панель бота</h1>
-
+<h1>Админ <i>НейроЯга</i></h1>
+<p class="note">Управление ботом: клиенты, кредиты, чёрный список и шаблоны кабинета.</p>
 <div class="card" id="login">
-  <div class="row">
-    <input id="pass" type="password" placeholder="Пароль">
-    <button onclick="login()">Войти</button>
-  </div>
+  <div class="row"><input id="pass" type="password" placeholder="Пароль"><button onclick="login()">Войти</button></div>
   <p id="err" class="bad"></p>
 </div>
-
 <div id="panel" style="display:none">
-  <div class="card">
-    <div class="row">
-      <input id="q" placeholder="Поиск user_id">
-      <button onclick="load()">Найти</button>
-      <button onclick="load('')">Все</button>
-    </div>
-    <div id="list">Загрузка...</div>
+  <div class="tabs">
+    <button id="t-users" class="on" onclick="show('users')">Клиенты</button>
+    <button id="t-tpl" class="ghost" onclick="show('tpl')">Шаблоны</button>
   </div>
-
-  <div class="card" id="edit" style="display:none">
-    <h3>Пользователь <span id="uid"></span></h3>
-    <div class="row">
-      <input id="delta" type="number" placeholder="+100 или -50">
-      <input id="reason" placeholder="Причина">
-      <button onclick="changeBalance()">Применить</button>
-    </div>
-    <div class="row" style="margin-top:10px">
-      <button onclick="toggleBlock()">В чёрный список / Убрать</button>
-    </div>
-    <p id="msg"></p>
-  </div>
+  <div id="users"></div>
+  <div id="tpl" style="display:none"></div>
 </div>
-
 <script>
 const PASS = 'admin123';
-let token = sessionStorage.getItem('botadmin') || '';
-
-function login() {
+let users = [], templates = [], editId = null;
+function login(){
   if (document.getElementById('pass').value === PASS) {
-    sessionStorage.setItem('botadmin', '1');
-    document.getElementById('login').style.display = 'none';
-    document.getElementById('panel').style.display = 'block';
-    load();
+    sessionStorage.setItem('nybot_admin','1');
+    document.getElementById('login').style.display='none';
+    document.getElementById('panel').style.display='block';
+    boot();
   } else document.getElementById('err').textContent = 'Неверный пароль';
 }
-if (token) { document.getElementById('login').style.display='none'; document.getElementById('panel').style.display='block'; load(); }
-
-async function load(q='') {
-  const r = await fetch('/api/admin/users?q='+encodeURIComponent(q));
-  const d = await r.json();
-  document.getElementById('list').innerHTML = '<table><tr><th>ID</th><th>Баланс</th><th>Модель</th><th>Статус</th><th></th></tr>' +
-    (d.users||[]).map(u=>`<tr>
-      <td>${u.user_id}</td>
-      <td class="ok">${u.balance}</td>
-      <td>${u.current_model||'—'}</td>
-      <td>${u.blocked?'<span class="bad">ЧС</span>':'—'}</td>
-      <td><button onclick="edit('${u.user_id}')">Изменить</button></td>
-    </tr>`).join('') + '</table>';
+if (sessionStorage.getItem('nybot_admin')) { document.getElementById('login').style.display='none'; document.getElementById('panel').style.display='block'; boot(); }
+function show(name){
+  document.getElementById('users').style.display = name==='users' ? 'block' : 'none';
+  document.getElementById('tpl').style.display = name==='tpl' ? 'block' : 'none';
+  document.getElementById('t-users').className = name==='users' ? 'on' : 'ghost';
+  document.getElementById('t-tpl').className = name==='tpl' ? 'on' : 'ghost';
 }
-
-function edit(id) {
+async function boot(){ await loadUsers(); await loadTpl(); }
+async function loadUsers(q){
+  const r = await fetch('/api/admin/users?q=' + encodeURIComponent(q || ''));
+  const d = await r.json();
+  users = d.users || [];
+  document.getElementById('users').innerHTML =
+    '<div class="card"><div class="row"><input id="q" placeholder="Поиск по Telegram ID" value="' + esc(q||'') + '"><button onclick="loadUsers(document.getElementById(\'q\').value)">Найти</button></div>' +
+    '<table><tr><th>ID</th><th>Баланс</th><th>Модель</th><th>Статус</th><th></th></tr>' +
+    users.map(u => '<tr><td>' + u.user_id + '</td><td class="ok">' + u.balance + '</td><td>' + esc(u.current_model||'') + '</td><td>' + (u.blocked?'<span class="bad">ЧС</span>':'—') + '</td><td><button class="ghost" onclick="edit(' + u.user_id + ')">Открыть</button></td></tr>').join('') +
+    '</table></div><div class="card" id="edit" style="display:none"><h3>Клиент <span id="uid"></span></h3>' +
+    '<div class="row"><input id="delta" type="number" placeholder="+100 или -50"><input id="reason" placeholder="Причина, видна в истории"></div>' +
+    '<div class="row"><button onclick="applyBal()">Начислить / списать</button><button class="danger" id="ban" onclick="toggleBan()">Чёрный список</button></div><p id="msg"></p></div>';
+}
+function edit(id){
+  editId = id;
+  const u = users.find(x => String(x.user_id) === String(id));
   document.getElementById('edit').style.display = 'block';
   document.getElementById('uid').textContent = id;
-  document.getElementById('edit').dataset.uid = id;
+  document.getElementById('ban').textContent = u && u.blocked ? 'Убрать из ЧС' : 'В чёрный список';
+  document.getElementById('ban').dataset.blocked = u && u.blocked ? '1' : '0';
 }
-
-async function changeBalance() {
-  const uid = document.getElementById('edit').dataset.uid;
-  const delta = +document.getElementById('delta').value;
+async function applyBal(){
+  const delta = parseInt(document.getElementById('delta').value, 10);
+  const reason = document.getElementById('reason').value.trim() || 'Админ';
   if (!delta) return alert('Укажите сумму');
-  const r = await fetch('/api/admin/balance', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:uid,delta})});
+  const r = await fetch('/api/admin/balance', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({userId: editId, delta, reason})});
   const d = await r.json();
-  document.getElementById('msg').textContent = d.ok ? `Баланс: ${d.balance}` : (d.error||'Ошибка');
-  if (d.ok) load();
+  document.getElementById('msg').textContent = d.ok ? ('Баланс: ' + d.balance) : (d.error || 'Ошибка');
+  if (d.ok) loadUsers(document.getElementById('q').value);
 }
-
-async function toggleBlock() {
-  const uid = document.getElementById('edit').dataset.uid;
-  const r = await fetch('/api/admin/block', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:uid})});
+async function toggleBan(){
+  const blocked = document.getElementById('ban').dataset.blocked !== '1';
+  const r = await fetch('/api/admin/block', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({userId: editId, blocked})});
   const d = await r.json();
-  document.getElementById('msg').textContent = d.ok ? (d.blocked?'В чёрном списке':'Убран из ЧС') : 'Ошибка';
-  if (d.ok) load();
+  document.getElementById('msg').textContent = d.ok ? (d.blocked ? 'В чёрном списке' : 'Убран из списка') : 'Ошибка';
+  if (d.ok) loadUsers(document.getElementById('q') ? document.getElementById('q').value : '');
 }
+async function loadTpl(){
+  const r = await fetch('/api/admin/templates');
+  const d = await r.json();
+  templates = d.templates || [];
+  document.getElementById('tpl').innerHTML =
+    '<div class="card"><h3>Новый шаблон</h3>' +
+    '<div class="row"><input id="tt" placeholder="Название"><select id="tc"><option value="chat">Чат</option><option value="image">Картинки</option><option value="video">Видео</option><option value="audio">Голос</option></select></div>' +
+    '<div class="row"><input id="tm" placeholder="Ключ модели, например flash"><input id="tcost" type="number" placeholder="Цена, кр" value="4"></div>' +
+    '<textarea id="tp" placeholder="Промпт, который уйдёт в бота"></textarea>' +
+    '<div class="row" style="margin-top:8px"><button onclick="saveTpl()">Сохранить шаблон</button></div></div>' +
+    '<div class="card"><table><tr><th>Название</th><th>Модель</th><th>Цена</th><th></th></tr>' +
+    templates.map(t => '<tr><td><b>' + esc(t.title) + '</b><div class="note">' + esc(t.category) + (t.active?'':' · выкл') + '</div></td><td>' + esc(t.model) + '</td><td>' + t.cost + '</td><td><button class="danger" onclick="delTpl(' + t.id + ')">Удалить</button></td></tr>').join('') +
+    '</table></div>';
+}
+async function saveTpl(){
+  const body = { title: document.getElementById('tt').value.trim(), category: document.getElementById('tc').value, model: document.getElementById('tm').value.trim() || 'flash', cost: +document.getElementById('tcost').value || 0, prompt: document.getElementById('tp').value.trim(), active: true };
+  if (!body.title || !body.prompt) return alert('Нужны название и промпт');
+  const r = await fetch('/api/admin/templates', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  const d = await r.json();
+  if (!d.ok) return alert(d.error || 'Ошибка');
+  loadTpl();
+}
+async function delTpl(id){
+  if (!confirm('Удалить шаблон?')) return;
+  await fetch('/api/admin/templates/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id})});
+  loadTpl();
+}
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&','<':'<','>':'>','"':'"'}[c])); }
 </script>
 </body>
 </html>

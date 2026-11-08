@@ -162,7 +162,7 @@ const CREDIT_PACKAGES = {
     'pack_2500': { credits: 2500, price: 2500, title: '2500 кредитов' }
 };
 
-const WEBAPP_URL = process.env.WEBAPP_URL || 'https://neurozhiga-ai-telegram-bot-production.up.railway.app';
+const WEBAPP_URL = process.env.WEBAPP_URL || 'https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app';
 
 const mainKeyboard = Markup.keyboard([
     ['🤖 Модель', '💳 Баланс'],
@@ -370,9 +370,12 @@ async function startBot(app) {
         userAwaitingSupport.delete(ctx.from.id);
         userProcessing.delete(ctx.from.id);
         userPendingBratukhaRequests.delete(ctx.from.id);
-        if (!userActiveMode.has(ctx.from.id)) {
-            userActiveMode.set(ctx.from.id, 'flash');
+        if (await db.isBlocked(ctx.from.id)) {
+            await ctx.reply('Доступ к боту ограничен. Напишите в поддержку, если это ошибка.');
+            return;
         }
+        const savedModel = await db.getCurrentModel(ctx.from.id);
+        userActiveMode.set(ctx.from.id, savedModel || 'flash');
         const currentMode = userActiveMode.get(ctx.from.id);
         const balance = await getUserBalance(ctx.from.id);
 
@@ -617,6 +620,11 @@ async function startBot(app) {
         const userId = ctx.from.id;
         const stringUserId = String(userId);
 
+        if (await db.isBlocked(userId)) {
+            await ctx.reply('Доступ ограничен. Генерации для этого аккаунта выключены.');
+            return;
+        }
+
         if (stringUserId === ADMIN_ID && ctx.message.reply_to_message) {
             const repliedText = ctx.message.reply_to_message.text || '';
             const match = repliedText.match(/ID:\s*`?(\d+)`?/);
@@ -823,6 +831,9 @@ async function startBot(app) {
     const handleAlbumRequest = async (contexts) => {
         const firstCtx = contexts[0];
         const userId = firstCtx.from.id;
+        if (await db.isBlocked(userId)) {
+            return firstCtx.reply('Доступ ограничен. Генерации для этого аккаунта выключены.');
+        }
 
         if (userProcessing.has(userId)) {
             return firstCtx.reply('⏳ *Подождите...* Нейросеть еще отвечает на ваш предыдущий запрос. Пожалуйста, дождитесь завершения генерации.', { parse_mode: 'Markdown' });
@@ -937,6 +948,31 @@ async function startBot(app) {
             userProcessing.delete(userId);
         }
     };
+
+    bot.on('message', async (ctx, next) => {
+        const raw = ctx.message?.web_app_data?.data;
+        if (!raw) return next();
+        let payload = null;
+        try { payload = JSON.parse(raw); } catch (e) { payload = { action: 'buy_credits' }; }
+        if (await db.isBlocked(ctx.from.id)) {
+            await ctx.reply('Доступ ограничен.');
+            return;
+        }
+        if (payload.action === 'run_template' && payload.prompt) {
+            const model = payload.model || 'flash';
+            userActiveMode.set(ctx.from.id, model);
+            await db.setCurrentModel(ctx.from.id, model);
+            ctx.message.text = payload.prompt;
+            await ctx.reply(`Запускаю шаблон «${payload.title || 'шаблон'}».`);
+            return handleAiRequest(ctx);
+        }
+        await ctx.reply('Выберите пакет кредитов:', Markup.inlineKeyboard(
+            Object.keys(CREDIT_PACKAGES).map(pkgKey => {
+                const pkg = CREDIT_PACKAGES[pkgKey];
+                return [Markup.button.callback(`💳 ${pkg.title} — ${pkg.price} ₽`, `buy_pkg_${pkgKey}`)];
+            })
+        ));
+    });
 
     bot.on('text', handleAiRequest);
     

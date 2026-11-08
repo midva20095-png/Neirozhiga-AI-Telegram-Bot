@@ -4,39 +4,31 @@ const db = require('../core/db');
 
 function startWebApp() {
     const app = express();
-
-    app.use(express.json());
+    app.use(express.json({ limit: '1mb' }));
     app.use(express.urlencoded({ extended: true }));
 
     const publicPath = path.join(__dirname, '../public');
-
-    // Статика
     app.use(express.static(publicPath));
 
-    // Главная страница — мини-приложение
     app.get('/', (req, res) => {
         res.sendFile(path.join(publicPath, 'index.html'));
     });
-
-    // Админка
     app.get('/admin', (req, res) => {
         res.sendFile(path.join(publicPath, 'admin.html'));
     });
-    app.get('/admin.html', (req, res) => {
-        res.sendFile(path.join(publicPath, 'admin.html'));
-    });
 
-    // API для мини-приложения
     app.get('/api/me', async (req, res) => {
         try {
             const userId = req.query.userId || req.headers['x-telegram-user-id'];
             if (!userId) return res.status(400).json({ error: 'userId required' });
-
             const user = await db.getUser(userId);
+            const history = await db.listHistory(userId, 40);
             res.json({
                 user_id: user.user_id,
                 balance: user.balance,
-                current_model: user.current_model || 'flash'
+                current_model: user.current_model || 'flash',
+                blocked: !!user.blocked,
+                history
             });
         } catch (e) {
             console.error('API /api/me error:', e.message);
@@ -44,31 +36,36 @@ function startWebApp() {
         }
     });
 
+    app.get('/api/templates', async (req, res) => {
+        try {
+            const templates = await db.listTemplates(false);
+            res.json({ templates });
+        } catch (e) {
+            res.status(500).json({ error: e.message, templates: [] });
+        }
+    });
+
     app.post('/api/set-model', async (req, res) => {
         try {
             const { userId, model } = req.body;
             if (!userId || !model) return res.status(400).json({ error: 'userId and model required' });
-
+            const user = await db.getUser(userId);
+            if (user.blocked) return res.status(403).json({ error: 'blocked' });
             const ok = await db.setCurrentModel(userId, model);
-            if (ok) {
-                res.json({ success: true, model });
-            } else {
-                res.status(500).json({ error: 'Failed to set model' });
-            }
+            res.json({ success: !!ok, model });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
     });
 
-    // Админка API
     app.get('/api/admin/users', async (req, res) => {
         try {
             const q = (req.query.q || '').toString();
             const result = await db.pool.query(
-                `SELECT user_id, balance, current_model, created_at 
-                 FROM users 
-                 WHERE user_id::text ILIKE $1 
-                 ORDER BY created_at DESC 
+                `SELECT user_id, balance, current_model, blocked, created_at
+                 FROM users
+                 WHERE user_id::text ILIKE $1
+                 ORDER BY created_at DESC
                  LIMIT 100`,
                 [`%${q}%`]
             );
@@ -80,10 +77,10 @@ function startWebApp() {
 
     app.post('/api/admin/balance', async (req, res) => {
         try {
-            const { userId, delta } = req.body;
+            const { userId, delta, reason } = req.body;
             if (!userId || delta === undefined) return res.status(400).json({ error: 'userId and delta required' });
-            const newBalance = await db.updateBalance(userId, Number(delta));
-            res.json({ ok: true, balance: newBalance });
+            const newBalance = await db.updateBalance(userId, Number(delta), reason || 'Админ');
+            res.json({ ok: newBalance !== null, balance: newBalance });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
@@ -91,14 +88,43 @@ function startWebApp() {
 
     app.post('/api/admin/block', async (req, res) => {
         try {
-            const { userId } = req.body;
+            const { userId, blocked } = req.body;
             if (!userId) return res.status(400).json({ error: 'userId required' });
-            // Простая блокировка через поле blocked (нужно добавить колонку)
-            await db.pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked BOOLEAN DEFAULT false`);
-            const cur = await db.pool.query(`SELECT blocked FROM users WHERE user_id = $1`, [userId]);
-            const newBlocked = !(cur.rows[0]?.blocked);
-            await db.pool.query(`UPDATE users SET blocked = $1 WHERE user_id = $2`, [newBlocked, userId]);
-            res.json({ ok: true, blocked: newBlocked });
+            let next = blocked;
+            if (typeof next !== 'boolean') {
+                const user = await db.getUser(userId);
+                next = !user.blocked;
+            }
+            await db.setBlocked(userId, next);
+            res.json({ ok: true, blocked: next });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.get('/api/admin/templates', async (req, res) => {
+        try {
+            res.json({ templates: await db.listTemplates(true) });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.post('/api/admin/templates', async (req, res) => {
+        try {
+            const { title, prompt } = req.body || {};
+            if (!title || !prompt) return res.status(400).json({ error: 'title and prompt required' });
+            const row = await db.saveTemplate(req.body);
+            res.json({ ok: true, template: row });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.post('/api/admin/templates/delete', async (req, res) => {
+        try {
+            await db.deleteTemplate(req.body.id);
+            res.json({ ok: true });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
