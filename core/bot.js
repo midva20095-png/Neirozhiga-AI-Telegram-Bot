@@ -998,8 +998,16 @@ async function startBot(app) {
         }
     });
 
-    bot.launch().then(() => {
+    bot.launch().then(async () => {
         console.log('🤖 Бот успешно запущен!');
+        try {
+            await bot.telegram.setChatMenuButton({
+                menu_button: { type: 'web_app', text: 'Кабинет', web_app: { url: WEBAPP_URL } }
+            });
+            console.log('✅ Кнопка меню Mini App установлена:', WEBAPP_URL);
+        } catch (e) {
+            console.error('❌ Не удалось поставить кнопку меню:', e.message);
+        }
     }).catch(err => {
         console.error('❌ Ошибка запуска бота:', err);
     });
