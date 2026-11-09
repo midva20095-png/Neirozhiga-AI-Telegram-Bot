@@ -71,7 +71,106 @@ async function initDB() {
       PRIMARY KEY (user_id, model, day)
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value JSONB NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS support_tickets (
+      id SERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      username TEXT,
+      message TEXT NOT NULL,
+      answer TEXT,
+      status TEXT DEFAULT 'open',
+      source TEXT DEFAULT 'bot',
+      created_at TIMESTAMP DEFAULT NOW(),
+      answered_at TIMESTAMP
+    )
+  `);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS spent INTEGER DEFAULT 0`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gens INTEGER DEFAULT 0`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP DEFAULT NOW()`);
   console.log('✅ Таблица users готова (PostgreSQL)');
+}
+
+async function getSettings(keys) {
+  const res = await pool.query('SELECT key, value FROM settings WHERE key = ANY($1)', [keys]);
+  const out = {};
+  for (const row of res.rows) out[row.key] = row.value;
+  return out;
+}
+
+async function setSetting(key, value) {
+  await pool.query(
+    `INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, NOW())
+     ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+    [key, JSON.stringify(value)]
+  );
+}
+
+async function touchUser(userId, username) {
+  const id = String(userId);
+  await getUser(id);
+  await pool.query(
+    'UPDATE users SET last_seen = NOW(), username = COALESCE($2, username) WHERE user_id = $1',
+    [id, username || null]
+  );
+}
+
+async function recordGeneration(userId, cost) {
+  await pool.query(
+    'UPDATE users SET gens = COALESCE(gens, 0) + 1, spent = COALESCE(spent, 0) + $2 WHERE user_id = $1',
+    [String(userId), Math.max(0, Number(cost) || 0)]
+  );
+}
+
+async function createTicket(userId, username, message, source) {
+  const res = await pool.query(
+    `INSERT INTO support_tickets (user_id, username, message, source) VALUES ($1,$2,$3,$4) RETURNING *`,
+    [String(userId), username || null, String(message).slice(0, 4000), source || 'bot']
+  );
+  return res.rows[0];
+}
+
+async function listTickets(status) {
+  const res = status && status !== 'all'
+    ? await pool.query('SELECT * FROM support_tickets WHERE status = $1 ORDER BY id DESC LIMIT 200', [status])
+    : await pool.query('SELECT * FROM support_tickets ORDER BY id DESC LIMIT 200');
+  return res.rows;
+}
+
+async function answerTicket(id, answer) {
+  const res = await pool.query(
+    `UPDATE support_tickets SET answer = $2, status = 'answered', answered_at = NOW() WHERE id = $1 RETURNING *`,
+    [id, String(answer).slice(0, 4000)]
+  );
+  return res.rows[0];
+}
+
+async function listUserIds() {
+  const res = await pool.query('SELECT user_id FROM users WHERE blocked = false');
+  return res.rows.map(r => r.user_id);
+}
+
+async function getStats() {
+  const q = await pool.query(`
+    SELECT
+      (SELECT COUNT(*)::int FROM users) AS users_total,
+      (SELECT COUNT(*)::int FROM users WHERE blocked) AS users_blocked,
+      (SELECT COUNT(*)::int FROM users WHERE last_seen >= NOW() - INTERVAL '1 day') AS active_day,
+      (SELECT COUNT(*)::int FROM users WHERE created_at >= NOW() - INTERVAL '1 day') AS new_day,
+      (SELECT COALESCE(SUM(balance),0)::int FROM users) AS balance_total,
+      (SELECT COALESCE(SUM(gens),0)::int FROM users) AS gens_total,
+      (SELECT COALESCE(SUM(spent),0)::int FROM users) AS spent_total,
+      (SELECT COALESCE(SUM(delta),0)::int FROM history WHERE delta > 0) AS credited_total,
+      (SELECT COUNT(*)::int FROM support_tickets WHERE status = 'open') AS tickets_open
+  `);
+  return q.rows[0];
 }
 
 async function getUser(userId) {
@@ -85,6 +184,23 @@ async function getUser(userId) {
     res = await pool.query('SELECT * FROM users WHERE user_id = $1', [id]);
   }
   return res.rows[0];
+}
+
+async function ensureUser(userId, username) {
+  const id = String(userId);
+  const res = await pool.query('SELECT * FROM users WHERE user_id = $1', [id]);
+  if (res.rows.length > 0) {
+    if (username) {
+      await pool.query('UPDATE users SET username = $2, last_seen = NOW() WHERE user_id = $1', [id, username]);
+    }
+    return { user: res.rows[0], isNew: false };
+  }
+  const ins = await pool.query(
+    'INSERT INTO users (user_id, balance, current_model, username) VALUES ($1, 0, $2, $3) ON CONFLICT (user_id) DO NOTHING RETURNING *',
+    [id, 'flash', username || null]
+  );
+  const user = ins.rows[0] || (await pool.query('SELECT * FROM users WHERE user_id = $1', [id])).rows[0];
+  return { user, isNew: ins.rows.length > 0 };
 }
 
 async function getUserBalance(userId) {
@@ -220,6 +336,16 @@ async function addGigaUse(userId, model) {
 module.exports = {
   initDB,
   getUser,
+  ensureUser,
+  getSettings,
+  setSetting,
+  touchUser,
+  recordGeneration,
+  createTicket,
+  listTickets,
+  answerTicket,
+  listUserIds,
+  getStats,
   getUserBalance,
   updateBalance,
   setCurrentModel,

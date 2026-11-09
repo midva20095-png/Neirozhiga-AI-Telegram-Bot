@@ -1,86 +1,170 @@
 const express = require('express');
 const path = require('path');
 const db = require('../core/db');
-const { generate } = require('../core/generate');
+const catalog = require('../core/catalog');
+const gen = require('../core/generate');
+const auth = require('../core/auth');
+
+// Определяет пользователя из initData Telegram или из подписанной ссылки.
+function resolveUserId(req) {
+    const initData = req.headers['x-telegram-init-data'] || (req.body && req.body.initData);
+    if (initData) {
+        const user = auth.validateInitData(initData);
+        if (user) return String(user.id);
+    }
+    const token = req.headers['x-user-token'] || req.query.tk || (req.body && req.body.tk);
+    if (token) {
+        const id = auth.verifyUserToken(token);
+        if (id) return id;
+    }
+    return null;
+}
+
+function requireUser(req, res, next) {
+    const userId = resolveUserId(req);
+    if (!userId) return res.status(401).json({ error: 'auth_required' });
+    req.userId = userId;
+    next();
+}
+
+function requireAdmin(req, res, next) {
+    const header = req.headers['authorization'] || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : header;
+    if (auth.verifyAdminToken(token)) return next();
+    return res.status(401).json({ error: 'admin_auth_required' });
+}
+
+function publicModels() {
+    return catalog.listModels().map(m => ({
+        key: m.key, name: m.name, short: m.short, desc: m.desc,
+        group: m.group, cost: m.cost, image: m.image, ratio: !!m.ratio,
+        limit: m.limit, free: m.cost === 0
+    }));
+}
 
 function startWebApp() {
     const app = express();
-    app.use(express.json({ limit: '1mb' }));
+    app.use(express.json({ limit: '2mb' }));
     app.use(express.urlencoded({ extended: true }));
 
     const publicPath = path.join(__dirname, '../public');
     app.use(express.static(publicPath));
+    app.get('/', (req, res) => res.sendFile(path.join(publicPath, 'index.html')));
+    app.get('/admin', (req, res) => res.sendFile(path.join(publicPath, 'admin.html')));
 
-    app.get('/', (req, res) => {
-        res.sendFile(path.join(publicPath, 'index.html'));
-    });
-    app.get('/admin', (req, res) => {
-        res.sendFile(path.join(publicPath, 'admin.html'));
+    // ---- Публичная конфигурация витрины ----
+    app.get('/api/config', (req, res) => {
+        const g = catalog.getGeneral();
+        res.json({
+            groups: catalog.GROUPS,
+            models: publicModels(),
+            packages: catalog.listPackages(),
+            site_url: g.site_url,
+            support_enabled: !!g.support_enabled,
+            default_model: catalog.defaultModelKey()
+        });
     });
 
-    app.get('/api/me', async (req, res) => {
+    // ---- Пользовательские эндпоинты ----
+    app.get('/api/me', requireUser, async (req, res) => {
         try {
-            const userId = req.query.userId || req.headers['x-telegram-user-id'];
-            if (!userId || !/^\d+$/.test(String(userId))) return res.status(400).json({ error: 'userId required' });
-            const user = await db.getUser(userId);
-            const history = await db.listHistory(userId, 40);
+            const user = await db.getUser(req.userId);
+            const history = await db.listHistory(req.userId, 40);
             res.json({
                 user_id: user.user_id,
                 balance: user.balance,
-                current_model: user.current_model || 'flash',
+                current_model: user.current_model || catalog.defaultModelKey(),
                 blocked: !!user.blocked,
                 history
             });
         } catch (e) {
-            console.error('API /api/me error:', e.message);
+            console.error('API /api/me:', e.message);
             res.status(500).json({ error: 'Internal error' });
         }
     });
 
     app.get('/api/templates', async (req, res) => {
         try {
-            const templates = await db.listTemplates(false);
-            res.json({ templates });
+            res.json({ templates: await db.listTemplates(false) });
         } catch (e) {
             res.status(500).json({ error: e.message, templates: [] });
         }
     });
 
-    app.post('/api/set-model', async (req, res) => {
+    app.post('/api/set-model', requireUser, async (req, res) => {
         try {
-            const { userId, model } = req.body;
-            if (!userId || !model) return res.status(400).json({ error: 'userId and model required' });
-            const user = await db.getUser(userId);
+            const { model } = req.body || {};
+            if (!model || !catalog.getModel(model)) return res.status(400).json({ error: 'model required' });
+            const user = await db.getUser(req.userId);
             if (user.blocked) return res.status(403).json({ error: 'blocked' });
-            const ok = await db.setCurrentModel(userId, model);
-            res.json({ success: !!ok, model });
+            await db.setCurrentModel(req.userId, model);
+            res.json({ success: true, model });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
     });
 
-    app.post('/api/generate', async (req, res) => {
+    app.post('/api/generate', requireUser, async (req, res) => {
         try {
-            const { userId, prompt, model } = req.body || {};
-            if (!userId || !/^\d+$/.test(String(userId))) return res.status(400).json({ error: 'userId required' });
+            const { prompt, model } = req.body || {};
             if (!prompt || !String(prompt).trim()) return res.status(400).json({ error: 'Введите промпт' });
-            const result = await generate({ userId, prompt: String(prompt).trim(), model });
+            const result = await gen.generateForWeb({ userId: req.userId, prompt: String(prompt).trim(), modelKey: model });
             res.json(result);
         } catch (e) {
-            console.error('API /api/generate error:', e.message);
-            res.status(400).json({ error: e.message || 'Ошибка генерации' });
+            console.error('API /api/generate:', e.message);
+            const code = e.code === 'busy' ? 429 : 400;
+            res.status(code).json({ error: e.message || 'Ошибка генерации' });
         }
     });
 
-    app.get('/api/admin/users', async (req, res) => {
+    app.post('/api/support', requireUser, async (req, res) => {
+        try {
+            if (!catalog.getGeneral().support_enabled) return res.status(403).json({ error: 'disabled' });
+            const message = String((req.body && req.body.message) || '').trim();
+            if (!message) return res.status(400).json({ error: 'Введите сообщение' });
+            const user = await db.getUser(req.userId);
+            const ticket = await db.createTicket(req.userId, user.username, message, 'webapp');
+            const bot = app.locals.bot;
+            if (bot) {
+                const text = `🚨 *Обращение из кабинета*\n\n👤 ID: \`${req.userId}\`\n💬 ${message}`;
+                for (const adminId of auth.adminIds()) {
+                    try { await bot.telegram.sendMessage(adminId, text, { parse_mode: 'Markdown' }); } catch (e) {}
+                }
+            }
+            res.json({ ok: true, ticket_id: ticket.id });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // ---- Админка: вход ----
+    app.post('/api/admin/login', (req, res) => {
+        const { password, initData } = req.body || {};
+        if (initData) {
+            const user = auth.validateInitData(initData);
+            if (user && auth.isAdminId(user.id)) return res.json({ token: auth.issueAdminToken(user.id) });
+        }
+        if (password && auth.checkAdminPassword(password)) {
+            return res.json({ token: auth.issueAdminToken('password') });
+        }
+        return res.status(401).json({ error: 'Неверный пароль' });
+    });
+
+    app.get('/api/admin/me', requireAdmin, (req, res) => res.json({ ok: true }));
+
+    app.get('/api/admin/stats', requireAdmin, async (req, res) => {
+        try { res.json({ stats: await db.getStats() }); }
+        catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.get('/api/admin/users', requireAdmin, async (req, res) => {
         try {
             const q = (req.query.q || '').toString();
             const result = await db.pool.query(
-                `SELECT user_id, balance, current_model, blocked, created_at
+                `SELECT user_id, username, balance, current_model, blocked, gens, spent, created_at, last_seen
                  FROM users
-                 WHERE user_id::text ILIKE $1
-                 ORDER BY created_at DESC
-                 LIMIT 100`,
+                 WHERE user_id::text ILIKE $1 OR COALESCE(username,'') ILIKE $1
+                 ORDER BY last_seen DESC NULLS LAST LIMIT 100`,
                 [`%${q}%`]
             );
             res.json({ users: result.rows });
@@ -89,26 +173,28 @@ function startWebApp() {
         }
     });
 
-    app.post('/api/admin/balance', async (req, res) => {
+    app.post('/api/admin/balance', requireAdmin, async (req, res) => {
         try {
-            const { userId, delta, reason } = req.body;
+            const { userId, delta, reason } = req.body || {};
             if (!userId || delta === undefined) return res.status(400).json({ error: 'userId and delta required' });
             const newBalance = await db.updateBalance(userId, Number(delta), reason || 'Админ');
+            const bot = app.locals.bot;
+            if (bot && newBalance !== null && Number(delta) !== 0) {
+                const sign = Number(delta) > 0 ? `➕ Начислено ${delta}` : `➖ Списано ${Math.abs(delta)}`;
+                try { await bot.telegram.sendMessage(userId, `💳 ${sign} кредитов.\nБаланс: ${newBalance} кр.`); } catch (e) {}
+            }
             res.json({ ok: newBalance !== null, balance: newBalance });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
     });
 
-    app.post('/api/admin/block', async (req, res) => {
+    app.post('/api/admin/block', requireAdmin, async (req, res) => {
         try {
-            const { userId, blocked } = req.body;
-            if (!userId || !/^\d+$/.test(String(userId))) return res.status(400).json({ error: 'userId required' });
+            const { userId, blocked } = req.body || {};
+            if (!userId) return res.status(400).json({ error: 'userId required' });
             let next = blocked;
-            if (typeof next !== 'boolean') {
-                const user = await db.getUser(userId);
-                next = !user.blocked;
-            }
+            if (typeof next !== 'boolean') next = !(await db.getUser(userId)).blocked;
             await db.setBlocked(userId, next);
             res.json({ ok: true, blocked: next });
         } catch (e) {
@@ -116,29 +202,101 @@ function startWebApp() {
         }
     });
 
-    app.get('/api/admin/templates', async (req, res) => {
+    app.post('/api/admin/message', requireAdmin, async (req, res) => {
         try {
-            res.json({ templates: await db.listTemplates(true) });
+            const { userId, text } = req.body || {};
+            if (!userId || !text) return res.status(400).json({ error: 'userId and text required' });
+            const bot = app.locals.bot;
+            if (!bot) return res.status(503).json({ error: 'bot offline' });
+            await bot.telegram.sendMessage(userId, String(text), { parse_mode: 'Markdown' });
+            res.json({ ok: true });
+        } catch (e) {
+            res.status(400).json({ error: e.message });
+        }
+    });
+
+    app.post('/api/admin/broadcast', requireAdmin, async (req, res) => {
+        try {
+            const text = String((req.body && req.body.text) || '').trim();
+            if (!text) return res.status(400).json({ error: 'text required' });
+            const bot = app.locals.bot;
+            if (!bot) return res.status(503).json({ error: 'bot offline' });
+            const ids = await db.listUserIds();
+            let sent = 0, failed = 0;
+            for (const id of ids) {
+                try { await bot.telegram.sendMessage(id, text, { parse_mode: 'Markdown' }); sent++; }
+                catch (e) { failed++; }
+                await new Promise(r => setTimeout(r, 40));
+            }
+            res.json({ ok: true, sent, failed, total: ids.length });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
     });
 
-    app.post('/api/admin/templates', async (req, res) => {
+    // ---- Админка: шаблоны ----
+    app.get('/api/admin/templates', requireAdmin, async (req, res) => {
+        try { res.json({ templates: await db.listTemplates(true) }); }
+        catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.post('/api/admin/templates', requireAdmin, async (req, res) => {
         try {
             const { title, prompt } = req.body || {};
             if (!title || !prompt) return res.status(400).json({ error: 'title and prompt required' });
-            const row = await db.saveTemplate(req.body);
-            res.json({ ok: true, template: row });
+            res.json({ ok: true, template: await db.saveTemplate(req.body) });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
     });
 
-    app.post('/api/admin/templates/delete', async (req, res) => {
+    app.post('/api/admin/templates/delete', requireAdmin, async (req, res) => {
+        try { await db.deleteTemplate(req.body.id); res.json({ ok: true }); }
+        catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    // ---- Админка: модели / пакеты / общие настройки ----
+    app.get('/api/admin/models', requireAdmin, (req, res) => {
+        res.json({ models: catalog.listModels({ includeDisabled: true }), groups: catalog.GROUPS });
+    });
+
+    app.post('/api/admin/models', requireAdmin, async (req, res) => {
+        try { res.json({ ok: true, models: await catalog.saveModels(db, req.body.models || {}) }); }
+        catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.get('/api/admin/packages', requireAdmin, (req, res) => res.json({ packages: catalog.listPackages() }));
+
+    app.post('/api/admin/packages', requireAdmin, async (req, res) => {
+        try { res.json({ ok: true, packages: await catalog.savePackages(db, req.body.packages || []) }); }
+        catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.get('/api/admin/general', requireAdmin, (req, res) => {
+        res.json({ general: catalog.getGeneral(), models: publicModels() });
+    });
+
+    app.post('/api/admin/general', requireAdmin, async (req, res) => {
+        try { res.json({ ok: true, general: await catalog.saveGeneral(db, req.body.general || {}) }); }
+        catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    // ---- Админка: поддержка ----
+    app.get('/api/admin/tickets', requireAdmin, async (req, res) => {
+        try { res.json({ tickets: await db.listTickets(req.query.status || 'open') }); }
+        catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.post('/api/admin/tickets/answer', requireAdmin, async (req, res) => {
         try {
-            await db.deleteTemplate(req.body.id);
-            res.json({ ok: true });
+            const { id, answer } = req.body || {};
+            if (!id || !answer) return res.status(400).json({ error: 'id and answer required' });
+            const ticket = await db.answerTicket(id, answer);
+            const bot = app.locals.bot;
+            if (bot && ticket) {
+                try { await bot.telegram.sendMessage(ticket.user_id, `💬 *Ответ поддержки:*\n\n${answer}`, { parse_mode: 'Markdown' }); } catch (e) {}
+            }
+            res.json({ ok: true, ticket });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }

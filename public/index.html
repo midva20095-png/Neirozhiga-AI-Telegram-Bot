@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>НейроЯга</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Unbounded:wght@700&display=swap" rel="stylesheet">
@@ -10,28 +10,39 @@
 :root{--bg:#0b0614;--card:#140c24;--text:#f3efff;--mut:#a79cc4;--line:rgba(255,255,255,.1);--grad:linear-gradient(135deg,#00ffe0,#b366ff 55%,#ff2d95)}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 Manrope,system-ui,sans-serif;min-height:100%}
-button,textarea{font:inherit;color:inherit}
-.app{max-width:560px;margin:0 auto;padding:12px 12px 24px}
+button,textarea,input,select{font:inherit;color:inherit}
+.app{max-width:620px;margin:0 auto;padding:12px 12px calc(84px + env(safe-area-inset-bottom))}
 .top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .logo{font-family:Unbounded,sans-serif;font-weight:700;font-size:18px;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;flex:1}
-.bal{font-weight:800;border:1px solid var(--line);border-radius:12px;padding:6px 10px}
+.bal{font-weight:800;border:1px solid var(--line);border-radius:12px;padding:6px 10px;white-space:nowrap}
 .site{text-decoration:none;color:#fff;border:1px solid var(--line);border-radius:12px;padding:6px 10px;font-size:13px}
-.tabs{display:flex;gap:6px;overflow:auto;margin-bottom:12px}
-.tabs button{flex:0 0 auto;border:1px solid var(--line);background:#120a20;color:var(--mut);border-radius:12px;padding:8px 12px;font-weight:700}
-.tabs button.on{background:var(--grad);color:#fff;border-color:transparent}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
-textarea{width:100%;min-height:110px;border-radius:14px;border:1px solid var(--line);background:#1c1233;padding:12px;outline:none;resize:vertical}
+textarea{width:100%;min-height:120px;border-radius:14px;border:1px solid var(--line);background:#1c1233;padding:12px;outline:none;resize:vertical}
 .btn{width:100%;border:0;border-radius:14px;padding:14px;font-weight:800;color:#fff;background:var(--grad);margin-top:10px}
 .btn:disabled{opacity:.5}
-.now{color:var(--mut);font-size:13px;margin:8px 0}
+.now{color:var(--mut);font-size:13px;margin:0 0 8px}
+.now b{color:var(--text)}
+.groupttl{font-weight:800;margin:4px 2px 8px;font-size:13px;color:var(--mut)}
 .model{display:flex;justify-content:space-between;gap:8px;width:100%;text-align:left;background:#1c1233;border:1px solid transparent;border-radius:14px;padding:12px;margin-bottom:8px}
 .model.on{border-color:#b366ff;background:#24163d}
 .name{font-weight:800}.meta{color:var(--mut);font-size:12px}.cost{font-weight:800;white-space:nowrap}
+.cost.free{color:#3ee08f}
 .result img,.result video,.result audio{max-width:100%;border-radius:12px;margin-top:10px}
+.result .meta{margin-top:8px}
 .empty{color:var(--mut);text-align:center;padding:16px 0}
 .err{color:#ff8fb0;font-weight:700}
 .item{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:0}
 .plus{color:#3ee08f;font-weight:800}.minus{color:#ff8be0;font-weight:800}
+.pack{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#1c1233;border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:8px}
+.pack button{border:0;border-radius:10px;padding:8px 14px;font-weight:800;color:#fff;background:var(--grad)}
+.tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;gap:4px;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:rgba(11,6,20,.96);border-top:1px solid var(--line);backdrop-filter:blur(8px)}
+.tabbar button{flex:1;border:0;background:transparent;color:var(--mut);font-size:11px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0}
+.tabbar button .ic{font-size:19px}
+.tabbar button.on{color:#fff}
+.spin{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-3px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+.hint{font-size:12px;color:var(--mut);margin-top:6px}
 </style>
 </head>
 <body>
@@ -39,105 +50,136 @@ textarea{width:100%;min-height:110px;border-radius:14px;border:1px solid var(--l
   <div class="top">
     <div class="logo">НейроЯга</div>
     <div class="bal" id="bal">—</div>
-    <a class="site" href="https://babayagaland.ru" target="_blank">Сайт</a>
-  </div>
-  <div class="tabs" id="tabs">
-    <button data-t="gen" class="on">Генерация</button>
-    <button data-t="models">Модели</button>
-    <button data-t="tpl">Шаблоны</button>
-    <button data-t="hist">История</button>
+    <a class="site" id="site" href="#" target="_blank">Сайт</a>
   </div>
   <div id="view"></div>
 </div>
+<div class="tabbar" id="tabs">
+  <button data-t="gen" class="on"><span class="ic">✨</span>Генерация</button>
+  <button data-t="models"><span class="ic">🤖</span>Модели</button>
+  <button data-t="tpl"><span class="ic">📋</span>Шаблоны</button>
+  <button data-t="hist"><span class="ic">🧾</span>История</button>
+  <button data-t="top"><span class="ic">💳</span>Баланс</button>
+  <button data-t="help"><span class="ic">💬</span>Помощь</button>
+</div>
 <script>
-const MODELS = [
-  ['flash','Gemini Flash','Текст',4],
-  ['flash_25','Gemini 2.5 Flash','Текст',4],
-  ['pro','Gemini Pro','Текст',15],
-  ['nanobanana','Nano Banana','Картинка',20],
-  ['nanobanana_pro','Nano Banana Pro','Картинка',50],
-  ['qwen-image-3-0','Qwen Image 3.0','Картинка',45],
-  ['seedream-4-5','Seedream 4.5','Картинка',20],
-  ['recraft-v4-1','Recraft V4.1','Картинка',20],
-  ['runway-gen4-image','Runway Gen4','Картинка',80],
-  ['qwen3-tts-flash','Озвучка','Голос',100]
-];
-const CAT = {chat:'Чат',image:'Картинки',video:'Видео',audio:'Голос'};
-let tab='gen', me=null, templates=[], userId=null, busy=false, last=null;
+const CAT = {chat:'Чат', text:'Текст', image:'Картинки', video:'Видео', audio:'Голос', fix:'Улучшение'};
+let tab='gen', me=null, cfg=null, templates=[], userId=null, token=null, busy=false, last=null;
 
 function tg(){ return window.Telegram && window.Telegram.WebApp; }
 function parseUser(raw){
   if (!raw) return null;
-  try {
-    const p = new URLSearchParams(raw);
-    const u = JSON.parse(p.get('user') || 'null');
-    if (u && u.id) return u.id;
-  } catch(e){}
+  try { const p = new URLSearchParams(raw); const u = JSON.parse(p.get('user')||'null'); if (u && u.id) return u.id; } catch(e){}
   return null;
 }
-function detectUser(){
+function detectAuth(){
   const w = tg();
-  if (w && w.initDataUnsafe && w.initDataUnsafe.user && w.initDataUnsafe.user.id) return w.initDataUnsafe.user.id;
-  if (w && w.initData) { const id = parseUser(w.initData); if (id) return id; }
+  if (w && w.initData) { initData = w.initData; }
+  // подписанный токен из ссылки (#tk=...) — для открытия с обычной клавиатуры
   const hash = (location.hash||'').replace(/^#/,'');
   const hp = new URLSearchParams(hash);
-  return parseUser(hp.get('tgWebAppData') || hash);
+  if (hp.get('tk')) token = hp.get('tk');
+  if (w && w.initDataUnsafe && w.initDataUnsafe.user && w.initDataUnsafe.user.id) userId = w.initDataUnsafe.user.id;
+  else if (w && w.initData) userId = parseUser(w.initData);
+  else if (token) userId = token.split('.')[0];
 }
-function nameOf(k){ const m = MODELS.find(x=>x[0]===k); return m ? m[1] : k; }
-function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&','<':'<','>':'>','"':'"'}[c])); }
+let initData = '';
+function authHeaders(){
+  const h = {'Content-Type':'application/json'};
+  if (initData) h['X-Telegram-Init-Data'] = initData;
+  if (token) h['X-User-Token'] = token;
+  return h;
+}
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function modelOf(k){ return (cfg&&cfg.models||[]).find(m=>m.key===k) || null; }
+function nameOf(k){ const m = modelOf(k); return m ? m.name : k; }
+function costLabel(m){ return m.free ? 'бесплатно' : (m.cost+' кр'); }
 
+async function loadConfig(){
+  try { cfg = await (await fetch('/api/config')).json(); }
+  catch(e){ cfg = {models:[],packages:[],groups:{}}; }
+  const s = document.getElementById('site');
+  if (cfg.site_url){ s.href = cfg.site_url; s.style.display=''; } else s.style.display='none';
+}
 async function load(){
-  userId = detectUser();
   if (!userId) { draw(); return; }
   try {
-    const r = await fetch('/api/me?userId='+encodeURIComponent(userId));
+    const r = await fetch('/api/me', {headers: authHeaders()});
+    if (r.status === 401) { me = null; draw(); return; }
     me = await r.json();
     if (me.error) throw new Error(me.error);
-  } catch(e){ me = {error:true, balance:0, history:[], current_model:'flash'}; }
-  try {
-    const t = await fetch('/api/templates');
-    templates = (await t.json()).templates || [];
-  } catch(e){ templates=[]; }
+  } catch(e){ me = {error:true, balance:0, history:[], current_model:(cfg&&cfg.default_model)||'flash'}; }
+  try { templates = ((await (await fetch('/api/templates')).json()).templates)||[]; } catch(e){ templates=[]; }
   document.getElementById('bal').textContent = (me.balance||0)+' кр';
   draw();
 }
 function draw(){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.t===tab));
   const box = document.getElementById('view');
-  if (!userId) {
-    box.innerHTML = '<div class="card"><p class="empty">Откройте приложение кнопкой «Кабинет» в боте. Ссылка из браузера аккаунт не передаёт.</p></div>';
+  if (!userId || (me && !me.user_id && me.error!==true && !me.balance)) {
+    box.innerHTML = '<div class="card"><p class="empty">Откройте кабинет кнопкой «Кабинет» в боте — ссылка из обычного браузера не передаёт аккаунт Telegram.</p></div>';
     return;
   }
   if (me && me.blocked) { box.innerHTML = '<div class="card err">Аккаунт в чёрном списке.</div>'; return; }
-  if (tab==='gen') box.innerHTML = gen();
-  else if (tab==='models') box.innerHTML = models();
-  else if (tab==='tpl') box.innerHTML = tpls();
-  else box.innerHTML = hist();
+  if (tab==='gen') box.innerHTML = viewGen();
+  else if (tab==='models') box.innerHTML = viewModels();
+  else if (tab==='tpl') box.innerHTML = viewTpl();
+  else if (tab==='hist') box.innerHTML = viewHist();
+  else if (tab==='top') box.innerHTML = viewTop();
+  else box.innerHTML = viewHelp();
   bind();
 }
-function gen(){
-  const cur = (me&&me.current_model)||'flash';
+function viewGen(){
+  const cur = (me&&me.current_model)||(cfg&&cfg.default_model)||'flash';
+  const m = modelOf(cur);
   const res = last ? renderResult(last) : '';
-  return '<div class="card"><div class="now">Модель: <b>'+esc(nameOf(cur))+'</b> · '+costOf(cur)+' кр</div>'+
-    '<textarea id="prompt" placeholder="Что сгенерировать"></textarea>'+
-    '<button class="btn" id="go">'+(busy?'Генерирую…':'Сгенерировать')+'</button>'+res+'</div>';
+  const info = m ? ('<div class="now">Модель: <b>'+esc(m.name)+'</b> · '+costLabel(m)+'</div>') : '';
+  const note = m && m.image==='required'
+    ? '<div class="hint">Эта модель работает с загруженным фото. Загрузка фото доступна в чате бота; здесь — текстовые модели.</div>' : '';
+  return '<div class="card">'+info+
+    '<textarea id="prompt" placeholder="Опишите, что сгенерировать">'+esc(last&&last._prompt||'')+'</textarea>'+
+    '<button class="btn" id="go"'+(busy?' disabled':'')+'>'+(busy?'<span class="spin"></span>Генерирую…':'Сгенерировать')+'</button>'+
+    note+res+'</div>';
 }
-function costOf(k){ const m = MODELS.find(x=>x[0]===k); return m ? m[3] : 4; }
-function models(){
+function viewModels(){
   const cur = (me&&me.current_model)||'flash';
-  return '<div class="card">'+MODELS.map(m=>'<button class="model'+(m[0]===cur?' on':'')+'" data-model="'+m[0]+'"><div><div class="name">'+(m[0]===cur?'✅ ':'')+esc(m[1])+'</div><div class="meta">'+esc(m[2])+'</div></div><div class="cost">'+m[3]+' кр</div></button>').join('')+'</div>';
+  const groups = (cfg&&cfg.groups)||{};
+  const order = Object.keys(groups);
+  let html = '';
+  for (const g of order){
+    const list = (cfg.models||[]).filter(m=>m.group===g);
+    if (!list.length) continue;
+    html += '<div class="groupttl">'+esc(groups[g])+'</div><div class="card">'+
+      list.map(m=>'<button class="model'+(m.key===cur?' on':'')+'" data-model="'+m.key+'">'+
+        '<div><div class="name">'+(m.key===cur?'✅ ':'')+esc(m.name)+'</div><div class="meta">'+esc(m.desc||'')+(m.limit!=null?(' · лимит '+m.limit+'/день'):'')+'</div></div>'+
+        '<div class="cost'+(m.free?' free':'')+'">'+costLabel(m)+'</div></button>').join('')+'</div>';
+  }
+  return html || '<div class="card"><div class="empty">Модели недоступны</div></div>';
 }
-function tpls(){
-  if (!templates.length) return '<div class="card"><div class="empty">Шаблонов нет. Добавьте в админке /admin</div></div>';
-  return '<div class="card">'+templates.map(t=>'<button class="model" data-tpl="'+t.id+'"><div><div class="name">'+esc(t.title)+'</div><div class="meta">'+(CAT[t.category]||t.category)+' · '+esc(nameOf(t.model))+'</div></div><div class="cost">'+t.cost+' кр</div></button>').join('')+'</div>';
+function viewTpl(){
+  if (!templates.length) return '<div class="card"><div class="empty">Шаблонов нет</div></div>';
+  return '<div class="card">'+templates.map(t=>'<button class="model" data-tpl="'+t.id+'"><div><div class="name">'+esc(t.title)+'</div><div class="meta">'+esc(CAT[t.category]||t.category)+' · '+esc(nameOf(t.model))+'</div></div><div class="cost">'+t.cost+' кр</div></button>').join('')+'</div>';
 }
-function hist(){
+function viewHist(){
   const rows = (me&&me.history)||[];
   if (!rows.length) return '<div class="card"><div class="empty">Операций нет</div></div>';
   return '<div class="card">'+rows.map(h=>{
     const sign = Number(h.delta)>=0;
     return '<div class="item"><div><b>'+esc(h.reason||'')+'</b><div class="meta">остаток '+(h.balance||0)+'</div></div><div class="'+(sign?'plus':'minus')+'">'+(sign?'+':'')+h.delta+'</div></div>';
   }).join('')+'</div>';
+}
+function viewTop(){
+  const packs = (cfg&&cfg.packages)||[];
+  const head = '<div class="card"><div class="now">Текущий баланс</div><div style="font-size:28px;font-weight:800">'+((me&&me.balance)||0)+' кр</div></div>';
+  if (!packs.length) return head+'<div class="card"><div class="empty">Пакеты недоступны. Пополнение — в чате бота кнопкой «Пополнить».</div></div>';
+  return head+'<div class="groupttl">Пакеты</div><div class="card">'+packs.map(p=>'<div class="pack"><div><div class="name">'+esc(p.title)+'</div><div class="meta">'+p.credits+' кредитов</div></div><button data-pkg="'+esc(p.id)+'">'+p.price+' ₽</button></div>').join('')+
+    '</div><div class="hint">Оплата открывается в чате бота: мы отправим кнопку оплаты туда.</div>';
+}
+function viewHelp(){
+  if (cfg && cfg.support_enabled===false) return '<div class="card"><div class="empty">Поддержка временно недоступна.</div></div>';
+  return '<div class="card"><div class="now">Напишите нам — ответ придёт в чат бота.</div>'+
+    '<textarea id="supmsg" placeholder="Опишите вопрос или проблему"></textarea>'+
+    '<button class="btn" id="supsend">Отправить</button><p id="supok" class="hint"></p></div>';
 }
 function renderResult(r){
   if (r.error) return '<p class="err">'+esc(r.error)+'</p>';
@@ -149,51 +191,66 @@ function renderResult(r){
   return html;
 }
 function bind(){
-  const go = document.getElementById('go');
-  if (go) go.onclick = generate;
+  const go = document.getElementById('go'); if (go) go.onclick = generate;
   document.querySelectorAll('[data-model]').forEach(b=>b.onclick=()=>setModel(b.dataset.model));
   document.querySelectorAll('[data-tpl]').forEach(b=>b.onclick=()=>useTpl(Number(b.dataset.tpl)));
+  document.querySelectorAll('[data-pkg]').forEach(b=>b.onclick=()=>buy(b.dataset.pkg));
+  const ss = document.getElementById('supsend'); if (ss) ss.onclick = sendSupport;
 }
 async function setModel(model){
   if (me) me.current_model = model;
+  if (tab==='models'){ tab='gen'; }
   draw();
-  try { await fetch('/api/set-model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:String(userId),model})}); } catch(e){}
+  try { await fetch('/api/set-model',{method:'POST',headers:authHeaders(),body:JSON.stringify({model})}); } catch(e){}
 }
 function useTpl(id){
-  const t = templates.find(x=>x.id===id);
-  if (!t) return;
+  const t = templates.find(x=>x.id===id); if (!t) return;
   if (me) me.current_model = t.model;
-  tab = 'gen';
-  draw();
-  const p = document.getElementById('prompt');
-  if (p) p.value = t.prompt;
+  last = {_prompt:t.prompt, text:'', cost:0, balance:(me&&me.balance)||0, type:'text'};
+  tab='gen'; draw();
+  const p = document.getElementById('prompt'); if (p){ p.value=t.prompt; p.focus(); }
+}
+function buy(pkgId){
+  const w = tg();
+  if (w && w.sendData){ w.sendData(JSON.stringify({action:'buy_credits', pkg:pkgId})); }
+  else alert('Откройте оплату в чате бота кнопкой «Пополнить».');
 }
 async function generate(){
   if (busy) return;
-  const prompt = (document.getElementById('prompt')||{}).value || '';
-  if (!prompt.trim()) return;
-  busy = true; last = null; draw();
+  const prompt = ((document.getElementById('prompt')||{}).value||'').trim();
+  if (!prompt) return;
+  busy = true; last = {_prompt:prompt}; draw();
   try {
-    const r = await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:String(userId),prompt,model:me&&me.current_model})});
+    const r = await fetch('/api/generate',{method:'POST',headers:authHeaders(),body:JSON.stringify({prompt,model:me&&me.current_model})});
     const d = await r.json();
-    if (!r.ok || d.error) throw new Error(d.error || 'Ошибка');
-    last = d;
+    if (!r.ok || d.error) throw new Error(d.error||'Ошибка');
+    last = Object.assign({_prompt:prompt}, d);
     if (me) me.balance = d.balance;
     document.getElementById('bal').textContent = d.balance+' кр';
-  } catch(e){ last = {error:e.message}; }
+  } catch(e){ last = {_prompt:prompt, error:e.message}; }
   busy = false; draw();
-  const p = document.getElementById('prompt');
-  if (p) p.value = prompt;
+}
+async function sendSupport(){
+  const ta = document.getElementById('supmsg');
+  const msg = (ta&&ta.value||'').trim();
+  const ok = document.getElementById('supok');
+  if (!msg){ if(ok) ok.textContent='Введите сообщение'; return; }
+  try {
+    const r = await fetch('/api/support',{method:'POST',headers:authHeaders(),body:JSON.stringify({message:msg})});
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error||'Ошибка');
+    if (ta) ta.value=''; if (ok) ok.textContent='Отправлено! Ответ придёт в чат бота.';
+  } catch(e){ if (ok) ok.textContent='Не удалось отправить: '+e.message; }
 }
 document.getElementById('tabs').onclick = function(e){
   const b = e.target.closest('button'); if (!b) return;
-  tab = b.dataset.t; draw();
+  tab = b.dataset.t; last = (tab==='gen') ? last : last; draw();
 };
-const w = tg();
-if (w) { try { w.ready(); w.expand(); } catch(e){} }
-let tries = 0;
-function boot(){ load(); if (!userId && tries<20){ tries++; setTimeout(boot, 250); } }
-boot();
+const w = tg(); if (w){ try{ w.ready(); w.expand(); }catch(e){} }
+detectAuth();
+(async function boot(){ await loadConfig(); await load(); })();
+let tries=0;
+(function retry(){ if (!userId && tries<20){ tries++; detectAuth(); if (userId){ load(); return; } setTimeout(retry,250); } })();
 </script>
 </body>
 </html>
