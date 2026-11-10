@@ -80,6 +80,16 @@ function defaultEnabled(m) {
     return true;
 }
 
+// null — лимит снят, число (включая 0) — жёсткий дневной потолок, отсутствие ключа — значение по умолчанию.
+function resolvedLimit(model, override) {
+    if (model.provider !== 'giga') return undefined;
+    if (!override || !Object.prototype.hasOwnProperty.call(override, 'limit')) return model.limit;
+    if (override.limit === null || override.limit === '') return null;
+    const n = Number(override.limit);
+    if (!Number.isFinite(n)) return model.limit;
+    return Math.max(0, Math.round(n));
+}
+
 function listModels({ includeDisabled = false } = {}) {
     const out = BASE_MODELS.map((m, idx) => {
         const o = overrides.models[m.key] || {};
@@ -90,9 +100,7 @@ function listModels({ includeDisabled = false } = {}) {
             short: o.short || m.short,
             desc: o.desc !== undefined ? o.desc : m.desc,
             cost: Number.isFinite(Number(o.cost)) && o.cost !== '' && o.cost !== null ? Math.max(0, Math.round(Number(o.cost))) : m.cost,
-            limit: m.provider === 'giga'
-                ? (Number.isFinite(Number(o.limit)) && o.limit !== null && o.limit !== '' ? Math.max(0, Math.round(Number(o.limit))) : m.limit)
-                : undefined,
+            limit: resolvedLimit(m, Object.prototype.hasOwnProperty.call(overrides.models, m.key) ? overrides.models[m.key] : null),
             enabled: typeof o.enabled === 'boolean' ? o.enabled : defaultEnabled(m)
         };
     });
@@ -127,13 +135,23 @@ function defaultModelKey() {
     return first ? first.key : 'flash';
 }
 
+function asJson(value) {
+    if (typeof value === 'string') {
+        try { return JSON.parse(value); } catch (e) { return null; }
+    }
+    return value;
+}
+
 async function load(db) {
     try {
         const rows = await db.getSettings(['models', 'packages', 'general']);
+        const models = asJson(rows.models);
+        const packages = asJson(rows.packages);
+        const general = asJson(rows.general);
         overrides = {
-            models: rows.models && typeof rows.models === 'object' ? rows.models : {},
-            packages: Array.isArray(rows.packages) ? rows.packages : null,
-            general: rows.general && typeof rows.general === 'object' ? rows.general : {}
+            models: models && typeof models === 'object' && !Array.isArray(models) ? models : {},
+            packages: Array.isArray(packages) ? packages : null,
+            general: general && typeof general === 'object' && !Array.isArray(general) ? general : {}
         };
     } catch (e) {
         console.error('⚠️ Не удалось загрузить настройки каталога:', e.message);
@@ -148,7 +166,11 @@ function sanitizeModelOverrides(input) {
         const item = {};
         if (typeof o.enabled === 'boolean') item.enabled = o.enabled;
         if (o.cost !== undefined && o.cost !== '' && Number.isFinite(Number(o.cost))) item.cost = Math.max(0, Math.round(Number(o.cost)));
-        if (o.limit !== undefined && o.limit !== '' && Number.isFinite(Number(o.limit))) item.limit = Math.max(0, Math.round(Number(o.limit)));
+        const base = BASE_MODELS.find(m => m.key === key);
+        if (base && base.provider === 'giga' && Object.prototype.hasOwnProperty.call(o, 'limit')) {
+            if (o.limit === null || o.limit === '') item.limit = null;
+            else if (Number.isFinite(Number(o.limit))) item.limit = Math.max(0, Math.round(Number(o.limit)));
+        }
         if (typeof o.name === 'string' && o.name.trim()) item.name = o.name.trim().slice(0, 60);
         if (typeof o.short === 'string' && o.short.trim()) item.short = o.short.trim().slice(0, 30);
         if (typeof o.desc === 'string') item.desc = o.desc.trim().slice(0, 80);

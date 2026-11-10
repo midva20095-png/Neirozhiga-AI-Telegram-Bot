@@ -12,10 +12,16 @@ const MODEL_MAPPING = {
     'veo': 'veo-3.1-generate-preview'
 };
 
-async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeTypes, modelKey = 'flash', imageConfig }) {
+async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeTypes, modelKey = 'flash', imageConfig, aspectRatio }) {
     try {
         const resolvedModel = MODEL_MAPPING[modelKey] || MODEL_MAPPING['flash'];
-        const safePrompt = prompt ? prompt.trim() : "";
+        let safePrompt = prompt ? prompt.trim() : "";
+        if (aspectRatio && aspectRatio !== 'auto' && !safePrompt.includes(String(aspectRatio))) {
+            safePrompt = safePrompt ? `${safePrompt}, aspect ratio ${aspectRatio}` : `aspect ratio ${aspectRatio}`;
+        }
+        if (!imageConfig && aspectRatio && aspectRatio !== 'auto') {
+            imageConfig = { imageConfig: { aspectRatio: String(aspectRatio) } };
+        }
 
         // 🎬 ОБРАБОТКА ГЕНЕРАЦИИ ВИДЕО ЧЕРЕЗ VEO
         if (modelKey === 'veo') {

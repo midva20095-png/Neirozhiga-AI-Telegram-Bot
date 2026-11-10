@@ -4,6 +4,7 @@ const db = require('../core/db');
 const catalog = require('../core/catalog');
 const gen = require('../core/generate');
 const auth = require('../core/auth');
+const templatesSrc = require('../core/templates');
 
 // Определяет пользователя из initData Telegram или из подписанной ссылки.
 function resolveUserId(req) {
@@ -42,9 +43,28 @@ function publicModels() {
     }));
 }
 
+function decodeImage(input) {
+    const raw = String(input || '');
+    const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([a-zA-Z0-9+/=\s]+)$/.exec(raw);
+    const mime = match ? match[1] : 'image/jpeg';
+    const b64 = (match ? match[2] : raw).replace(/\s/g, '');
+    if (!/^[a-zA-Z0-9+/=]+$/.test(b64)) {
+        const error = new Error('Некорректное фото');
+        error.code = 'image';
+        throw error;
+    }
+    const buffer = Buffer.from(b64, 'base64');
+    if (!buffer.length || buffer.length > 7 * 1024 * 1024) {
+        const error = new Error('Фото слишком большое. Выберите снимок поменьше.');
+        error.code = 'image';
+        throw error;
+    }
+    return { buffer, mime };
+}
+
 function startWebApp() {
     const app = express();
-    app.use(express.json({ limit: '2mb' }));
+    app.use(express.json({ limit: '12mb' }));
     app.use(express.urlencoded({ extended: true }));
 
     const publicPath = path.join(__dirname, '../public');
@@ -85,7 +105,7 @@ function startWebApp() {
 
     app.get('/api/templates', async (req, res) => {
         try {
-            res.json({ templates: await db.listTemplates(false) });
+            res.json({ templates: await templatesSrc.listPublic() });
         } catch (e) {
             res.status(500).json({ error: e.message, templates: [] });
         }
@@ -106,9 +126,41 @@ function startWebApp() {
 
     app.post('/api/generate', requireUser, async (req, res) => {
         try {
-            const { prompt, model } = req.body || {};
-            if (!prompt || !String(prompt).trim()) return res.status(400).json({ error: 'Введите промпт' });
-            const result = await gen.generateForWeb({ userId: req.userId, prompt: String(prompt).trim(), modelKey: model });
+            const body = req.body || {};
+            let prompt = body.prompt ? String(body.prompt).trim() : '';
+            let modelKey = body.model;
+            let charge;
+            let reason;
+            let aspect = body.format || null;
+            let keepModel = false;
+            let strict = false;
+            if (body.templateId) {
+                const tpl = await templatesSrc.getFull(body.templateId);
+                if (!tpl) return res.status(404).json({ error: 'Шаблон не найден' });
+                prompt = tpl.prompt || prompt;
+                if (!prompt) prompt = 'Сделай изображение по прикреплённому фото';
+                modelKey = tpl.model;
+                charge = tpl.cost;
+                reason = `Шаблон · ${tpl.title}`;
+                keepModel = true;
+                strict = true;
+                if (!aspect && tpl.formats && tpl.formats.length === 1) aspect = tpl.formats[0];
+                if (tpl.photo && !body.image) return res.status(400).json({ error: 'Прикрепите фото' });
+            }
+            if (!prompt) return res.status(400).json({ error: 'Введите промпт' });
+            const file = body.image ? decodeImage(body.image) : null;
+            const result = await gen.generateForWeb({
+                userId: req.userId,
+                prompt,
+                modelKey,
+                fileBuffer: file && file.buffer,
+                mimeType: file && file.mime,
+                aspectRatio: aspect,
+                charge,
+                reason,
+                keepModel,
+                strict
+            });
             res.json(result);
         } catch (e) {
             console.error('API /api/generate:', e.message);
@@ -236,8 +288,18 @@ function startWebApp() {
 
     // ---- Админка: шаблоны ----
     app.get('/api/admin/templates', requireAdmin, async (req, res) => {
-        try { res.json({ templates: await db.listTemplates(true) }); }
-        catch (e) { res.status(500).json({ error: e.message }); }
+        try {
+            const remote = await templatesSrc.listAdminRemote();
+            res.json({ templates: await db.listTemplates(true), remote: remote.items, remoteError: remote.error, remoteConfigured: remote.configured });
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.post('/api/admin/templates/reload', requireAdmin, async (req, res) => {
+        try {
+            templatesSrc.clearCache();
+            const remote = await templatesSrc.listAdminRemote();
+            res.json({ ok: true, remote: remote.items, remoteError: remote.error, remoteConfigured: remote.configured });
+        } catch (e) { res.status(500).json({ error: e.message }); }
     });
 
     app.post('/api/admin/templates', requireAdmin, async (req, res) => {

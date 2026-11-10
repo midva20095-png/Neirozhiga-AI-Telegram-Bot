@@ -21,7 +21,15 @@ YOOKASSA_SHOP_ID=...
 YOOKASSA_SECRET_KEY=...
 YOOKASSA_RETURN_URL=https://t.me/ваш_бот
 WEBAPP_URL=https://ваш-сервис.up.railway.app   # или домен мини-приложения
+TEMPLATES_SCRIPT_URL=https://script.google.com/macros/s/.../exec
+TEMPLATES_KEY=секрет_из_таблицы
+TEMPLATES_CACHE_SEC=300
+TEMPLATE_MODEL=nanobanana
+GIGACHAT_AUTH_KEY=
+ADMIN_PASSWORD=admin123
 ```
+
+Шаблоны кабинета запрашиваются у Apps Script (`POST {"action":"templates","key":...}`). Промпт на клиент не отдаётся: для шаблона с примером доступны только прикрепление фото и кнопка «Сгенерировать». Дневной лимит GigaChat задаётся в админке (пустое поле — без лимита) и считается по московским суткам.
 
 ## Мини-приложение
 - Открывается кнопкой «📱 Личный кабинет» в главном меню.

@@ -62,7 +62,8 @@ async function getTelegramFileBuffer(ctx, fileId) {
 function modelButton(model, currentMode) {
     const mark = model.key === currentMode ? '✅ ' : '';
     const price = model.cost === 0 ? 'бесплатно' : `${model.cost} кр`;
-    return Markup.button.callback(`${mark}${model.short} · ${price}`, `set_model_${model.key}`);
+    const cap = model.provider === 'giga' ? (model.limit === null ? ' · без лимита' : ` · ${model.limit}/день`) : '';
+    return Markup.button.callback(`${mark}${model.short} · ${price}${cap}`, `set_model_${model.key}`);
 }
 
 function getModelSelectionKeyboard(currentMode) {
@@ -392,6 +393,9 @@ async function startBot(app) {
             console.error('❌ Ошибка генерации:', error.message || error);
             try { await ctx.deleteMessage(waitMessage.message_id); } catch (e) {}
             if (error.code === 'no_credits') return notLowBalance(ctx, prepared.model);
+            if (error.code === 'limit' || error.code === 'need_image' || error.code === 'need_text' || error.code === 'blocked') {
+                return ctx.reply(`⚠️ ${error.message}`);
+            }
             await ctx.reply('⚠️ Не удалось получить ответ от нейросети. Кредиты не списаны.');
         }
     }

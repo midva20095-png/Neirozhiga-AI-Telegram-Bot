@@ -53,6 +53,10 @@ async function initDB() {
       created_at TIMESTAMP DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS image TEXT`);
+  await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS description TEXT`);
+  await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS hide_prompt BOOLEAN DEFAULT false`);
+  await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS formats TEXT`);
   const count = await pool.query('SELECT COUNT(*)::int AS n FROM templates');
   if (count.rows[0].n === 0) {
     for (const row of SEED_TEMPLATES) {
@@ -294,16 +298,32 @@ async function listTemplates(all = false) {
 }
 
 async function saveTemplate(data) {
+  const values = [
+    String(data.title || '').trim().slice(0, 120),
+    data.category || 'image',
+    String(data.prompt || '').trim(),
+    data.model || 'nanobanana',
+    Math.max(0, Math.round(Number(data.cost) || 0)),
+    data.active !== false,
+    data.image ? String(data.image).trim().slice(0, 2000) : null,
+    data.description ? String(data.description).trim().slice(0, 500) : null,
+    data.hide_prompt !== false,
+    data.formats ? String(data.formats).trim().slice(0, 200) : null
+  ];
   if (data.id) {
     const res = await pool.query(
-      `UPDATE templates SET title=$1, category=$2, prompt=$3, model=$4, cost=$5, active=$6 WHERE id=$7 RETURNING *`,
-      [data.title, data.category || 'chat', data.prompt, data.model || 'flash', data.cost || 0, data.active !== false, data.id]
+      `UPDATE templates
+       SET title=$1, category=$2, prompt=$3, model=$4, cost=$5, active=$6,
+           image=$7, description=$8, hide_prompt=$9, formats=$10
+       WHERE id=$11 RETURNING *`,
+      [...values, data.id]
     );
     return res.rows[0];
   }
   const res = await pool.query(
-    `INSERT INTO templates (title, category, prompt, model, cost, active) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [data.title, data.category || 'chat', data.prompt, data.model || 'flash', data.cost || 0, data.active !== false]
+    `INSERT INTO templates (title, category, prompt, model, cost, active, image, description, hide_prompt, formats)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+    values
   );
   return res.rows[0];
 }
@@ -312,23 +332,46 @@ async function deleteTemplate(id) {
   await pool.query('DELETE FROM templates WHERE id = $1', [id]);
 }
 
-const GIGA_LIMITS = { 'giga-lite': 30, 'giga-pro': 10, 'giga-max': 5, 'giga-ultra': 5 };
+const DAY_MSK = `(NOW() AT TIME ZONE 'Europe/Moscow')::date`;
 
-async function checkGigaLimit(userId, model) {
-  const limit = GIGA_LIMITS[model] || 10;
+// limit === null — без дневного потолка. Иначе число, включая 0.
+async function peekGiga(userId, model, limit) {
+  if (limit === null || limit === undefined || limit === '') return { ok: true, unlimited: true, used: 0, limit: null };
+  const cap = Math.max(0, Math.round(Number(limit)));
+  if (!Number.isFinite(cap)) return { ok: true, unlimited: true, used: 0, limit: null };
+  if (cap === 0) return { ok: false, used: 0, limit: 0 };
   const res = await pool.query(
-    `SELECT count FROM gigachat_usage WHERE user_id=$1 AND model=$2 AND day=CURRENT_DATE`,
+    `SELECT count FROM gigachat_usage WHERE user_id=$1 AND model=$2 AND day=${DAY_MSK}`,
     [String(userId), model]
   );
-  const used = res.rows[0] ? res.rows[0].count : 0;
-  return { ok: used < limit, used, limit };
+  const used = res.rows[0] ? Number(res.rows[0].count) : 0;
+  return { ok: used < cap, used, limit: cap };
 }
 
-async function addGigaUse(userId, model) {
-  await pool.query(
+// Атомарно занимает слот. При гонке второй запрос не проходит, если потолок уже взят.
+async function consumeGiga(userId, model, limit) {
+  const before = await peekGiga(userId, model, limit);
+  if (before.unlimited || !before.ok) return before;
+  const res = await pool.query(
     `INSERT INTO gigachat_usage (user_id, model, day, count)
-     VALUES ($1, $2, CURRENT_DATE, 1)
-     ON CONFLICT (user_id, model, day) DO UPDATE SET count = gigachat_usage.count + 1`,
+     VALUES ($1, $2, ${DAY_MSK}, 1)
+     ON CONFLICT (user_id, model, day)
+     DO UPDATE SET count = gigachat_usage.count + 1
+     WHERE gigachat_usage.count < $3
+     RETURNING count`,
+    [String(userId), model, before.limit]
+  );
+  if (!res.rows.length) {
+    const again = await peekGiga(userId, model, before.limit);
+    return { ok: false, used: again.used, limit: before.limit };
+  }
+  return { ok: true, used: Number(res.rows[0].count), limit: before.limit };
+}
+
+async function releaseGiga(userId, model) {
+  await pool.query(
+    `UPDATE gigachat_usage SET count = GREATEST(0, count - 1)
+     WHERE user_id=$1 AND model=$2 AND day=${DAY_MSK} AND count > 0`,
     [String(userId), model]
   );
 }
@@ -356,8 +399,8 @@ module.exports = {
   listTemplates,
   saveTemplate,
   deleteTemplate,
-  checkGigaLimit,
-  addGigaUse,
-  GIGA_LIMITS,
+  peekGiga,
+  consumeGiga,
+  releaseGiga,
   pool,
 };

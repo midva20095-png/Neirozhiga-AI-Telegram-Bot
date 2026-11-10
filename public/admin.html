@@ -35,10 +35,11 @@ th{color:var(--mut);font-size:12px}
 .stat .n{font-size:24px;font-weight:800}
 .stat .l{color:var(--mut);font-size:12px}
 .pill{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:999px;padding:2px 8px;margin-right:4px}
-.mrow{display:grid;grid-template-columns:1fr 90px 80px 70px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.mrow{display:grid;grid-template-columns:minmax(140px,1fr) 90px 120px 70px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
 .mrow .mname{font-weight:700}
 .mrow input{padding:7px 9px}
-@media(max-width:640px){.mrow{grid-template-columns:1fr 70px 60px;}.mrow .lim{display:none}}
+.thumb{width:54px;height:54px;object-fit:cover;border-radius:8px;background:#1c1233}
+@media(max-width:640px){.mrow{grid-template-columns:1fr 1fr}}
 </style>
 </head>
 <body>
@@ -69,7 +70,8 @@ const TABS = [
 ];
 let token = sessionStorage.getItem('ny_admin_token') || null;
 let cur = 'stats';
-let users=[], templates=[], modelsData=[], groupsData={}, packagesData=[], generalData={};
+let users=[], templates=[], remoteTemplates=[], modelsData=[], groupsData={}, packagesData=[], generalData={};
+let tplEdit = null, modelsMsg = '';
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function tgInit(){ try{ return (window.Telegram&&window.Telegram.WebApp&&window.Telegram.WebApp.initData)||''; }catch(e){ return ''; } }
@@ -183,23 +185,62 @@ async function sendPm(id){
 /* ---- Шаблоны ---- */
 async function loadTpl(){
   const el = document.getElementById('section-tpl');
-  const d = await api('/api/admin/templates'); templates = d.templates||[];
-  const mopts = (modelsData.length?modelsData:[]).map(m=>'<option value="'+m.key+'">'+esc(m.short||m.key)+'</option>').join('');
+  const d = await api('/api/admin/templates');
+  templates = d.templates||[];
+  remoteTemplates = d.remote||[];
+  const editing = tplEdit;
+  const remoteNote = !d.remoteConfigured
+    ? 'Переменные TEMPLATES_SCRIPT_URL и TEMPLATES_KEY не заданы — таблица не подключена.'
+    : (d.remoteError ? ('Ошибка таблицы: '+d.remoteError) : ('Из таблицы: '+remoteTemplates.length));
   el.innerHTML =
-    '<div class="card"><h3>Новый шаблон</h3>'+
-    '<div class="row"><input id="tt" placeholder="Название"><select id="tc"><option value="chat">Чат</option><option value="image">Картинки</option><option value="video">Видео</option><option value="audio">Голос</option></select></div>'+
-    '<div class="row"><input id="tm" placeholder="Ключ модели, напр. flash"><input id="tcost" type="number" placeholder="Цена, кр" value="4"></div>'+
-    '<textarea id="tp" placeholder="Промпт, который уйдёт в бота"></textarea>'+
-    '<div class="row" style="margin-top:8px"><button onclick="saveTpl()">Сохранить шаблон</button></div></div>'+
-    '<div class="card"><table><tr><th>Название</th><th>Модель</th><th>Цена</th><th></th></tr>'+
-    templates.map(t=>'<tr><td><b>'+esc(t.title)+'</b><div class="note">'+esc(t.category)+(t.active?'':' · выкл')+'</div></td><td>'+esc(t.model)+'</td><td>'+t.cost+'</td><td><button class="danger" onclick="delTpl('+t.id+')">Удалить</button></td></tr>').join('')+
+    '<div class="card"><h3>Шаблоны из таблицы</h3><p class="note">Подтягиваются из Google Apps Script. Промпт клиенту не отдаётся: в кабинете только пример, кнопка фото и «Сгенерировать».</p>'+
+    '<p class="note">'+esc(remoteNote)+'</p><div class="row"><button class="ghost" onclick="reloadRemote()">Обновить из таблицы</button></div>'+
+    (remoteTemplates.length ? '<table><tr><th></th><th>Название</th><th>Модель</th><th>Цена</th><th>Статус</th></tr>'+
+      remoteTemplates.map(t=>'<tr><td>'+(t.image?'<img class="thumb" src="'+esc(t.image)+'" alt="">':'')+'</td><td><b>'+esc(t.title)+'</b><div class="note">'+esc(t.desc||'')+'</div></td><td>'+esc(t.model)+'</td><td>'+t.cost+'</td><td>'+(t.active?'вкл':'выкл')+(t.vip?' · VIP':'')+'</td></tr>').join('')+
+      '</table>' : '')+'</div>'+
+    '<div class="card"><h3>'+(editing?'Правка шаблона':'Свой шаблон')+'</h3>'+
+    '<p class="note">Промпт хранится на сервере. Если скрыть его, клиент видит пример и может только прикрепить своё фото и нажать «Сгенерировать».</p>'+
+    '<div class="row"><input id="tt" placeholder="Название" value="'+esc(editing?editing.title:'')+'"><select id="tc">'+
+      ['image','chat','video','audio'].map(c=>'<option value="'+c+'"'+((editing?editing.category:'image')===c?' selected':'')+'>'+c+'</option>').join('')+'</select></div>'+
+    '<div class="row"><input id="tm" placeholder="Модель, напр. nanobanana" value="'+esc(editing?editing.model:'nanobanana')+'"><input id="tcost" type="number" placeholder="Цена, кр" value="'+(editing?editing.cost:20)+'"></div>'+
+    '<label>Ссылка на фото-пример</label><input id="timg" placeholder="https://..." value="'+esc(editing&&editing.image?editing.image:'')+'">'+
+    '<label>Короткое описание для клиента</label><input id="tdesc" placeholder="Что получится" value="'+esc(editing&&editing.description?editing.description:'')+'">'+
+    '<label>Форматы через запятую (1:1, 9:16)</label><input id="tfmt" placeholder="1:1, 9:16" value="'+esc(editing&&editing.formats?editing.formats:'')+'">'+
+    '<label>Промпт (клиент его не видит, если скрыт)</label><textarea id="tp" placeholder="Скрытый промпт">'+esc(editing?editing.prompt:'')+'</textarea>'+
+    '<label><input id="thide" type="checkbox" style="width:auto" '+(!editing||editing.hide_prompt!==false?'checked':'')+'> Скрыть промпт: в кабинете только фото и кнопка «Сгенерировать»</label>'+
+    '<div class="row" style="margin-top:8px"><button onclick="saveTpl()">'+(editing?'Сохранить изменения':'Сохранить шаблон')+'</button>'+
+    (editing?'<button class="ghost" onclick="tplEdit=null;loadTpl()">Отмена</button>':'')+'</div></div>'+
+    '<div class="card"><table><tr><th></th><th>Название</th><th>Модель</th><th>Цена</th><th></th></tr>'+
+    templates.map(t=>'<tr><td>'+(t.image?'<img class="thumb" src="'+esc(t.image)+'" alt="">':'')+'</td><td><b>'+esc(t.title)+'</b><div class="note">'+esc(t.category)+(t.hide_prompt?' · промпт скрыт':'')+(t.active?'':' · выкл')+'</div></td><td>'+esc(t.model)+'</td><td>'+t.cost+'</td><td><button class="ghost" onclick="editTpl('+t.id+')">Править</button> <button class="danger" onclick="delTpl('+t.id+')">Удалить</button></td></tr>').join('')+
     '</table></div>';
 }
+function editTpl(id){
+  tplEdit = templates.find(t=>t.id===id) || null;
+  loadTpl();
+}
+async function reloadRemote(){
+  const d = await api('/api/admin/templates/reload',{method:'POST',body:'{}'});
+  if (d.remoteError) alert(d.remoteError);
+  loadTpl();
+}
 async function saveTpl(){
-  const body = { title:document.getElementById('tt').value.trim(), category:document.getElementById('tc').value, model:document.getElementById('tm').value.trim()||'flash', cost:+document.getElementById('tcost').value||0, prompt:document.getElementById('tp').value.trim(), active:true };
-  if (!body.title||!body.prompt) return alert('Нужны название и промпт');
+  const body = {
+    id: tplEdit ? tplEdit.id : undefined,
+    title: document.getElementById('tt').value.trim(),
+    category: document.getElementById('tc').value,
+    model: document.getElementById('tm').value.trim() || 'nanobanana',
+    cost: +document.getElementById('tcost').value || 0,
+    image: document.getElementById('timg').value.trim(),
+    description: document.getElementById('tdesc').value.trim(),
+    formats: document.getElementById('tfmt').value.trim(),
+    prompt: document.getElementById('tp').value.trim(),
+    hide_prompt: document.getElementById('thide').checked,
+    active: true
+  };
+  if (!body.title || !body.prompt) return alert('Нужны название и промпт');
   const d = await api('/api/admin/templates',{method:'POST',body:JSON.stringify(body)});
   if (!d.ok) return alert(d.error||'Ошибка');
+  tplEdit = null;
   loadTpl();
 }
 async function delTpl(id){ if(!confirm('Удалить шаблон?'))return; await api('/api/admin/templates/delete',{method:'POST',body:JSON.stringify({id})}); loadTpl(); }
@@ -208,7 +249,7 @@ async function delTpl(id){ if(!confirm('Удалить шаблон?'))return; a
 async function loadModels(){
   const el = document.getElementById('section-models');
   const d = await api('/api/admin/models'); modelsData = d.models||[]; groupsData = d.groups||{};
-  let html = '<div class="card"><h3>Модели</h3><p class="note">Включайте/выключайте модели, меняйте цену в кредитах и дневной лимит бесплатных моделей. Выключенные не видны в боте и кабинете.</p>';
+  let html = '<div class="card"><h3>Модели</h3><p class="note">Для GigaChat поле «В день» — жёсткий потолок. Пустое поле снимает лимит и это сохраняется. 0 запрещает генерации. Счётчик обнуляется в полночь по Москве, лимит проверяется до ответа модели.</p>'+(modelsMsg?'<p class="ok">'+esc(modelsMsg)+'</p>':'');
   const order = Object.keys(groupsData);
   for (const g of order){
     const list = modelsData.filter(m=>m.group===g);
@@ -217,7 +258,9 @@ async function loadModels(){
     html += list.map(m=>'<div class="mrow" data-key="'+m.key+'">'+
       '<div><div class="mname">'+esc(m.name)+'</div><div class="note">'+m.key+'</div></div>'+
       '<div><label style="margin:0">Цена</label><input type="number" class="f-cost" value="'+m.cost+'"></div>'+
-      '<div class="lim"><label style="margin:0">Лимит</label><input type="number" class="f-limit" value="'+(m.limit!=null?m.limit:'')+'" '+(m.provider==='giga'?'':'disabled')+'></div>'+
+      (m.provider==='giga'
+        ? '<div class="lim"><label style="margin:0">В день</label><input type="number" min="0" class="f-limit" placeholder="без лимита" value="'+(m.limit==null?'':m.limit)+'"></div>'
+        : '<div class="lim"><label style="margin:0">В день</label><input class="f-limit" disabled value="—"></div>')+
       '<div><label style="margin:0">Вкл</label><input type="checkbox" class="f-en" '+(m.enabled?'checked':'')+' style="width:auto;height:22px"></div>'+
       '</div>').join('');
   }
@@ -228,15 +271,17 @@ async function saveModels(){
   const models = {};
   document.querySelectorAll('#section-models .mrow').forEach(row=>{
     const key = row.dataset.key;
+    const limEl = row.querySelector('.f-limit');
     models[key] = {
       cost: row.querySelector('.f-cost').value,
-      limit: row.querySelector('.f-limit').value,
       enabled: row.querySelector('.f-en').checked
     };
+    if (limEl && !limEl.disabled) models[key].limit = limEl.value.trim()==='' ? null : Number(limEl.value);
   });
   const d = await api('/api/admin/models',{method:'POST',body:JSON.stringify({models})});
-  document.getElementById('mmsg').textContent = d.ok?'Сохранено':(d.error||'Ошибка');
-  if (d.ok){ modelsData = d.models||modelsData; }
+  if (!d.ok) { modelsMsg = ''; alert(d.error||'Ошибка'); return; }
+  modelsMsg = 'Сохранено';
+  await loadModels();
 }
 
 /* ---- Пакеты ---- */
