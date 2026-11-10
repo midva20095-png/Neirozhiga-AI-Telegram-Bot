@@ -101,23 +101,28 @@ function mergeCookies(previous, setCookie) {
     return [...jar.entries()].map(([key, value]) => `${key}=${value}`).join('; ');
 }
 
-// Apps Script на /exec отвечает 302. Обычный клиент превращает следующий шаг в GET
-// и теряет тело, поэтому вместо JSON приходит HTML. Тело и cookie переносим сами.
+// Apps Script на /exec принимает POST и отвечает 302 на script.googleusercontent.com.
+// Этот адрес не принимает POST (405) и отдаёт результат только GET с cookie первого ответа.
 async function postJson(url, body) {
     const payload = JSON.stringify(body);
     let current = url;
     let cookie = '';
+    let method = 'post';
     let last = null;
     for (let hop = 0; hop < 5; hop++) {
-        const res = await axios.post(current, payload, {
+        const res = await axios.request({
+            url: current,
+            method,
+            data: method === 'post' ? payload : undefined,
             timeout: 20000,
             maxRedirects: 0,
             validateStatus: () => true,
             responseType: 'text',
             transformResponse: [value => value],
             headers: {
-                'Content-Type': 'text/plain;charset=utf-8',
-                'User-Agent': 'NeirozhigaBot/1.0',
+                Accept: 'application/json, text/plain, */*',
+                'User-Agent': 'Mozilla/5.0',
+                ...(method === 'post' ? { 'Content-Type': 'text/plain;charset=utf-8' } : {}),
                 ...(cookie ? { Cookie: cookie } : {})
             }
         });
@@ -125,6 +130,7 @@ async function postJson(url, body) {
         cookie = mergeCookies(cookie, res.headers['set-cookie']);
         if (res.status >= 300 && res.status < 400 && res.headers.location) {
             current = new URL(res.headers.location, current).toString();
+            method = 'get';
             continue;
         }
         return { status: res.status, data: res.data };
