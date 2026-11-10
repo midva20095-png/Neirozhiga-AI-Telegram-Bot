@@ -52,6 +52,13 @@ textarea{width:100%;min-height:120px;border-radius:14px;border:1px solid var(--l
 .chips button{border:1px solid var(--line);background:#1c1233;border-radius:999px;padding:6px 10px;font-weight:700}
 .chips button.on{border-color:#b366ff;color:#fff}
 .back{border:0;background:transparent;color:var(--mut);font-weight:800;padding:0 0 8px}
+.gallery{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{padding:0;border:1px solid var(--line);background:#1c1233;border-radius:16px;overflow:hidden;text-align:left}
+.tile img,.tile .ph{width:100%;height:148px;object-fit:cover;display:block;background:#0b0614}
+.tile .cap{padding:8px 10px 10px}
+.tile .cap b{display:block}
+.tile .cap span{display:block;color:var(--mut);font-size:12px;font-weight:600}
+input{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1233;padding:12px;outline:none;margin-top:8px}
 </style>
 </head>
 <body>
@@ -101,7 +108,12 @@ function authHeaders(){
   return h;
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-function safeSrc(u){ return /^https?:\/\//i.test(u||'') ? u : ''; }
+function safeSrc(u){
+  const s = String(u||'');
+  if (/^https?:\/\//i.test(s)) return s;
+  if (/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(s) && s.length < 1600000) return s;
+  return '';
+}
 function modelOf(k){ return (cfg&&cfg.models||[]).find(m=>m.key===k) || null; }
 function nameOf(k){ const m = modelOf(k); return m ? m.name : k; }
 function costLabel(m){ return m.free ? 'бесплатно' : (m.cost+' кр'); }
@@ -169,12 +181,12 @@ function viewModels(){
 }
 function viewTpl(){
   if (openTpl) return viewTplRun();
-  if (!templates.length) return '<div class="card"><div class="empty">Шаблонов нет</div></div>';
-  return '<div class="card">'+templates.map(t=>{
+  if (!templates.length) return '<div class="card"><div class="empty">Шаблонов пока нет</div></div>';
+  return '<div class="gallery">'+templates.map(t=>{
     const src = safeSrc(t.image);
-    return '<button class="tcard" data-tpl="'+esc(t.id)+'">'+(src?'<img src="'+esc(src)+'" alt="">':'<div class="thumb"></div>')+
-      '<div style="flex:1"><div class="name">'+esc(t.title)+(t.trend?' · тренд':'')+(t.vip?' · VIP':'')+'</div><div class="meta">'+esc(t.desc||nameOf(t.model))+'</div></div>'+
-      '<div class="cost">'+(t.cost?t.cost+' кр':'0')+'</div></button>';
+    return '<button class="tile" data-tpl="'+esc(t.id)+'">'+
+      (src?'<img src="'+esc(src)+'" alt="">':'<div class="ph"></div>')+
+      '<div class="cap"><b>'+esc(t.title)+'</b><span>'+(t.cost?t.cost+' кр':'0 кр')+(t.desc?' · '+esc(t.desc):'')+'</span></div></button>';
   }).join('')+'</div>';
 }
 function viewTplRun(){
@@ -202,9 +214,15 @@ function viewHist(){
 }
 function viewTop(){
   const packs = (cfg&&cfg.packages)||[];
-  const head = '<div class="card"><div class="now">Текущий баланс</div><div style="font-size:28px;font-weight:800">'+((me&&me.balance)||0)+' кр</div></div>';
-  if (!packs.length) return head+'<div class="card"><div class="empty">Пакеты недоступны. Пополнение — в чате бота кнопкой «Пополнить».</div></div>';
-  return head+'<div class="groupttl">Пакеты</div><div class="card">'+packs.map(p=>'<div class="pack"><div><div class="name">'+esc(p.title)+'</div><div class="meta">'+p.credits+' кредитов</div></div><button data-pkg="'+esc(p.id)+'">'+p.price+' ₽</button></div>').join('')+
+  const site = (cfg&&cfg.site_url) || 'сайт';
+  const head = '<div class="card"><div class="now">Текущий баланс</div><div id="topbal" style="font-size:28px;font-weight:800">'+((me&&me.balance)||0)+' кр</div></div>';
+  const move = '<div class="card"><div class="now">Перенос на сайт</div>'+
+    '<p class="hint">Укажите почту, с которой входите на '+esc(site)+', и сколько кредитов перенести. Они спишутся здесь и появятся на сайте. Если почты нет или сайт не ответит — сумма вернётся.</p>'+
+    '<input id="temail" type="email" inputmode="email" autocomplete="email" placeholder="почта на сайте">'+
+    '<input id="tamt" type="number" min="1" inputmode="numeric" placeholder="сколько кредитов">'+
+    '<button class="btn" id="transfer">Перенести на сайт</button><p id="tmsg" class="hint"></p></div>';
+  if (!packs.length) return head+move+'<div class="card"><div class="empty">Пакеты недоступны. Пополнение — в чате бота кнопкой «Пополнить».</div></div>';
+  return head+move+'<div class="groupttl">Пакеты</div><div class="card">'+packs.map(p=>'<div class="pack"><div><div class="name">'+esc(p.title)+'</div><div class="meta">'+p.credits+' кредитов</div></div><button data-pkg="'+esc(p.id)+'">'+p.price+' ₽</button></div>').join('')+
     '</div><div class="hint">Оплата открывается в чате бота: мы отправим кнопку оплаты туда.</div>';
 }
 function viewHelp(){
@@ -232,6 +250,7 @@ function bind(){
   const file=document.getElementById('file'); if (file) file.onchange=()=>onPhoto(file);
   const goTpl=document.getElementById('goTpl'); if (goTpl) goTpl.onclick=generateTemplate;
   const ss = document.getElementById('supsend'); if (ss) ss.onclick = sendSupport;
+  const tr = document.getElementById('transfer'); if (tr) tr.onclick = sendTransfer;
 }
 async function setModel(model){
   if (me) me.current_model = model;
@@ -315,6 +334,28 @@ async function generate(){
     document.getElementById('bal').textContent = d.balance+' кр';
   } catch(e){ last = {_prompt:prompt, error:e.message}; }
   busy = false; draw();
+}
+async function sendTransfer(){
+  const emailEl = document.getElementById('temail');
+  const amtEl = document.getElementById('tamt');
+  const msg = document.getElementById('tmsg');
+  const email = (emailEl&&emailEl.value||'').trim();
+  const credits = parseInt(amtEl&&amtEl.value, 10);
+  if (msg) { msg.className = 'hint'; msg.textContent = 'Переносим…'; }
+  try {
+    const r = await fetch('/api/transfer',{method:'POST',headers:authHeaders(),body:JSON.stringify({email, credits})});
+    const d = await r.json();
+    if (typeof d.balance === 'number') {
+      if (me) me.balance = d.balance;
+      const bal = document.getElementById('bal'); if (bal) bal.textContent = d.balance+' кр';
+      const top = document.getElementById('topbal'); if (top) top.textContent = d.balance+' кр';
+    }
+    if (!r.ok || !d.ok) throw new Error(d.error||'Не получилось');
+    if (msg) msg.textContent = 'Готово. На сайте у '+email+' теперь '+(d.siteCredits!=null?d.siteCredits:d.credits)+' кр. В боте осталось '+d.balance+'.';
+    if (amtEl) amtEl.value = '';
+  } catch (e) {
+    if (msg) { msg.className = 'err'; msg.textContent = e.message; }
+  }
 }
 async function sendSupport(){
   const ta = document.getElementById('supmsg');

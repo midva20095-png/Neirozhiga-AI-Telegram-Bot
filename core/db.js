@@ -57,6 +57,7 @@ async function initDB() {
   await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS description TEXT`);
   await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS hide_prompt BOOLEAN DEFAULT false`);
   await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS formats TEXT`);
+  await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS sort INTEGER DEFAULT 0`);
   const count = await pool.query('SELECT COUNT(*)::int AS n FROM templates');
   if (count.rows[0].n === 0) {
     for (const row of SEED_TEMPLATES) {
@@ -258,6 +259,32 @@ async function updateBalance(userId, amount, reason) {
   }
 }
 
+async function debitBalance(userId, amount, reason) {
+  const id = String(userId);
+  const amt = Math.round(Number(amount));
+  if (!(amt > 0)) return { ok: false, error: 'amount' };
+  try {
+    await getUser(id);
+    const res = await pool.query(
+      `UPDATE users
+       SET balance = balance - $1, updated_at = NOW()
+       WHERE user_id = $2 AND balance >= $1
+       RETURNING balance`,
+      [amt, id]
+    );
+    if (!res.rows[0]) return { ok: false, error: 'balance' };
+    const balance = parseInt(res.rows[0].balance, 10);
+    await pool.query(
+      'INSERT INTO history (user_id, delta, balance, reason) VALUES ($1,$2,$3,$4)',
+      [id, -amt, balance, reason || 'Списание']
+    );
+    return { ok: true, balance };
+  } catch (err) {
+    console.error('❌ debitBalance error:', err.message);
+    return { ok: false, error: 'balance' };
+  }
+}
+
 async function setCurrentModel(userId, model) {
   const id = String(userId);
   try {
@@ -292,9 +319,23 @@ async function listHistory(userId, limit = 40) {
 
 async function listTemplates(all = false) {
   const res = all
-    ? await pool.query('SELECT * FROM templates ORDER BY id DESC')
-    : await pool.query('SELECT * FROM templates WHERE active = true ORDER BY category, id');
+    ? await pool.query('SELECT * FROM templates ORDER BY sort ASC, id DESC')
+    : await pool.query('SELECT * FROM templates WHERE active = true ORDER BY sort ASC, id ASC');
   return res.rows;
+}
+
+function cleanTemplateImage(value) {
+  const s = String(value || '').trim();
+  if (!s) return null;
+  if (s.startsWith('data:image/')) {
+    if (s.length > 1500000) {
+      const err = new Error('Фото-пример слишком большое. Загрузите картинку поменьше.');
+      err.code = 'image';
+      throw err;
+    }
+    return s;
+  }
+  return s.slice(0, 2000);
 }
 
 async function saveTemplate(data) {
@@ -305,24 +346,25 @@ async function saveTemplate(data) {
     data.model || 'nanobanana',
     Math.max(0, Math.round(Number(data.cost) || 0)),
     data.active !== false,
-    data.image ? String(data.image).trim().slice(0, 2000) : null,
+    cleanTemplateImage(data.image),
     data.description ? String(data.description).trim().slice(0, 500) : null,
     data.hide_prompt !== false,
-    data.formats ? String(data.formats).trim().slice(0, 200) : null
+    data.formats ? String(data.formats).trim().slice(0, 200) : null,
+    Number.isFinite(Number(data.sort)) ? Math.round(Number(data.sort)) : 0
   ];
   if (data.id) {
     const res = await pool.query(
       `UPDATE templates
        SET title=$1, category=$2, prompt=$3, model=$4, cost=$5, active=$6,
-           image=$7, description=$8, hide_prompt=$9, formats=$10
-       WHERE id=$11 RETURNING *`,
+           image=$7, description=$8, hide_prompt=$9, formats=$10, sort=$11
+       WHERE id=$12 RETURNING *`,
       [...values, data.id]
     );
     return res.rows[0];
   }
   const res = await pool.query(
-    `INSERT INTO templates (title, category, prompt, model, cost, active, image, description, hide_prompt, formats)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+    `INSERT INTO templates (title, category, prompt, model, cost, active, image, description, hide_prompt, formats, sort)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
     values
   );
   return res.rows[0];
@@ -391,6 +433,7 @@ module.exports = {
   getStats,
   getUserBalance,
   updateBalance,
+  debitBalance,
   setCurrentModel,
   getCurrentModel,
   isBlocked,

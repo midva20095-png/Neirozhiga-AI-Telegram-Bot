@@ -21,15 +21,16 @@ YOOKASSA_SHOP_ID=...
 YOOKASSA_SECRET_KEY=...
 YOOKASSA_RETURN_URL=https://t.me/ваш_бот
 WEBAPP_URL=https://ваш-сервис.up.railway.app   # или домен мини-приложения
-TEMPLATES_SCRIPT_URL=https://script.google.com/macros/s/.../exec
-TEMPLATES_KEY=секрет_из_таблицы
-TEMPLATES_CACHE_SEC=300
 TEMPLATE_MODEL=nanobanana
+SITE_API_URL=https://neiroyaga-backend-production.up.railway.app
+SITE_TRANSFER_KEY=общий_секрет_с_сайтом
 GIGACHAT_AUTH_KEY=
 ADMIN_PASSWORD=admin123
 ```
 
-Шаблоны кабинета запрашиваются у Apps Script (`POST {"action":"templates","key":...}`). Промпт на клиент не отдаётся: для шаблона с примером доступны только прикрепление фото и кнопка «Сгенерировать». Дневной лимит GigaChat задаётся в админке (пустое поле — без лимита) и считается по московским суткам.
+Шаблоны кабинета задаются только в админке бота: фото-пример, скрытый промпт, своя цена и модель. Google-таблица больше не используется. Для шаблона со скрытым промптом клиент видит пример, прикрепляет своё фото и нажимает «Сгенерировать». Дневной лимит GigaChat задаётся в админке (пустое поле — без лимита) и считается по московским суткам.
+
+Кнопка «На сайт» и вкладка «Баланс» в кабинете переносят кредиты на почту аккаунта сайта. На боте и на сайте должна быть одна и та же `SITE_TRANSFER_KEY`. Сайт принимает `POST /api/telegram/transfer` с заголовком `X-Transfer-Key` и телом `{email, credits, transferId, telegramUserId}`. Если почты нет или сайт не подтвердил перевод, сумма возвращается на баланс бота.
 
 ## Мини-приложение
 - Открывается кнопкой «📱 Личный кабинет» в главном меню.

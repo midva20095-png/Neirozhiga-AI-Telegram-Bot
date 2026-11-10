@@ -5,6 +5,7 @@ const db = require('./db');
 const catalog = require('./catalog');
 const gen = require('./generate');
 const auth = require('./auth');
+const transferApi = require('./transfer');
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 300000 });
 
@@ -12,6 +13,16 @@ const userAwaitingEmail = new Map();
 const userAwaitingSupport = new Map();
 const mediaGroupBuffers = new Map();
 const userPendingRatio = new Map();
+const userTransfer = new Map();
+
+const MENU_TEXTS = [
+    '📱 Кабинет',
+    '✨ Модель', '🤖 Модель', '🤖 Выбрать модель ИИ', '🤖 Сменить модель', '🤖 Модели',
+    '💳 Мой баланс', '💳 Баланс',
+    '💰 Пополнить', '💰 Пополнить баланс', '➕ Пополнить',
+    '↗️ На сайт', 'На сайт',
+    '💬 Поддержка', 'ℹ Справка', 'ℹ️ Справка', '❓ Справка'
+];
 
 bot.catch((err, ctx) => {
     console.error(`⚠️ Ошибка в Telegraf для ${ctx?.updateType || 'события'}:`, err.message);
@@ -31,18 +42,91 @@ function baseWebappUrl() {
 // Кнопка web_app в обычной клавиатуре открывает Mini App с пустым initData,
 // поэтому для надёжного определения пользователя подписываем id и кладём в ссылку.
 function webappUrlFor(userId) {
-    return `${baseWebappUrl()}/?v=9#tk=${auth.signUserId(userId)}`;
+    return `${baseWebappUrl()}/?v=10#tk=${auth.signUserId(userId)}`;
 }
 
-function mainKeyboard(userId, currentMode) {
-    const model = catalog.getModel(currentMode);
-    const label = model ? model.short : 'Flash';
+function mainKeyboard(userId) {
     return Markup.keyboard([
         [Markup.button.webApp('📱 Кабинет', webappUrlFor(userId))],
-        [`✅ ${label}`, '💳 Баланс'],
-        ['🤖 Сменить модель', '💰 Пополнить'],
-        ['💬 Поддержка', 'ℹ Справка']
-    ]).resize();
+        ['✨ Модель', '💳 Баланс'],
+        ['➕ Пополнить', '↗️ На сайт'],
+        ['💬 Поддержка', '❓ Справка']
+    ]).resize().persistent().placeholder('Напишите запрос или пришлите фото');
+}
+
+function amountKeyboard(balance) {
+    const presets = [50, 100, 300, 500, 1000, 2500].filter(n => n < balance);
+    const rows = [];
+    for (let i = 0; i < presets.length; i += 3) {
+        rows.push(presets.slice(i, i + 3).map(n => Markup.button.callback(`${n} кр`, `transfer_amt_${n}`)));
+    }
+    rows.push([Markup.button.callback(`Весь баланс · ${balance} кр`, 'transfer_amt_all')]);
+    rows.push([Markup.button.callback('Отмена', 'transfer_cancel')]);
+    return Markup.inlineKeyboard(rows);
+}
+
+function confirmKeyboard() {
+    return Markup.inlineKeyboard([
+        [Markup.button.callback('✅ Перенести', 'transfer_yes'), Markup.button.callback('Отмена', 'transfer_cancel')]
+    ]);
+}
+
+async function beginTransfer(ctx) {
+    userAwaitingEmail.delete(ctx.from.id);
+    userAwaitingSupport.delete(ctx.from.id);
+    userPendingRatio.delete(ctx.from.id);
+    const balance = await getUserBalance(ctx.from.id);
+    userTransfer.set(ctx.from.id, { step: 'email' });
+    const site = catalog.getGeneral().site_url || 'сайт';
+    await ctx.reply(
+        `↗️ Перенос на сайт\n\n` +
+        `Кредиты на сайте привязаны к почте, с которой вы входите в кабинет (${site}).\n\n` +
+        `В боте сейчас: ${balance} кр.\n\n` +
+        `Напишите эту почту:`,
+        Markup.inlineKeyboard([[Markup.button.callback('Отмена', 'transfer_cancel')]])
+    );
+}
+
+async function handleTransferText(ctx, text) {
+    const userId = ctx.from.id;
+    const state = userTransfer.get(userId);
+    if (!state) return;
+    if (state.step === 'email') {
+        const email = text.trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            await ctx.reply('Это не похоже на почту. Напишите адрес, с которым входите на сайте, например name@mail.ru');
+            return;
+        }
+        const balance = await getUserBalance(userId);
+        if (balance <= 0) {
+            userTransfer.delete(userId);
+            await ctx.reply('На балансе 0 кредитов. Сначала пополните его, потом перенесите на сайт.', mainKeyboard(userId));
+            return;
+        }
+        state.email = email;
+        state.step = 'amount';
+        await ctx.reply(
+            `Почта на сайте: ${email}\nВ боте сейчас ${balance} кр.\n\nСколько перенести? Нажмите кнопку или напишите число.`,
+            amountKeyboard(balance)
+        );
+        return;
+    }
+    const n = parseInt(String(text).replace(/\s/g, ''), 10);
+    if (!Number.isFinite(n) || n <= 0) {
+        await ctx.reply('Напишите целое число кредитов или нажмите кнопку с суммой.');
+        return;
+    }
+    const balance = await getUserBalance(userId);
+    if (n > balance) {
+        await ctx.reply(`На балансе ${balance} кр. — больше перенести нельзя.`);
+        return;
+    }
+    state.amount = n;
+    state.step = 'confirm';
+    await ctx.reply(
+        `Перенести ${n} кр. на ${state.email}?\nОни спишутся в боте и появятся на сайте.`,
+        confirmKeyboard()
+    );
 }
 
 async function getUserBalance(userId) {
@@ -80,20 +164,14 @@ function getModelSelectionKeyboard(currentMode) {
 }
 
 function getGroupKeyboard(group, currentMode) {
-    const models = catalog.modelsByGroup(group);
-    const rows = [];
-    for (let i = 0; i < models.length; i += 2) {
-        const row = [modelButton(models[i], currentMode)];
-        if (models[i + 1]) row.push(modelButton(models[i + 1], currentMode));
-        rows.push(row);
-    }
-    rows.push([Markup.button.callback('← Разделы', 'models_home')]);
+    const rows = catalog.modelsByGroup(group).map(model => [modelButton(model, currentMode)]);
+    rows.push([Markup.button.callback('← К разделам', 'models_home')]);
     return Markup.inlineKeyboard(rows);
 }
 
 function packagesKeyboard() {
     return Markup.inlineKeyboard(
-        catalog.listPackages().map(p => [Markup.button.callback(`💳 ${p.title} — ${p.price} ₽`, `buy_pkg_${p.id}`)])
+        catalog.listPackages().map(p => [Markup.button.callback(`💎 ${p.title} · ${p.price} ₽`, `buy_pkg_${p.id}`)])
     );
 }
 
@@ -200,10 +278,19 @@ async function startBot(app) {
     // Бот обращается к боту (ответ на обращение из админки, рассылка и т.п.) через app.locals.
     if (app) app.locals.bot = bot;
 
+    bot.use(async (ctx, next) => {
+        const text = ctx.message && ctx.message.text;
+        if (ctx.from && text && (MENU_TEXTS.includes(text) || text.startsWith('✅ '))) {
+            userTransfer.delete(ctx.from.id);
+        }
+        return next();
+    });
+
     bot.start(async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
         userPendingRatio.delete(ctx.from.id);
+        userTransfer.delete(ctx.from.id);
         if (await db.isBlocked(ctx.from.id)) {
             await ctx.reply('Доступ к боту ограничен. Напишите в поддержку, если это ошибка.');
             return;
@@ -228,7 +315,7 @@ async function startBot(app) {
                 ...Markup.inlineKeyboard([[Markup.button.webApp('📱 Открыть кабинет', webappUrlFor(ctx.from.id))]])
             }
         );
-        await ctx.reply('Меню:', mainKeyboard(ctx.from.id, model ? model.key : savedModel));
+        await ctx.reply('Меню внизу. «На сайт» переносит кредиты на почту кабинета.', mainKeyboard(ctx.from.id));
         try {
             await ctx.telegram.setChatMenuButton({
                 chat_id: ctx.chat.id,
@@ -243,12 +330,12 @@ async function startBot(app) {
         const balance = await getUserBalance(ctx.from.id);
         const model = catalog.getModel((await db.getCurrentModel(ctx.from.id)) || catalog.defaultModelKey());
         await ctx.reply(
-            `💳 *Баланс:* ${balance} кр.\nМодель: ${model ? model.name : ''}`,
-            { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('💰 Пополнить баланс', 'action_buy_credits')]]) }
+            `💳 *Баланс:* ${balance} кр.\nМодель: ${model ? model.name : ''}\n\nПополнить или перенести на сайт — кнопками внизу.`,
+            { parse_mode: 'Markdown', ...mainKeyboard(ctx.from.id) }
         );
     });
 
-    bot.hears(['🤖 Модель', '🤖 Выбрать модель ИИ', '🤖 Модели', '🤖 Сменить модель'], async (ctx) => {
+    bot.hears(['🤖 Модель', '✨ Модель', '🤖 Выбрать модель ИИ', '🤖 Модели', '🤖 Сменить модель'], async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
         const currentMode = (await db.getCurrentModel(ctx.from.id)) || catalog.defaultModelKey();
@@ -270,10 +357,14 @@ async function startBot(app) {
 
     bot.action(/^noop_.+$/, async (ctx) => { await ctx.answerCbQuery('Выберите модель ниже 👇'); });
 
-    bot.hears(['💰 Пополнить', '💰 Пополнить баланс'], async (ctx) => {
+    bot.hears(['💰 Пополнить', '💰 Пополнить баланс', '➕ Пополнить'], async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
         await ctx.reply(`💳 *Выберите пакет пополнения:*`, { parse_mode: 'Markdown', ...packagesKeyboard() });
+    });
+
+    bot.hears(['↗️ На сайт', 'На сайт'], async (ctx) => {
+        await beginTransfer(ctx);
     });
 
     bot.hears('💬 Поддержка', async (ctx) => {
@@ -295,10 +386,66 @@ async function startBot(app) {
         try { await ctx.editMessageText('❌ Обращение в поддержку отменено.'); } catch (e) {}
     });
 
-    bot.hears(['ℹ Справка', 'ℹ️ Справка'], async (ctx) => {
+    bot.hears(['ℹ Справка', 'ℹ️ Справка', '❓ Справка'], async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
-        await ctx.reply(catalog.getGeneral().help_text);
+        await ctx.reply(catalog.getGeneral().help_text, mainKeyboard(ctx.from.id));
+    });
+
+    bot.action('transfer_start', async (ctx) => {
+        await ctx.answerCbQuery();
+        await beginTransfer(ctx);
+    });
+
+    bot.action('transfer_cancel', async (ctx) => {
+        userTransfer.delete(ctx.from.id);
+        await ctx.answerCbQuery('Отменено');
+        try { await ctx.editMessageText('Перенос отменён. Кредиты остались в боте.'); } catch (e) {}
+    });
+
+    bot.action(/^transfer_amt_(.+)$/, async (ctx) => {
+        const state = userTransfer.get(ctx.from.id);
+        if (!state || !state.email) {
+            await ctx.answerCbQuery('Начните перенос заново');
+            return;
+        }
+        const balance = await getUserBalance(ctx.from.id);
+        const raw = ctx.match[1];
+        const amount = raw === 'all' ? balance : parseInt(raw, 10);
+        if (!(amount > 0) || amount > balance) {
+            await ctx.answerCbQuery('Недостаточно кредитов');
+            return;
+        }
+        state.amount = amount;
+        state.step = 'confirm';
+        await ctx.answerCbQuery();
+        try {
+            await ctx.editMessageText(
+                `Перенести ${amount} кр. на ${state.email}?\nОни спишутся в боте и появятся на сайте.`,
+                confirmKeyboard()
+            );
+        } catch (e) {}
+    });
+
+    bot.action('transfer_yes', async (ctx) => {
+        const state = userTransfer.get(ctx.from.id);
+        if (!state || state.step !== 'confirm' || !state.email || !(state.amount > 0)) {
+            await ctx.answerCbQuery('Начните перенос заново');
+            return;
+        }
+        userTransfer.delete(ctx.from.id);
+        await ctx.answerCbQuery('Переносим');
+        try { await ctx.editMessageText('Переносим кредиты на сайт…'); } catch (e) {}
+        const result = await transferApi.transfer({
+            userId: ctx.from.id,
+            email: state.email,
+            credits: state.amount
+        });
+        const text = result.ok
+            ? `Готово.\n\nНа сайте ${result.email}: ${result.siteCredits} кр.\nВ боте осталось: ${result.balance} кр.`
+            : result.error;
+        try { await ctx.editMessageText(text); } catch (e) { await ctx.reply(text); }
+        await ctx.reply('Меню:', mainKeyboard(ctx.from.id));
     });
 
     bot.action('action_choose_ai', async (ctx) => {
@@ -316,7 +463,7 @@ async function startBot(app) {
         await ctx.answerCbQuery(`Выбрано: ${model.short}`);
         const price = model.cost === 0 ? 'бесплатно' : `${model.cost} кр`;
         try { await ctx.editMessageText(`✅ ${model.short} · ${price}. Пишите запрос.`); } catch (e) {}
-        await ctx.reply('Меню:', mainKeyboard(ctx.from.id, key));
+        await ctx.reply('Меню:', mainKeyboard(ctx.from.id));
     });
 
     bot.action('action_buy_credits', async (ctx) => {
@@ -454,8 +601,6 @@ async function startBot(app) {
         await executeGeneration(ctx, { prompt, fileBuffers, modelKey });
     }
 
-    const MENU_TEXTS = ['🤖 Модель', '🤖 Выбрать модель ИИ', '🤖 Сменить модель', '🤖 Модели', '💳 Мой баланс', '💳 Баланс', '💰 Пополнить', '💰 Пополнить баланс', '💬 Поддержка', 'ℹ Справка', 'ℹ️ Справка'];
-
     const handleTextMessage = async (ctx) => {
         const text = ctx.message?.text || '';
         if (MENU_TEXTS.includes(text) || text.startsWith('✅ ')) return;
@@ -477,6 +622,11 @@ async function startBot(app) {
                 }
                 return;
             }
+        }
+
+        if (userTransfer.has(userId)) {
+            await handleTransferText(ctx, text);
+            return;
         }
 
         if (userAwaitingSupport.has(userId)) {
@@ -554,19 +704,36 @@ async function startBot(app) {
         }
     });
 
-    bot.launch().then(async () => {
-        console.log('🤖 Бот успешно запущен!');
-        try {
-            await bot.telegram.setChatMenuButton({
-                menu_button: { type: 'web_app', text: 'Кабинет', web_app: { url: baseWebappUrl() + '/?v=9' } }
-            });
-            console.log('✅ Кнопка меню Mini App установлена');
-        } catch (e) {
-            console.error('❌ Не удалось поставить кнопку меню:', e.message);
+    try {
+        await bot.telegram.setChatMenuButton({
+            menu_button: { type: 'web_app', text: 'Кабинет', web_app: { url: baseWebappUrl() + '/?v=10' } }
+        });
+        console.log('✅ Кнопка меню Mini App установлена');
+    } catch (e) {
+        console.error('❌ Не удалось поставить кнопку меню:', e.message);
+    }
+
+    // 409 значит, что старый контейнер ещё опрашивает Telegram. Ждём, пока он отпустит бота,
+    // и не роняем веб-сервер: кабинет продолжает работать.
+    async function launchBot() {
+        for (let attempt = 1; attempt <= 8; attempt++) {
+            try {
+                console.log('🤖 Подключаюсь к Telegram...');
+                await bot.launch();
+                console.log('🤖 Бот остановлен');
+                return;
+            } catch (err) {
+                const conflict = String((err && err.message) || '').includes('409');
+                console.error(conflict
+                    ? `⚠️ Telegram занят другим экземпляром (${attempt}/8). Повтор через 15 секунд.`
+                    : '❌ Ошибка запуска бота:', err);
+                try { bot.stop('retry'); } catch (e) {}
+                if (!conflict || attempt === 8) return;
+                await new Promise(r => setTimeout(r, 15000));
+            }
         }
-    }).catch(err => {
-        console.error('❌ Ошибка запуска бота:', err);
-    });
+    }
+    launchBot();
 
     process.once('SIGINT', () => bot.stop('SIGINT'));
     process.once('SIGTERM', () => bot.stop('SIGTERM'));

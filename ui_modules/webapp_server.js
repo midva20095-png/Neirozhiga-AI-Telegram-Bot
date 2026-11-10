@@ -5,6 +5,7 @@ const catalog = require('../core/catalog');
 const gen = require('../core/generate');
 const auth = require('../core/auth');
 const templatesSrc = require('../core/templates');
+const transfer = require('../core/transfer');
 
 // Определяет пользователя из initData Telegram или из подписанной ссылки.
 function resolveUserId(req) {
@@ -189,6 +190,24 @@ function startWebApp() {
         }
     });
 
+    app.post('/api/transfer', requireUser, async (req, res) => {
+        try {
+            const user = await db.getUser(req.userId);
+            if (user.blocked) return res.status(403).json({ error: 'Аккаунт в чёрном списке' });
+            const body = req.body || {};
+            const result = await transfer.transfer({
+                userId: req.userId,
+                email: body.email,
+                credits: body.credits
+            });
+            if (!result.ok) return res.status(400).json(result);
+            res.json(result);
+        } catch (e) {
+            console.error('API /api/transfer:', e.message);
+            res.status(500).json({ error: 'Не удалось перенести кредиты' });
+        }
+    });
+
     // ---- Админка: вход ----
     app.post('/api/admin/login', (req, res) => {
         const { password, initData } = req.body || {};
@@ -289,16 +308,7 @@ function startWebApp() {
     // ---- Админка: шаблоны ----
     app.get('/api/admin/templates', requireAdmin, async (req, res) => {
         try {
-            const remote = await templatesSrc.listAdminRemote();
-            res.json({ templates: await db.listTemplates(true), remote: remote.items, remoteError: remote.error, remoteConfigured: remote.configured });
-        } catch (e) { res.status(500).json({ error: e.message }); }
-    });
-
-    app.post('/api/admin/templates/reload', requireAdmin, async (req, res) => {
-        try {
-            templatesSrc.clearCache();
-            const remote = await templatesSrc.listAdminRemote();
-            res.json({ ok: true, remote: remote.items, remoteError: remote.error, remoteConfigured: remote.configured });
+            res.json({ templates: await db.listTemplates(true) });
         } catch (e) { res.status(500).json({ error: e.message }); }
     });
 
