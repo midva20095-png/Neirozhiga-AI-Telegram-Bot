@@ -54,7 +54,7 @@ function fromDb(row) {
         cost: Number(row.cost) || 0,
         model,
         category: row.category || 'image',
-        formats: splitList(row.formats),
+        formats: catalog.templateFormats(catalog.getModel(model, { includeDisabled: true }), row.formats),
         hidePrompt,
         active: row.active !== false,
         photo: hidePrompt && isPhotoModel(model),

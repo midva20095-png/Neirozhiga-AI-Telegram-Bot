@@ -198,7 +198,8 @@ function startWebApp() {
                 reason = `Шаблон · ${tpl.title}`;
                 keepModel = true;
                 strict = true;
-                if (!aspect && tpl.formats && tpl.formats.length === 1) aspect = tpl.formats[0];
+                const allowed = tpl.formats || [];
+                aspect = allowed.includes(String(aspect || '')) ? String(aspect) : (allowed[0] || null);
                 if (tpl.photo && !body.image) return res.status(400).json({ error: 'Прикрепите фото' });
             }
             if (!prompt && !body.image) return res.status(400).json({ error: 'Введите промпт' });

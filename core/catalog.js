@@ -40,7 +40,7 @@ const BASE_MODELS = [
     { key: 'grok-video-720', name: 'Grok Video 720p', short: 'Grok 720p', desc: 'То же в 720p — чётче', group: 'video', kind: 'video', provider: 'bratukha', site: true, tool: 'grok-video', resolution: '720p', rate: 9, perSec: true, cost: 54, image: 'optional', ratio: true, aspects: ['16:9', '9:16', '1:1'], durations: [6, 10, 15, 20, 30] },
     { key: 'veo-3-1-lite', name: 'Veo 3.1 Lite', short: 'Veo Lite', desc: '8 сек по описанию, самая доступная', group: 'video', kind: 'video', provider: 'bratukha', site: true, tool: 'veo-3-1', vmodel: 'veo3.1-lite', cost: 30, image: 'forbidden', ratio: true, aspects: ['16:9', '9:16'] },
 
-    { key: 'nanobanana', name: 'Картинка', short: 'Картинка', desc: 'Картинка и правка фото', group: 'image', kind: 'image', provider: 'google', cost: 20, image: 'optional' },
+    { key: 'nanobanana', name: 'Картинка', short: 'Картинка', desc: 'Картинка и правка фото', group: 'image', kind: 'image', provider: 'google', cost: 20, image: 'optional', ratio: true, aspects: ['1:1', '9:16', '16:9', '4:5', '3:4', '4:3', '3:2', '2:3', '5:4', '21:9'] },
     { key: 'recraft-v4-1', name: 'Recraft V4.1', short: 'Recraft 4.1', desc: 'Улучшенный V4', group: 'image', kind: 'image', provider: 'bratukha', cost: 20, image: 'optional', ratio: true },
     { key: 'qwen-image-2-1', name: 'Qwen Image 2.1', short: 'Qwen 2.1', desc: 'Арт и фото', group: 'image', kind: 'image', provider: 'bratukha', cost: 40, image: 'optional', ratio: true },
     { key: 'qwen-image-3-0', name: 'Qwen Image 3.0', short: 'Qwen 3.0', desc: 'Арт и фото', group: 'image', kind: 'image', provider: 'bratukha', cost: 45, image: 'optional', ratio: true },
@@ -57,7 +57,7 @@ const BASE_MODELS = [
     { key: 'pruna-ai-p-video-2-pro', name: 'Pruna P-Video 2 Pro', short: 'Pruna Video', desc: 'Оживляет фото — нужно прикрепить фото', group: 'video_mid', kind: 'video', provider: 'bratukha', site: true, rate: 28, perSec: true, cost: 140, image: 'required', ratio: true, aspects: ['16:9', '9:16', '1:1'], durations: [5, 10] },
     { key: 'wan-2-2-avatar', name: 'Wan 2.2 Avatar', short: 'Говорящее фото', desc: 'Фото и голосовое: человек на фото произнесёт запись', group: 'video_mid', kind: 'video', provider: 'bratukha', site: true, tool: 'wan-2-2-avatar', cost: 18, rate: 18, unit: 'sec', image: 'required', audio: true, noAspect: true, qualities: [{ id: '480p', name: '480p', desc: 'Быстрее и дешевле', cost: 18, perSec: true }, { id: '720p', name: '720p', desc: 'Чётче', cost: 30, perSec: true }], quality: '480p' },
 
-    { key: 'nanobanana_pro', name: 'Картинка Pro', short: 'Картинка Pro', desc: 'Детальная картинка и правка фото', group: 'image', kind: 'image', provider: 'google', cost: 50, image: 'optional' },
+    { key: 'nanobanana_pro', name: 'Картинка Pro', short: 'Картинка Pro', desc: 'Детальная картинка и правка фото', group: 'image', kind: 'image', provider: 'google', cost: 50, image: 'optional', ratio: true, aspects: ['1:1', '9:16', '16:9', '4:5', '3:4', '4:3', '3:2', '2:3', '5:4', '21:9'] },
     { key: 'runway-gen4-image', name: 'Runway Gen4', short: 'Runway', desc: 'Реализм', group: 'image', kind: 'image', provider: 'bratukha', cost: 80, image: 'optional', ratio: true },
     { key: 'wan-3-0-720', name: 'Wan 3.0 720p', short: 'Wan 720p', desc: 'Видео со звуком в 720p', group: 'video_top', kind: 'video', provider: 'bratukha', site: true, tool: 'wan-3-0', resolution: '720P', rate: 30, perSec: true, cost: 150, image: 'optional', ratio: true, aspects: A, durations: [5, 10, 15] },
     { key: 'seedance-2-5-480', name: 'Seedance 2.5 480p', short: 'Seedance 2.5', desc: 'Новый Seedance со звуком', group: 'video_top', kind: 'video', provider: 'bratukha', site: true, tool: 'seedance-2-5', resolution: '480p', rate: 42, perSec: true, cost: 168, image: 'optional', ratio: true, aspects: A, durations: [4, 6, 8, 10] },
@@ -80,6 +80,17 @@ const BASE_MODELS = [
 ];
 
 const RATIOS = ['auto', '1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9', '9:21'];
+
+// Размеры кнопок шаблона. Пустое поле в админке значит все размеры модели.
+function templateFormats(model, stored) {
+    if (!model || model.noAspect || !model.ratio) return [];
+    const known = (model.aspects && model.aspects.length)
+        ? model.aspects.filter(a => a && a !== 'auto')
+        : RATIOS.filter(a => a !== 'auto');
+    const raw = Array.isArray(stored) ? stored : String(stored || '').split(/[,;|]/);
+    const picked = raw.map(s => String(s).trim()).filter(f => known.includes(f));
+    return picked.length ? picked : known.slice();
+}
 
 const BASE_PACKAGES = [
     { id: 'pack_100', credits: 100, price: 100, title: '100 кредитов' },
@@ -336,6 +347,7 @@ async function saveGeneral(db, input) {
 module.exports = {
     GROUPS,
     RATIOS,
+    templateFormats,
     BASE_MODELS,
     listModels,
     getModel,

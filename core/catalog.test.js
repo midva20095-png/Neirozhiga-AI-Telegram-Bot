@@ -40,6 +40,10 @@ test('гугл остаётся на прежних ключах и называ
     assert.equal(model('nanobanana').name, 'Картинка');
     assert.equal(model('nanobanana').group, 'image');
     assert.equal(model('nanobanana_pro').name, 'Картинка Pro');
+    const sizes = catalog.templateFormats(model('nanobanana'), '');
+    assert.ok(sizes.includes('1:1') && sizes.includes('9:16') && sizes.includes('16:9') && sizes.includes('21:9'));
+    assert.deepEqual(catalog.templateFormats(model('nanobanana'), '9:16, 1:1'), ['9:16', '1:1']);
+    assert.deepEqual(catalog.templateFormats(model('flash'), ''), []);
     assert.equal(catalog.quote(model('flash'), {}), 4);
     assert.equal(catalog.priceLabel(model('flash')), '4 кр');
 });

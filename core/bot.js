@@ -44,7 +44,7 @@ function baseWebappUrl() {
 // Кнопка web_app в обычной клавиатуре открывает Mini App с пустым initData,
 // поэтому для надёжного определения пользователя подписываем id и кладём в ссылку.
 function webappUrlFor(userId) {
-    return `${baseWebappUrl()}/?v=13#tk=${auth.signUserId(userId)}`;
+    return `${baseWebappUrl()}/?v=14#tk=${auth.signUserId(userId)}`;
 }
 
 function mainKeyboard(userId) {
@@ -949,7 +949,7 @@ async function startBot(app) {
 
     try {
         await bot.telegram.setChatMenuButton({
-            menu_button: { type: 'web_app', text: 'Кабинет', web_app: { url: baseWebappUrl() + '/?v=13' } }
+            menu_button: { type: 'web_app', text: 'Кабинет', web_app: { url: baseWebappUrl() + '/?v=14' } }
         });
         console.log('✅ Кнопка меню Mini App установлена');
     } catch (e) {

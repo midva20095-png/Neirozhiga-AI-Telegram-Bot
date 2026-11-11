@@ -249,7 +249,7 @@ async function loadTpl(){
     (preview?'<img id="tpreview" class="hero" src="'+esc(preview)+'" alt="">':'<img id="tpreview" class="hero" alt="" style="display:none">')+
     '<label class="filebtn">Загрузить фото<input id="tfile" type="file" accept="image/*"></label>'+
     '<label>Или ссылка на картинку</label><input id="timg" placeholder="https://..." value="'+esc(link)+'">'+
-    '<label>Форматы через запятую, если модель их умеет (1:1, 9:16)</label><input id="tfmt" placeholder="1:1, 9:16" value="'+esc(editing&&editing.formats?editing.formats:'')+'">'+
+    '<label>Размеры. Пустое поле — в кабинете все размеры этой модели. Через запятую можно оставить только нужные</label><input id="tfmt" placeholder="пусто = все размеры модели" value="'+esc(editing&&editing.formats?editing.formats:'')+'">'+
     '<label>Промпт. Клиент его не видит</label><textarea id="tp" placeholder="Что должна сделать модель с фото человека">'+esc(editing?editing.prompt:'')+'</textarea>'+
     '<label class="check"><input id="thide" type="checkbox" '+(!editing||editing.hide_prompt!==false?'checked':'')+'> Скрыть промпт: в кабинете только пример, своё фото и кнопка «Сгенерировать»</label>'+
     '<label class="check"><input id="tactive" type="checkbox" '+(!editing||editing.active!==false?'checked':'')+'> Показывать в кабинете</label>'+
