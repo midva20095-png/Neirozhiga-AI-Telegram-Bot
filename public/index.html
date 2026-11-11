@@ -132,10 +132,10 @@ function quote(m, o){
     var id = o.quality || m.quality;
     q = m.qualities.filter(function(x){ return x.id === id; })[0] || m.qualities.filter(function(x){ return x.id === m.quality; })[0] || m.qualities[0];
   }
-  if (q && q.perSec) return q.cost * (Number(o.duration) || (m.durations && m.durations[0]) || 1);
+  if (q && q.perSec) return Math.round(q.cost * (Number(o.duration) || (m.durations && m.durations[0]) || 1));
   if (q) return q.cost;
-  if (m.perSec) return (m.rate || m.cost) * (Number(o.duration) || (m.durations && m.durations[0]) || 1);
-  if (m.unit === 'sec') return (m.rate || m.cost);
+  if (m.perSec) return Math.round((m.rate || m.cost) * (Number(o.duration) || (m.durations && m.durations[0]) || 1));
+  if (m.unit === 'sec') return Math.round(m.rate || m.cost);
   return m.cost;
 }
 function syncPicks(m){

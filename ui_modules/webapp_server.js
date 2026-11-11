@@ -43,16 +43,22 @@ function publicModels() {
         cost: m.cost, from: catalog.fromPrice(m), label: catalog.priceLabel(m),
         image: m.image, ratio: !!m.ratio && !m.noAspect,
         aspects: m.aspects || null,
-        qualities: (m.qualities || []).map(q => ({ id: q.id, name: q.name, desc: q.desc || '', cost: q.cost, perSec: !!q.perSec })),
+        qualities: (m.qualities || []).map(q => ({
+            id: q.id, name: q.name, desc: q.desc || '',
+            cost: q.perSec ? Number(q.cost) * catalog.priceScale(m) : catalog.applyPrice(m, q.cost),
+            perSec: !!q.perSec
+        })),
         quality: m.quality || null,
         durations: m.durations || null,
-        durationPrices: m.durationPrices || null,
+        durationPrices: m.durationPrices
+            ? Object.fromEntries(Object.entries(m.durationPrices).map(([k, v]) => [k, catalog.applyPrice(m, v)]))
+            : null,
         perSec: !!m.perSec,
-        rate: m.rate || null,
+        rate: m.rate == null ? null : Number(m.rate) * catalog.priceScale(m),
         unit: m.unit || null,
         audio: !!m.audio,
         limit: m.limit,
-        free: m.provider === 'giga' || m.cost === 0
+        free: !(Number(m.cost) > 0)
     }));
 }
 

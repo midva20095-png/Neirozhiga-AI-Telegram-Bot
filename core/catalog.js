@@ -25,9 +25,9 @@ const BASE_MODELS = [
     { key: 'pro', name: 'Чат Pro', short: 'Чат Pro', desc: 'Текст. Длинные ответы, аналитика и код', group: 'text_pro', kind: 'text', provider: 'google', cost: 15, image: 'optional' },
 
     { key: 'giga-lite', name: 'GigaChat 2 Lite', short: 'Giga Lite', desc: 'Бесплатно, лимит в день', group: 'free', kind: 'text', provider: 'giga', cost: 0, limit: 30, image: 'no' },
-    { key: 'giga-pro', name: 'GigaChat 2 Pro', short: 'Giga Pro', desc: 'Бесплатно, лимит в день', group: 'free', kind: 'text', provider: 'giga', cost: 0, limit: 10, image: 'no' },
-    { key: 'giga-max', name: 'GigaChat 2 Max', short: 'Giga Max', desc: 'Бесплатно, лимит в день', group: 'free', kind: 'text', provider: 'giga', cost: 0, limit: 5, image: 'no' },
-    { key: 'giga-ultra', name: 'GigaChat 3 Ultra', short: 'Giga Ultra', desc: 'Бесплатно, лимит в день', group: 'free', kind: 'text', provider: 'giga', cost: 0, limit: 5, image: 'no' },
+    { key: 'giga-pro', name: 'GigaChat 2 Pro', short: 'Giga Pro', desc: 'Текст. Цена задаётся в админке, 0 — бесплатно', group: 'text_pro', kind: 'text', provider: 'giga', cost: 0, limit: 10, image: 'no' },
+    { key: 'giga-max', name: 'GigaChat 2 Max', short: 'Giga Max', desc: 'Текст. Цена задаётся в админке, 0 — бесплатно', group: 'text_pro', kind: 'text', provider: 'giga', cost: 0, limit: 5, image: 'no' },
+    { key: 'giga-ultra', name: 'GigaChat 3 Ultra', short: 'Giga Ultra', desc: 'Текст. Цена задаётся в админке, 0 — бесплатно', group: 'text_pro', kind: 'text', provider: 'giga', cost: 0, limit: 5, image: 'no' },
 
     { key: 'nano-banana', name: 'Nano Banana', short: 'Nano Banana', desc: 'Быстрые картинки и правка фото', group: 'image', kind: 'image', provider: 'bratukha', site: true, cost: 6, image: 'optional', ratio: true, aspects: ['1:1', '4:5', '3:4', '9:16', '4:3', '16:9'], qualities: [{ id: 'cheap', name: 'Эконом', desc: 'Дешевле, но медленнее', cost: 3 }, { id: 'normal', name: 'Быстро', desc: 'Обычный режим', cost: 6 }], quality: 'normal' },
     { key: 'gpt-image-2', name: 'GPT Image 2', short: 'GPT Image 2', desc: 'Точный текст на картинке', group: 'image', kind: 'image', provider: 'bratukha', site: true, cost: 30, image: 'optional', ratio: true, aspects: ['1:1', '4:5', '3:4', '9:16', '4:3', '16:9'], resolution: '1k', cheapFirst: true, qualities: [{ id: 'low', name: 'Быстро', desc: 'Черновик', cost: 6 }, { id: 'medium', name: 'Стандарт', desc: 'Точный текст', cost: 30 }, { id: 'high', name: 'Максимум', desc: 'Высокая детализация', cost: 90 }], quality: 'medium' },
@@ -125,22 +125,40 @@ function chosenQuality(model, quality) {
     return list.find(q => q.id === quality) || list.find(q => q.id === model.quality) || list[0];
 }
 
+function baseOf(model) {
+    if (!model) return null;
+    return BASE_MODELS.find(m => m.key === model.key) || null;
+}
+
+// Поле «Цена» в админке. Для моделей с режимами и секундами это цена базового запуска,
+// остальные варианты сдвигаются в ту же сторону. 0 — бесплатно, в том числе у GigaChat.
+function priceScale(model) {
+    const base = baseOf(model);
+    const scale = base && base.cost > 0 ? (Number(model.cost) / base.cost) : 1;
+    return Number.isFinite(scale) ? scale : 1;
+}
+
+function applyPrice(model, amount) {
+    const n = Number(amount) * priceScale(model);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.round(n));
+}
+
 function fromPrice(model) {
     if (!model) return 0;
-    if (model.provider === 'giga') return 0;
-    if (model.durationPrices) return Math.min(...Object.values(model.durationPrices).map(Number));
+    if (model.provider === 'giga') return Math.max(0, Math.round(Number(model.cost) || 0));
+    if (model.durationPrices) return Math.min(...Object.values(model.durationPrices).map(v => applyPrice(model, v)));
     const list = model.qualities || [];
-    if (list.length) {
-        return Math.min(...list.map(q => q.perSec ? q.cost : q.cost));
-    }
-    if (model.perSec) return (model.rate || model.cost) * ((model.durations && model.durations[0]) || 1);
-    return model.cost;
+    if (list.length) return Math.min(...list.map(q => applyPrice(model, q.cost)));
+    if (model.perSec) return applyPrice(model, (model.rate || model.cost) * ((model.durations && model.durations[0]) || 1));
+    return Math.max(0, Math.round(Number(model.cost) || 0));
 }
 
 function priceLabel(model) {
-    if (!model || model.provider === 'giga' || model.cost === 0) return 'бесплатно';
+    if (!model || !(Number(model.cost) > 0)) return 'бесплатно';
     if (model.unit === 'sec') {
-        const min = Math.min(...(model.qualities || []).map(q => q.cost).concat(model.rate || model.cost));
+        const raw = Math.min(...(model.qualities || []).map(q => q.cost).concat(model.rate || model.cost));
+        const min = applyPrice(model, raw);
         return ((model.qualities || []).length > 1 ? 'от ' : '') + min + ' кр/сек';
     }
     const min = fromPrice(model);
@@ -155,24 +173,25 @@ function priceLabel(model) {
 // Цена конкретного запуска. seconds — длина голосовой записи для говорящего фото.
 function quote(model, opts) {
     const o = opts || {};
-    if (!model || model.provider === 'giga') return 0;
+    if (!model) return 0;
+    if (model.provider === 'giga') return Math.max(0, Math.round(Number(model.cost) || 0));
     if (model.durationPrices) {
         const d = String(o.duration || (model.durations && model.durations[0]) || '');
-        if (model.durationPrices[d] != null) return Number(model.durationPrices[d]);
+        if (model.durationPrices[d] != null) return applyPrice(model, model.durationPrices[d]);
         return fromPrice(model);
     }
     const q = chosenQuality(model, o.quality);
     if (q && q.perSec) {
         const seconds = Number(o.seconds || o.duration) || 1;
-        return q.cost * seconds;
+        return applyPrice(model, q.cost * seconds);
     }
-    if (q) return q.cost;
+    if (q) return applyPrice(model, q.cost);
     if (model.perSec) {
         const seconds = Number(o.duration) || (model.durations && model.durations[0]) || 1;
-        return (model.rate || model.cost) * seconds;
+        return applyPrice(model, (model.rate || model.cost) * seconds);
     }
-    if (model.unit === 'sec') return (model.rate || model.cost) * (Number(o.seconds) || 1);
-    return model.cost;
+    if (model.unit === 'sec') return applyPrice(model, (model.rate || model.cost) * (Number(o.seconds) || 1));
+    return Math.max(0, Math.round(Number(model.cost) || 0));
 }
 
 function listModels({ includeDisabled = false } = {}) {
@@ -324,6 +343,8 @@ module.exports = {
     fromPrice,
     priceLabel,
     quote,
+    applyPrice,
+    priceScale,
     listPackages,
     getPackage,
     getGeneral,

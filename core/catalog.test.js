@@ -105,3 +105,30 @@ test('запрос в Братуху собирается как на сайте
     assert.deepEqual(input.siteModes(gpt, 'high'), ['cheap', 'normal']);
     assert.deepEqual(input.siteModes(gpt, 'low'), ['normal']);
 });
+
+test('цена из админки списывается, в том числе у GigaChat', async () => {
+    const saved = {};
+    await catalog.saveModels({ setSetting: async (key, value) => { saved[key] = value; } }, {
+        'giga-pro': { cost: '15', enabled: true, limit: 10 },
+        'giga-max': { cost: 20, enabled: true },
+        'giga-ultra': { cost: 30, enabled: true },
+        'nano-banana': { cost: 12, enabled: true },
+        'sora-2': { cost: 240, enabled: true }
+    });
+    const pro = model('giga-pro');
+    assert.equal(pro.group, 'text_pro');
+    assert.equal(pro.cost, 15);
+    assert.equal(pro.limit, 10);
+    assert.equal(catalog.quote(pro, {}), 15);
+    assert.equal(catalog.priceLabel(pro), '15 кр');
+    assert.equal(catalog.quote(model('giga-max'), {}), 20);
+    assert.equal(catalog.quote(model('giga-ultra'), {}), 30);
+    assert.equal(catalog.quote(model('giga-lite'), {}), 0);
+    assert.equal(catalog.priceLabel(model('giga-lite')), 'бесплатно');
+    assert.equal(catalog.quote(model('nano-banana'), { quality: 'cheap' }), 6);
+    assert.equal(catalog.quote(model('nano-banana'), {}), 12);
+    assert.equal(catalog.quote(model('sora-2'), { duration: 4 }), 240);
+    assert.equal(catalog.quote(model('sora-2'), { duration: 8 }), 480);
+    assert.equal(saved.models['giga-pro'].cost, 15);
+    assert.equal(saved.models['sora-2'].cost, 240);
+});
