@@ -110,6 +110,15 @@ async function initDB() {
       created_at TIMESTAMP DEFAULT NOW()
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS site_pushes (
+      id TEXT PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      email TEXT NOT NULL,
+      credits INTEGER NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
   console.log('✅ Таблица users готова (PostgreSQL)');
 }
 
@@ -292,6 +301,67 @@ async function debitBalance(userId, amount, reason) {
   } catch (err) {
     console.error('❌ debitBalance error:', err.message);
     return { ok: false, error: 'balance' };
+  }
+}
+
+async function findTelegramUser(raw) {
+  const text = String(raw || '').trim();
+  if (/^\d{5,20}$/.test(text)) {
+    const res = await pool.query('SELECT user_id, blocked FROM users WHERE user_id = $1', [text]);
+    return res.rows[0] || null;
+  }
+  const name = text.replace(/^@+/, '').toLowerCase();
+  if (!/^[a-z0-9_]{4,32}$/.test(name)) return null;
+  const res = await pool.query(
+    `SELECT user_id, blocked FROM users
+     WHERE lower(username) = $1 OR lower(username) = $2
+     LIMIT 2`,
+    ['@' + name, name]
+  );
+  if (res.rows.length > 1) return { ambiguous: true };
+  return res.rows[0] || null;
+}
+
+async function creditIncoming({ id, userId, email, credits }) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const ins = await client.query(
+      `INSERT INTO site_pushes (id, user_id, email, credits)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (id) DO NOTHING
+       RETURNING id`,
+      [id, String(userId), email, credits]
+    );
+    if (!ins.rows.length) {
+      const bal = await client.query('SELECT balance FROM users WHERE user_id = $1', [String(userId)]);
+      await client.query('COMMIT');
+      return { ok: true, duplicate: true, balance: bal.rows[0] ? parseInt(bal.rows[0].balance, 10) : 0 };
+    }
+    const res = await client.query(
+      `UPDATE users
+       SET balance = balance + $1, updated_at = NOW()
+       WHERE user_id = $2 AND blocked = false
+       RETURNING balance`,
+      [credits, String(userId)]
+    );
+    if (!res.rows[0]) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: 'Аккаунт в боте не найден или заблокирован' };
+    }
+    const balance = parseInt(res.rows[0].balance, 10);
+    await client.query(
+      'INSERT INTO history (user_id, delta, balance, reason) VALUES ($1,$2,$3,$4)',
+      [String(userId), credits, balance, `Перенос с сайта · ${email}`]
+    );
+    await client.query('COMMIT');
+    return { ok: true, balance };
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (e) {}
+    console.error('❌ creditIncoming:', err.message);
+    return { ok: false, error: 'Не удалось начислить кредиты в бот' };
+  } finally {
+    client.release();
   }
 }
 
@@ -533,6 +603,8 @@ module.exports = {
   getUserBalance,
   updateBalance,
   debitBalance,
+  findTelegramUser,
+  creditIncoming,
   insertSitePull,
   listPendingPulls,
   markSitePull,

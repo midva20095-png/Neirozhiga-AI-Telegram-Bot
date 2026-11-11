@@ -208,6 +208,38 @@ function startWebApp() {
         }
     });
 
+    // Сайт списывает кредиты у вошедшего клиента и просит бота начислить их.
+    // Ключ остаётся на серверах, в страницу Тильды его класть нельзя.
+    app.post('/api/internal/credit', async (req, res) => {
+        if (!transfer.acceptKey(req.headers['x-transfer-key'])) {
+            return res.status(403).json({ ok: false, error: 'Перенос не настроен' });
+        }
+        const body = req.body || {};
+        const credits = Math.round(Number(body.credits));
+        const transferId = String(body.transferId || '').trim().slice(0, 80);
+        const email = String(body.email || '').trim().toLowerCase().slice(0, 120);
+        const telegram = String(body.telegram || body.telegramUserId || '').trim().slice(0, 40);
+        if (!(credits > 0) || credits > 1000000 || transferId.length < 8 || !email.includes('@') || !telegram) {
+            return res.status(400).json({ ok: false, error: 'Некорректные данные перевода' });
+        }
+        try {
+            const user = await db.findTelegramUser(telegram);
+            if (!user) {
+                return res.status(400).json({ ok: false, error: 'Такого аккаунта в боте нет. Откройте бота, нажмите /start и укажите @username.' });
+            }
+            if (user.ambiguous) {
+                return res.status(400).json({ ok: false, error: 'Укажите числовой id Telegram: такой @username найден у нескольких людей.' });
+            }
+            if (user.blocked) return res.status(400).json({ ok: false, error: 'Аккаунт в боте заблокирован' });
+            const done = await db.creditIncoming({ id: transferId, userId: user.user_id, email, credits });
+            if (!done.ok) return res.status(400).json(done);
+            return res.json({ ok: true, balance: done.balance, duplicate: !!done.duplicate, telegram: String(user.user_id) });
+        } catch (e) {
+            console.error('API /api/internal/credit:', e.message);
+            return res.status(500).json({ ok: false, error: 'Не удалось начислить кредиты в бот' });
+        }
+    });
+
     app.post('/api/transfer-in', requireUser, async (req, res) => {
         try {
             const user = await db.getUser(req.userId);

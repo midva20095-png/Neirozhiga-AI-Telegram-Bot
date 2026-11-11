@@ -16,6 +16,13 @@ function configured() {
     return !!transferKey();
 }
 
+function acceptKey(given) {
+    const expected = transferKey();
+    const got = String(given || '');
+    if (!expected || got.length !== expected.length) return false;
+    return crypto.timingSafeEqual(Buffer.from(got), Buffer.from(expected));
+}
+
 async function postTransfer(body, key) {
     return axios.post(`${siteBase()}/api/telegram/transfer`, body, {
         timeout: 20000,
@@ -299,4 +306,4 @@ async function transferFromSite({ userId, email, password, credits }) {
     }
 }
 
-module.exports = { transfer, transferFromSite, siteBalance, resumePending, configured, siteBase };
+module.exports = { transfer, transferFromSite, siteBalance, resumePending, configured, acceptKey, siteBase };

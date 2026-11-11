@@ -19,6 +19,13 @@ test.after(async () => {
     await db.pool.end();
 });
 
+test('ключ переноса сверяется без допуска чужого значения', () => {
+    assert.equal(transfer.acceptKey('test-key'), true);
+    assert.equal(transfer.acceptKey('test-key-x'), false);
+    assert.equal(transfer.acceptKey(''), false);
+    assert.equal(transfer.acceptKey('other-key'), false);
+});
+
 test('перенос на сайт по-прежнему возвращает кредиты, если сайт не принял', async () => {
     const calls = [];
     db.debitBalance = async () => ({ ok: true, balance: 40 });
