@@ -25,6 +25,7 @@ TEMPLATE_MODEL=nanobanana
 SITE_API_URL=https://neiroyaga-backend-production.up.railway.app
 SITE_TRANSFER_KEY=общий_секрет_с_сайтом
 GIGACHAT_AUTH_KEY=
+PROXYAPI_KEY=ключ_proxyapi.ru
 ADMIN_PASSWORD=admin123
 ```
 

@@ -24,6 +24,10 @@ const BASE_MODELS = [
     { key: 'flash_25', name: 'Чат Flash 2', short: 'Чат Flash 2', desc: 'Текст. Второй быстрый чат', group: 'text', kind: 'text', provider: 'google', cost: 4, image: 'optional' },
     { key: 'pro', name: 'Чат Pro', short: 'Чат Pro', desc: 'Текст. Длинные ответы, аналитика и код', group: 'text_pro', kind: 'text', provider: 'google', cost: 15, image: 'optional' },
 
+    // Только low и 1024×1024. ~1,5–1,8 ₽ у ProxyAPI. 5 кредитов — запас на текст запроса; в админке цену можно сменить.
+    { key: 'px-gpt-image-mini', name: 'GPT Image Mini', short: 'GPT Mini', desc: 'Картинка 1024, только дешёвый режим, без фото', group: 'image', kind: 'image', provider: 'proxyapi', upstream: 'openai/gpt-image-1-mini', cost: 5, apiRub: 3, maxChars: 600, image: 'forbidden' },
+    { key: 'px-gpt-image-2-low', name: 'GPT Image 2 эконом', short: 'GPT 2 эконом', desc: 'Картинка 1024, только дешёвый режим, без фото', group: 'image', kind: 'image', provider: 'proxyapi', upstream: 'openai/gpt-image-2', cost: 5, apiRub: 3, maxChars: 600, image: 'forbidden' },
+
     { key: 'giga-lite', name: 'GigaChat 2 Lite', short: 'Giga Lite', desc: 'Бесплатно, лимит в день', group: 'free', kind: 'text', provider: 'giga', cost: 0, limit: 30, image: 'no' },
     { key: 'giga-pro', name: 'GigaChat 2 Pro', short: 'Giga Pro', desc: 'Текст. Цена задаётся в админке, 0 — бесплатно', group: 'text_pro', kind: 'text', provider: 'giga', cost: 0, limit: 10, image: 'no' },
     { key: 'giga-max', name: 'GigaChat 2 Max', short: 'Giga Max', desc: 'Текст. Цена задаётся в админке, 0 — бесплатно', group: 'text_pro', kind: 'text', provider: 'giga', cost: 0, limit: 5, image: 'no' },
@@ -106,6 +110,7 @@ let overrides = { models: {}, packages: null, general: {} };
 
 function defaultEnabled(m) {
     if (m.provider === 'giga') return !!process.env.GIGACHAT_AUTH_KEY;
+    if (m.provider === 'proxyapi') return !!(process.env.PROXYAPI_KEY || process.env.PROXYAPI_API_KEY || process.env.PROXY_API_KEY);
     return true;
 }
 

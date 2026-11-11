@@ -1,7 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const catalog = require('./catalog');
 const input = require('./bratukha_input');
+const imageApi = require('./proxyapi_image');
 
 function model(key) {
     const m = catalog.getModel(key, { includeDisabled: true });
@@ -81,6 +84,39 @@ test('кнопки моделей укладываются в лимит Telegra
         const list = catalog.listModels({ includeDisabled: true }).filter(m => m.group === id);
         assert.ok(list.length > 0, id);
     }
+});
+
+test('дешёвые картинки ProxyAPI заперты в low 1024 и стоят 5 кредитов', () => {
+    for (const key of ['px-gpt-image-mini', 'px-gpt-image-2-low']) {
+        const m = model(key);
+        assert.equal(m.provider, 'proxyapi');
+        assert.equal(m.group, 'image');
+        assert.equal(m.kind, 'image');
+        assert.equal(m.cost, 5);
+        assert.equal(m.image, 'forbidden');
+        assert.equal(catalog.quote(m, { quality: 'high', duration: 20 }), 5);
+        const body = imageApi.buildImageBody(m, 'кот на крыше');
+        assert.equal(body.model, m.upstream);
+        assert.equal(body.quality, 'low');
+        assert.equal(body.size, '1024x1024');
+        assert.equal(body.n, 1);
+        assert.equal(Object.keys(body).includes('8k'), false);
+    }
+    assert.equal(catalog.quote({ provider: 'proxyapi', cost: 9 }, {}), 9);
+    assert.equal(imageApi.promptTooLong({ maxChars: 600 }, 'я'.repeat(601)), true);
+    assert.equal(model('gpt-image-2').provider, 'bratukha');
+    assert.equal(model('gpt-image-2').cost, 30);
+});
+
+test('видео Veo от Google в каталоге нет, Veo сайта остаётся', () => {
+    assert.equal(catalog.getModel('veo', { includeDisabled: true }), null);
+    const googleVideo = catalog.listModels({ includeDisabled: true }).filter(m => m.provider === 'google' && m.kind === 'video');
+    assert.equal(googleVideo.length, 0);
+    assert.equal(model('veo-3-1-lite').provider, 'bratukha');
+    assert.equal(model('veo-3-1-quality').cost, 300);
+    const plugin = fs.readFileSync(path.join(__dirname, '../ai_plugins/google_gemini_plugin.js'), 'utf8');
+    assert.equal(plugin.includes('veo-3.1-generate-preview'), false);
+    assert.equal(plugin.includes("modelKey === 'veo'"), false);
 });
 
 test('запрос в Братуху собирается как на сайте', () => {

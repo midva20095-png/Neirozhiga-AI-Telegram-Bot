@@ -758,7 +758,7 @@ async function startBot(app) {
             console.error('❌ Ошибка генерации:', error.message || error);
             try { await ctx.deleteMessage(waitMessage.message_id); } catch (e) {}
             if (error.code === 'no_credits') return notLowBalance(ctx, prepared.model, prepared.price);
-            if (error.code === 'limit' || error.code === 'need_image' || error.code === 'need_audio' || error.code === 'need_text' || error.code === 'no_image' || error.code === 'blocked') {
+            if (error.code === 'limit' || error.code === 'need_image' || error.code === 'need_audio' || error.code === 'need_text' || error.code === 'no_image' || error.code === 'blocked' || error.code === 'user') {
                 return ctx.reply(`⚠️ ${error.message}`);
             }
             await ctx.reply('⚠️ Не удалось получить ответ от нейросети. Кредиты не списаны.');
