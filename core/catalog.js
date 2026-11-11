@@ -29,6 +29,11 @@ const BASE_MODELS = [
     { key: 'giga-max', name: 'GigaChat 2 Max', short: 'Giga Max', desc: 'Текст. Цена задаётся в админке, 0 — бесплатно', group: 'text_pro', kind: 'text', provider: 'giga', cost: 0, limit: 5, image: 'no' },
     { key: 'giga-ultra', name: 'GigaChat 3 Ultra', short: 'Giga Ultra', desc: 'Текст. Цена задаётся в админке, 0 — бесплатно', group: 'text_pro', kind: 'text', provider: 'giga', cost: 0, limit: 5, image: 'no' },
 
+    { key: 'or-recraft-flash', name: 'Recraft Flash', short: 'Recraft Flash', desc: 'Быстрая картинка по тексту. Всегда 3 кр.', group: 'image', kind: 'image', provider: 'openrouter', orModel: 'recraft/recraft-v4.1-flash', orProvider: 'recraft', usd: 0.007, cost: 3, image: 'forbidden', ratio: true, aspects: ['1:1', '4:3', '3:4', '16:9', '9:16'] },
+    { key: 'or-flux-klein', name: 'Flux Klein', short: 'Flux Klein', desc: 'Картинка и правка фото. Цена за штуку', group: 'image', kind: 'image', provider: 'openrouter', orModel: 'black-forest-labs/flux-3-image-klein', orProvider: 'black-forest-labs', outputFormat: 'jpeg', cost: 3, image: 'optional', ratio: true, aspects: ['1:1', '4:5', '3:4', '9:16', '4:3', '16:9'], qualities: [{ id: '1K', name: '1K', desc: 'Для соцсетей', cost: 3, usd: 0.009 }, { id: '2K', name: '2K', desc: 'Чётче', cost: 5, usd: 0.014 }], quality: '1K' },
+    { key: 'or-krea-turbo', name: 'Krea Turbo', short: 'Krea Turbo', desc: 'Яркая картинка и правка фото. Всегда 5 кр.', group: 'image', kind: 'image', provider: 'openrouter', orModel: 'krea/krea-2-medium-turbo', orProvider: 'krea', resolution: '1K', usd: 0.015, cost: 5, image: 'optional', ratio: true, aspects: ['1:1', '4:3', '16:9', '4:5', '9:16'] },
+    { key: 'or-seedream-flash', name: 'Seedream Flash', short: 'Seedream Flash', desc: 'Seedream 5 Flash, картинка 2K. Всегда 6 кр.', group: 'image', kind: 'image', provider: 'openrouter', orModel: 'bytedance-seed/seedream-5-0-flash', orProvider: 'seed', resolution: '2K', usd: 0.018, cost: 6, image: 'optional', ratio: true, aspects: ['1:1', '4:5', '3:4', '9:16', '4:3', '16:9'] },
+    { key: 'or-qwen-turbo', name: 'Qwen Turbo', short: 'Qwen Turbo', desc: 'Картинка 2K и правка фото. Всегда 6 кр.', group: 'image', kind: 'image', provider: 'openrouter', orModel: 'qwen/qwen-image-2.1-turbo', orProvider: 'alibaba', resolution: '2K', usd: 0.0184, cost: 6, image: 'optional', ratio: true, aspects: ['1:1', '4:5', '3:4', '9:16', '4:3', '16:9'] },
     { key: 'nano-banana', name: 'Nano Banana', short: 'Nano Banana', desc: 'Быстрые картинки и правка фото', group: 'image', kind: 'image', provider: 'bratukha', site: true, cost: 6, image: 'optional', ratio: true, aspects: ['1:1', '4:5', '3:4', '9:16', '4:3', '16:9'], qualities: [{ id: 'cheap', name: 'Эконом', desc: 'Дешевле, но медленнее', cost: 3 }, { id: 'normal', name: 'Быстро', desc: 'Обычный режим', cost: 6 }], quality: 'normal' },
     { key: 'gpt-image-2', name: 'GPT Image 2', short: 'GPT Image 2', desc: 'Точный текст на картинке', group: 'image', kind: 'image', provider: 'bratukha', site: true, cost: 30, image: 'optional', ratio: true, aspects: ['1:1', '4:5', '3:4', '9:16', '4:3', '16:9'], resolution: '1k', cheapFirst: true, qualities: [{ id: 'low', name: 'Быстро', desc: 'Черновик', cost: 6 }, { id: 'medium', name: 'Стандарт', desc: 'Точный текст', cost: 30 }, { id: 'high', name: 'Максимум', desc: 'Высокая детализация', cost: 90 }], quality: 'medium' },
     { key: 'grok-image', name: 'Grok Image', short: 'Grok Image', desc: 'Яркие картинки и правка фото', group: 'image', kind: 'image', provider: 'bratukha', site: true, cost: 12, image: 'optional', ratio: true, aspects: ['1:1', '9:16', '16:9'] },
@@ -117,6 +122,7 @@ let overrides = { models: {}, packages: null, general: {} };
 
 function defaultEnabled(m) {
     if (m.provider === 'giga') return !!process.env.GIGACHAT_AUTH_KEY;
+    if (m.provider === 'openrouter') return !!process.env.OPENROUTER_API_KEY;
     return true;
 }
 

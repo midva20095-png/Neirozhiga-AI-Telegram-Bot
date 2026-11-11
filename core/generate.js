@@ -7,8 +7,10 @@ let bratukhaPlugin = null;
 try { bratukhaPlugin = require('../ai_plugins/bratukha_plugin'); } catch (e) {}
 let gigaPlugin = null;
 try { gigaPlugin = require('../ai_plugins/gigachat_plugin'); } catch (e) {}
+let openrouterPlugin = null;
+try { openrouterPlugin = require('../ai_plugins/openrouter_plugin'); } catch (e) {}
 
-const PLUGINS = { google: googlePlugin, bratukha: bratukhaPlugin, giga: gigaPlugin };
+const PLUGINS = { google: googlePlugin, bratukha: bratukhaPlugin, giga: gigaPlugin, openrouter: openrouterPlugin };
 
 function getPlugin(model) {
     return PLUGINS[model.provider] || null;
