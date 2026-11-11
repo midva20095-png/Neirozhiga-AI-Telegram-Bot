@@ -151,3 +151,40 @@ test('цена из админки списывается, в том числе 
     assert.equal(saved.models['giga-pro'].cost, 15);
     assert.equal(saved.models['sora-2'].cost, 240);
 });
+
+test('картинки OpenRouter списывают фиксированные кредиты', () => {
+    const plugin = require('../ai_plugins/openrouter_plugin');
+    const flash = model('or-recraft-flash');
+    assert.equal(flash.provider, 'openrouter');
+    assert.equal(flash.image, 'forbidden');
+    assert.equal(catalog.quote(flash, {}), 3);
+    assert.equal(catalog.priceLabel(flash), '3 кр');
+
+    const flux = model('or-flux-klein');
+    assert.equal(catalog.quote(flux, { quality: '1K' }), 3);
+    assert.equal(catalog.quote(flux, { quality: '2K' }), 5);
+    assert.equal(catalog.priceLabel(flux), 'от 3 кр');
+    assert.equal(catalog.quote(model('or-krea-turbo'), {}), 5);
+    assert.equal(catalog.quote(model('or-seedream-flash'), {}), 6);
+    assert.equal(catalog.quote(model('or-qwen-turbo'), {}), 6);
+
+    const body = plugin.buildImageRequest({
+        spec: flux,
+        prompt: 'рыжий кот',
+        aspectRatio: '9:16',
+        quality: '2K',
+        dataUrl: 'data:image/jpeg;base64,aa'
+    });
+    assert.equal(body.model, 'black-forest-labs/flux-3-image-klein');
+    assert.equal(body.resolution, '2K');
+    assert.equal(body.aspect_ratio, '9:16');
+    assert.equal(body.n, 1);
+    assert.deepEqual(body.provider, { only: ['black-forest-labs'], allow_fallbacks: false });
+    assert.equal(body.input_references[0].image_url.url, 'data:image/jpeg;base64,aa');
+    assert.equal(plugin.expectedUsd(flux, '2K'), 0.014);
+
+    const textOnly = plugin.buildImageRequest({ spec: flash, prompt: 'море', aspectRatio: '1:1' });
+    assert.equal(textOnly.input_references, undefined);
+    assert.equal(textOnly.resolution, undefined);
+    assert.equal(textOnly.model, 'recraft/recraft-v4.1-flash');
+});
