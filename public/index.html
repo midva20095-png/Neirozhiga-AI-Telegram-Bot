@@ -221,8 +221,14 @@ function viewTop(){
     '<input id="temail" type="email" inputmode="email" autocomplete="email" placeholder="почта на сайте">'+
     '<input id="tamt" type="number" min="1" inputmode="numeric" placeholder="сколько кредитов">'+
     '<button class="btn" id="transfer">Перенести на сайт</button><p id="tmsg" class="hint"></p></div>';
-  if (!packs.length) return head+move+'<div class="card"><div class="empty">Пакеты недоступны. Пополнение — в чате бота кнопкой «Пополнить».</div></div>';
-  return head+move+'<div class="groupttl">Пакеты</div><div class="card">'+packs.map(p=>'<div class="pack"><div><div class="name">'+esc(p.title)+'</div><div class="meta">'+p.credits+' кредитов</div></div><button data-pkg="'+esc(p.id)+'">'+p.price+' ₽</button></div>').join('')+
+  const back = '<div class="card"><div class="now">Перенос в бот</div>'+
+    '<p class="hint">Спишем кредиты с кабинета на '+esc(site)+' и начислим их здесь. Нужны почта и пароль от сайта: пароль только проверяется и не сохраняется. Если сайт не подтвердит списание — в боте ничего не прибавится.</p>'+
+    '<input id="pemail" type="email" inputmode="email" autocomplete="username" placeholder="почта на сайте">'+
+    '<input id="ppass" type="password" autocomplete="current-password" placeholder="пароль на сайте">'+
+    '<input id="pamt" type="number" min="1" inputmode="numeric" placeholder="сколько кредитов">'+
+    '<button class="btn" id="pull">Перенести в бот</button><p id="pmsg" class="hint"></p></div>';
+  if (!packs.length) return head+move+back+'<div class="card"><div class="empty">Пакеты недоступны. Пополнение — в чате бота кнопкой «Пополнить».</div></div>';
+  return head+move+back+'<div class="groupttl">Пакеты</div><div class="card">'+packs.map(p=>'<div class="pack"><div><div class="name">'+esc(p.title)+'</div><div class="meta">'+p.credits+' кредитов</div></div><button data-pkg="'+esc(p.id)+'">'+p.price+' ₽</button></div>').join('')+
     '</div><div class="hint">Оплата открывается в чате бота: мы отправим кнопку оплаты туда.</div>';
 }
 function viewHelp(){
@@ -251,6 +257,7 @@ function bind(){
   const goTpl=document.getElementById('goTpl'); if (goTpl) goTpl.onclick=generateTemplate;
   const ss = document.getElementById('supsend'); if (ss) ss.onclick = sendSupport;
   const tr = document.getElementById('transfer'); if (tr) tr.onclick = sendTransfer;
+  const pull = document.getElementById('pull'); if (pull) pull.onclick = sendPull;
 }
 async function setModel(model){
   if (me) me.current_model = model;
@@ -355,6 +362,39 @@ async function sendTransfer(){
     if (amtEl) amtEl.value = '';
   } catch (e) {
     if (msg) { msg.className = 'err'; msg.textContent = e.message; }
+  }
+}
+let pulling = false;
+async function sendPull(){
+  if (pulling) return;
+  const emailEl = document.getElementById('pemail');
+  const passEl = document.getElementById('ppass');
+  const amtEl = document.getElementById('pamt');
+  const msg = document.getElementById('pmsg');
+  const email = (emailEl&&emailEl.value||'').trim();
+  const password = passEl&&passEl.value||'';
+  const credits = parseInt(amtEl&&amtEl.value, 10);
+  if (msg) { msg.className = 'hint'; msg.textContent = 'Переносим…'; }
+  pulling = true;
+  try {
+    const r = await fetch('/api/transfer-in',{method:'POST',headers:authHeaders(),body:JSON.stringify({email, password, credits})});
+    const d = await r.json();
+    if (typeof d.balance === 'number') {
+      if (me) {
+        me.balance = d.balance;
+        if (d.ok && Array.isArray(me.history)) me.history.unshift({ delta: credits, balance: d.balance, reason: 'Перенос с сайта · '+email });
+      }
+      const bal = document.getElementById('bal'); if (bal) bal.textContent = d.balance+' кр';
+      const top = document.getElementById('topbal'); if (top) top.textContent = d.balance+' кр';
+    }
+    if (!r.ok || !d.ok) throw new Error(d.error||'Не получилось');
+    if (msg) msg.textContent = 'Готово. В боте сейчас '+d.balance+' кр. На сайте у '+email+' осталось '+(d.siteCredits!=null?d.siteCredits:'?')+'.';
+    if (amtEl) amtEl.value = '';
+    if (passEl) passEl.value = '';
+  } catch (e) {
+    if (msg) { msg.className = 'err'; msg.textContent = e.message; }
+  } finally {
+    pulling = false;
   }
 }
 async function sendSupport(){

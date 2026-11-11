@@ -100,6 +100,16 @@ async function initDB() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS spent INTEGER DEFAULT 0`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gens INTEGER DEFAULT 0`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP DEFAULT NOW()`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS site_pulls (
+      id TEXT PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      email TEXT NOT NULL,
+      credits INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
   console.log('✅ Таблица users готова (PostgreSQL)');
 }
 
@@ -285,6 +295,95 @@ async function debitBalance(userId, amount, reason) {
   }
 }
 
+async function insertSitePull({ id, userId, email, credits }) {
+  const res = await pool.query(
+    `INSERT INTO site_pulls (id, user_id, email, credits, status)
+     VALUES ($1,$2,$3,$4,'pending')
+     ON CONFLICT (id) DO NOTHING
+     RETURNING id`,
+    [id, String(userId), email, credits]
+  );
+  return { ok: res.rows.length > 0 };
+}
+
+async function listPendingPulls(userId) {
+  const where = `status IN ('pending', 'refunding')`;
+  if (userId) {
+    const res = await pool.query(
+      `SELECT id, user_id, email, credits, status, created_at
+       FROM site_pulls WHERE ${where} AND user_id = $1
+       ORDER BY created_at`,
+      [String(userId)]
+    );
+    return res.rows;
+  }
+  const res = await pool.query(
+    `SELECT id, user_id, email, credits, status, created_at
+     FROM site_pulls WHERE ${where}
+     ORDER BY created_at LIMIT 50`
+  );
+  return res.rows;
+}
+
+async function markSitePull(id, status, fromStatus = 'pending') {
+  const res = await pool.query(
+    `UPDATE site_pulls SET status = $2 WHERE id = $1 AND status = $3`,
+    [id, status, fromStatus]
+  );
+  return res.rowCount > 0;
+}
+
+// Начисляет сумму один раз: повтор того же id не увеличивает баланс.
+async function creditSitePull({ id, userId, credits, email }) {
+  try {
+    await getUser(userId);
+  } catch (err) {
+    console.error('❌ creditSitePull user:', err.message);
+    return { ok: false };
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const lock = await client.query(
+      `UPDATE site_pulls SET status = 'credited' WHERE id = $1 AND status = 'pending' RETURNING id`,
+      [id]
+    );
+    if (!lock.rows.length) {
+      const cur = await client.query('SELECT status FROM site_pulls WHERE id = $1', [id]);
+      const status = cur.rows[0] ? cur.rows[0].status : '';
+      let balance = 0;
+      if (status === 'credited') {
+        const bal = await client.query('SELECT balance FROM users WHERE user_id = $1', [String(userId)]);
+        balance = bal.rows[0] ? parseInt(bal.rows[0].balance, 10) : 0;
+      }
+      await client.query('COMMIT');
+      if (status === 'credited') return { ok: true, already: true, balance };
+      return { ok: false, status };
+    }
+    const res = await client.query(
+      `UPDATE users SET balance = balance + $1, updated_at = NOW() WHERE user_id = $2 RETURNING balance`,
+      [credits, String(userId)]
+    );
+    if (!res.rows[0]) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: 'user' };
+    }
+    const balance = parseInt(res.rows[0].balance, 10);
+    await client.query(
+      'INSERT INTO history (user_id, delta, balance, reason) VALUES ($1,$2,$3,$4)',
+      [String(userId), credits, balance, `Перенос с сайта · ${email}`]
+    );
+    await client.query('COMMIT');
+    return { ok: true, balance };
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (e) {}
+    console.error('❌ creditSitePull:', err.message);
+    return { ok: false };
+  } finally {
+    client.release();
+  }
+}
+
 async function setCurrentModel(userId, model) {
   const id = String(userId);
   try {
@@ -434,6 +533,10 @@ module.exports = {
   getUserBalance,
   updateBalance,
   debitBalance,
+  insertSitePull,
+  listPendingPulls,
+  markSitePull,
+  creditSitePull,
   setCurrentModel,
   getCurrentModel,
   isBlocked,

@@ -208,6 +208,25 @@ function startWebApp() {
         }
     });
 
+    app.post('/api/transfer-in', requireUser, async (req, res) => {
+        try {
+            const user = await db.getUser(req.userId);
+            if (user.blocked) return res.status(403).json({ error: 'Аккаунт в чёрном списке' });
+            const body = req.body || {};
+            const result = await transfer.transferFromSite({
+                userId: req.userId,
+                email: body.email,
+                password: body.password,
+                credits: body.credits
+            });
+            if (!result.ok) return res.status(400).json(result);
+            res.json(result);
+        } catch (e) {
+            console.error('API /api/transfer-in:', e.message);
+            res.status(500).json({ error: 'Не удалось перенести кредиты' });
+        }
+    });
+
     // ---- Админка: вход ----
     app.post('/api/admin/login', (req, res) => {
         const { password, initData } = req.body || {};

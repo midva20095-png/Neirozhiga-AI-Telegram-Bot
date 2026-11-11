@@ -21,6 +21,7 @@ const MENU_TEXTS = [
     '💳 Мой баланс', '💳 Баланс',
     '💰 Пополнить', '💰 Пополнить баланс', '➕ Пополнить',
     '↗️ На сайт', 'На сайт',
+    '↙️ С сайта', 'С сайта',
     '💬 Поддержка', 'ℹ Справка', 'ℹ️ Справка', '❓ Справка'
 ];
 
@@ -42,7 +43,7 @@ function baseWebappUrl() {
 // Кнопка web_app в обычной клавиатуре открывает Mini App с пустым initData,
 // поэтому для надёжного определения пользователя подписываем id и кладём в ссылку.
 function webappUrlFor(userId) {
-    return `${baseWebappUrl()}/?v=10#tk=${auth.signUserId(userId)}`;
+    return `${baseWebappUrl()}/?v=11#tk=${auth.signUserId(userId)}`;
 }
 
 function mainKeyboard(userId) {
@@ -50,7 +51,8 @@ function mainKeyboard(userId) {
         [Markup.button.webApp('📱 Кабинет', webappUrlFor(userId))],
         ['✨ Модель', '💳 Баланс'],
         ['➕ Пополнить', '↗️ На сайт'],
-        ['💬 Поддержка', '❓ Справка']
+        ['💬 Поддержка', '❓ Справка'],
+        ['↙️ С сайта']
     ]).resize().persistent().placeholder('Напишите запрос или пришлите фото');
 }
 
@@ -71,6 +73,23 @@ function confirmKeyboard() {
     ]);
 }
 
+function pullAmountKeyboard(balance) {
+    const presets = [50, 100, 300, 500, 1000, 2500].filter(n => n < balance);
+    const rows = [];
+    for (let i = 0; i < presets.length; i += 3) {
+        rows.push(presets.slice(i, i + 3).map(n => Markup.button.callback(`${n} кр`, `pull_amt_${n}`)));
+    }
+    rows.push([Markup.button.callback(`Весь баланс · ${balance} кр`, 'pull_amt_all')]);
+    rows.push([Markup.button.callback('Отмена', 'transfer_cancel')]);
+    return Markup.inlineKeyboard(rows);
+}
+
+function pullConfirmKeyboard() {
+    return Markup.inlineKeyboard([
+        [Markup.button.callback('✅ Перенести', 'pull_yes'), Markup.button.callback('Отмена', 'transfer_cancel')]
+    ]);
+}
+
 async function beginTransfer(ctx) {
     userAwaitingEmail.delete(ctx.from.id);
     userAwaitingSupport.delete(ctx.from.id);
@@ -87,10 +106,93 @@ async function beginTransfer(ctx) {
     );
 }
 
+async function beginPull(ctx) {
+    userAwaitingEmail.delete(ctx.from.id);
+    userAwaitingSupport.delete(ctx.from.id);
+    userPendingRatio.delete(ctx.from.id);
+    userTransfer.set(ctx.from.id, { step: 'email', dir: 'in' });
+    const site = catalog.getGeneral().site_url || 'сайт';
+    await ctx.reply(
+        `↙️ Перенос с сайта в бот\n\n` +
+        `Кредиты спишутся с кабинета на сайте (${site}) и появятся здесь.\n` +
+        `Нужны почта и пароль, с которыми вы входите на сайте: так нельзя забрать чужой баланс. Пароль нигде не сохраняется.\n\n` +
+        `Напишите почту:`,
+        Markup.inlineKeyboard([[Markup.button.callback('Отмена', 'transfer_cancel')]])
+    );
+}
+
+async function handlePullText(ctx, text) {
+    const userId = ctx.from.id;
+    const state = userTransfer.get(userId);
+    if (!state) return;
+    if (state.step === 'email') {
+        const email = text.trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            await ctx.reply('Это не похоже на почту. Напишите адрес, с которым входите на сайте, например name@mail.ru');
+            return;
+        }
+        state.email = email;
+        state.step = 'password';
+        await ctx.reply(
+            `Почта на сайте: ${email}\n\n` +
+            `Напишите пароль от этого кабинета. Он проверяется на сайте и не сохраняется.\n` +
+            `Если не хотите оставлять пароль в переписке — откройте кабинет, вкладка «Баланс».`,
+            Markup.inlineKeyboard([[Markup.button.callback('Отмена', 'transfer_cancel')]])
+        );
+        return;
+    }
+    if (state.step === 'password') {
+        const password = String(text || '');
+        if (password.trim().length < 4) {
+            await ctx.reply('Пароль слишком короткий. Напишите пароль от кабинета на сайте.');
+            return;
+        }
+        state.password = password;
+        await ctx.reply('Проверяем пароль и баланс на сайте…');
+        const look = await transferApi.siteBalance({ email: state.email, password });
+        if (!look.ok) {
+            state.password = '';
+            await ctx.reply(look.error || 'Не удалось проверить кабинет. Напишите пароль ещё раз или нажмите «Отмена».');
+            return;
+        }
+        if (!(look.credits > 0)) {
+            userTransfer.delete(userId);
+            await ctx.reply(`На сайте у ${state.email} сейчас 0 кр. Переносить нечего.`, mainKeyboard(userId));
+            return;
+        }
+        state.siteBalance = look.credits;
+        state.step = 'amount';
+        await ctx.reply(
+            `На сайте ${look.credits} кр.\nСколько перенести в бот? Нажмите кнопку или напишите число.`,
+            pullAmountKeyboard(look.credits)
+        );
+        return;
+    }
+    const n = parseInt(String(text).replace(/\s/g, ''), 10);
+    if (!Number.isFinite(n) || n <= 0) {
+        await ctx.reply('Напишите целое число кредитов или нажмите кнопку с суммой.');
+        return;
+    }
+    if (state.siteBalance && n > state.siteBalance) {
+        await ctx.reply(`На сайте ${state.siteBalance} кр. — больше перенести нельзя.`);
+        return;
+    }
+    state.amount = n;
+    state.step = 'confirm';
+    await ctx.reply(
+        `Перенести ${n} кр. с ${state.email} в бот?\nОни спишутся на сайте и появятся здесь.`,
+        pullConfirmKeyboard()
+    );
+}
+
 async function handleTransferText(ctx, text) {
     const userId = ctx.from.id;
     const state = userTransfer.get(userId);
     if (!state) return;
+    if (state.dir === 'in') {
+        await handlePullText(ctx, text);
+        return;
+    }
     if (state.step === 'email') {
         const email = text.trim().toLowerCase();
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -237,6 +339,12 @@ async function startBot(app) {
     try {
         await db.initDB();
         console.log('✅ База данных PostgreSQL инициализирована');
+        try {
+            const pending = await transferApi.resumePending();
+            if (pending && pending.credited) console.log('✅ Доначислены кредиты с незавершённого переноса с сайта');
+        } catch (err) {
+            console.error('Перенос с сайта, проверка незавершённых:', err.message);
+        }
     } catch (e) {
         console.error('❌ Критическая ошибка инициализации БД:', e.message);
     }
@@ -315,7 +423,7 @@ async function startBot(app) {
                 ...Markup.inlineKeyboard([[Markup.button.webApp('📱 Открыть кабинет', webappUrlFor(ctx.from.id))]])
             }
         );
-        await ctx.reply('Меню внизу. «На сайт» переносит кредиты на почту кабинета.', mainKeyboard(ctx.from.id));
+        await ctx.reply('Меню внизу. «На сайт» переносит кредиты на почту кабинета, «С сайта» — обратно в бот.', mainKeyboard(ctx.from.id));
         try {
             await ctx.telegram.setChatMenuButton({
                 chat_id: ctx.chat.id,
@@ -330,7 +438,7 @@ async function startBot(app) {
         const balance = await getUserBalance(ctx.from.id);
         const model = catalog.getModel((await db.getCurrentModel(ctx.from.id)) || catalog.defaultModelKey());
         await ctx.reply(
-            `💳 *Баланс:* ${balance} кр.\nМодель: ${model ? model.name : ''}\n\nПополнить или перенести на сайт — кнопками внизу.`,
+            `💳 *Баланс:* ${balance} кр.\nМодель: ${model ? model.name : ''}\n\nПополнить, перенести на сайт или вернуть в бот — кнопками внизу.`,
             { parse_mode: 'Markdown', ...mainKeyboard(ctx.from.id) }
         );
     });
@@ -365,6 +473,10 @@ async function startBot(app) {
 
     bot.hears(['↗️ На сайт', 'На сайт'], async (ctx) => {
         await beginTransfer(ctx);
+    });
+
+    bot.hears(['↙️ С сайта', 'С сайта'], async (ctx) => {
+        await beginPull(ctx);
     });
 
     bot.hears('💬 Поддержка', async (ctx) => {
@@ -443,6 +555,53 @@ async function startBot(app) {
         });
         const text = result.ok
             ? `Готово.\n\nНа сайте ${result.email}: ${result.siteCredits} кр.\nВ боте осталось: ${result.balance} кр.`
+            : result.error;
+        try { await ctx.editMessageText(text); } catch (e) { await ctx.reply(text); }
+        await ctx.reply('Меню:', mainKeyboard(ctx.from.id));
+    });
+
+    bot.action(/^pull_amt_(.+)$/, async (ctx) => {
+        const state = userTransfer.get(ctx.from.id);
+        if (!state || state.dir !== 'in' || !state.email) {
+            await ctx.answerCbQuery('Начните перенос заново');
+            return;
+        }
+        const raw = ctx.match[1];
+        const cap = Number(state.siteBalance) || 0;
+        const amount = raw === 'all' ? cap : parseInt(raw, 10);
+        if (!(amount > 0) || (cap && amount > cap)) {
+            await ctx.answerCbQuery('Недостаточно кредитов на сайте');
+            return;
+        }
+        state.amount = amount;
+        state.step = 'confirm';
+        await ctx.answerCbQuery();
+        try {
+            await ctx.editMessageText(
+                `Перенести ${amount} кр. с ${state.email} в бот?\nОни спишутся на сайте и появятся здесь.`,
+                pullConfirmKeyboard()
+            );
+        } catch (e) {}
+    });
+
+    bot.action('pull_yes', async (ctx) => {
+        const state = userTransfer.get(ctx.from.id);
+        if (!state || state.dir !== 'in' || state.step !== 'confirm' || !state.email || !state.password || !(state.amount > 0)) {
+            await ctx.answerCbQuery('Начните перенос заново');
+            return;
+        }
+        const job = { email: state.email, password: state.password, amount: state.amount };
+        userTransfer.delete(ctx.from.id);
+        await ctx.answerCbQuery('Переносим');
+        try { await ctx.editMessageText('Переносим кредиты с сайта…'); } catch (e) {}
+        const result = await transferApi.transferFromSite({
+            userId: ctx.from.id,
+            email: job.email,
+            password: job.password,
+            credits: job.amount
+        });
+        const text = result.ok
+            ? `Готово.\n\nВ боте сейчас: ${result.balance} кр.\nНа сайте ${result.email} осталось: ${result.siteCredits} кр.`
             : result.error;
         try { await ctx.editMessageText(text); } catch (e) { await ctx.reply(text); }
         await ctx.reply('Меню:', mainKeyboard(ctx.from.id));
