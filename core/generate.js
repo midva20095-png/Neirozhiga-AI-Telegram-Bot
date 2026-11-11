@@ -28,6 +28,8 @@ class GenError extends Error {
     }
 }
 
+const { userMessage, QUIET_ERROR } = require('./user_message');
+
 // Общая проверка перед генерацией: возвращает подготовленные данные либо кидает GenError.
 function limitMessage(slot) {
     if (slot.limit === 0) return 'Эта бесплатная модель сейчас без доступных генераций. Лимит можно изменить в админке.';
@@ -154,4 +156,4 @@ async function generateForWeb({ userId, prompt, modelKey, fileBuffer, mimeType, 
     return out;
 }
 
-module.exports = { prepare, run, generateForWeb, getPlugin, isBusy, GenError };
+module.exports = { prepare, run, generateForWeb, getPlugin, isBusy, GenError, userMessage, QUIET_ERROR };

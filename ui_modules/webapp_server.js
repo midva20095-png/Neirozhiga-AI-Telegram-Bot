@@ -222,7 +222,7 @@ function startWebApp() {
         } catch (e) {
             console.error('API /api/generate:', e.message);
             const code = e.code === 'busy' ? 429 : 400;
-            res.status(code).json({ error: e.message || 'Ошибка генерации' });
+            res.status(code).json({ error: gen.userMessage(e) });
         }
     });
 

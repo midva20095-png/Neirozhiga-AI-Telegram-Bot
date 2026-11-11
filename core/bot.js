@@ -727,8 +727,9 @@ async function startBot(app) {
             });
         } catch (e) {
             const shown = catalog.quote(catalog.getModel(job.modelKey) || { cost: 0 }, job);
+            console.error('Подготовка генерации:', e.message);
             if (e.code === 'no_credits') return notLowBalance(ctx, catalog.getModel(job.modelKey) || { cost: shown }, shown);
-            return ctx.reply(`⚠️ ${e.message}`);
+            return ctx.reply(`⚠️ ${gen.userMessage(e)}`);
         }
         if (gen.isBusy(userId)) {
             return ctx.reply('⏳ Подождите, нейросеть ещё отвечает на предыдущий запрос.');
@@ -758,10 +759,7 @@ async function startBot(app) {
             console.error('❌ Ошибка генерации:', error.message || error);
             try { await ctx.deleteMessage(waitMessage.message_id); } catch (e) {}
             if (error.code === 'no_credits') return notLowBalance(ctx, prepared.model, prepared.price);
-            if (error.code === 'limit' || error.code === 'need_image' || error.code === 'need_audio' || error.code === 'need_text' || error.code === 'no_image' || error.code === 'blocked') {
-                return ctx.reply(`⚠️ ${error.message}`);
-            }
-            await ctx.reply('⚠️ Не удалось получить ответ от нейросети. Кредиты не списаны.');
+            await ctx.reply(`⚠️ ${gen.userMessage(error)}`);
         }
     }
 
