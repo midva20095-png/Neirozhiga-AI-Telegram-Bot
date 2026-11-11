@@ -2,12 +2,9 @@
 // Базовые значения заданы в коде, админка хранит поверх них правки в таблице settings.
 // Бот строит клавиатуры синхронно, поэтому всё держится в памяти и перечитывается после сохранения.
 
-const { cappedQuote } = require('./proxyapi_price');
-
 const GROUPS = {
     text: '💬 Текст',
     text_pro: '💬 Текст · сильнее',
-    text_top: '👑 Текст · максимум',
     image: '🖼 Картинки',
     video: '🎬 Видео · недорого',
     video_mid: '🎬 Видео',
@@ -19,36 +16,13 @@ const GROUPS = {
 
 // Цены моделей сайта не удваиваются: 1 кредит = 1 ₽, как на сайте.
 // Google остаётся на своих ключах. Названия как на сайте: «Чат Flash», «Чат Pro», «Картинка».
-// ProxyAPI — отдельные ключи px-. Цена видна до запуска: 1 ₽ их тарифа на ограниченный запрос = 3 кредита.
 // site: true — запрос в Братуху собирается так же, как на сайте.
 // cost — цена запуска с режимом и длиной по умолчанию. rate — цена одной секунды.
 const A = ['16:9', '9:16', '1:1', '4:3', '3:4'];
-
-function px(key, name, group, upstream, inn, out) {
-    const price = cappedQuote(inn, out);
-    return {
-        key, name, short: name,
-        desc: 'Текст. Цена указана до запуска',
-        group, kind: 'text', provider: 'proxyapi',
-        upstream, cost: price.credits, apiRub: price.apiRub,
-        maxOut: price.maxOut, maxChars: price.maxChars,
-        image: 'no'
-    };
-}
-
 const BASE_MODELS = [
     { key: 'flash', name: 'Чат Flash', short: 'Чат Flash', desc: 'Текст. Быстрые ответы, код и разбор фото', group: 'text', kind: 'text', provider: 'google', cost: 4, image: 'optional' },
     { key: 'flash_25', name: 'Чат Flash 2', short: 'Чат Flash 2', desc: 'Текст. Второй быстрый чат', group: 'text', kind: 'text', provider: 'google', cost: 4, image: 'optional' },
     { key: 'pro', name: 'Чат Pro', short: 'Чат Pro', desc: 'Текст. Длинные ответы, аналитика и код', group: 'text_pro', kind: 'text', provider: 'google', cost: 15, image: 'optional' },
-
-    px('px-qwen-flash', 'Qwen Flash', 'text', 'qwen/qwen3.8-flash', 25, 85),
-    px('px-deepseek-flash', 'DeepSeek Flash', 'text', 'deepseek/deepseek-v4.1-flash', 26.07, 100.25),
-    px('px-claude-haiku', 'Claude Haiku', 'text', 'anthropic/claude-haiku-5-5', 30, 150),
-    px('px-gpt-luna', 'GPT Luna', 'text', 'openai/gpt-6-luna', 30, 150),
-    px('px-deepseek-pro', 'DeepSeek Pro', 'text_pro', 'deepseek/deepseek-v4-pro-0813', 160.40, 481.20),
-    px('px-gpt-sol', 'GPT Sol', 'text_pro', 'openai/gpt-6.1-sol', 420, 2100),
-    px('px-claude-sonnet', 'Claude Sonnet', 'text_pro', 'anthropic/claude-sonnet-5-5', 500, 2500),
-    px('px-claude-opus', 'Claude Opus', 'text_top', 'anthropic/claude-opus-5-5', 840, 4200),
 
     { key: 'giga-lite', name: 'GigaChat 2 Lite', short: 'Giga Lite', desc: 'Бесплатно, лимит в день', group: 'free', kind: 'text', provider: 'giga', cost: 0, limit: 30, image: 'no' },
     { key: 'giga-pro', name: 'GigaChat 2 Pro', short: 'Giga Pro', desc: 'Бесплатно, лимит в день', group: 'free', kind: 'text', provider: 'giga', cost: 0, limit: 10, image: 'no' },
@@ -132,7 +106,6 @@ let overrides = { models: {}, packages: null, general: {} };
 
 function defaultEnabled(m) {
     if (m.provider === 'giga') return !!process.env.GIGACHAT_AUTH_KEY;
-    if (m.provider === 'proxyapi') return !!(process.env.PROXYAPI_KEY || process.env.PROXYAPI_API_KEY || process.env.PROXY_API_KEY);
     return true;
 }
 
@@ -183,7 +156,6 @@ function priceLabel(model) {
 function quote(model, opts) {
     const o = opts || {};
     if (!model || model.provider === 'giga') return 0;
-    if (model.provider === 'proxyapi') return Math.max(0, Math.round(Number(model.cost) || 0));
     if (model.durationPrices) {
         const d = String(o.duration || (model.durations && model.durations[0]) || '');
         if (model.durationPrices[d] != null) return Number(model.durationPrices[d]);

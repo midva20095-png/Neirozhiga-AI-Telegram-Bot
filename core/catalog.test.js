@@ -2,7 +2,6 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const catalog = require('./catalog');
 const input = require('./bratukha_input');
-const price = require('./proxyapi_price');
 
 function model(key) {
     const m = catalog.getModel(key, { includeDisabled: true });
@@ -77,31 +76,11 @@ test('кнопки моделей укладываются в лимит Telegra
         assert.ok(label.length <= 64, label);
         assert.ok(Buffer.byteLength(`set_model_${m.key}`) <= 64, m.key);
     }
-    for (const id of ['text', 'text_pro', 'text_top', 'image', 'video', 'video_mid', 'video_top', 'music', 'free', 'fix']) {
+    for (const id of ['text', 'text_pro', 'image', 'video', 'video_mid', 'video_top', 'music', 'free', 'fix']) {
         assert.ok(catalog.GROUPS[id]);
         const list = catalog.listModels({ includeDisabled: true }).filter(m => m.group === id);
         assert.ok(list.length > 0, id);
     }
-});
-
-test('ProxyAPI показывает цену заранее: 1 ₽ тарифа = 3 кредита', () => {
-    const haiku = price.cappedQuote(30, 150);
-    const sonnet = price.cappedQuote(500, 2500);
-    const opus = price.cappedQuote(840, 4200);
-    assert.equal(model('px-claude-haiku').cost, haiku.credits);
-    assert.equal(model('px-claude-haiku').apiRub, haiku.apiRub);
-    assert.equal(model('px-claude-haiku').provider, 'proxyapi');
-    assert.equal(model('px-claude-haiku').group, 'text');
-    assert.equal(model('px-claude-sonnet').cost, sonnet.credits);
-    assert.equal(model('px-claude-opus').group, 'text_top');
-    assert.equal(model('px-claude-opus').cost, opus.credits);
-    assert.equal(catalog.quote({ provider: 'proxyapi', cost: 9 }, {}), 9);
-    assert.equal(price.promptTooLong({ maxChars: 10 }, '12345678901'), true);
-    const body = price.buildChatBody(model('px-claude-haiku'), 'привет');
-    assert.equal(body.model, 'anthropic/claude-haiku-5-5');
-    assert.equal(body.max_completion_tokens, 1200);
-    assert.ok(model('nano-banana').cost === 6);
-    assert.equal(catalog.quote(model('sora-2'), { duration: 4 }), 120);
 });
 
 test('запрос в Братуху собирается как на сайте', () => {
