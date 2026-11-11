@@ -109,10 +109,12 @@ function startWebApp() {
         try {
             const user = await db.getUser(req.userId);
             const history = await db.listHistory(req.userId, 40);
+            let current = user.current_model || catalog.defaultModelKey();
+            if (!catalog.getModel(current)) current = catalog.defaultModelKey();
             res.json({
                 user_id: user.user_id,
                 balance: user.balance,
-                current_model: user.current_model || catalog.defaultModelKey(),
+                current_model: current,
                 blocked: !!user.blocked,
                 history
             });
