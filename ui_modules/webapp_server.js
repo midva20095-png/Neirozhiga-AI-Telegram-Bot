@@ -124,6 +124,39 @@ function startWebApp() {
         }
     });
 
+    app.get('/api/works', requireUser, async (req, res) => {
+        try {
+            const rows = await db.listWorks(req.userId, 30);
+            res.json({
+                works: rows.map(w => ({
+                    id: w.id,
+                    kind: w.kind,
+                    model: w.model || '',
+                    prompt: w.prompt || '',
+                    created_at: w.created_at
+                }))
+            });
+        } catch (e) {
+            console.error('API /api/works:', e.message);
+            res.status(500).json({ error: 'Internal error', works: [] });
+        }
+    });
+
+    app.get('/api/works/:id', requireUser, async (req, res) => {
+        try {
+            const row = await db.getWork(req.userId, req.params.id);
+            if (!row || !row.bytes) return res.status(404).end();
+            const allowed = ['image/png', 'image/jpeg', 'image/webp', 'video/mp4', 'audio/mpeg'];
+            res.set('Content-Type', allowed.includes(row.mime) ? row.mime : 'application/octet-stream');
+            res.set('Cache-Control', 'private, max-age=86400');
+            res.set('X-Content-Type-Options', 'nosniff');
+            res.send(row.bytes);
+        } catch (e) {
+            console.error('API /api/works/:id:', e.message);
+            res.status(500).end();
+        }
+    });
+
     app.get('/api/templates', async (req, res) => {
         try {
             res.json({ templates: await templatesSrc.listPublic() });

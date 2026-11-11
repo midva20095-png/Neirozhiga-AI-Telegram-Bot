@@ -54,7 +54,8 @@ textarea{width:100%;min-height:120px;border-radius:14px;border:1px solid var(--l
 .back{border:0;background:transparent;color:var(--mut);font-weight:800;padding:0 0 8px}
 .gallery{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .tile{padding:0;border:1px solid var(--line);background:#1c1233;border-radius:16px;overflow:hidden;text-align:left}
-.tile img,.tile .ph{width:100%;height:148px;object-fit:cover;display:block;background:#0b0614}
+.tile img,.tile video,.tile .ph{width:100%;height:148px;object-fit:cover;display:block;background:#0b0614}
+.tile audio{width:100%;display:block;margin-top:8px}
 .tile .cap{padding:8px 10px 10px}
 .tile .cap b{display:block}
 .tile .cap span{display:block;color:var(--mut);font-size:12px;font-weight:600}
@@ -80,7 +81,7 @@ input{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1
 </div>
 <script>
 const KIND = {text:'Текст', image:'Картинка', video:'Видео', audio:'Музыка'};
-let tab='gen', me=null, cfg=null, templates=[], userId=null, token=null, busy=false, last=null;
+let tab='gen', me=null, cfg=null, templates=[], works=null, worksLoading=false, userId=null, token=null, busy=false, last=null;
 let openTpl=null, photoData=null, pickedFormat=null, genPhoto=null, draft='';
 let pickedQuality=null, pickedDuration=null, pickedAspect=null;
 
@@ -250,13 +251,39 @@ function viewTplRun(){
     '<div class="now">'+t.cost+' кр</div>'+chips+photo+
     '<button class="btn" id="goTpl"'+(busy?' disabled':'')+'>'+(busy?'<span class="spin"></span>Генерирую…':'Сгенерировать')+'</button>'+res+'</div>';
 }
+function ensureWorks(){
+  if (works || worksLoading) return;
+  worksLoading = true;
+  fetch('/api/works', {headers: authHeaders()})
+    .then(function(r){ return r.json(); })
+    .then(function(d){ works = (d && d.works) || []; })
+    .catch(function(){ works = []; })
+    .finally(function(){ worksLoading = false; if (tab==='hist') draw(); });
+}
+function viewWorks(){
+  ensureWorks();
+  if (!works) return '<div class="card"><div class="empty">Загружаю картинки…</div></div>';
+  if (!works.length) return '<div class="card"><div class="empty">Картинок пока нет. Новые появятся здесь после генерации в кабинете или в чате бота.</div></div>';
+  return '<div class="groupttl">Мои работы</div><div class="gallery">'+works.map(function(w){
+    const media = w.kind==='video'
+      ? '<video data-work="'+w.id+'" controls playsinline></video>'
+      : w.kind==='audio'
+        ? '<audio data-work="'+w.id+'" controls></audio>'
+        : '<img data-work="'+w.id+'" alt="">';
+    const when = w.created_at ? new Date(w.created_at).toLocaleString('ru-RU', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : '';
+    const cap = (w.prompt||'').slice(0, 80);
+    return '<div class="tile">'+media+'<div class="cap"><b>'+esc(w.model||'Работа')+'</b><span>'+esc(when)+(cap?' · '+esc(cap):'')+'</span></div></div>';
+  }).join('')+'</div>';
+}
 function viewHist(){
   const rows = (me&&me.history)||[];
-  if (!rows.length) return '<div class="card"><div class="empty">Операций нет</div></div>';
-  return '<div class="card">'+rows.map(h=>{
-    const sign = Number(h.delta)>=0;
-    return '<div class="item"><div><b>'+esc(h.reason||'')+'</b><div class="meta">остаток '+(h.balance||0)+'</div></div><div class="'+(sign?'plus':'minus')+'">'+(sign?'+':'')+h.delta+'</div></div>';
-  }).join('')+'</div>';
+  const ops = !rows.length
+    ? '<div class="card"><div class="empty">Операций нет</div></div>'
+    : '<div class="groupttl">Операции</div><div class="card">'+rows.map(h=>{
+      const sign = Number(h.delta)>=0;
+      return '<div class="item"><div><b>'+esc(h.reason||'')+'</b><div class="meta">остаток '+(h.balance||0)+'</div></div><div class="'+(sign?'plus':'minus')+'">'+(sign?'+':'')+h.delta+'</div></div>';
+    }).join('')+'</div>';
+  return viewWorks()+ops;
 }
 function viewTop(){
   const packs = (cfg&&cfg.packages)||[];
@@ -310,6 +337,12 @@ function bind(){
   const back=document.getElementById('back'); if (back) back.onclick=()=>{ openTpl=null; photoData=null; last=null; draw(); };
   const file=document.getElementById('file'); if (file) file.onchange=()=>onPhoto(file);
   const goTpl=document.getElementById('goTpl'); if (goTpl) goTpl.onclick=generateTemplate;
+  document.querySelectorAll('[data-work]').forEach(function(el){
+    fetch('/api/works/'+el.dataset.work, {headers: authHeaders()})
+      .then(function(r){ if (!r.ok) throw new Error(); return r.blob(); })
+      .then(function(b){ el.src = URL.createObjectURL(b); })
+      .catch(function(){});
+  });
   const ss = document.getElementById('supsend'); if (ss) ss.onclick = sendSupport;
   const tr = document.getElementById('transfer'); if (tr) tr.onclick = sendTransfer;
   const pull = document.getElementById('pull'); if (pull) pull.onclick = sendPull;
@@ -381,6 +414,7 @@ async function generateTemplate(){
     const d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error||'Ошибка');
     last = d;
+    works = null;
     if (me) me.balance = d.balance;
     document.getElementById('bal').textContent = d.balance+' кр';
   } catch(e){ last = {error:e.message}; }
@@ -408,6 +442,7 @@ async function generate(){
     const d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error||'Ошибка');
     last = Object.assign({_prompt:prompt}, d);
+    works = null;
     if (me) me.balance = d.balance;
     document.getElementById('bal').textContent = d.balance+' кр';
   } catch(e){ last = {_prompt:prompt, error:e.message}; }

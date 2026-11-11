@@ -1,4 +1,5 @@
 const { Pool } = require('pg');
+const worksLib = require('./works');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -110,6 +111,19 @@ async function initDB() {
       created_at TIMESTAMP DEFAULT NOW()
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS works (
+      id SERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      kind TEXT NOT NULL,
+      model TEXT,
+      prompt TEXT,
+      mime TEXT NOT NULL,
+      bytes BYTEA NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS works_user_id_idx ON works (user_id, id DESC)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS site_pushes (
       id TEXT PRIMARY KEY,
@@ -478,6 +492,43 @@ async function getCurrentModel(userId) {
   }
 }
 
+async function saveWork(userId, input) {
+  const row = worksLib.prepareWork(input);
+  if (!row) return null;
+  const ins = await pool.query(
+    `INSERT INTO works (user_id, kind, model, prompt, mime, bytes)
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+    [String(userId), row.kind, row.model || null, row.prompt || null, row.mime, row.buffer]
+  );
+  await pool.query(
+    `DELETE FROM works WHERE user_id = $1 AND id NOT IN (
+       SELECT id FROM works WHERE user_id = $1 ORDER BY id DESC LIMIT $2
+     )`,
+    [String(userId), worksLib.KEEP]
+  );
+  return ins.rows[0].id;
+}
+
+async function listWorks(userId, limit = 30) {
+  const cap = Math.min(worksLib.KEEP, Math.max(1, Number(limit) || 30));
+  const res = await pool.query(
+    `SELECT id, kind, model, prompt, created_at
+     FROM works WHERE user_id = $1 ORDER BY id DESC LIMIT $2`,
+    [String(userId), cap]
+  );
+  return res.rows;
+}
+
+async function getWork(userId, id) {
+  const n = Number(id);
+  if (!Number.isInteger(n) || n <= 0) return null;
+  const res = await pool.query(
+    'SELECT id, kind, mime, bytes FROM works WHERE id = $1 AND user_id = $2',
+    [n, String(userId)]
+  );
+  return res.rows[0] || null;
+}
+
 async function listHistory(userId, limit = 40) {
   const res = await pool.query(
     'SELECT id, delta, balance, reason, created_at FROM history WHERE user_id = $1 ORDER BY id DESC LIMIT $2',
@@ -613,6 +664,9 @@ module.exports = {
   getCurrentModel,
   isBlocked,
   setBlocked,
+  saveWork,
+  listWorks,
+  getWork,
   listHistory,
   listTemplates,
   saveTemplate,

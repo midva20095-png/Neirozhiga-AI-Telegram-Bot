@@ -100,6 +100,16 @@ async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mim
         await db.recordGeneration(id, cost);
         if (!keepModel) await db.setCurrentModel(id, model.key);
         consumed = false;
+        try {
+            await db.saveWork(id, { kind: result.type, model: model.name, prompt, buffer: result.buffer });
+            if (result.type === 'audio' && Array.isArray(result.extra)) {
+                for (const buf of result.extra) {
+                    await db.saveWork(id, { kind: 'audio', model: model.name, prompt, buffer: buf });
+                }
+            }
+        } catch (err) {
+            console.error('Не удалось сохранить работу:', err.message);
+        }
 
         return {
             type: result.type || 'text',
