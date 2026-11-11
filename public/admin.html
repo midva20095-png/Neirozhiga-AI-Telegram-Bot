@@ -340,7 +340,7 @@ async function delTpl(id){ if(!confirm('Удалить шаблон?'))return; a
 async function loadModels(){
   const el = document.getElementById('section-models');
   const d = await api('/api/admin/models'); modelsData = d.models||[]; groupsData = d.groups||{};
-  let html = '<div class="card"><h3>Модели</h3><p class="note">Для GigaChat поле «В день» — жёсткий потолок. Пустое поле снимает лимит и это сохраняется. 0 запрещает генерации. Счётчик обнуляется в полночь по Москве, лимит проверяется до ответа модели.</p>'+(modelsMsg?'<p class="ok">'+esc(modelsMsg)+'</p>':'');
+  let html = '<div class="card"><h3>Модели</h3><p class="note">Для GigaChat поле «В день» — жёсткий потолок. Пустое поле снимает лимит и это сохраняется. 0 запрещает генерации. Счётчик обнуляется в полночь по Москве, лимит проверяется до ответа модели.</p><p class="note">Модели ProxyAPI (ключи px-) списывают цену из поля «Цена» ещё до запуска, человек видит её в списке. По умолчанию это 3 кредита за 1 ₽ тарифа ProxyAPI на ответ ограниченной длины. Цену можно изменить здесь. Запрос не уйдёт, если на балансе ProxyAPI не хватает запаса под этот ответ.</p>'+(modelsMsg?'<p class="ok">'+esc(modelsMsg)+'</p>':'');
   const order = Object.keys(groupsData);
   for (const g of order){
     const list = modelsData.filter(m=>m.group===g);

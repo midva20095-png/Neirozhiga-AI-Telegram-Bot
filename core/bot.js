@@ -451,7 +451,7 @@ async function startBot(app) {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
         const currentMode = (await db.getCurrentModel(ctx.from.id)) || catalog.defaultModelKey();
-        await ctx.reply('Выберите раздел: быстрые и недорогие, обычные или качество.', getModelSelectionKeyboard(currentMode));
+        await ctx.reply('Выберите раздел: текст, картинки, видео или музыка.', getModelSelectionKeyboard(currentMode));
     });
 
     bot.action(/^models_(.+)$/, async (ctx) => {
@@ -460,7 +460,7 @@ async function startBot(app) {
         await ctx.answerCbQuery();
         try {
             if (group === 'home') {
-                await ctx.editMessageText('Выберите раздел: быстрые и недорогие, обычные или качество.', getModelSelectionKeyboard(currentMode));
+                await ctx.editMessageText('Выберите раздел: текст, картинки, видео или музыка.', getModelSelectionKeyboard(currentMode));
             } else if (catalog.GROUPS[group]) {
                 await ctx.editMessageText(catalog.GROUPS[group], getGroupKeyboard(group, currentMode));
             }
@@ -614,7 +614,7 @@ async function startBot(app) {
     bot.action('action_choose_ai', async (ctx) => {
         await ctx.answerCbQuery();
         const currentMode = (await db.getCurrentModel(ctx.from.id)) || catalog.defaultModelKey();
-        await ctx.reply('Выберите раздел: быстрые и недорогие, обычные или качество.', getModelSelectionKeyboard(currentMode));
+        await ctx.reply('Выберите раздел: текст, картинки, видео или музыка.', getModelSelectionKeyboard(currentMode));
     });
 
     bot.action(/^set_model_(.+)$/, async (ctx) => {
@@ -758,7 +758,7 @@ async function startBot(app) {
             console.error('❌ Ошибка генерации:', error.message || error);
             try { await ctx.deleteMessage(waitMessage.message_id); } catch (e) {}
             if (error.code === 'no_credits') return notLowBalance(ctx, prepared.model, prepared.price);
-            if (error.code === 'limit' || error.code === 'need_image' || error.code === 'need_audio' || error.code === 'need_text' || error.code === 'no_image' || error.code === 'blocked') {
+            if (error.code === 'limit' || error.code === 'need_image' || error.code === 'need_audio' || error.code === 'need_text' || error.code === 'no_image' || error.code === 'blocked' || error.code === 'user') {
                 return ctx.reply(`⚠️ ${error.message}`);
             }
             await ctx.reply('⚠️ Не удалось получить ответ от нейросети. Кредиты не списаны.');
