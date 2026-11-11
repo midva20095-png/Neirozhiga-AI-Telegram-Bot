@@ -79,9 +79,10 @@ input{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1
   <button data-t="help"><span class="ic">💬</span>Помощь</button>
 </div>
 <script>
-const CAT = {chat:'Чат', text:'Текст', image:'Картинки', video:'Видео', audio:'Голос', fix:'Улучшение'};
+const KIND = {text:'Текст', image:'Картинка', video:'Видео', audio:'Музыка'};
 let tab='gen', me=null, cfg=null, templates=[], userId=null, token=null, busy=false, last=null;
-let openTpl=null, photoData=null, pickedFormat=null;
+let openTpl=null, photoData=null, pickedFormat=null, genPhoto=null, draft='';
+let pickedQuality=null, pickedDuration=null, pickedAspect=null;
 
 function tg(){ return window.Telegram && window.Telegram.WebApp; }
 function parseUser(raw){
@@ -116,7 +117,42 @@ function safeSrc(u){
 }
 function modelOf(k){ return (cfg&&cfg.models||[]).find(m=>m.key===k) || null; }
 function nameOf(k){ const m = modelOf(k); return m ? m.name : k; }
-function costLabel(m){ return m.free ? 'бесплатно' : (m.cost+' кр'); }
+function costLabel(m){ return (m && m.label) || (m && m.free ? 'бесплатно' : ((m && m.cost) || 0)+' кр'); }
+function quote(m, o){
+  o = o || {};
+  if (!m || m.free) return 0;
+  if (m.durationPrices){
+    var d = String(o.duration || (m.durations && m.durations[0]) || '');
+    if (m.durationPrices[d] != null) return Number(m.durationPrices[d]);
+    var vals = Object.keys(m.durationPrices).map(function(k){ return Number(m.durationPrices[k]); });
+    return Math.min.apply(null, vals);
+  }
+  var q = null;
+  if (m.qualities && m.qualities.length){
+    var id = o.quality || m.quality;
+    q = m.qualities.filter(function(x){ return x.id === id; })[0] || m.qualities.filter(function(x){ return x.id === m.quality; })[0] || m.qualities[0];
+  }
+  if (q && q.perSec) return q.cost * (Number(o.duration) || (m.durations && m.durations[0]) || 1);
+  if (q) return q.cost;
+  if (m.perSec) return (m.rate || m.cost) * (Number(o.duration) || (m.durations && m.durations[0]) || 1);
+  if (m.unit === 'sec') return (m.rate || m.cost);
+  return m.cost;
+}
+function syncPicks(m){
+  if (!m) return;
+  if (!m.qualities || !m.qualities.some(function(q){ return q.id === pickedQuality; })) pickedQuality = m.quality || (m.qualities && m.qualities[0] && m.qualities[0].id) || null;
+  if (!m.durations || m.durations.indexOf(Number(pickedDuration)) < 0) pickedDuration = (m.durations && m.durations[0]) || null;
+  if (!m.ratio) pickedAspect = null;
+  else if (m.aspects && m.aspects.length && m.aspects.indexOf(pickedAspect) < 0) pickedAspect = m.aspects[0];
+}
+function chips(list, current, attr){
+  return '<div class="chips">'+list.map(function(item){
+    var id = item.id != null ? item.id : item;
+    var name = item.name || item;
+    var on = String(current) === String(id);
+    return '<button type="button" data-'+attr+'="'+esc(id)+'" class="'+(on?'on':'')+'">'+esc(name)+'</button>';
+  }).join('')+'</div>';
+}
 
 async function loadConfig(){
   try { cfg = await (await fetch('/api/config')).json(); }
@@ -155,14 +191,24 @@ function draw(){
 function viewGen(){
   const cur = (me&&me.current_model)||(cfg&&cfg.default_model)||'flash';
   const m = modelOf(cur);
+  syncPicks(m);
   const res = last ? renderResult(last) : '';
-  const info = m ? ('<div class="now">Модель: <b>'+esc(m.name)+'</b> · '+costLabel(m)+'</div>') : '';
-  const note = m && m.image==='required'
-    ? '<div class="hint">Эта модель работает с загруженным фото. Загрузка фото доступна в чате бота; здесь — текстовые модели.</div>' : '';
-  return '<div class="card">'+info+
-    '<textarea id="prompt" placeholder="Опишите, что сгенерировать">'+esc(last&&last._prompt||'')+'</textarea>'+
-    '<button class="btn" id="go"'+(busy?' disabled':'')+'>'+(busy?'<span class="spin"></span>Генерирую…':'Сгенерировать')+'</button>'+
-    note+res+'</div>';
+  const price = m ? quote(m, {quality:pickedQuality, duration:pickedDuration}) : 0;
+  const info = m ? ('<div class="now">Модель: <b>'+esc(m.name)+'</b> · '+(m.audio ? costLabel(m) : (price+' кр'))+'</div>') : '';
+  let opts = '';
+  if (m && m.qualities && m.qualities.length > 1) opts += '<div class="hint">Режим</div>'+chips(m.qualities, pickedQuality, 'q');
+  if (m && m.durations && m.durations.length > 1) opts += '<div class="hint">Длина</div>'+chips(m.durations.map(function(d){ return {id:d, name:d+' сек · '+quote(m,{quality:pickedQuality,duration:d})+' кр'}; }), pickedDuration, 'dur');
+  if (m && m.ratio && m.aspects && m.aspects.length) opts += '<div class="hint">Формат</div>'+chips(m.aspects, pickedAspect, 'asp');
+  let photo = '';
+  if (m && (m.image === 'optional' || m.image === 'required')) {
+    photo = '<label class="filebtn">'+(genPhoto?'Фото прикреплено — заменить':'Прикрепить фото'+(m.image==='required'?'':' — по желанию'))+'<input id="genfile" type="file" accept="image/*"></label>'+(genPhoto?'<img class="preview" style="margin-top:10px" src="'+genPhoto+'" alt="">':'');
+  }
+  const note = m && m.audio
+    ? '<div class="hint">Говорящее фото запускается в чате бота: отправьте фото и голосовое сообщение.</div>' : '';
+  const go = m && m.audio ? '' : '<button class="btn" id="go"'+(busy?' disabled':'')+'>'+(busy?'<span class="spin"></span>Генерирую…':'Сгенерировать · '+price+' кр')+'</button>';
+  return '<div class="card">'+info+opts+
+    '<textarea id="prompt" placeholder="Опишите, что сгенерировать">'+esc(draft || (last&&last._prompt) || '')+'</textarea>'+
+    photo+go+note+res+'</div>';
 }
 function viewModels(){
   const cur = (me&&me.current_model)||'flash';
@@ -170,11 +216,11 @@ function viewModels(){
   const order = Object.keys(groups);
   let html = '';
   for (const g of order){
-    const list = (cfg.models||[]).filter(m=>m.group===g);
+    const list = (cfg.models||[]).filter(m=>m.group===g).slice().sort((a,b)=>(a.from||0)-(b.from||0));
     if (!list.length) continue;
     html += '<div class="groupttl">'+esc(groups[g])+'</div><div class="card">'+
       list.map(m=>'<button class="model'+(m.key===cur?' on':'')+'" data-model="'+m.key+'">'+
-        '<div><div class="name">'+(m.key===cur?'✅ ':'')+esc(m.name)+'</div><div class="meta">'+esc(m.desc||'')+(m.limit!=null?(' · лимит '+m.limit+'/день'):(m.limit===null?' · без лимита':''))+'</div></div>'+
+        '<div><div class="name">'+(m.key===cur?'✅ ':'')+esc(m.name)+'</div><div class="meta">'+esc((KIND[m.kind]?KIND[m.kind]+' · ':'')+(m.desc||''))+(m.limit!=null?(' · лимит '+m.limit+'/день'):(m.limit===null?' · без лимита':''))+'</div></div>'+
         '<div class="cost'+(m.free?' free':'')+'">'+costLabel(m)+'</div></button>').join('')+'</div>';
   }
   return html || '<div class="card"><div class="empty">Модели недоступны</div></div>';
@@ -242,12 +288,21 @@ function renderResult(r){
   let html = '<div class="result"><p>'+esc(r.text||'Готово')+'</p>';
   if (r.media && r.type==='image') html += '<img src="'+r.media+'">';
   else if (r.media && r.type==='video') html += '<video src="'+r.media+'" controls></video>';
-  else if (r.media && r.type==='audio') html += '<audio src="'+r.media+'" controls></audio>';
+  else if (r.media && r.type==='audio') {
+    html += '<audio src="'+r.media+'" controls></audio>';
+    (r.more||[]).forEach(function(src){ html += '<audio src="'+src+'" controls></audio>'; });
+  }
   html += '<div class="meta">Списано '+r.cost+' · остаток '+r.balance+'</div></div>';
   return html;
 }
 function bind(){
+  const promptBox = document.getElementById('prompt');
+  if (promptBox) promptBox.addEventListener('input', function(){ draft = promptBox.value; });
   const go = document.getElementById('go'); if (go) go.onclick = generate;
+  document.querySelectorAll('[data-q]').forEach(b=>b.onclick=function(){ draft=(document.getElementById('prompt')||{}).value||draft; pickedQuality=b.dataset.q; draw(); });
+  document.querySelectorAll('[data-dur]').forEach(b=>b.onclick=function(){ draft=(document.getElementById('prompt')||{}).value||draft; pickedDuration=Number(b.dataset.dur); draw(); });
+  document.querySelectorAll('[data-asp]').forEach(b=>b.onclick=function(){ draft=(document.getElementById('prompt')||{}).value||draft; pickedAspect=b.dataset.asp; draw(); });
+  const genfile=document.getElementById('genfile'); if (genfile) genfile.onchange=function(){ onGenPhoto(genfile); };
   document.querySelectorAll('[data-model]').forEach(b=>b.onclick=()=>setModel(b.dataset.model));
   document.querySelectorAll('[data-tpl]').forEach(b=>b.onclick=()=>useTpl(b.dataset.tpl));
   document.querySelectorAll('[data-fmt]').forEach(b=>b.onclick=()=>{ pickedFormat=b.dataset.fmt; draw(); });
@@ -261,6 +316,7 @@ function bind(){
 }
 async function setModel(model){
   if (me) me.current_model = model;
+  pickedQuality = null; pickedDuration = null; pickedAspect = null; genPhoto = null;
   if (tab==='models'){ tab='gen'; }
   draw();
   try { await fetch('/api/set-model',{method:'POST',headers:authHeaders(),body:JSON.stringify({model})}); } catch(e){}
@@ -269,6 +325,7 @@ function useTpl(id){
   const t = templates.find(x=>String(x.id)===String(id)); if (!t) return;
   if (!t.hidePrompt && t.prompt) {
     if (me) me.current_model = t.model;
+    draft = t.prompt;
     last = {_prompt:t.prompt, text:'', cost:0, balance:(me&&me.balance)||0, type:'text'};
     tab='gen'; draw();
     const p = document.getElementById('prompt'); if (p){ p.value=t.prompt; p.focus(); }
@@ -298,6 +355,13 @@ function fileToJpeg(file){
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Не удалось прочитать фото')); };
     img.src = url;
   });
+}
+async function onGenPhoto(input){
+  const file = input.files && input.files[0];
+  if (!file) return;
+  try { genPhoto = await fileToJpeg(file); draft = (document.getElementById('prompt')||{}).value || draft; }
+  catch (e) { genPhoto = null; alert(e.message); }
+  draw();
 }
 async function onPhoto(input){
   const file = input.files && input.files[0];
@@ -330,10 +394,17 @@ function buy(pkgId){
 async function generate(){
   if (busy) return;
   const prompt = ((document.getElementById('prompt')||{}).value||'').trim();
-  if (!prompt) return;
-  busy = true; last = {_prompt:prompt}; draw();
+  const m = modelOf((me&&me.current_model)||'');
+  if (m && m.audio) return;
+  if (m && m.image === 'required' && !genPhoto) { last = {_prompt:prompt, error:'Прикрепите фото'}; draw(); return; }
+  if (!prompt && !genPhoto) return;
+  if (m && m.image === 'forbidden' && !prompt) return;
+  busy = true; draft = prompt; last = {_prompt:prompt}; draw();
   try {
-    const r = await fetch('/api/generate',{method:'POST',headers:authHeaders(),body:JSON.stringify({prompt,model:me&&me.current_model})});
+    const r = await fetch('/api/generate',{method:'POST',headers:authHeaders(),body:JSON.stringify({
+      prompt, model: me&&me.current_model, image: (m && m.image !== 'forbidden') ? genPhoto : null,
+      quality: pickedQuality, duration: pickedDuration, format: pickedAspect
+    })});
     const d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error||'Ошибка');
     last = Object.assign({_prompt:prompt}, d);

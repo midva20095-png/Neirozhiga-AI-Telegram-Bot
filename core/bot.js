@@ -7,12 +7,13 @@ const gen = require('./generate');
 const auth = require('./auth');
 const transferApi = require('./transfer');
 
-const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 300000 });
+const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 16 * 60 * 1000 });
 
 const userAwaitingEmail = new Map();
 const userAwaitingSupport = new Map();
 const mediaGroupBuffers = new Map();
 const userPendingRatio = new Map();
+const userPendingAvatar = new Map();
 const userTransfer = new Map();
 
 const MENU_TEXTS = [
@@ -247,9 +248,8 @@ async function getTelegramFileBuffer(ctx, fileId) {
 
 function modelButton(model, currentMode) {
     const mark = model.key === currentMode ? '✅ ' : '';
-    const price = model.cost === 0 ? 'бесплатно' : `${model.cost} кр`;
     const cap = model.provider === 'giga' ? (model.limit === null ? ' · без лимита' : ` · ${model.limit}/день`) : '';
-    return Markup.button.callback(`${mark}${model.short} · ${price}${cap}`, `set_model_${model.key}`);
+    return Markup.button.callback(`${mark}${model.short} · ${catalog.priceLabel(model)}${cap}`, `set_model_${model.key}`);
 }
 
 function getModelSelectionKeyboard(currentMode) {
@@ -317,17 +317,21 @@ async function sendResult(ctx, result, extra) {
         await ctx.replyWithVideo({ source: result.buffer }, { caption: `${result.text || ''}\n\n${suffix}` });
     } else if (result.buffer && result.type === 'audio') {
         await ctx.replyWithAudio({ source: result.buffer }, { caption: `${result.text || ''}\n\n${suffix}` });
+        for (const buf of result.extra || []) {
+            try { await ctx.replyWithAudio({ source: buf }); } catch (e) {}
+        }
     } else {
         const full = `${result.text || 'Готово'}\n\n───────────────\n${suffix}`;
         try { await ctx.reply(full, { parse_mode: 'Markdown' }); } catch (e) { await ctx.reply(full); }
     }
 }
 
-async function notLowBalance(ctx, model) {
+async function notLowBalance(ctx, model, need) {
     const balance = await getUserBalance(ctx.from.id);
-    if (balance < model.cost) {
+    const price = Number.isFinite(Number(need)) ? need : model.cost;
+    if (balance < price) {
         await ctx.reply(
-            `❌ *Недостаточно кредитов!*\nВаш баланс: ${balance} кр. Требуется: ${model.cost} кр.`,
+            `❌ *Недостаточно кредитов!*\nВаш баланс: ${balance} кр. Требуется: ${price} кр.`,
             { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.callback('💰 Пополнить баланс', 'action_buy_credits')]]) }
         );
         return false;
@@ -447,7 +451,7 @@ async function startBot(app) {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
         const currentMode = (await db.getCurrentModel(ctx.from.id)) || catalog.defaultModelKey();
-        await ctx.reply('Выберите раздел, потом модель.', getModelSelectionKeyboard(currentMode));
+        await ctx.reply('Выберите раздел: быстрые и недорогие, обычные или качество.', getModelSelectionKeyboard(currentMode));
     });
 
     bot.action(/^models_(.+)$/, async (ctx) => {
@@ -456,7 +460,7 @@ async function startBot(app) {
         await ctx.answerCbQuery();
         try {
             if (group === 'home') {
-                await ctx.editMessageText('Выберите раздел, потом модель.', getModelSelectionKeyboard(currentMode));
+                await ctx.editMessageText('Выберите раздел: быстрые и недорогие, обычные или качество.', getModelSelectionKeyboard(currentMode));
             } else if (catalog.GROUPS[group]) {
                 await ctx.editMessageText(catalog.GROUPS[group], getGroupKeyboard(group, currentMode));
             }
@@ -610,7 +614,7 @@ async function startBot(app) {
     bot.action('action_choose_ai', async (ctx) => {
         await ctx.answerCbQuery();
         const currentMode = (await db.getCurrentModel(ctx.from.id)) || catalog.defaultModelKey();
-        await ctx.reply('Выберите раздел, потом модель.', getModelSelectionKeyboard(currentMode));
+        await ctx.reply('Выберите раздел: быстрые и недорогие, обычные или качество.', getModelSelectionKeyboard(currentMode));
     });
 
     bot.action(/^set_model_(.+)$/, async (ctx) => {
@@ -620,8 +624,7 @@ async function startBot(app) {
         if (!model) return ctx.answerCbQuery('Модель недоступна');
         await db.setCurrentModel(ctx.from.id, key);
         await ctx.answerCbQuery(`Выбрано: ${model.short}`);
-        const price = model.cost === 0 ? 'бесплатно' : `${model.cost} кр`;
-        try { await ctx.editMessageText(`✅ ${model.short} · ${price}. Пишите запрос.`); } catch (e) {}
+        try { await ctx.editMessageText(`✅ ${model.short} · ${catalog.priceLabel(model)}. Пишите запрос.`); } catch (e) {}
         await ctx.reply('Меню:', mainKeyboard(ctx.from.id));
     });
 
@@ -641,11 +644,51 @@ async function startBot(app) {
         );
     });
 
-    // Выбор соотношения сторон для моделей, которые это поддерживают.
-    bot.action(/^brat_ratio_(.+)$/, async (ctx) => {
+    function rowsOf(buttons, size) {
+        const rows = [];
+        for (let i = 0; i < buttons.length; i += size) rows.push(buttons.slice(i, i + size));
+        return rows;
+    }
+
+    async function askOptions(ctx, userId) {
+        const job = userPendingRatio.get(userId);
+        const model = job && catalog.getModel(job.modelKey);
+        if (!job || !model) {
+            userPendingRatio.delete(userId);
+            return ctx.reply('⚠️ Запрос устарел. Отправьте его ещё раз.');
+        }
+        const qualities = model.qualities || [];
+        if (qualities.length > 1 && !job.quality) {
+            const buttons = qualities.map(q => {
+                const price = q.perSec ? `${q.cost} кр/сек` : `${q.cost} кр`;
+                return Markup.button.callback(`${q.name} · ${price}`, `optq_${q.id}`);
+            });
+            buttons.push(Markup.button.callback('❌ Отмена', 'optq_cancel'));
+            return ctx.reply(`🎚 Режим · ${model.name}`, Markup.inlineKeyboard(rowsOf(buttons, 1)));
+        }
+        if ((model.durations || []).length > 1 && !job.duration) {
+            const buttons = model.durations.map(d => {
+                const price = catalog.quote(model, { duration: d, quality: job.quality || model.quality });
+                return Markup.button.callback(`${d} сек · ${price} кр`, `optd_${d}`);
+            });
+            buttons.push(Markup.button.callback('❌ Отмена', 'optd_cancel'));
+            return ctx.reply(`⏱ Длина · ${model.name}`, Markup.inlineKeyboard(rowsOf(buttons, 2)));
+        }
+        if (model.ratio && !model.noAspect && !job.aspect) {
+            const aspects = (model.aspects && model.aspects.length) ? model.aspects : catalog.RATIOS;
+            const buttons = aspects.map(a => Markup.button.callback(a, `brat_ratio_${a}`));
+            if (!model.aspects) buttons.push(Markup.button.callback('Авто', 'brat_ratio_auto'));
+            buttons.push(Markup.button.callback('❌ Отмена', 'brat_ratio_cancel'));
+            return ctx.reply(`📐 Формат · ${model.name}`, Markup.inlineKeyboard(rowsOf(buttons, 3)));
+        }
+        const ready = job;
+        userPendingRatio.delete(userId);
+        return executeGeneration(ctx, ready);
+    }
+
+    async function takeOption(ctx, field, value) {
         const userId = ctx.from.id;
-        const ratio = ctx.match[1];
-        if (ratio === 'cancel') {
+        if (value === 'cancel') {
             userPendingRatio.delete(userId);
             await ctx.answerCbQuery('Отменено');
             try { await ctx.editMessageText('❌ Генерация отменена.'); } catch (e) {}
@@ -653,53 +696,69 @@ async function startBot(app) {
         }
         const pending = userPendingRatio.get(userId);
         if (!pending) {
-            await ctx.answerCbQuery('⚠️ Запрос устарел.');
+            await ctx.answerCbQuery('Запрос устарел');
             try { await ctx.editMessageText('⚠️ Время ожидания истекло. Отправьте запрос заново.'); } catch (e) {}
             return;
         }
-        userPendingRatio.delete(userId);
-        await ctx.answerCbQuery(`Размер: ${ratio}`);
+        pending[field] = field === 'duration' ? Number(value) : value;
+        await ctx.answerCbQuery('Принято');
         try { await ctx.deleteMessage(); } catch (e) {}
-        await executeGeneration(ctx, { ...pending, aspectRatio: ratio });
-    });
+        await askOptions(ctx, userId);
+    }
 
-    // Общий исполнитель: проверка через ядро, замок, отправка результата.
-    async function executeGeneration(ctx, { prompt, fileBuffers, modelKey, aspectRatio }) {
+    bot.action(/^optq_(.+)$/, async (ctx) => { await takeOption(ctx, 'quality', ctx.match[1]); });
+    bot.action(/^optd_(\d+|cancel)$/, async (ctx) => { await takeOption(ctx, 'duration', ctx.match[1]); });
+    bot.action(/^brat_ratio_(.+)$/, async (ctx) => { await takeOption(ctx, 'aspect', ctx.match[1]); });
+
+    async function executeGeneration(ctx, job) {
         const userId = ctx.from.id;
+        const fileBuffers = job.fileBuffers || [];
+        const aspectRatio = job.aspect && job.aspect !== 'auto' ? job.aspect : null;
         let prepared;
         try {
             prepared = await gen.prepare({
                 userId,
-                modelKey,
+                modelKey: job.modelKey,
                 hasImage: fileBuffers.length > 0,
-                hasText: !!(prompt && prompt.trim())
+                hasText: !!(job.prompt && job.prompt.trim()),
+                duration: job.duration,
+                quality: job.quality,
+                audioSeconds: job.audioSeconds
             });
         } catch (e) {
-            if (e.code === 'no_credits') return notLowBalance(ctx, catalog.getModel(modelKey) || { cost: 0 });
+            const shown = catalog.quote(catalog.getModel(job.modelKey) || { cost: 0 }, job);
+            if (e.code === 'no_credits') return notLowBalance(ctx, catalog.getModel(job.modelKey) || { cost: shown }, shown);
             return ctx.reply(`⚠️ ${e.message}`);
         }
         if (gen.isBusy(userId)) {
             return ctx.reply('⏳ Подождите, нейросеть ещё отвечает на предыдущий запрос.');
         }
-        const ratioNote = aspectRatio && aspectRatio !== 'auto' ? `📐 Размер: ${aspectRatio} | ` : '';
+        const notes = [];
+        if (aspectRatio) notes.push(`📐 ${aspectRatio}`);
+        if (job.duration) notes.push(`⏱ ${job.duration} сек`);
         const waitMessage = await ctx.reply('⏳ *Генерирую ответ...*', { parse_mode: 'Markdown' });
         try {
             const result = await gen.run({
                 userId,
-                prompt,
+                prompt: job.prompt,
                 model: prepared.model,
                 plugin: prepared.plugin,
                 fileBuffer: fileBuffers.length === 1 ? fileBuffers[0] : null,
                 fileBuffers,
-                aspectRatio
+                aspectRatio,
+                duration: job.duration,
+                quality: job.quality,
+                audioBuffer: job.audioBuffer,
+                audioMime: job.audioMime,
+                audioSeconds: job.audioSeconds
             });
             try { await ctx.deleteMessage(waitMessage.message_id); } catch (e) {}
-            await sendResult(ctx, result, ratioNote);
+            await sendResult(ctx, result, notes.length ? notes.join(' | ') + ' | ' : '');
         } catch (error) {
             console.error('❌ Ошибка генерации:', error.message || error);
             try { await ctx.deleteMessage(waitMessage.message_id); } catch (e) {}
-            if (error.code === 'no_credits') return notLowBalance(ctx, prepared.model);
-            if (error.code === 'limit' || error.code === 'need_image' || error.code === 'need_text' || error.code === 'blocked') {
+            if (error.code === 'no_credits') return notLowBalance(ctx, prepared.model, prepared.price);
+            if (error.code === 'limit' || error.code === 'need_image' || error.code === 'need_audio' || error.code === 'need_text' || error.code === 'no_image' || error.code === 'blocked') {
                 return ctx.reply(`⚠️ ${error.message}`);
             }
             await ctx.reply('⚠️ Не удалось получить ответ от нейросети. Кредиты не списаны.');
@@ -729,35 +788,58 @@ async function startBot(app) {
         }
         const model = catalog.getModel(modelKey);
 
-        let fileBuffers = [];
+        const fileBuffers = [];
+        let audioBuffer = null;
+        let audioMime = null;
+        let audioSeconds = 0;
         for (const c of list) {
             if (c.message?.photo && c.message.photo.length > 0) {
                 const largest = c.message.photo[c.message.photo.length - 1];
                 const buf = await getTelegramFileBuffer(ctx, largest.file_id);
                 if (buf) fileBuffers.push(buf);
             }
+            const voice = c.message?.voice || c.message?.audio;
+            if (voice && !audioBuffer) {
+                audioBuffer = await getTelegramFileBuffer(ctx, voice.file_id);
+                audioMime = c.message.voice ? 'audio/ogg' : (voice.mime_type || 'audio/mpeg');
+                audioSeconds = Number(voice.duration) || 0;
+            }
         }
+        if (model.image === 'forbidden') fileBuffers.length = 0;
 
-        if (model.image === 'required' && fileBuffers.length === 0) {
+        if (model.audio) {
+            if (fileBuffers.length && audioBuffer) {
+                userPendingAvatar.delete(userId);
+            } else if (fileBuffers.length && !audioBuffer) {
+                userPendingAvatar.set(userId, { fileBuffers: fileBuffers.slice(), prompt, at: Date.now() });
+                return ctx.reply('Фото получил. Теперь отправьте голосовое — человек на фото его произнесёт.');
+            } else if (!fileBuffers.length && audioBuffer) {
+                const saved = userPendingAvatar.get(userId);
+                if (!saved || Date.now() - saved.at > 10 * 60 * 1000) {
+                    userPendingAvatar.delete(userId);
+                    return ctx.reply('⚠️ Говорящее фото: сначала отправьте фото, затем голосовое сообщение.');
+                }
+                fileBuffers.push(...saved.fileBuffers);
+                if (!prompt.trim() && saved.prompt) prompt = saved.prompt;
+                userPendingAvatar.delete(userId);
+            } else {
+                return ctx.reply('⚠️ Говорящее фото: отправьте фото, затем голосовое сообщение.');
+            }
+        } else if (model.image === 'required' && fileBuffers.length === 0) {
             return ctx.reply('⚠️ Для выбранной модели нужно прикрепить фото (с подписью-промптом).');
-        }
-        if (model.image !== 'required' && !prompt.trim() && fileBuffers.length === 0) {
+        } else if (model.image === 'forbidden' && !prompt.trim()) {
+            return ctx.reply('⚠️ Эта модель работает только по тексту.');
+        } else if (model.image !== 'required' && !prompt.trim() && fileBuffers.length === 0) {
             return ctx.reply('⚠️ Отправьте текст запроса или прикрепите фото.');
         }
 
-        if (model.ratio) {
-            userPendingRatio.set(userId, { prompt, fileBuffers, modelKey });
-            const kb = Markup.inlineKeyboard([
-                [Markup.button.callback('1:1', 'brat_ratio_1:1'), Markup.button.callback('16:9', 'brat_ratio_16:9'), Markup.button.callback('9:16', 'brat_ratio_9:16')],
-                [Markup.button.callback('4:3', 'brat_ratio_4:3'), Markup.button.callback('3:4', 'brat_ratio_3:4'), Markup.button.callback('3:2', 'brat_ratio_3:2')],
-                [Markup.button.callback('2:3', 'brat_ratio_2:3'), Markup.button.callback('21:9', 'brat_ratio_21:9'), Markup.button.callback('9:21', 'brat_ratio_9:21')],
-                [Markup.button.callback('🤖 Auto', 'brat_ratio_auto')],
-                [Markup.button.callback('❌ Отмена', 'brat_ratio_cancel')]
-            ]);
-            return ctx.reply(`📐 *Выберите формат для ${model.name}:*`, { parse_mode: 'Markdown', ...kb });
+        const needsChoice = (model.qualities || []).length > 1 || (model.durations || []).length > 1 || (model.ratio && !model.noAspect);
+        const job = { prompt, fileBuffers, modelKey, audioBuffer, audioMime, audioSeconds, quality: null, duration: null, aspect: null };
+        if (needsChoice) {
+            userPendingRatio.set(userId, job);
+            return askOptions(ctx, userId);
         }
-
-        await executeGeneration(ctx, { prompt, fileBuffers, modelKey });
+        await executeGeneration(ctx, job);
     }
 
     const handleTextMessage = async (ctx) => {
@@ -843,6 +925,8 @@ async function startBot(app) {
 
     bot.on('text', handleTextMessage);
 
+    bot.on(['voice', 'audio'], async (ctx) => collectAndGenerate(ctx));
+
     bot.on('photo', async (ctx) => {
         const mediaGroupId = ctx.message?.media_group_id;
         if (mediaGroupId) {
@@ -865,7 +949,7 @@ async function startBot(app) {
 
     try {
         await bot.telegram.setChatMenuButton({
-            menu_button: { type: 'web_app', text: 'Кабинет', web_app: { url: baseWebappUrl() + '/?v=10' } }
+            menu_button: { type: 'web_app', text: 'Кабинет', web_app: { url: baseWebappUrl() + '/?v=11' } }
         });
         console.log('✅ Кнопка меню Mini App установлена');
     } catch (e) {

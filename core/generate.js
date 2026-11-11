@@ -34,7 +34,7 @@ function limitMessage(slot) {
     return `Лимит бесплатной модели на сегодня исчерпан: ${slot.used}/${slot.limit}. Завтра по Москве счётчик обнулится.`;
 }
 
-async function prepare({ userId, modelKey, hasImage, hasText, charge, strict }) {
+async function prepare({ userId, modelKey, hasImage, hasText, charge, strict, duration, quality, audioSeconds }) {
     const id = String(userId);
     const user = await db.getUser(id);
     if (user.blocked) throw new GenError('Аккаунт в чёрном списке', 'blocked');
@@ -46,14 +46,19 @@ async function prepare({ userId, modelKey, hasImage, hasText, charge, strict }) 
     if (!plugin || !plugin.processRequest) throw new GenError('Модель временно недоступна', 'no_plugin');
 
     if (model.image === 'required' && !hasImage) throw new GenError('Для этой модели нужно прикрепить изображение', 'need_image');
-    if (model.image !== 'required' && !hasText && !hasImage) throw new GenError('Введите текст запроса', 'need_text');
+    if (model.image === 'forbidden' && hasImage) throw new GenError('Эта модель работает только по тексту, без фото', 'no_image');
+    if (model.audio && !hasImage) throw new GenError('Для говорящего фото прикрепите фото и голосовое сообщение', 'need_image');
+    if (model.audio && !(Number(audioSeconds) > 0)) throw new GenError('Пришлите голосовое сообщение вместе с фото. В кабинете бота это делается в чате.', 'need_audio');
+    if (model.image !== 'required' && !model.audio && !hasText && !hasImage) throw new GenError('Введите текст запроса', 'need_text');
 
     if (model.provider === 'giga') {
         const lim = await db.peekGiga(id, model.key, model.limit);
         if (!lim.ok) throw new GenError(limitMessage(lim), 'limit');
     }
 
-    const price = Number.isFinite(Number(charge)) ? Math.max(0, Math.round(Number(charge))) : model.cost;
+    const price = Number.isFinite(Number(charge))
+        ? Math.max(0, Math.round(Number(charge)))
+        : catalog.quote(model, { duration, quality, seconds: audioSeconds });
     if (Number(user.balance) < price) {
         throw new GenError(`Недостаточно кредитов: ${user.balance}, нужно ${price}`, 'no_credits');
     }
@@ -62,7 +67,7 @@ async function prepare({ userId, modelKey, hasImage, hasText, charge, strict }) 
 }
 
 // Выполняет генерацию: держит замок, списывает кредиты и фиксирует статистику.
-async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mimeType, aspectRatio, charge, reason, keepModel }) {
+async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mimeType, aspectRatio, duration, quality, audioBuffer, audioMime, audioSeconds, charge, reason, keepModel }) {
     const id = String(userId);
     if (busy.has(id)) throw new GenError('Дождитесь завершения предыдущей генерации', 'busy');
     busy.add(id);
@@ -80,10 +85,17 @@ async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mim
             fileBuffers: fileBuffers && fileBuffers.length > 1 ? fileBuffers : undefined,
             mimeType: mimeType || 'image/jpeg',
             modelKey: model.key,
-            aspectRatio
+            aspectRatio,
+            duration,
+            quality,
+            audioBuffer: audioBuffer || null,
+            audioMime: audioMime || 'audio/ogg',
+            spec: model
         });
 
-        const cost = Number.isFinite(Number(charge)) ? Math.max(0, Math.round(Number(charge))) : model.cost;
+        const cost = Number.isFinite(Number(charge))
+            ? Math.max(0, Math.round(Number(charge)))
+            : catalog.quote(model, { duration, quality, seconds: audioSeconds });
         const balance = await db.updateBalance(id, -cost, reason || `Генерация · ${model.name}`);
         await db.recordGeneration(id, cost);
         if (!keepModel) await db.setCurrentModel(id, model.key);
@@ -93,6 +105,7 @@ async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mim
             type: result.type || 'text',
             text: result.text || '',
             buffer: result.buffer || null,
+            extra: result.extra || null,
             cost,
             balance,
             model: model.key,
@@ -109,21 +122,25 @@ async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mim
 }
 
 // Удобная обёртка для веба: data: URL вместо бинарника.
-async function generateForWeb({ userId, prompt, modelKey, fileBuffer, mimeType, aspectRatio, charge, reason, keepModel, strict }) {
+async function generateForWeb({ userId, prompt, modelKey, fileBuffer, mimeType, aspectRatio, duration, quality, charge, reason, keepModel, strict }) {
     const { model, plugin } = await prepare({
         userId,
         modelKey,
         hasImage: !!(fileBuffer && fileBuffer.length),
         hasText: !!(prompt && String(prompt).trim()),
         charge,
-        strict
+        strict,
+        duration,
+        quality
     });
-    const out = await run({ userId, prompt, model, plugin, fileBuffer, mimeType, aspectRatio, charge, reason, keepModel });
-    if (out.buffer) {
-        const mime = out.type === 'audio' ? 'audio/mpeg' : out.type === 'video' ? 'video/mp4' : 'image/png';
-        out.media = `data:${mime};base64,${out.buffer.toString('base64')}`;
+    const out = await run({ userId, prompt, model, plugin, fileBuffer, mimeType, aspectRatio, duration, quality, charge, reason, keepModel });
+    const mime = out.type === 'audio' ? 'audio/mpeg' : out.type === 'video' ? 'video/mp4' : 'image/png';
+    if (out.buffer) out.media = `data:${mime};base64,${out.buffer.toString('base64')}`;
+    if (out.extra && out.extra.length && out.type === 'audio') {
+        out.more = out.extra.filter(Boolean).map(buf => `data:${mime};base64,${buf.toString('base64')}`);
     }
     delete out.buffer;
+    delete out.extra;
     return out;
 }
 

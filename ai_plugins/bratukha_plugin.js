@@ -1,5 +1,6 @@
 require('dotenv').config();
 const axios = require('axios');
+const { buildSiteInput, siteModes } = require('../core/bratukha_input');
 
 // Берем URL из переменных Railway или ставим рабочий дефолт
 const BRATUKHA_API_URL = process.env.BRATUKHA_API_URL || 'https://bratuha.ru/api/v1';
@@ -111,7 +112,126 @@ async function uploadBuffer(apiKey, buf, mimeType = 'image/jpeg', filename = 'in
     return publicUrl;
 }
 
-async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, modelKey, aspectRatio }) {
+async function postOperation(apiKey, tool, input) {
+    try {
+        const createRes = await axios.post(`${BRATUKHA_API_URL}/operations`, { tool, input }, {
+            headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+            timeout: 30_000
+        });
+        const operationId = createRes.data?.id || createRes.data?.operation_id;
+        if (!operationId) throw new Error('Не удалось получить номер операции');
+        return operationId;
+    } catch (err) {
+        if (err.response) {
+            const errData = err.response.data || {};
+            console.error(`🚨 [Bratukha API Error] Status: ${err.response.status}`, JSON.stringify(errData));
+            throw new Error(errData.error?.message || errData.message || `Ошибка API: статус ${err.response.status}`);
+        }
+        throw err;
+    }
+}
+
+async function waitOperation(apiKey, operationId, attempts) {
+    for (let attempt = 0; attempt < attempts; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        let statusRes;
+        try {
+            statusRes = await axios.get(`${BRATUKHA_API_URL}/operations/${operationId}`, {
+                headers: { Authorization: `Bearer ${apiKey}` },
+                timeout: 15_000
+            });
+        } catch (pollErr) {
+            if (pollErr.response?.status === 429 || pollErr.response?.status === 503) {
+                const retryAfter = pollErr.response.headers['retry-after'] || 2;
+                await new Promise(r => setTimeout(r, retryAfter * 1000));
+                continue;
+            }
+            if (attempt === attempts - 1) throw pollErr;
+            continue;
+        }
+        const opData = statusRes.data || {};
+        if (opData.status === 'completed') return opData;
+        if (opData.status === 'failed') {
+            throw new Error(opData.error_message || opData.error?.message || 'Нейросеть не смогла выполнить задачу');
+        }
+    }
+    throw new Error('Слишком долгое ожидание ответа от нейросети');
+}
+
+function resultUrls(opData) {
+    const result = opData.result || opData;
+    const urls = []
+        .concat(result.urls || [], result.files || [], result.images || [], result.videos || [])
+        .map(x => (x && x.url) || x)
+        .filter(u => typeof u === 'string' && u.startsWith('http'));
+    for (const key of ['image_url', 'video_url', 'audio_url', 'url']) {
+        if (typeof result[key] === 'string' && result[key].startsWith('http') && !urls.includes(result[key])) urls.push(result[key]);
+    }
+    return urls;
+}
+
+async function downloadUrl(url) {
+    const mediaRes = await axios.get(url, { responseType: 'arraybuffer', timeout: 120_000 });
+    return Buffer.from(mediaRes.data);
+}
+
+async function runSite(context) {
+    const spec = context.spec;
+    const apiKey = context.apiKey;
+    const buffers = [];
+    if (context.fileBuffer) buffers.push(context.fileBuffer);
+    if (Array.isArray(context.fileBuffers)) buffers.push(...context.fileBuffers);
+    let imageUrl = null;
+    if (spec.image !== 'forbidden' && buffers.length) {
+        imageUrl = await uploadBuffer(apiKey, buffers[0], context.mimeType || 'image/jpeg', 'input_1.jpg');
+    }
+    let audioUrl = null;
+    if (context.audioBuffer) {
+        audioUrl = await uploadBuffer(apiKey, context.audioBuffer, context.audioMime || 'audio/ogg', 'voice.ogg');
+    }
+    const attempts = spec.kind === 'video' ? 300 : spec.kind === 'audio' ? 160 : 100;
+    const modes = siteModes(spec, context.quality || spec.quality);
+    let lastErr = null;
+    for (const mode of modes) {
+        try {
+            const built = buildSiteInput(spec, {
+                prompt: context.prompt,
+                imageUrl,
+                audioUrl,
+                aspect: context.aspectRatio,
+                duration: context.duration,
+                quality: context.quality,
+                mode
+            });
+            console.log(`🚀 [Bratukha] ${built.tool}${mode ? ' (' + mode + ')' : ''}`);
+            const operationId = await postOperation(apiKey, built.tool, built.input);
+            const opData = await waitOperation(apiKey, operationId, attempts);
+            const urls = resultUrls(opData);
+            if (!urls.length) throw new Error('Результат готов, но ссылки на него нет');
+            const limit = spec.kind === 'audio' ? Math.min(2, urls.length) : 1;
+            const files = [];
+            for (let i = 0; i < limit; i++) files.push(await downloadUrl(urls[i]));
+            const type = spec.kind === 'audio' ? 'audio' : spec.kind === 'video' ? 'video' : 'image';
+            return { type, buffer: files[0], extra: files.slice(1), text: '' };
+        } catch (e) {
+            lastErr = e;
+            if (mode === 'cheap' && !/модерац/i.test(String(e.message || ''))) {
+                console.log(`⚠️ ${spec.key} в дешёвом режиме не вышло (${e.message}), пробую обычный`);
+                continue;
+            }
+            throw e;
+        }
+    }
+    throw lastErr || new Error('Не получилось');
+}
+
+async function processRequest(context) {
+    const { prompt, fileBuffer, fileBuffers, mimeType, modelKey, aspectRatio } = context;
+    if (context.spec && context.spec.site) {
+        const apiKey = process.env.BRATUKHA_API_KEY || process.env.BRATUKHA_TOKEN;
+        if (!apiKey) throw new Error('BRATUKHA_API_KEY не задан в переменных окружения');
+        return runSite({ ...context, apiKey });
+    }
     const apiKey = process.env.BRATUKHA_API_KEY || process.env.BRATUKHA_TOKEN;
     if (!apiKey) {
         throw new Error('❌ BRATUKHA_API_KEY не задан в переменных окружения Railway');

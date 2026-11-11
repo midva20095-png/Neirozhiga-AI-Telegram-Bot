@@ -3,50 +3,77 @@
 // Бот строит клавиатуры синхронно, поэтому всё держится в памяти и перечитывается после сохранения.
 
 const GROUPS = {
-    text: '💬 Текст',
-    audio: '🎵 Голос',
-    image: '🎨 Картинки',
-    fix: '✨ Улучшить фото',
-    video: '🎬 Видео'
+    fast: '⚡ Быстрые и недорогие',
+    standard: '✨ Обычные',
+    quality: '👑 Качество',
+    music: '🎵 Музыка и голос',
+    free: '🎁 Бесплатные',
+    fix: '✨ Улучшить фото'
 };
 
-// provider: google | bratukha | giga
-// image: 'no' — фото не принимается, 'optional' — можно приложить, 'required' — без фото не работает
-// ratio: модель умеет соотношение сторон
-// limit: бесплатная модель с дневным лимитом запросов
+// Цены совпадают с сайтом: 1 кредит = 1 ₽.
+// Google-модели остаются на своих ключах, для человека они называются «НейроЯга Про».
+// site: true — запрос в Братуху собирается так же, как на сайте.
+// cost — цена запуска с режимом и длиной по умолчанию. rate — цена одной секунды.
+const A = ['16:9', '9:16', '1:1', '4:3', '3:4'];
 const BASE_MODELS = [
-    { key: 'flash', name: 'Gemini 3.8 Flash', short: 'Flash', desc: 'Текст и код', group: 'text', provider: 'google', cost: 4, image: 'optional' },
-    { key: 'flash_25', name: 'Gemini 2.5 Flash', short: 'Flash 2.5', desc: 'Быстрый текст', group: 'text', provider: 'google', cost: 4, image: 'optional' },
-    { key: 'pro', name: 'Gemini 3.1 Pro', short: 'Pro', desc: 'Аналитика и код', group: 'text', provider: 'google', cost: 15, image: 'optional' },
-    { key: 'giga-lite', name: 'GigaChat 2 Lite', short: 'Giga Lite', desc: 'Бесплатно, лимит в день', group: 'text', provider: 'giga', cost: 0, limit: 30, image: 'no' },
-    { key: 'giga-pro', name: 'GigaChat 2 Pro', short: 'Giga Pro', desc: 'Бесплатно, лимит в день', group: 'text', provider: 'giga', cost: 0, limit: 10, image: 'no' },
-    { key: 'giga-max', name: 'GigaChat 2 Max', short: 'Giga Max', desc: 'Бесплатно, лимит в день', group: 'text', provider: 'giga', cost: 0, limit: 5, image: 'no' },
-    { key: 'giga-ultra', name: 'GigaChat 3 Ultra', short: 'Giga Ultra', desc: 'Бесплатно, лимит в день', group: 'text', provider: 'giga', cost: 0, limit: 5, image: 'no' },
+    { key: 'flash', name: 'НейроЯга Про', short: 'НейроЯга Про', desc: 'Быстрый текст, код и фото', group: 'fast', kind: 'text', provider: 'google', cost: 4, image: 'optional' },
+    { key: 'flash_25', name: 'НейроЯга Про Flash', short: 'Про Flash', desc: 'Быстрый текст', group: 'fast', kind: 'text', provider: 'google', cost: 4, image: 'optional' },
+    { key: 'pro', name: 'НейроЯга Про Макс', short: 'Про Макс', desc: 'Длинные ответы, аналитика и код', group: 'standard', kind: 'text', provider: 'google', cost: 15, image: 'optional' },
 
-    { key: 'qwen3-tts', name: 'Qwen3 TTS', short: 'Озвучка', desc: 'Озвучка текста', group: 'audio', provider: 'bratukha', cost: 100, image: 'no' },
-    { key: 'qwen3-tts-flash', name: 'Qwen3 TTS Flash', short: 'Озвучка быстрая', desc: 'Быстрая озвучка', group: 'audio', provider: 'bratukha', cost: 100, image: 'no' },
+    { key: 'giga-lite', name: 'GigaChat 2 Lite', short: 'Giga Lite', desc: 'Бесплатно, лимит в день', group: 'free', kind: 'text', provider: 'giga', cost: 0, limit: 30, image: 'no' },
+    { key: 'giga-pro', name: 'GigaChat 2 Pro', short: 'Giga Pro', desc: 'Бесплатно, лимит в день', group: 'free', kind: 'text', provider: 'giga', cost: 0, limit: 10, image: 'no' },
+    { key: 'giga-max', name: 'GigaChat 2 Max', short: 'Giga Max', desc: 'Бесплатно, лимит в день', group: 'free', kind: 'text', provider: 'giga', cost: 0, limit: 5, image: 'no' },
+    { key: 'giga-ultra', name: 'GigaChat 3 Ultra', short: 'Giga Ultra', desc: 'Бесплатно, лимит в день', group: 'free', kind: 'text', provider: 'giga', cost: 0, limit: 5, image: 'no' },
 
-    { key: 'nanobanana', name: 'Nano Banana 2', short: 'Nano Banana', desc: 'Генерация и правка фото', group: 'image', provider: 'google', cost: 20, image: 'optional' },
-    { key: 'nanobanana_pro', name: 'Nano Banana Pro', short: 'Nano Pro', desc: 'Про-фото', group: 'image', provider: 'google', cost: 50, image: 'optional' },
-    { key: 'qwen-image-2-1', name: 'Qwen Image 2.1', short: 'Qwen 2.1', desc: 'Арт и фото', group: 'image', provider: 'bratukha', cost: 40, image: 'optional', ratio: true },
-    { key: 'qwen-image-3-0', name: 'Qwen Image 3.0', short: 'Qwen 3.0', desc: 'Арт и фото', group: 'image', provider: 'bratukha', cost: 45, image: 'optional', ratio: true },
-    { key: 'recraft-v4', name: 'Recraft V4', short: 'Recraft 4', desc: 'Вектор и растр', group: 'image', provider: 'bratukha', cost: 15, image: 'optional', ratio: true },
-    { key: 'recraft-v4-1', name: 'Recraft V4.1', short: 'Recraft 4.1', desc: 'Улучшенный V4', group: 'image', provider: 'bratukha', cost: 20, image: 'optional', ratio: true },
-    { key: 'runway-gen4-image', name: 'Runway Gen4', short: 'Runway', desc: 'Реализм', group: 'image', provider: 'bratukha', cost: 80, image: 'optional', ratio: true },
-    { key: 'seedream-4-0', name: 'Seedream 4.0', short: 'Seedream 4', desc: 'Генерация фото', group: 'image', provider: 'bratukha', cost: 15, image: 'optional', ratio: true },
-    { key: 'seedream-4-5', name: 'Seedream 4.5', short: 'Seedream 4.5', desc: 'Продвинутый арт', group: 'image', provider: 'bratukha', cost: 20, image: 'optional', ratio: true },
+    { key: 'nano-banana', name: 'Nano Banana', short: 'Nano Banana', desc: 'Быстрые картинки и правка фото', group: 'fast', kind: 'image', provider: 'bratukha', site: true, cost: 6, image: 'optional', ratio: true, aspects: ['1:1', '4:5', '3:4', '9:16', '4:3', '16:9'], qualities: [{ id: 'cheap', name: 'Эконом', desc: 'Дешевле, но медленнее', cost: 3 }, { id: 'normal', name: 'Быстро', desc: 'Обычный режим', cost: 6 }], quality: 'normal' },
+    { key: 'gpt-image-2', name: 'GPT Image 2', short: 'GPT Image 2', desc: 'Точный текст на картинке', group: 'fast', kind: 'image', provider: 'bratukha', site: true, cost: 30, image: 'optional', ratio: true, aspects: ['1:1', '4:5', '3:4', '9:16', '4:3', '16:9'], resolution: '1k', cheapFirst: true, qualities: [{ id: 'low', name: 'Быстро', desc: 'Черновик', cost: 6 }, { id: 'medium', name: 'Стандарт', desc: 'Точный текст', cost: 30 }, { id: 'high', name: 'Максимум', desc: 'Высокая детализация', cost: 90 }], quality: 'medium' },
+    { key: 'grok-image', name: 'Grok Image', short: 'Grok Image', desc: 'Яркие картинки и правка фото', group: 'fast', kind: 'image', provider: 'bratukha', site: true, cost: 12, image: 'optional', ratio: true, aspects: ['1:1', '9:16', '16:9'] },
+    { key: 'seedream-4-0', name: 'Seedream 4.0', short: 'Seedream 4', desc: 'Генерация фото', group: 'fast', kind: 'image', provider: 'bratukha', cost: 15, image: 'optional', ratio: true },
+    { key: 'seedream-4-5', name: 'Seedream 4.5', short: 'Seedream 4.5', desc: 'Детальные картинки, до 4K', group: 'fast', kind: 'image', provider: 'bratukha', site: true, cost: 15, image: 'optional', ratio: true, aspects: ['1:1', '3:4', '9:16', '4:3', '16:9'], qualities: [{ id: '2K', name: '2K', desc: 'Для экрана и соцсетей', cost: 15 }, { id: '4K', name: '4K', desc: 'Для печати', cost: 15 }], quality: '2K' },
+    { key: 'wan-2-7-image', name: 'Wan 2.7 Image', short: 'Wan Image', desc: 'Точно следует описанию', group: 'fast', kind: 'image', provider: 'bratukha', site: true, cost: 15, image: 'optional', ratio: true, aspects: ['1:1', '3:4', '9:16', '4:3', '16:9'], qualities: [{ id: 'standard', name: 'Обычная', desc: 'Хорошее качество', cost: 15 }, { id: 'pro', name: 'Pro', desc: 'Больше деталей', cost: 30 }], quality: 'standard' },
+    { key: 'recraft-v4', name: 'Recraft V4', short: 'Recraft 4', desc: 'Вектор и растр', group: 'fast', kind: 'image', provider: 'bratukha', cost: 15, image: 'optional', ratio: true },
+    { key: 'grok-video-480', name: 'Grok Video 480p', short: 'Grok 480p', desc: 'Ролики 6–30 сек по тексту или из фото', group: 'fast', kind: 'video', provider: 'bratukha', site: true, tool: 'grok-video', resolution: '480p', rate: 6, perSec: true, cost: 36, image: 'optional', ratio: true, aspects: ['16:9', '9:16', '1:1'], durations: [6, 10, 15, 20, 30] },
+    { key: 'grok-video-720', name: 'Grok Video 720p', short: 'Grok 720p', desc: 'То же в 720p — чётче', group: 'fast', kind: 'video', provider: 'bratukha', site: true, tool: 'grok-video', resolution: '720p', rate: 9, perSec: true, cost: 54, image: 'optional', ratio: true, aspects: ['16:9', '9:16', '1:1'], durations: [6, 10, 15, 20, 30] },
+    { key: 'veo-3-1-lite', name: 'Veo 3.1 Lite', short: 'Veo Lite', desc: '8 сек по описанию, самая доступная', group: 'fast', kind: 'video', provider: 'bratukha', site: true, tool: 'veo-3-1', vmodel: 'veo3.1-lite', cost: 30, image: 'forbidden', ratio: true, aspects: ['16:9', '9:16'] },
 
-    { key: 'phota-enhance', name: 'Phota Enhance', short: 'Улучшить фото', desc: 'Улучшение фото', group: 'fix', provider: 'bratukha', cost: 220, image: 'required' },
-    { key: 'p-image-upscale', name: 'Pruna Upscale', short: 'Резкость', desc: 'Резкость фото', group: 'fix', provider: 'bratukha', cost: 10, image: 'required' },
-    { key: 'recraft-creative-upscale', name: 'Recraft Creative', short: 'Апскейл креатив', desc: 'Креативный апскейл', group: 'fix', provider: 'bratukha', cost: 400, image: 'required' },
-    { key: 'recraft-crisp-upscale', name: 'Recraft Crisp', short: 'Апскейл чёткий', desc: 'Чёткий апскейл', group: 'fix', provider: 'bratukha', cost: 10, image: 'required' },
-    { key: 'sam-3d', name: 'SAM 3D', short: 'Фото в 3D', desc: 'Фото в 3D', group: 'fix', provider: 'bratukha', cost: 40, image: 'required' },
+    { key: 'nanobanana', name: 'НейроЯга Про Картинка', short: 'Про картинка', desc: 'Картинки и правка фото', group: 'standard', kind: 'image', provider: 'google', cost: 20, image: 'optional' },
+    { key: 'recraft-v4-1', name: 'Recraft V4.1', short: 'Recraft 4.1', desc: 'Улучшенный V4', group: 'standard', kind: 'image', provider: 'bratukha', cost: 20, image: 'optional', ratio: true },
+    { key: 'qwen-image-2-1', name: 'Qwen Image 2.1', short: 'Qwen 2.1', desc: 'Арт и фото', group: 'standard', kind: 'image', provider: 'bratukha', cost: 40, image: 'optional', ratio: true },
+    { key: 'qwen-image-3-0', name: 'Qwen Image 3.0', short: 'Qwen 3.0', desc: 'Арт и фото', group: 'standard', kind: 'image', provider: 'bratukha', cost: 45, image: 'optional', ratio: true },
+    { key: 'veo-3-1-fast', name: 'Veo 3.1 Fast', short: 'Veo Fast', desc: '8 сек со звуком, по тексту или из фото', group: 'standard', kind: 'video', provider: 'bratukha', site: true, tool: 'veo-3-1', vmodel: 'veo3.1-fast', cost: 60, image: 'optional', ratio: true, aspects: ['16:9', '9:16'] },
+    { key: 'seedance-1-0', name: 'Seedance 1.0', short: 'Seedance 1', desc: 'Короткие ролики по описанию', group: 'standard', kind: 'video', provider: 'bratukha', site: true, cost: 60, image: 'optional', ratio: true, aspects: ['16:9', '9:16', '1:1'] },
+    { key: 'wan-3-0-480', name: 'Wan 3.0 480p', short: 'Wan 480p', desc: 'Видео со звуком по тексту или из фото', group: 'standard', kind: 'video', provider: 'bratukha', site: true, tool: 'wan-3-0', resolution: '480P', rate: 15, perSec: true, cost: 75, image: 'optional', ratio: true, aspects: A, durations: [5, 10, 15] },
+    { key: 'kling-2-1-standard', name: 'Kling 2.1 Standard', short: 'Kling Standard', desc: 'Оживляет фото — нужно прикрепить фото', group: 'standard', kind: 'video', provider: 'bratukha', site: true, tool: 'kling-2-1', kmodel: 'kling/v2-1-standard', cost: 75, image: 'required', noAspect: true, durations: [5, 10], durationPrices: { 5: 75, 10: 150 } },
+    { key: 'seedance-2-0-apimart', name: 'Seedance 2.0', short: 'Seedance 2', desc: 'Только по тексту, без фото', group: 'standard', kind: 'video', provider: 'bratukha', site: true, rate: 18, perSec: true, cost: 90, image: 'forbidden', ratio: true, aspects: ['16:9', '9:16', '1:1'], durations: [5, 10] },
+    { key: 'pika-720', name: 'Pika 2.2 720p', short: 'Pika 720p', desc: 'Яркая анимация, без звука', group: 'standard', kind: 'video', provider: 'bratukha', site: true, tool: 'pika', resolution: '720p', cost: 105, image: 'optional', ratio: true, aspects: ['16:9', '9:16', '1:1', '4:5'], durations: [5, 10], durationPrices: { 5: 105, 10: 240 } },
+    { key: 'sora-2', name: 'Sora 2', short: 'Sora 2', desc: 'Видео со звуком, до 20 сек', group: 'standard', kind: 'video', provider: 'bratukha', site: true, rate: 30, perSec: true, cost: 120, image: 'optional', ratio: true, aspects: ['9:16', '16:9'], durations: [4, 8, 12, 16, 20] },
+    { key: 'seedance-1-5-pro', name: 'Seedance 1.5 Pro', short: 'Seedance 1.5', desc: 'Видео из фото', group: 'standard', kind: 'video', provider: 'bratukha', cost: 120, image: 'required', ratio: true },
+    { key: 'kling-2-1-pro', name: 'Kling 2.1 Pro', short: 'Kling Pro', desc: 'Оживляет фото качественнее', group: 'standard', kind: 'video', provider: 'bratukha', site: true, tool: 'kling-2-1', kmodel: 'kling/v2-1-pro', cost: 120, image: 'required', noAspect: true, durations: [5, 10], durationPrices: { 5: 120, 10: 270 } },
+    { key: 'wan-3-0-prime-480', name: 'Wan 3.0 Prime 480p', short: 'Wan Prime 480', desc: 'Флагман Wan: лучше движение и звук', group: 'standard', kind: 'video', provider: 'bratukha', site: true, tool: 'wan-3-0-video-prime', resolution: '480P', rate: 27, perSec: true, cost: 135, image: 'optional', ratio: true, aspects: A, durations: [5, 10, 15] },
+    { key: 'pruna-ai-p-video-2-pro', name: 'Pruna P-Video 2 Pro', short: 'Pruna Video', desc: 'Оживляет фото — нужно прикрепить фото', group: 'standard', kind: 'video', provider: 'bratukha', site: true, rate: 28, perSec: true, cost: 140, image: 'required', ratio: true, aspects: ['16:9', '9:16', '1:1'], durations: [5, 10] },
+    { key: 'wan-2-2-avatar', name: 'Wan 2.2 Avatar', short: 'Говорящее фото', desc: 'Фото и голосовое: человек на фото произнесёт запись', group: 'standard', kind: 'video', provider: 'bratukha', site: true, tool: 'wan-2-2-avatar', cost: 18, rate: 18, unit: 'sec', image: 'required', audio: true, noAspect: true, qualities: [{ id: '480p', name: '480p', desc: 'Быстрее и дешевле', cost: 18, perSec: true }, { id: '720p', name: '720p', desc: 'Чётче', cost: 30, perSec: true }], quality: '480p' },
 
-    { key: 'sora-2', name: 'Sora 2.0', short: 'Sora 2', desc: 'Анимация фото', group: 'video', provider: 'bratukha', cost: 150, image: 'required', ratio: true },
-    { key: 'seedance-1-0', name: 'Seedance 1.0', short: 'Seedance 1', desc: 'Анимация тела', group: 'video', provider: 'bratukha', cost: 100, image: 'required', ratio: true },
-    { key: 'seedance-1-5-pro', name: 'Seedance 1.5 Pro', short: 'Seedance 1.5', desc: 'Видео из фото', group: 'video', provider: 'bratukha', cost: 120, image: 'required', ratio: true },
-    { key: 'seedance-2-0-apimart', name: 'Seedance 2.0', short: 'Seedance 2', desc: 'Быстрое видео', group: 'video', provider: 'bratukha', cost: 100, image: 'required', ratio: true },
-    { key: 'pruna-ai-p-video-2-pro', name: 'Pruna Video 2 Pro', short: 'Pruna Video', desc: 'Генерация видео', group: 'video', provider: 'bratukha', cost: 70, image: 'required', ratio: true }
+    { key: 'nanobanana_pro', name: 'НейроЯга Про Картинка Макс', short: 'Про фото макс', desc: 'Детальные картинки', group: 'quality', kind: 'image', provider: 'google', cost: 50, image: 'optional' },
+    { key: 'runway-gen4-image', name: 'Runway Gen4', short: 'Runway', desc: 'Реализм', group: 'quality', kind: 'image', provider: 'bratukha', cost: 80, image: 'optional', ratio: true },
+    { key: 'wan-3-0-720', name: 'Wan 3.0 720p', short: 'Wan 720p', desc: 'Видео со звуком в 720p', group: 'quality', kind: 'video', provider: 'bratukha', site: true, tool: 'wan-3-0', resolution: '720P', rate: 30, perSec: true, cost: 150, image: 'optional', ratio: true, aspects: A, durations: [5, 10, 15] },
+    { key: 'seedance-2-5-480', name: 'Seedance 2.5 480p', short: 'Seedance 2.5', desc: 'Новый Seedance со звуком', group: 'quality', kind: 'video', provider: 'bratukha', site: true, tool: 'seedance-2-5', resolution: '480p', rate: 42, perSec: true, cost: 168, image: 'optional', ratio: true, aspects: A, durations: [4, 6, 8, 10] },
+    { key: 'gemini-omni', name: 'Gemini Omni', short: 'Gemini Omni', desc: 'Видео со звуком и речью, до 10 сек', group: 'quality', kind: 'video', provider: 'bratukha', site: true, cost: 180, image: 'optional', ratio: true, aspects: ['16:9', '9:16'], durations: [4, 6, 8, 10], durationPrices: { 4: 180, 6: 240, 8: 300, 10: 360 } },
+    { key: 'pika-1080', name: 'Pika 2.2 1080p', short: 'Pika 1080p', desc: 'Pika в 1080p, без звука', group: 'quality', kind: 'video', provider: 'bratukha', site: true, tool: 'pika', resolution: '1080p', cost: 210, image: 'optional', ratio: true, aspects: ['16:9', '9:16', '1:1', '4:5'], durations: [5, 10], durationPrices: { 5: 210, 10: 480 } },
+    { key: 'wan-3-0-prime-720', name: 'Wan 3.0 Prime 720p', short: 'Wan Prime 720', desc: 'Флагман Wan в 720p', group: 'quality', kind: 'video', provider: 'bratukha', site: true, tool: 'wan-3-0-video-prime', resolution: '720P', rate: 54, perSec: true, cost: 270, image: 'optional', ratio: true, aspects: A, durations: [5, 10, 15] },
+    { key: 'veo-3-1-quality', name: 'Veo 3.1 Quality', short: 'Veo Quality', desc: 'Максимальное качество, 8 сек', group: 'quality', kind: 'video', provider: 'bratukha', site: true, tool: 'veo-3-1', vmodel: 'veo3.1-quality', cost: 300, image: 'optional', ratio: true, aspects: ['16:9', '9:16'] },
+    { key: 'seedance-2-5-720', name: 'Seedance 2.5 720p', short: 'Seedance 2.5 720', desc: 'Seedance 2.5 в 720p', group: 'quality', kind: 'video', provider: 'bratukha', site: true, tool: 'seedance-2-5', resolution: '720p', rate: 84, perSec: true, cost: 336, image: 'optional', ratio: true, aspects: A, durations: [4, 6, 8, 10] },
+    { key: 'kling-2-1-master', name: 'Kling 2.1 Master', short: 'Kling Master', desc: 'Топ-качество Kling, по тексту или из фото', group: 'quality', kind: 'video', provider: 'bratukha', site: true, tool: 'kling-2-1', kmodel: 'master', cost: 420, image: 'optional', ratio: true, aspects: ['16:9', '9:16', '1:1'], durations: [5, 10], durationPrices: { 5: 420, 10: 840 } },
+
+    { key: 'suno', name: 'Suno', short: 'Suno', desc: 'Песня, музыка или звуки — два варианта', group: 'music', kind: 'audio', provider: 'bratukha', site: true, cost: 30, image: 'forbidden', noAspect: true, qualities: [{ id: 'song', name: 'Песня', desc: 'Текст и музыку напишет сама', cost: 30 }, { id: 'instrumental', name: 'Инструментал', desc: 'Музыка без слов', cost: 30 }, { id: 'sounds', name: 'Звуки', desc: 'Дождь, город, костёр', cost: 30 }], quality: 'song' },
+    { key: 'qwen3-tts-flash', name: 'Озвучка быстрая', short: 'Озвучка быстрая', desc: 'Быстрая озвучка текста', group: 'music', kind: 'audio', provider: 'bratukha', cost: 100, image: 'no' },
+    { key: 'qwen3-tts', name: 'Озвучка', short: 'Озвучка', desc: 'Озвучка текста', group: 'music', kind: 'audio', provider: 'bratukha', cost: 100, image: 'no' },
+
+    { key: 'p-image-upscale', name: 'Pruna Upscale', short: 'Резкость', desc: 'Резкость фото', group: 'fix', kind: 'image', provider: 'bratukha', cost: 10, image: 'required' },
+    { key: 'recraft-crisp-upscale', name: 'Recraft Crisp', short: 'Апскейл чёткий', desc: 'Чёткий апскейл', group: 'fix', kind: 'image', provider: 'bratukha', cost: 10, image: 'required' },
+    { key: 'sam-3d', name: 'SAM 3D', short: 'Фото в 3D', desc: 'Фото в 3D', group: 'fix', kind: 'image', provider: 'bratukha', cost: 40, image: 'required' },
+    { key: 'phota-enhance', name: 'Phota Enhance', short: 'Улучшить фото', desc: 'Улучшение фото', group: 'fix', kind: 'image', provider: 'bratukha', cost: 220, image: 'required' },
+    { key: 'recraft-creative-upscale', name: 'Recraft Creative', short: 'Апскейл креатив', desc: 'Креативный апскейл', group: 'fix', kind: 'image', provider: 'bratukha', cost: 400, image: 'required' }
 ];
 
 const RATIOS = ['auto', '1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9', '9:21'];
@@ -64,11 +91,10 @@ const BASE_GENERAL = {
     help_text:
         'Здравствуйте! Я — универсальный ИИ-помощник.\n\n' +
         'Что я умею:\n' +
-        '• Генерация текста, кодинг и аналитика\n' +
-        '• Создание изображений, апскейл и 3D-моделирование\n' +
-        '• Создание и анимация видеоклипов\n' +
-        '• Озвучка текста\n\n' +
-        'Выберите модель и отправьте запрос текстом или фото. Всё то же самое доступно в «Кабинете».',
+        '• Текст — НейроЯга Про, быстро и дёшево или подробнее\n' +
+        '• Картинки, видео, песни и озвучка — те же модели и цены, что на сайте\n' +
+        '• Разделы: быстрые и недорогие, обычные, качество\n\n' +
+        'Выберите модель и отправьте запрос текстом или фото. То же самое есть в «Кабинете».',
     support_enabled: true,
     site_url: 'https://babayagaland.ru'
 };
@@ -88,6 +114,62 @@ function resolvedLimit(model, override) {
     const n = Number(override.limit);
     if (!Number.isFinite(n)) return model.limit;
     return Math.max(0, Math.round(n));
+}
+
+function chosenQuality(model, quality) {
+    const list = model.qualities || [];
+    if (!list.length) return null;
+    return list.find(q => q.id === quality) || list.find(q => q.id === model.quality) || list[0];
+}
+
+function fromPrice(model) {
+    if (!model) return 0;
+    if (model.provider === 'giga') return 0;
+    if (model.durationPrices) return Math.min(...Object.values(model.durationPrices).map(Number));
+    const list = model.qualities || [];
+    if (list.length) {
+        return Math.min(...list.map(q => q.perSec ? q.cost : q.cost));
+    }
+    if (model.perSec) return (model.rate || model.cost) * ((model.durations && model.durations[0]) || 1);
+    return model.cost;
+}
+
+function priceLabel(model) {
+    if (!model || model.provider === 'giga' || model.cost === 0) return 'бесплатно';
+    if (model.unit === 'sec') {
+        const min = Math.min(...(model.qualities || []).map(q => q.cost).concat(model.rate || model.cost));
+        return ((model.qualities || []).length > 1 ? 'от ' : '') + min + ' кр/сек';
+    }
+    const min = fromPrice(model);
+    const prices = new Set();
+    if (model.durationPrices) Object.values(model.durationPrices).forEach(v => prices.add(Number(v)));
+    (model.qualities || []).forEach(q => prices.add(q.cost));
+    if (model.perSec && model.durations) model.durations.forEach(d => prices.add((model.rate || model.cost) * d));
+    if (prices.size > 1 || model.perSec) return 'от ' + min + ' кр';
+    return min + ' кр';
+}
+
+// Цена конкретного запуска. seconds — длина голосовой записи для говорящего фото.
+function quote(model, opts) {
+    const o = opts || {};
+    if (!model || model.provider === 'giga') return 0;
+    if (model.durationPrices) {
+        const d = String(o.duration || (model.durations && model.durations[0]) || '');
+        if (model.durationPrices[d] != null) return Number(model.durationPrices[d]);
+        return fromPrice(model);
+    }
+    const q = chosenQuality(model, o.quality);
+    if (q && q.perSec) {
+        const seconds = Number(o.seconds || o.duration) || 1;
+        return q.cost * seconds;
+    }
+    if (q) return q.cost;
+    if (model.perSec) {
+        const seconds = Number(o.duration) || (model.durations && model.durations[0]) || 1;
+        return (model.rate || model.cost) * seconds;
+    }
+    if (model.unit === 'sec') return (model.rate || model.cost) * (Number(o.seconds) || 1);
+    return model.cost;
 }
 
 function listModels({ includeDisabled = false } = {}) {
@@ -112,7 +194,9 @@ function getModel(key, { includeDisabled = false } = {}) {
 }
 
 function modelsByGroup(group) {
-    return listModels().filter(m => m.group === group);
+    return listModels()
+        .filter(m => m.group === group)
+        .sort((a, b) => fromPrice(a) - fromPrice(b) || a.order - b.order);
 }
 
 function listPackages() {
@@ -234,6 +318,9 @@ module.exports = {
     listModels,
     getModel,
     modelsByGroup,
+    fromPrice,
+    priceLabel,
+    quote,
     listPackages,
     getPackage,
     getGeneral,
