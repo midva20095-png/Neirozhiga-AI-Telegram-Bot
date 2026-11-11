@@ -1,5 +1,4 @@
 const { GoogleGenAI } = require('@google/genai');
-const axios = require('axios');
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -8,8 +7,7 @@ const MODEL_MAPPING = {
     'flash_25': 'gemini-3.8-flash',
     'pro': 'gemini-3.1-pro-preview',
     'nanobanana': 'gemini-3.1-flash-image',
-    'nanobanana_pro': 'gemini-3-pro-image',
-    'veo': 'veo-3.1-generate-preview'
+    'nanobanana_pro': 'gemini-3-pro-image'
 };
 
 async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeTypes, modelKey = 'flash', imageConfig, aspectRatio }) {
@@ -21,82 +19,6 @@ async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeT
         }
         if (!imageConfig && aspectRatio && aspectRatio !== 'auto') {
             imageConfig = { imageConfig: { aspectRatio: String(aspectRatio) } };
-        }
-
-        // 🎬 ОБРАБОТКА ГЕНЕРАЦИИ ВИДЕО ЧЕРЕЗ VEO
-        if (modelKey === 'veo') {
-            console.log(`🎬 Запуск генерации видео через Veo (${resolvedModel})...`);
-            
-            let videoPayload = { model: resolvedModel };
-            let targetBuffer = fileBuffer || (Array.isArray(fileBuffers) && fileBuffers.length > 0 ? fileBuffers[0] : null);
-
-            if (targetBuffer && Buffer.isBuffer(targetBuffer)) {
-                videoPayload.source = {
-                    prompt: safePrompt || "Cinematic video generation with motion and sound",
-                    image: {
-                        imageBytes: targetBuffer.toString("base64"),
-                        mimeType: mimeType || 'image/jpeg'
-                    }
-                };
-            } else {
-                videoPayload.prompt = safePrompt || "Cinematic video generation with sound and high detail";
-            }
-
-            let operation = await ai.models.generateVideos(videoPayload);
-            console.log(`⏳ Задача генерации видео создана. Ожидаем готовности...`);
-
-            let attempts = 0;
-            const maxAttempts = 60;
-
-            while (!operation.done && attempts < maxAttempts) {
-                await new Promise(resolve => setTimeout(resolve, 10000));
-                attempts++;
-                
-                try {
-                    operation = await ai.operations.get({ operation: operation });
-                    console.log(`⏱ Проверка статуса видео (попытка ${attempts}): done = ${operation.done}`);
-                } catch (pollErr) {
-                    console.warn(`⚠ Ошибка при опросе статуса операции Veo:`, pollErr.message);
-                }
-            }
-
-            if (!operation.done) {
-                throw new Error('Превышено время ожидания генерации видео Veo (таймаут)');
-            }
-
-            const generatedVideo = operation.response?.generatedVideos?.[0];
-            if (!generatedVideo || !generatedVideo.video) {
-                console.error("🔍 Полный ответ сервера:", JSON.stringify(operation, null, 2));
-                throw new Error('Не удалось получить сгенерированное видео от Veo');
-            }
-
-            const videoFileRef = generatedVideo.video;
-            let fileUri = typeof videoFileRef === 'string' ? videoFileRef : (videoFileRef.uri || videoFileRef.name);
-
-            // Если пришло короткое имя (например, files/xyz), формируем полный URL для скачивания
-            let downloadUrl = fileUri;
-            if (!downloadUrl.startsWith('http')) {
-                downloadUrl = `https://generativelanguage.googleapis.com/v1beta/${fileUri}:download?alt=media`;
-            }
-
-            // Добавляем ключ в параметры запроса, чтобы обойти 403 ошибку авторизации
-            const apiKey = process.env.GEMINI_API_KEY;
-            const separator = downloadUrl.includes('?') ? '&' : '?';
-            downloadUrl = `${downloadUrl}${separator}key=${apiKey}`;
-
-            console.log(`📥 Скачивание видео с авторизацией по ключу...`);
-            const res = await axios.get(downloadUrl, { responseType: 'arraybuffer' });
-            const videoBuffer = Buffer.from(res.data);
-
-            if (!videoBuffer || videoBuffer.length === 0) {
-                throw new Error('Не удалось загрузить бинарные данные сгенерированного видео');
-            }
-
-            return {
-                type: 'video',
-                buffer: videoBuffer,
-                text: safePrompt || '🎬 Видео успешно создано с помощью Veo!'
-            };
         }
 
         // 📝 ОБРАБОТКА ТЕКСТА И КАРТИНОК
