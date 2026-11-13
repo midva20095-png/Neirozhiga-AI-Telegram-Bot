@@ -38,7 +38,8 @@ function buildImageTask(spec, opts) {
     if (spec.kieAspect === 'image_size') {
         input.image_size = IDEOGRAM_SIZE[aspect] || 'square_hd';
         input.rendering_speed = 'TURBO';
-        input.expand_prompt = false;
+        input.style = 'AUTO';
+        input.expand_prompt = true;
     } else if (spec.kieAspect) {
         input[spec.kieAspect] = aspect;
     }
@@ -136,6 +137,20 @@ function taskView(data) {
     };
 }
 
+function explainFailure(text) {
+    const raw = String(text || '');
+    if (/content moderation|blocked by|safety|nsfw/i.test(raw)) {
+        return 'Запрос не прошёл проверку. Измените описание или фото и попробуйте ещё раз.';
+    }
+    if (/input was rejected|different input/i.test(raw)) {
+        return 'Модель не приняла этот запрос. Измените описание и попробуйте ещё раз.';
+    }
+    if (/internal error|try again later|unavailable|bad gateway|timeout/i.test(raw)) {
+        return 'Модель сейчас не отвечает. Кредиты не списаны. Попробуйте через минуту.';
+    }
+    return '';
+}
+
 function promptTooLong(spec, prompt) {
     const chat = spec.kieChat;
     if (!chat) return false;
@@ -149,5 +164,6 @@ module.exports = {
     buildChat,
     textFromResponse,
     taskView,
+    explainFailure,
     promptTooLong
 };
