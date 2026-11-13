@@ -161,6 +161,7 @@ function startWebApp() {
     });
 
     async function requireChannel(req, res) {
+        if (String(req.userId).startsWith('-')) return true;
         const gateBot = app.locals.bot;
         if (!gateBot) return true;
         const gate = await channel.subscribed(gateBot.telegram, req.userId);
@@ -235,9 +236,14 @@ function startWebApp() {
         try {
             const row = await db.getWork(req.userId, req.params.id);
             if (!row || !row.bytes) return res.status(404).json({ error: 'Файл не найден' });
+            const mime = row.mime || 'image/png';
+            if (String(req.userId).startsWith('-')) {
+                const sent = await vk.sendToUser(req.userId, row.bytes, mime, 'Файл из кабинета.');
+                if (!sent) return res.status(503).json({ error: 'Не удалось отправить файл в чат ВК. Сохраните его из кабинета.' });
+                return res.json({ ok: true });
+            }
             const bot = app.locals.bot;
             if (!bot) return res.status(503).json({ error: 'Бот сейчас недоступен' });
-            const mime = row.mime || 'image/png';
             const ext = mime === 'video/mp4' ? 'mp4' : mime === 'audio/mpeg' ? 'mp3' : mime === 'image/jpeg' ? 'jpg' : mime === 'image/webp' ? 'webp' : 'png';
             const file = { source: row.bytes, filename: `neuroyaga.${ext}` };
             if (mime.startsWith('image/') && mime !== 'image/webp' && row.bytes.length <= 9 * 1024 * 1024) {
