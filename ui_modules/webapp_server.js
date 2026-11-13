@@ -204,7 +204,7 @@ function startWebApp() {
             }
             if (!prompt && !body.image) return res.status(400).json({ error: 'Введите промпт' });
             const file = body.image ? decodeImage(body.image) : null;
-            const result = await gen.generateForWeb({
+            const fields = {
                 userId: req.userId,
                 prompt,
                 modelKey,
@@ -217,7 +217,16 @@ function startWebApp() {
                 reason,
                 keepModel,
                 strict
-            });
+            };
+            let result;
+            try {
+                result = await gen.generateForWeb(fields);
+            } catch (err) {
+                const next = body.templateId ? templatesSrc.fallbackModel(modelKey, err) : null;
+                if (!next) throw err;
+                db.note('gen', `шаблон: ${modelKey} не ответила, повтор через ${next}`).catch(() => {});
+                result = await gen.generateForWeb(Object.assign({}, fields, { modelKey: next }));
+            }
             res.json(result);
         } catch (e) {
             const shown = gen.userMessage(e);

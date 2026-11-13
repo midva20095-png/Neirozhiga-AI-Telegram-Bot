@@ -27,19 +27,41 @@ function safeImage(url) {
     return '';
 }
 
+// Nano Banana у Братухи отвечает «нейросеть временно недоступна».
+// Banana Lite на Kie в тот же день картинку отдала, цена шаблона не меняется.
+const STEADY_IMAGE = 'kie-banana-lite';
+
+function kieReady() {
+    return !!String(process.env.KIE_API_KEY || '').trim();
+}
+
 function mapModel(raw) {
     const key = String(raw || '').trim();
-    if (key === 'pro') return 'nanobanana_pro';
+    if (key === 'nano-banana' && kieReady() && catalog.getModel(STEADY_IMAGE, { includeDisabled: true })) return STEADY_IMAGE;
     if (key && catalog.getModel(key, { includeDisabled: true })) return key;
     const fallback = (process.env.TEMPLATE_MODEL || 'nanobanana').trim();
     if (catalog.getModel(fallback, { includeDisabled: true })) return fallback;
     return 'nanobanana';
 }
 
+function serviceDown(error) {
+    const message = String((error && error.message) || '');
+    return /временно недоступна|internal error|try again later|bad gateway|service unavailable/i.test(message);
+}
+
+// Запасной запуск только для картинки, если выбранная модель молчит.
+function fallbackModel(modelKey, error) {
+    if (!serviceDown(error) || !kieReady()) return null;
+    const current = catalog.getModel(modelKey, { includeDisabled: true });
+    if (!current || current.kind !== 'image' || current.provider === 'kie' || current.key === STEADY_IMAGE) return null;
+    const next = catalog.getModel(STEADY_IMAGE);
+    return next ? next.key : null;
+}
+
 function isPhotoModel(key) {
     const model = catalog.getModel(key, { includeDisabled: true });
     if (!model) return true;
-    return model.group === 'image' || model.group === 'fix' || model.image === 'required';
+    return model.kind === 'image' || model.image === 'required';
 }
 
 function fromDb(row) {
@@ -94,4 +116,4 @@ async function getFull(id) {
     return fromDb(row);
 }
 
-module.exports = { listPublic, getFull, fromDb, toPublic };
+module.exports = { listPublic, getFull, fromDb, toPublic, fallbackModel, serviceDown };

@@ -53,6 +53,22 @@ textarea{width:100%;min-height:120px;border-radius:14px;border:1px solid var(--l
 .chips button.on{border-color:#b366ff;color:#fff}
 .back{border:0;background:transparent;color:var(--mut);font-weight:800;padding:0 0 8px}
 .gallery{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tcats{display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;scrollbar-width:none}
+.tcats button{flex:0 0 auto;border:1px solid rgba(255,255,255,.16);background:transparent;color:var(--mut);border-radius:999px;padding:7px 12px;font-weight:700;font-size:13px}
+.tcats button.on{color:#fff;border-color:#9d4dff;background:#24163d;box-shadow:0 0 14px rgba(157,77,255,.35)}
+.tsearch{border-radius:999px;margin:0 0 10px;padding:12px 16px}
+.tgallery{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.titem{position:relative;display:flex;flex-direction:column;padding:0;border:1px solid var(--line);background:#140c24;border-radius:18px;overflow:hidden;text-align:left}
+.tph{position:relative;aspect-ratio:3/4;overflow:hidden;display:grid;place-items:center;font-size:40px;background:linear-gradient(150deg,#22164a,#0d2b3a)}
+.tph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top}
+.tph.txt{display:flex;flex-direction:column;gap:4px;background:radial-gradient(circle at 50% 35%,rgba(0,212,255,.22),transparent 60%),linear-gradient(160deg,#1c1240,#0f0a24)}
+.tph small{position:static;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#bfefff}
+.tcap{padding:10px 12px 12px}
+.tcap b{display:block;font-size:14px;line-height:1.3;font-weight:600}
+.tcap em{display:inline-block;margin-top:6px;font-style:normal;font-size:13px;font-weight:700;color:#00d4ff}
+.thero{position:relative;margin:-14px -14px 14px;height:min(52vh,420px);background:#07041a;overflow:hidden;border-radius:16px 16px 0 0}
+.thero img{display:block;width:100%;height:100%;object-fit:cover;object-position:center top}
+.thero:after{content:'';position:absolute;left:0;right:0;bottom:0;height:80px;background:linear-gradient(transparent,#140c24)}
 .tile{padding:0;border:1px solid var(--line);background:#1c1233;border-radius:16px;overflow:hidden;text-align:left}
 .tile img,.tile video,.tile .ph{width:100%;height:148px;object-fit:cover;display:block;background:#0b0614}
 .tile audio{width:100%;display:block;margin-top:8px}
@@ -83,6 +99,9 @@ input{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1
 const KIND = {text:'Текст', image:'Картинка', video:'Видео', audio:'Музыка'};
 let tab='gen', me=null, cfg=null, templates=[], works=null, worksLoading=false, userId=null, token=null, busy=false, last=null;
 let openTpl=null, photoData=null, pickedFormat=null, genPhoto=null, draft='';
+let tplCat='', tplQuery='';
+const TCAT = {image:'Картинки', fix:'Улучшение', chat:'Текст', video:'Видео', audio:'Голос'};
+const TMARK = {image:'🪄', fix:'✨', chat:'✍️', video:'🎬', audio:'🎙'};
 let pickedQuality=null, pickedDuration=null, pickedAspect=null;
 
 function tg(){ return window.Telegram && window.Telegram.WebApp; }
@@ -229,27 +248,44 @@ function viewModels(){
 function viewTpl(){
   if (openTpl) return viewTplRun();
   if (!templates.length) return '<div class="card"><div class="empty">Шаблонов пока нет</div></div>';
-  return '<div class="gallery">'+templates.map(t=>{
+  const have = {};
+  templates.forEach(t=>{ have[t.category||'image'] = 1; });
+  const cats = Object.keys(TCAT).filter(c=>have[c]).concat(Object.keys(have).filter(c=>!TCAT[c]));
+  const q = tplQuery.trim().toLowerCase();
+  const list = templates.filter(t=>{
+    if (tplCat && (t.category||'image')!==tplCat) return false;
+    if (!q) return true;
+    return (t.title+' '+(t.desc||'')).toLowerCase().indexOf(q)>=0;
+  });
+  const chips = '<div class="tcats"><button type="button" data-tcat="" class="'+(tplCat?'':'on')+'">Все</button>'+
+    cats.map(c=>'<button type="button" data-tcat="'+esc(c)+'" class="'+(tplCat===c?'on':'')+'">'+esc(TCAT[c]||c)+'</button>').join('')+'</div>';
+  const cards = list.length ? list.map(t=>{
     const src = safeSrc(t.image);
-    return '<button class="tile" data-tpl="'+esc(t.id)+'">'+
-      (src?'<img src="'+esc(src)+'" alt="">':'<div class="ph"></div>')+
-      '<div class="cap"><b>'+esc(t.title)+'</b><span>'+(t.cost?t.cost+' кр':'0 кр')+(t.desc?' · '+esc(t.desc):'')+'</span></div></button>';
-  }).join('')+'</div>';
+    const cat = t.category||'image';
+    const mark = TMARK[cat]||'🪄';
+    const face = src
+      ? '<div class="tph"><img src="'+esc(src)+'" alt=""></div>'
+      : '<div class="tph'+(cat==='chat'?' txt':'')+'"><span>'+mark+'</span>'+(cat==='chat'?'<small>Текст</small>':'')+'</div>';
+    return '<button class="titem" data-tpl="'+esc(t.id)+'">'+face+
+      '<div class="tcap"><b>'+esc(t.title)+'</b><em>'+(t.cost||0)+' кр.</em></div></button>';
+  }).join('') : '<div class="empty" style="grid-column:1/-1">Ничего не нашлось</div>';
+  return '<input class="tsearch" id="tq" placeholder="Найти шаблон" value="'+esc(tplQuery)+'">'+chips+'<div class="tgallery">'+cards+'</div>';
 }
 function viewTplRun(){
   const t = templates.find(x=>String(x.id)===String(openTpl));
   if (!t) return '<div class="card"><div class="empty">Шаблон не найден</div></div>';
   const src = safeSrc(t.image);
   const formats = t.formats||[];
-  const sizeChips = formats.length ? '<div class="hint">Размер</div><div class="chips">'+formats.map(f=>'<button type="button" data-fmt="'+esc(f)+'" class="'+(pickedFormat===f?'on':'')+'">'+esc(f)+'</button>').join('')+'</div>' : '';
-  const photo = t.photo ? '<label class="filebtn">'+(photoData?'Фото прикреплено — заменить':'Прикрепить фото')+'<input id="file" type="file" accept="image/*"></label>'+(photoData?'<img class="preview" style="margin-top:10px" src="'+photoData+'" alt="">':'') : '';
+  const sizeChips = formats.length ? '<div class="hint">Размер картинки</div><div class="chips">'+formats.map(f=>'<button type="button" data-fmt="'+esc(f)+'" class="'+(pickedFormat===f?'on':'')+'">'+esc(f)+'</button>').join('')+'</div>' : '';
+  const photo = t.photo ? '<label class="filebtn">'+(photoData?'Фото прикреплено — заменить':'Прикрепить своё фото')+'<input id="file" type="file" accept="image/*"></label>'+(photoData?'<img class="preview" style="margin-top:10px" src="'+photoData+'" alt="">':'') : '';
   const res = last ? renderResult(last) : '';
+  const lead = t.desc || (t.photo ? 'Готовая картинка появится здесь, её можно сразу сохранить' : 'Результат появится здесь');
   return '<div class="card"><button class="back" id="back" type="button">← Шаблоны</button>'+
-    (src?'<img class="preview" src="'+esc(src)+'" alt="">':'')+
-    '<div class="name" style="margin-top:10px">'+esc(t.title)+'</div>'+
-    (t.desc?'<div class="meta">'+esc(t.desc)+'</div>':'')+
-    '<div class="now">'+t.cost+' кр</div>'+sizeChips+photo+
-    '<button class="btn" id="goTpl"'+(busy?' disabled':'')+'>'+(busy?'<span class="spin"></span>Генерирую…':'Сгенерировать')+'</button>'+res+'</div>';
+    (src?'<div class="thero"><img src="'+esc(src)+'" alt=""></div>':'')+
+    '<div class="name">'+esc(t.title)+'</div>'+
+    '<div class="meta" style="margin:6px 0 12px">'+esc(lead)+'</div>'+
+    sizeChips+photo+
+    '<button class="btn" id="goTpl"'+(busy?' disabled':'')+'>'+(busy?'<span class="spin"></span>Генерирую…':'Создать за '+(t.cost||0)+' кр.')+'</button>'+res+'</div>';
 }
 function ensureWorks(){
   if (works || worksLoading) return;
@@ -333,6 +369,9 @@ function bind(){
   const genfile=document.getElementById('genfile'); if (genfile) genfile.onchange=function(){ onGenPhoto(genfile); };
   document.querySelectorAll('[data-model]').forEach(b=>b.onclick=()=>setModel(b.dataset.model));
   document.querySelectorAll('[data-tpl]').forEach(b=>b.onclick=()=>useTpl(b.dataset.tpl));
+  document.querySelectorAll('[data-tcat]').forEach(b=>b.onclick=()=>{ tplCat=b.dataset.tcat||''; draw(); });
+  const tq = document.getElementById('tq');
+  if (tq) tq.oninput = function(){ tplQuery = tq.value; const pos = tq.selectionStart; draw(); const again = document.getElementById('tq'); if (again){ again.focus(); try{ again.setSelectionRange(pos, pos); }catch(e){} } };
   document.querySelectorAll('[data-fmt]').forEach(b=>b.onclick=()=>{ pickedFormat=b.dataset.fmt; draw(); });
   document.querySelectorAll('[data-pkg]').forEach(b=>b.onclick=()=>buy(b.dataset.pkg));
   const back=document.getElementById('back'); if (back) back.onclick=()=>{ openTpl=null; photoData=null; last=null; draw(); };
