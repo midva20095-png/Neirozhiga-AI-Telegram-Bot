@@ -1,6 +1,6 @@
 const USER_CODES = new Set([
     'blocked', 'no_model', 'no_plugin', 'need_image', 'no_image', 'need_audio',
-    'need_text', 'limit', 'no_credits', 'busy', 'image'
+    'need_text', 'limit', 'no_credits', 'busy', 'image', 'user'
 ]);
 const QUIET_ERROR = 'Не получилось. Кредиты не списаны. Попробуйте ещё раз.';
 

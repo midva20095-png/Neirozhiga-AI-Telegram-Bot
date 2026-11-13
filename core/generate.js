@@ -7,8 +7,10 @@ let bratukhaPlugin = null;
 try { bratukhaPlugin = require('../ai_plugins/bratukha_plugin'); } catch (e) {}
 let gigaPlugin = null;
 try { gigaPlugin = require('../ai_plugins/gigachat_plugin'); } catch (e) {}
+let kiePlugin = null;
+try { kiePlugin = require('../ai_plugins/kie_plugin'); } catch (e) {}
 
-const PLUGINS = { google: googlePlugin, bratukha: bratukhaPlugin, giga: gigaPlugin };
+const PLUGINS = { google: googlePlugin, bratukha: bratukhaPlugin, giga: gigaPlugin, kie: kiePlugin };
 
 function getPlugin(model) {
     return PLUGINS[model.provider] || null;
