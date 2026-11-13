@@ -1,6 +1,7 @@
 {
   "static_path": "build",
   "app_id": 54895627,
+  "noprompt": 1,
   "update_prod": 1,
   "update_dev": 1,
   "endpoints": {
