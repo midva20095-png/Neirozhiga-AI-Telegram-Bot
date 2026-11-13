@@ -396,14 +396,6 @@ async function setModel(model){
 }
 function useTpl(id){
   const t = templates.find(x=>String(x.id)===String(id)); if (!t) return;
-  if (!t.hidePrompt && t.prompt) {
-    if (me) me.current_model = t.model;
-    draft = t.prompt;
-    last = {_prompt:t.prompt, text:'', cost:0, balance:(me&&me.balance)||0, type:'text'};
-    tab='gen'; draw();
-    const p = document.getElementById('prompt'); if (p){ p.value=t.prompt; p.focus(); }
-    return;
-  }
   openTpl = t.id;
   photoData = null;
   last = null;
@@ -449,7 +441,7 @@ async function generateTemplate(){
   if (!t) return;
   if (t.photo && !photoData) { last = {error:'Прикрепите фото'}; draw(); return; }
   busy = true;
-  last = { text: 'Отправляю промпт шаблона'+(pickedFormat?' · размер '+pickedFormat:'')+'…' };
+  last = { text: 'Создаю'+(pickedFormat?' · размер '+pickedFormat:'')+'…' };
   draw();
   try {
     const r = await fetch('/api/generate',{method:'POST',headers:authHeaders(),body:JSON.stringify({templateId:t.id, image:photoData, format:pickedFormat})});

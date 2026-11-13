@@ -44,7 +44,7 @@ function baseWebappUrl() {
 // Кнопка web_app в обычной клавиатуре открывает Mini App с пустым initData,
 // поэтому для надёжного определения пользователя подписываем id и кладём в ссылку.
 function webappUrlFor(userId) {
-    return `${baseWebappUrl()}/?v=14#tk=${auth.signUserId(userId)}`;
+    return `${baseWebappUrl()}/?v=16#tk=${auth.signUserId(userId)}`;
 }
 
 function mainKeyboard(userId) {
@@ -935,11 +935,9 @@ async function startBot(app) {
         if (await db.isBlocked(ctx.from.id)) return ctx.reply('Доступ ограничен.');
         let payload = null;
         try { payload = JSON.parse(raw); } catch (e) { payload = {}; }
-        if (payload.action === 'run_template' && payload.prompt) {
-            if (payload.model && catalog.getModel(payload.model)) await db.setCurrentModel(ctx.from.id, payload.model);
-            ctx.message.text = payload.prompt;
-            await ctx.reply(`Запускаю шаблон «${payload.title || 'шаблон'}».`);
-            return collectAndGenerate(ctx);
+        if (payload.action === 'run_template') {
+            await ctx.reply('Шаблон запускается в кабинете. Текст запроса в чат не отправляется.');
+            return;
         }
         if (payload.action === 'buy_credits') {
             return ctx.reply('Выберите пакет кредитов:', packagesKeyboard());
@@ -973,7 +971,7 @@ async function startBot(app) {
 
     try {
         await bot.telegram.setChatMenuButton({
-            menu_button: { type: 'web_app', text: 'Кабинет', web_app: { url: baseWebappUrl() + '/?v=14' } }
+            menu_button: { type: 'web_app', text: 'Кабинет', web_app: { url: baseWebappUrl() + '/?v=16' } }
         });
         console.log('✅ Кнопка меню Mini App установлена');
     } catch (e) {

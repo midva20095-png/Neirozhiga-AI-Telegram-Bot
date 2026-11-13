@@ -278,7 +278,7 @@ async function loadTpl(){
     '<label>4. Модель и цена для человека</label>'+
     '<div class="row"><select id="tm">'+modelOptions(currentModel)+'</select>'+
       '<input id="tcost" type="number" min="0" placeholder="Цена, кр" value="'+startCost+'"'+(editing?' data-lock="1"':'')+'></div>'+
-    '<p class="note">Список разбит по сервису. Если сервис молчит, откройте «Модели» и выключите его целиком: шаблоны и бот перестанут его вызывать. Шаблоны, сохранённые на Nano Banana Братухи, пока Kie включён, запускаются через Banana Lite. Цена на карточке не меняется.</p>'+
+    '<p class="note">Запрос уходит ровно в модель из этого списка, без подмены. Текст запроса в кабинет не попадает: человек видит пример, при необходимости своё фото и готовую картинку. Если сервис молчит, откройте «Модели» и выключите его целиком.</p>'+
     '<label class="check"><input id="tactive" type="checkbox" '+(!editing||editing.active!==false?'checked':'')+'> Показывать в кабинете</label>'+
     '<details'+(editing?' open':'')+'><summary>Дополнительно: описание, раздел, ссылка, размеры</summary>'+
     '<label>Короткое описание под заголовком</label><input id="tdesc" placeholder="Что получится" value="'+esc(editing&&editing.description?editing.description:'')+'">'+
@@ -286,7 +286,7 @@ async function loadTpl(){
     '<label>Ссылка на картинку, если фото не загружаете файлом</label><input id="timg" placeholder="https://..." value="'+esc(link)+'">'+
     '<label>Размеры через запятую. Пусто — все размеры выбранной модели</label><input id="tfmt" placeholder="9:16, 1:1" value="'+esc(editing&&editing.formats?editing.formats:'')+'">'+
     '<label>Порядок. Меньше число — выше в списке</label><input id="tsort" type="number" placeholder="0" value="'+(editing&&editing.sort?editing.sort:0)+'">'+
-    '<label class="check"><input id="thide" type="checkbox" '+(!editing||editing.hide_prompt!==false?'checked':'')+'> Скрыть текст запроса: в кабинете пример, своё фото и кнопка «Создать»</label>'+
+    '<label class="check"><input id="thide" type="checkbox" checked disabled> Текст запроса остаётся в админке. В кабинете его нет: только пример, своё фото и результат</label>'+
     '</details>'+
     '<div class="row" style="margin-top:12px"><button onclick="saveTpl()">'+(editing?'Сохранить изменения':'Добавить шаблон в кабинет')+'</button>'+
     (editing?'<button class="ghost" type="button" onclick="newTpl()">Отмена</button>':'')+'</div></div>'+
@@ -294,10 +294,9 @@ async function loadTpl(){
     (templates.length ? '<div class="agallery">'+templates.map(t=>{
       const src = safeImg(t.image);
       const saved = modelsData.find(m=>m.key===t.model);
-      const from = saved ? serviceName(saved.provider) : '';
-      const moved = t.model==='nano-banana' ? ' · запуск через Banana Lite, пока Kie включён' : '';
+      const from = saved ? serviceName(saved.provider) : 'модель не из списка';
       return '<div class="acard'+(t.active?'':' off')+'">'+(src?'<img src="'+esc(src)+'" alt="">':'<div class="ph"></div>')+
-        '<div class="abody"><b>'+esc(t.title)+'</b><div><em>'+t.cost+' кр.</em></div><div class="note">'+(from?esc(from)+' · ':'')+esc(t.model||'')+(t.active?'':' · скрыт')+(t.hide_prompt?' · текст скрыт':'')+moved+'</div>'+
+        '<div class="abody"><b>'+esc(t.title)+'</b><div><em>'+t.cost+' кр.</em></div><div class="note">'+esc(from)+' · '+esc((saved&&saved.name)||t.model||'')+(t.active?'':' · скрыт')+'</div>'+
         '<div class="row" style="margin:8px 0 0"><button class="ghost" onclick="editTpl('+t.id+')">Править</button>'+
         '<button class="ghost" onclick="toggleTpl('+t.id+')">'+(t.active?'Скрыть':'Показать')+'</button>'+
         '<button class="danger" onclick="delTpl('+t.id+')">Удалить</button></div></div></div>';
@@ -375,7 +374,7 @@ async function saveTpl(){
     description: document.getElementById('tdesc').value.trim(),
     formats: document.getElementById('tfmt').value.trim(),
     prompt: document.getElementById('tp').value.trim(),
-    hide_prompt: document.getElementById('thide').checked,
+    hide_prompt: true,
     active: document.getElementById('tactive').checked
   };
   if (!body.title || !body.prompt) return alert('Нужны название и промпт');
@@ -389,7 +388,7 @@ async function toggleTpl(id){
   const d = await api('/api/admin/templates',{method:'POST',body:JSON.stringify({
     id: t.id, title: t.title, category: t.category, model: t.model, cost: t.cost, sort: t.sort||0,
     image: t.image, description: t.description, formats: t.formats, prompt: t.prompt,
-    hide_prompt: t.hide_prompt, active: !t.active
+    hide_prompt: true, active: !t.active
   })});
   if (!d.ok) return alert(d.error||'Ошибка');
   loadTpl();

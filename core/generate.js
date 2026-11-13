@@ -71,7 +71,7 @@ async function prepare({ userId, modelKey, hasImage, hasText, charge, strict, du
 }
 
 // Выполняет генерацию: держит замок, списывает кредиты и фиксирует статистику.
-async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mimeType, aspectRatio, duration, quality, audioBuffer, audioMime, audioSeconds, charge, reason, keepModel }) {
+async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mimeType, aspectRatio, duration, quality, audioBuffer, audioMime, audioSeconds, charge, reason, keepModel, workLabel }) {
     const id = String(userId);
     if (busy.has(id)) throw new GenError('Дождитесь завершения предыдущей генерации', 'busy');
     busy.add(id);
@@ -105,10 +105,11 @@ async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mim
         if (!keepModel) await db.setCurrentModel(id, model.key);
         consumed = false;
         try {
-            await db.saveWork(id, { kind: result.type, model: model.name, prompt, buffer: result.buffer });
+            const shown = workLabel != null ? workLabel : prompt;
+            await db.saveWork(id, { kind: result.type, model: model.name, prompt: shown, buffer: result.buffer });
             if (result.type === 'audio' && Array.isArray(result.extra)) {
                 for (const buf of result.extra) {
-                    await db.saveWork(id, { kind: 'audio', model: model.name, prompt, buffer: buf });
+                    await db.saveWork(id, { kind: 'audio', model: model.name, prompt: shown, buffer: buf });
                 }
             }
         } catch (err) {
@@ -136,7 +137,7 @@ async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mim
 }
 
 // Удобная обёртка для веба: data: URL вместо бинарника.
-async function generateForWeb({ userId, prompt, modelKey, fileBuffer, mimeType, aspectRatio, duration, quality, charge, reason, keepModel, strict }) {
+async function generateForWeb({ userId, prompt, modelKey, fileBuffer, mimeType, aspectRatio, duration, quality, charge, reason, keepModel, strict, workLabel }) {
     const { model, plugin } = await prepare({
         userId,
         modelKey,
@@ -147,7 +148,14 @@ async function generateForWeb({ userId, prompt, modelKey, fileBuffer, mimeType, 
         duration,
         quality
     });
-    const out = await run({ userId, prompt, model, plugin, fileBuffer, mimeType, aspectRatio, duration, quality, charge, reason, keepModel });
+    const out = await run({ userId, prompt, model, plugin, fileBuffer, mimeType, aspectRatio, duration, quality, charge, reason, keepModel, workLabel });
+    if (workLabel && out.type === 'image') out.text = 'Изображение готово';
+    else if (workLabel && out.type === 'video') out.text = 'Видео готово';
+    else if (workLabel && out.type === 'audio') out.text = 'Аудио готово';
+    else if (workLabel && prompt) {
+        const clean = String(out.text || '').split(String(prompt)).join('').trim();
+        out.text = clean || 'Готово';
+    }
     const mime = out.type === 'audio' ? 'audio/mpeg' : out.type === 'video' ? 'video/mp4' : 'image/png';
     if (out.buffer) out.media = `data:${mime};base64,${out.buffer.toString('base64')}`;
     if (out.extra && out.extra.length && out.type === 'audio') {

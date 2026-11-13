@@ -595,7 +595,7 @@ async function saveTemplate(data) {
     data.active !== false,
     cleanTemplateImage(data.image),
     data.description ? String(data.description).trim().slice(0, 500) : null,
-    data.hide_prompt !== false,
+    true,
     data.formats ? String(data.formats).trim().slice(0, 200) : null,
     Number.isFinite(Number(data.sort)) ? Math.round(Number(data.sort)) : 0
   ];
