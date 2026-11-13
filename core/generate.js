@@ -9,8 +9,10 @@ let gigaPlugin = null;
 try { gigaPlugin = require('../ai_plugins/gigachat_plugin'); } catch (e) {}
 let proxyImagePlugin = null;
 try { proxyImagePlugin = require('../ai_plugins/proxyapi_image_plugin'); } catch (e) {}
+let kiePlugin = null;
+try { kiePlugin = require('../ai_plugins/kie_plugin'); } catch (e) {}
 
-const PLUGINS = { google: googlePlugin, bratukha: bratukhaPlugin, giga: gigaPlugin, proxyapi: proxyImagePlugin };
+const PLUGINS = { google: googlePlugin, bratukha: bratukhaPlugin, giga: gigaPlugin, proxyapi: proxyImagePlugin, kie: kiePlugin };
 
 function getPlugin(model) {
     return PLUGINS[model.provider] || null;

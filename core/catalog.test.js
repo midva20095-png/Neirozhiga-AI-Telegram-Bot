@@ -79,7 +79,7 @@ test('кнопки моделей укладываются в лимит Telegra
         assert.ok(label.length <= 64, label);
         assert.ok(Buffer.byteLength(`set_model_${m.key}`) <= 64, m.key);
     }
-    for (const id of ['text', 'text_pro', 'image', 'video', 'video_mid', 'video_top', 'music', 'free', 'fix']) {
+    for (const id of ['text', 'text_pro', 'cheap', 'cheap_image', 'image', 'video', 'video_mid', 'video_top', 'music', 'free', 'fix']) {
         assert.ok(catalog.GROUPS[id]);
         const list = catalog.listModels({ includeDisabled: true }).filter(m => m.group === id);
         assert.ok(list.length > 0, id);
