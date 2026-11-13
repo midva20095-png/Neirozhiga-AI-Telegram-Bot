@@ -7,6 +7,7 @@ const auth = require('../core/auth');
 const templatesSrc = require('../core/templates');
 const transfer = require('../core/transfer');
 const channel = require('../core/channel');
+const share = require('../core/share');
 
 // Определяет пользователя из initData Telegram или из подписанной ссылки.
 function resolveUserId(req) {
@@ -147,6 +148,8 @@ function startWebApp() {
                     kind: w.kind,
                     model: w.model || '',
                     prompt: w.prompt || '',
+                    template_id: w.template_id || null,
+                    shared: !!w.shared_at,
                     created_at: w.created_at
                 }))
             });
@@ -196,6 +199,61 @@ function startWebApp() {
         } catch (e) {
             console.error('API /api/works/:id/send:', e.message);
             res.status(500).json({ error: 'Не удалось отправить файл в чат' });
+        }
+    });
+
+    function botUsername() {
+        return app.locals.botUsername || 'NeyroYaga_ai_bot';
+    }
+
+    app.get('/api/templates/:id/link', requireUser, async (req, res) => {
+        try {
+            const tpl = await templatesSrc.getFull(req.params.id);
+            if (!tpl) return res.status(404).json({ error: 'Шаблон не найден' });
+            const url = share.templateLink(botUsername(), tpl.id);
+            if (!url) return res.status(404).json({ error: 'Шаблон не найден' });
+            res.json({ url, title: tpl.title });
+        } catch (e) {
+            res.status(500).json({ error: 'Не удалось собрать ссылку' });
+        }
+    });
+
+    app.post('/api/works/:id/channel', requireUser, async (req, res) => {
+        try {
+            if (!(await requireChannel(req, res))) return;
+            const row = await db.getWork(req.userId, req.params.id);
+            if (!row || !row.bytes) return res.status(404).json({ error: 'Файл не найден' });
+            if (row.shared_at) return res.status(400).json({ error: 'Эта работа уже в канале.' });
+            if (await db.recentShare(req.userId)) {
+                return res.status(429).json({ error: 'Следующую работу можно отправить в канал через несколько минут.' });
+            }
+            const gateBot = app.locals.bot;
+            if (!gateBot) return res.status(503).json({ error: 'Бот сейчас недоступен' });
+            const claimed = await db.claimShare(req.userId, row.id);
+            if (!claimed) return res.status(400).json({ error: 'Эта работа уже в канале.' });
+            try {
+                const tpl = row.template_id ? await templatesSrc.getFull(row.template_id) : null;
+                const url = tpl ? share.templateLink(botUsername(), tpl.id) : `https://t.me/${botUsername()}`;
+                const posted = await share.sendChannel(gateBot.telegram, {
+                    bytes: row.bytes,
+                    mime: row.mime,
+                    caption: share.workCaption(tpl && tpl.title),
+                    button: tpl ? share.BUTTON : share.OPEN_BOT,
+                    url
+                });
+                if (!posted.ok) {
+                    await db.releaseShare(req.userId, row.id);
+                    return res.status(502).json({ error: posted.error });
+                }
+                db.note('tpl', `в канал работа ${row.id}`).catch(() => {});
+                res.json({ ok: true });
+            } catch (err) {
+                await db.releaseShare(req.userId, row.id);
+                throw err;
+            }
+        } catch (e) {
+            console.error('API /api/works/:id/channel:', e.message);
+            res.status(500).json({ error: 'Не удалось отправить в канал' });
         }
     });
 
@@ -276,6 +334,7 @@ function startWebApp() {
                 const mode = pickedModel && (pickedModel.qualities || []).find(item => item.id === quality);
                 const modeText = [mode && mode.name, duration ? duration + ' сек' : ''].filter(Boolean).join(', ');
                 fields.workLabel = templateTitle;
+                fields.templateId = tpl.id;
                 db.note('tpl', `старт «${templateTitle}» · ${service} · ${modelKey} · ${remote}${modeText ? ' · ' + modeText : ''} · фото ${photoKb ? photoKb + ' КБ' : 'нет'}`).catch(() => {});
             }
             const result = await gen.generateForWeb(fields);
@@ -490,6 +549,38 @@ function startWebApp() {
             res.json({ ok: true, template: await db.saveTemplate(req.body) });
         } catch (e) {
             res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.post('/api/admin/templates/link', requireAdmin, async (req, res) => {
+        try {
+            const tpl = await templatesSrc.getFull(req.body && req.body.id);
+            if (!tpl) return res.status(404).json({ error: 'Шаблон скрыт или не найден. Сначала включите показ в кабинете.' });
+            const url = share.templateLink(botUsername(), tpl.id);
+            res.json({ ok: true, url, title: tpl.title });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.post('/api/admin/templates/channel', requireAdmin, async (req, res) => {
+        try {
+            const tpl = await templatesSrc.getFull(req.body && req.body.id);
+            if (!tpl) return res.status(404).json({ error: 'Шаблон скрыт или не найден. Сначала включите показ в кабинете.' });
+            const gateBot = app.locals.bot;
+            if (!gateBot) return res.status(503).json({ error: 'Бот сейчас недоступен' });
+            const url = share.templateLink(botUsername(), tpl.id);
+            const posted = await share.sendChannel(gateBot.telegram, {
+                ...share.imagePayload(tpl.image),
+                caption: share.templateCaption(tpl),
+                button: share.BUTTON,
+                url
+            });
+            if (!posted.ok) return res.status(502).json({ error: posted.error });
+            db.note('tpl', `в канал шаблон «${tpl.title}»`).catch(() => {});
+            res.json({ ok: true, url });
+        } catch (e) {
+            res.status(500).json({ error: 'Не удалось отправить шаблон в канал' });
         }
     });
 
