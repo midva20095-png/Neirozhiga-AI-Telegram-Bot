@@ -84,8 +84,23 @@ function decodeImage(input) {
     return { buffer, mime };
 }
 
+function vkPageOrigin(origin) {
+    return /^https:\/\/([a-z0-9-]+\.)*(vk\.com|vk\.ru|vk-apps\.com|vkuser\.net|userapi\.com)$/i.test(String(origin || ''));
+}
+
 function startWebApp() {
     const app = express();
+    app.use((req, res, next) => {
+        const origin = req.headers.origin;
+        if (vkPageOrigin(origin)) {
+            res.setHeader('Access-Control-Allow-Origin', origin);
+            res.setHeader('Vary', 'Origin');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        }
+        if (req.method === 'OPTIONS') return res.sendStatus(204);
+        next();
+    });
     app.use(express.json({ limit: '12mb' }));
     app.use(express.urlencoded({ extended: true }));
 
@@ -730,4 +745,4 @@ function startWebApp() {
     return app;
 }
 
-module.exports = { startWebApp };
+module.exports = { startWebApp, vkPageOrigin };
