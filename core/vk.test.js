@@ -32,6 +32,12 @@ test('меню ВК открывает кабинет и не считает к�
     const labels = menu.buttons.flat().map(button => button.action.label);
     assert.deepEqual(labels, ['Баланс', 'Модели', 'Пополнить', 'Кабинет', 'Справка']);
     assert.equal(menu.buttons[1][1].action.link, 'https://babayagaland.ru');
+    const sections = JSON.parse(vk.sectionKeyboard());
+    assert.equal(sections.inline, false);
+    assert.ok(sections.buttons.length <= 10);
+    assert.equal(sections.buttons.at(-1)[0].action.label, 'Меню');
+    assert.equal(vk.menuAction('Картинки', { g: 'image' }), 'group');
+    assert.equal(vk.menuAction('Чат', { m: 'flash' }), 'model');
     assert.equal(vk.menuAction('Пополнить'), 'pay');
     assert.equal(vk.menuAction('', { command: 'start' }), 'hello');
     assert.equal(vk.menuAction('нарисуй кота'), '');
