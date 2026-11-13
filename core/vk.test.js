@@ -58,3 +58,16 @@ test('меню ВК открывает кабинет и не считает к�
     });
     assert.equal(event.payload.m, 'flash');
 });
+
+test('кабинет ВК открывает приложение напрямую, без сообщества', () => {
+    process.env.VK_APP_ID = '54895627';
+    process.env.VK_GROUP_ID = '230706467';
+    const personal = JSON.parse(vk.mainMenu(10));
+    const action = personal.buttons[1][1].action;
+    assert.equal(action.type, 'open_app');
+    assert.equal(action.app_id, 54895627);
+    assert.equal(action.owner_id, undefined);
+    assert.match(action.hash, /^tk=-10\./);
+    delete process.env.VK_APP_ID;
+    delete process.env.VK_GROUP_ID;
+});

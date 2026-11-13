@@ -103,13 +103,11 @@ function cabinetLink(account, pkgId) {
 function cabinetButton(peerId) {
     const account = accountId(peerId);
     const appId = String(process.env.VK_APP_ID || '').replace(/\D/g, '');
-    const groupId = String(process.env.VK_GROUP_ID || '').replace(/\D/g, '');
-    if (appId && groupId && account) {
+    if (appId && account) {
         return {
             action: {
                 type: 'open_app',
                 app_id: Number(appId),
-                owner_id: -Number(groupId),
                 label: 'Кабинет',
                 hash: `tk=${auth.signUserId(account)}`
             }
