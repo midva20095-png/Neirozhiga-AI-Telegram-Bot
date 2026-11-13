@@ -137,8 +137,11 @@ function detectAuth(){
   // подписанный токен из ссылки (#tk=...) — для открытия с обычной клавиатуры
   const hash = (location.hash||'').replace(/^#/,'');
   const hp = new URLSearchParams(hash);
+  const sp = new URLSearchParams(location.search);
   if (hp.get('tk')) token = hp.get('tk');
-  if (hp.get('tpl')) pendingTpl = hp.get('tpl');
+  else if (sp.get('tk')) token = sp.get('tk');
+  if (hp.get('tpl') || sp.get('tpl')) pendingTpl = hp.get('tpl') || sp.get('tpl');
+  window.__vkPaid = hp.get('paid') === '1' || sp.get('paid') === '1';
   if (w && w.initDataUnsafe && w.initDataUnsafe.user && w.initDataUnsafe.user.id) userId = w.initDataUnsafe.user.id;
   else if (w && w.initData) userId = parseUser(w.initData);
   else if (token) userId = token.split('.')[0];
@@ -361,10 +364,18 @@ function viewHist(){
     }).join('')+'</div>';
   return viewWorks()+ops;
 }
+function isVk(){ return String(token||userId||'').startsWith('-'); }
 function viewTop(){
   const packs = (cfg&&cfg.packages)||[];
   const site = (cfg&&cfg.site_url) || 'сайт';
-  const head = '<div class="card"><div class="now">Текущий баланс</div><div id="topbal" style="font-size:28px;font-weight:800">'+((me&&me.balance)||0)+' кр</div></div>';
+  const paid = window.__vkPaid ? '<div class="card"><p class="hint">Оплата принята банком. Кредиты появятся на этом балансе в течение минуты.</p></div>' : '';
+  const head = paid+'<div class="card"><div class="now">Текущий баланс</div><div id="topbal" style="font-size:28px;font-weight:800">'+((me&&me.balance)||0)+' кр</div></div>';
+  if (isVk()) {
+    if (!packs.length) return head+'<div class="card"><div class="empty">Пакеты недоступны.</div></div>';
+    return head+'<div class="groupttl">Пополнение этого чата ВК</div><div class="card"><input id="paymail" type="email" inputmode="email" autocomplete="email" placeholder="почта для чека">'+
+      packs.map(p=>'<div class="pack"><div><div class="name">'+esc(p.title)+'</div><div class="meta">'+p.credits+' кредитов</div></div><button data-pkg="'+esc(p.id)+'">'+p.price+' ₽</button></div>').join('')+
+      '<p class="hint">Оплата откроется на следующей странице. Кредиты вернутся в этот кабинет и в чат ВК.</p></div>';
+  }
   const move = '<div class="card"><div class="now">Перенос на сайт</div>'+
     '<p class="hint">Укажите почту, с которой входите на '+esc(site)+', и сколько кредитов перенести. Они спишутся здесь и появятся на сайте. Если почты нет или сайт не ответит — сумма вернётся.</p>'+
     '<input id="temail" type="email" inputmode="email" autocomplete="email" placeholder="почта на сайте">'+
@@ -556,6 +567,18 @@ async function generateTemplate(){
   busy = false; draw();
 }
 function buy(pkgId){
+  if (isVk()) {
+    const email = ((document.getElementById('paymail')||{}).value||'').trim();
+    if (!email) { alert('Укажите почту для чека'); return; }
+    fetch('/api/vk/pay', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tk: token, packageId: pkgId, email})})
+      .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
+      .then(function(x){
+        if (!x.ok || !x.d.url) { alert((x.d && x.d.error) || 'Оплата не открылась'); return; }
+        location.href = x.d.url;
+      })
+      .catch(function(){ alert('Оплата не открылась'); });
+    return;
+  }
   const w = tg();
   if (w && w.sendData){ w.sendData(JSON.stringify({action:'buy_credits', pkg:pkgId})); }
   else alert('Откройте оплату в чате бота кнопкой «Пополнить».');

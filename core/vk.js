@@ -428,6 +428,23 @@ async function handleUpdate(token, update) {
     await reply(token, incoming.peerId, account, incoming.text, incoming.payload);
 }
 
+async function sendToUser(accountIdValue, buffer, mime, caption) {
+    const token = String(process.env.VK_GROUP_TOKEN || '').trim();
+    const id = Number(accountIdValue);
+    if (!token || !Number.isInteger(id) || id >= 0 || !buffer) return false;
+    const peerId = -id;
+    try {
+        if (String(mime || '').startsWith('image/')) {
+            await sendImage(token, peerId, buffer, caption || 'Файл из кабинета.');
+        } else {
+            await sendText(token, peerId, caption || 'Файл готов в кабинете.');
+        }
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
 async function notify(accountIdValue, message) {
     const token = String(process.env.VK_GROUP_TOKEN || '').trim();
     const id = Number(accountIdValue);
@@ -496,5 +513,5 @@ function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payMessageKeyboard, createPayment, sectionKeyboard, modelKeyboard, connectHint, startVk, notify
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payMessageKeyboard, createPayment, sectionKeyboard, modelKeyboard, connectHint, startVk, notify, sendToUser
 };
