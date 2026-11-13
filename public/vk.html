@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Кабинет ВК · НейроЯга</title>
+<style>
+body{margin:0;background:#0b0614;color:#f3efff;font:16px/1.45 system-ui,sans-serif}
+main{max-width:480px;margin:0 auto;padding:20px}
+h1{font-size:22px;margin:0 0 8px}
+.mut{color:#a79cc4}
+.card{background:#140c24;border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:14px;margin:12px 0}
+label{display:block;font-weight:700;margin-top:8px}
+input{font:inherit;width:100%;border-radius:12px;padding:12px;border:1px solid rgba(255,255,255,.15);background:#1c1233;color:#fff;margin-top:8px}
+button{font:inherit;width:100%;border:0;border-radius:12px;padding:14px;margin-top:12px;font-weight:800;color:#fff;background:linear-gradient(135deg,#00ffe0,#b366ff 55%,#ff2d95)}
+.pack{display:flex;justify-content:space-between;gap:8px;width:100%;text-align:left;background:#1c1233;color:#f3efff;border:1px solid transparent;border-radius:12px;padding:12px;margin:8px 0 0}
+.pack.on{border-color:#b366ff}
+.err{color:#ff8fb0;font-weight:700}
+.ok{color:#7dffa8;font-weight:700}
+</style>
+</head>
+<body>
+<main>
+<h1>Кабинет ВК</h1>
+<p class="mut">Баланс этого чата хранится в базе бота. Он не общий с Telegram и сайтом.</p>
+<p class="ok" id="paid" hidden>Оплата принята банком. Кредиты появятся в чате ВК в течение минуты. Баланс ниже можно обновить.</p>
+<div class="card" id="bal">Загрузка…</div>
+<div class="card">
+<div id="packs"></div>
+<label for="email">Почта для чека</label>
+<input id="email" type="email" inputmode="email" autocomplete="email" placeholder="name@mail.ru">
+<button id="go" type="button">Перейти к оплате</button>
+<p class="err" id="err"></p>
+</div>
+</main>
+<script>
+const q = new URLSearchParams(location.search);
+let tk = q.get('tk') || '';
+let picked = q.get('pkg') || '';
+const paid = document.getElementById('paid');
+if (q.get('paid') === '1') paid.hidden = false;
+const bal = document.getElementById('bal');
+const packs = document.getElementById('packs');
+const err = document.getElementById('err');
+
+function showError(text) { err.textContent = text || ''; }
+
+async function load() {
+  const res = await fetch('/api/vk/me' + location.search);
+  const data = await res.json();
+  if (!res.ok) {
+    bal.textContent = data.error || 'Откройте кабинет кнопкой из чата ВК.';
+    return;
+  }
+  tk = data.tk || tk;
+  bal.innerHTML = 'Баланс: <b>' + data.balance + ' кр</b><br><span class="mut">Модель: ' + (data.model || 'текст') + '</span>';
+  packs.innerHTML = '';
+  (data.packages || []).forEach(function (pkg) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'pack' + (pkg.id === picked ? ' on' : '');
+    button.textContent = pkg.title + ' · ' + pkg.price + ' ₽';
+    button.onclick = function () {
+      picked = pkg.id;
+      Array.prototype.forEach.call(packs.children, function (el) { el.classList.remove('on'); });
+      button.classList.add('on');
+    };
+    packs.appendChild(button);
+  });
+  if (!picked && data.packages && data.packages[0]) picked = data.packages[0].id;
+}
+
+document.getElementById('go').onclick = async function () {
+  showError('');
+  const email = document.getElementById('email').value.trim();
+  const res = await fetch('/api/vk/pay', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tk: tk, packageId: picked, email: email })
+  });
+  const data = await res.json();
+  if (!res.ok || !data.url) {
+    showError(data.error || 'Оплата не открылась.');
+    return;
+  }
+  location.href = data.url;
+};
+
+load().catch(function () { bal.textContent = 'Не удалось открыть баланс.'; });
+</script>
+</body>
+</html>
