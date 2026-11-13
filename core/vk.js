@@ -67,6 +67,9 @@ function isGreeting(text) {
 
 function menuAction(text, payload) {
     if (payload && payload.a) return String(payload.a);
+    if (payload && payload.q) return 'quality';
+    if (payload && payload.d != null && payload.d !== '') return 'duration';
+    if (payload && payload.s) return 'size';
     if (payload && payload.g) return 'group';
     if (payload && payload.m) return 'model';
     if (payload && payload.p) return 'pack';
@@ -129,6 +132,7 @@ function mainMenu(peerId) {
 
 const pendingPay = new Map();
 const pendingMove = new Map();
+const pendingJob = new Map();
 let tellTelegram = async () => {};
 
 function setTelegramNotify(fn) {
@@ -196,6 +200,57 @@ function modelKeyboard(group) {
     ]);
     rows.push([textButton('К разделам', { a: 'models' }, 'primary')]);
     return asBoard(rows);
+}
+
+function chunk(items, size) {
+    const rows = [];
+    for (let i = 0; i < items.length; i += size) rows.push(items.slice(i, i + size));
+    return rows;
+}
+
+function modelNeedsChoice(model) {
+    if (!model) return false;
+    return (model.qualities || []).length > 1 || (model.durations || []).length > 1 || (model.ratio && !model.noAspect);
+}
+
+function nextChoice(model, job) {
+    if (!model || !job) return null;
+    const qualities = model.qualities || [];
+    if (qualities.length > 1 && !job.quality) {
+        return {
+            text: `Режим · ${model.name}. Выберите цену.`,
+            rows: qualities.slice(0, 8).map(item => {
+                const price = item.perSec
+                    ? `${catalog.applyPrice(model, item.cost)} кр/сек`
+                    : `${catalog.quote(model, { quality: item.id })} кр`;
+                return [{ label: `${item.name} · ${price}`, payload: { q: item.id } }];
+            })
+        };
+    }
+    if ((model.durations || []).length > 1 && !job.duration) {
+        return {
+            text: `Длина · ${model.name}.`,
+            rows: chunk(model.durations.slice(0, 8).map(seconds => {
+                const price = catalog.quote(model, { duration: seconds, quality: job.quality || model.quality });
+                return { label: `${seconds} сек · ${price} кр`, payload: { d: seconds } };
+            }), 2)
+        };
+    }
+    if (model.ratio && !model.noAspect && !job.aspect) {
+        const aspects = (model.aspects && model.aspects.length) ? model.aspects : catalog.RATIOS.filter(item => item !== 'auto');
+        const buttons = aspects.slice(0, 24).map(item => ({ label: item, payload: { s: item } }));
+        if (!model.aspects) buttons.push({ label: 'Авто', payload: { s: 'auto' } });
+        return { text: `Размер · ${model.name}.`, rows: chunk(buttons, 3) };
+    }
+    return null;
+}
+
+function choiceKeyboard(model, job) {
+    const step = nextChoice(model, job);
+    if (!step) return null;
+    const rows = step.rows.map(row => row.map(item => textButton(item.label, item.payload)));
+    rows.push([textButton('Отмена', { a: 'opt_cancel' }, 'secondary')]);
+    return { text: step.text, keyboard: asBoard(rows) };
 }
 
 function payKeyboard() {
@@ -329,7 +384,7 @@ async function sendStatus(token, peerId, account) {
 const USER_HELP = [
     'Как пользоваться',
     '1. Нажмите «Модели» и выберите раздел: текст, картинки, видео или музыка.',
-    '2. Напишите запрос своими словами. Если модель просит фото, прикрепите его к сообщению.',
+    '2. Напишите запрос своими словами. Если у модели несколько цен или размеров, выберите их кнопками внизу. Если модель просит фото, прикрепите его к сообщению.',
     '3. Ответ придёт в этот чат. Картинки также лежат в кабинете, вкладка «История».',
     '',
     'Как пополнить',
@@ -375,7 +430,56 @@ async function chooseModel(token, peerId, account, key) {
     const model = catalog.getModel(key, { audience: 'vk' });
     if (!model) return sendText(token, peerId, 'Модель недоступна.');
     await db.setCurrentModel(account, model.key);
-    return sendText(token, peerId, `${model.name}. ${catalog.priceLabel(model)}. Напишите запрос.`);
+    const choice = modelNeedsChoice(model) ? ' После запроса внизу будут цена и размер, как в Telegram.' : '';
+    return sendText(token, peerId, `${model.name}. ${catalog.priceLabel(model)}. Напишите запрос.${choice}`);
+}
+
+async function askOrRun(token, peerId, account, job) {
+    const model = catalog.getModel(job.modelKey, { audience: 'vk' });
+    const step = model && choiceKeyboard(model, job);
+    if (step) {
+        pendingJob.set(String(account), job);
+        return sendText(token, peerId, step.text, step.keyboard);
+    }
+    pendingJob.delete(String(account));
+    return runJob(token, peerId, account, job);
+}
+
+async function runJob(token, peerId, account, job) {
+    try {
+        const prepared = await gen.prepare({
+            userId: account,
+            modelKey: job.modelKey,
+            hasImage: false,
+            hasText: !!(job.prompt && String(job.prompt).trim()),
+            audience: 'vk',
+            quality: job.quality || null,
+            duration: job.duration || null
+        });
+        await sendText(token, peerId, 'Делаю ответ…');
+        const result = await gen.run({
+            userId: account,
+            prompt: job.prompt,
+            model: prepared.model,
+            plugin: prepared.plugin,
+            aspectRatio: job.aspect && job.aspect !== 'auto' ? job.aspect : null,
+            duration: job.duration || null,
+            quality: job.quality || null,
+            reason: `ВК · ${prepared.model.name}`
+        });
+        if (result.buffer && result.type === 'image') {
+            await sendImage(token, peerId, result.buffer, `Готово. Списано ${result.cost} кр. Осталось ${result.balance}.`);
+            return;
+        }
+        const answer = String(result.text || 'Готово').slice(0, 3200);
+        await sendText(token, peerId, `${answer}\n\nСписано ${result.cost} кр. Осталось ${result.balance}.`);
+    } catch (error) {
+        if (error && error.code === 'no_credits') {
+            await sendText(token, peerId, `${error.message}\n\nНажмите «Пополнить» внизу.`);
+            return;
+        }
+        await sendText(token, peerId, gen.userMessage(error));
+    }
 }
 
 async function holdPayment(token, peerId, account, text, action) {
@@ -496,12 +600,22 @@ async function holdMove(token, peerId, account, text, action) {
 
 async function reply(token, peerId, account, text, payload) {
     const action = menuAction(text, payload);
-    if (action === 'pay_back') {
+    if (action === 'pay_back' || action === 'opt_cancel') {
         pendingPay.delete(String(account));
         pendingMove.delete(String(account));
-        return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId));
+        pendingJob.delete(String(account));
+        return sendText(token, peerId, action === 'opt_cancel' ? 'Запрос отменён.' : 'Вы в меню.', mainMenu(peerId));
+    }
+    if (action === 'quality' || action === 'duration' || action === 'size') {
+        const job = pendingJob.get(String(account));
+        if (!job) return sendText(token, peerId, 'Запрос устарел. Напишите его ещё раз.', mainMenu(peerId));
+        if (action === 'quality') job.quality = payload.q;
+        if (action === 'duration') job.duration = Number(payload.d);
+        if (action === 'size') job.aspect = payload.s;
+        return askOrRun(token, peerId, account, job);
     }
     if (action === 'pack') {
+        pendingJob.delete(String(account));
         const pkg = catalog.getPackage(payload && payload.p);
         if (!pkg) return sendText(token, peerId, 'Пакет недоступен.');
         pendingMove.delete(String(account));
@@ -514,6 +628,7 @@ async function reply(token, peerId, account, text, payload) {
         );
     }
     if (action === 'move') {
+        pendingJob.delete(String(account));
         pendingPay.delete(String(account));
         pendingMove.set(String(account), { stage: 'who' });
         const shown = String(account).replace(/^-/, '');
@@ -527,47 +642,24 @@ async function reply(token, peerId, account, text, payload) {
     if (await holdPayment(token, peerId, account, text, action)) return;
     if (await holdMove(token, peerId, account, text, action)) return;
     if (action === 'group') {
+        pendingJob.delete(String(account));
         if (!payload || !catalog.GROUPS[payload.g]) return sendText(token, peerId, 'Раздел недоступен.');
         return sendText(token, peerId, `${catalog.GROUPS[payload.g]}. Выберите модель внизу.`, modelKeyboard(payload.g));
     }
     if (action === 'model') {
+        pendingJob.delete(String(account));
         return chooseModel(token, peerId, account, payload && payload.m);
     }
-    if (action) return openMenu(token, peerId, account, action);
+    if (action) {
+        pendingJob.delete(String(account));
+        return openMenu(token, peerId, account, action);
+    }
     if (!text) {
         await sendText(token, peerId, 'Напишите запрос или нажмите кнопку внизу.');
         return;
     }
-    try {
-        const modelKey = (await db.getCurrentModel(account)) || catalog.defaultModelKey('vk');
-        const prepared = await gen.prepare({
-            userId: account,
-            modelKey,
-            hasImage: false,
-            hasText: true,
-            audience: 'vk'
-        });
-        await sendText(token, peerId, 'Делаю ответ…');
-        const result = await gen.run({
-            userId: account,
-            prompt: text,
-            model: prepared.model,
-            plugin: prepared.plugin,
-            reason: `ВК · ${prepared.model.name}`
-        });
-        if (result.buffer && result.type === 'image') {
-            await sendImage(token, peerId, result.buffer, `Готово. Списано ${result.cost} кр. Осталось ${result.balance}.`);
-            return;
-        }
-        const answer = String(result.text || 'Готово').slice(0, 3200);
-        await sendText(token, peerId, `${answer}\n\nСписано ${result.cost} кр. Осталось ${result.balance}.`);
-    } catch (error) {
-        if (error && error.code === 'no_credits') {
-            await sendText(token, peerId, `${error.message}\n\nНажмите «Пополнить» внизу. Кредиты этого чата не берутся из Telegram.`);
-            return;
-        }
-        await sendText(token, peerId, gen.userMessage(error));
-    }
+    const modelKey = (await db.getCurrentModel(account)) || catalog.defaultModelKey('vk');
+    return askOrRun(token, peerId, account, { prompt: text, modelKey, quality: '', duration: 0, aspect: '' });
 }
 
 async function handleEvent(token, event) {
@@ -695,5 +787,5 @@ function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, connectHint, startVk, notify, sendToUser, askTopup, setTelegramNotify, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, startVk, notify, sendToUser, askTopup, setTelegramNotify, USER_HELP
 };

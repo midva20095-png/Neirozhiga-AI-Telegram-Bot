@@ -61,6 +61,18 @@ test('меню ВК открывает кабинет и не считает к�
     assert.equal(vk.menuAction('Чат', { m: 'flash' }), 'model');
     assert.equal(vk.menuAction('Пополнить'), 'pay');
     assert.equal(vk.menuAction('Перенос'), 'move');
+    assert.equal(vk.menuAction('', { q: 'cheap' }), 'quality');
+    assert.equal(vk.menuAction('', { d: 8 }), 'duration');
+    assert.equal(vk.menuAction('', { s: '9:16' }), 'size');
+    const catalog = require('./catalog');
+    const banana = catalog.getModel('nano-banana');
+    const priceStep = vk.nextChoice(banana, { quality: '', duration: 0, aspect: '' });
+    assert.match(priceStep.text, /Режим/);
+    assert.match(priceStep.rows.map(row => row[0].label).join(' '), /Эконом/);
+    assert.match(priceStep.rows.map(row => row[0].label).join(' '), /кр/);
+    const sizeStep = vk.nextChoice(banana, { quality: 'cheap', duration: 0, aspect: '' });
+    assert.match(sizeStep.text, /Размер/);
+    assert.ok(sizeStep.rows.flat().some(item => item.payload.s === '9:16'));
     assert.equal(vk.menuAction('', { command: 'start' }), 'hello');
     assert.equal(vk.menuAction('нарисуй кота'), '');
     const event = vk.readEvent({
