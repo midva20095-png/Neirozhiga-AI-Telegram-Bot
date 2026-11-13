@@ -23,7 +23,7 @@ button{cursor:pointer;border:0;border-radius:12px;padding:10px 14px;font-weight:
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
 .row>*{flex:1;min-width:120px}
 table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top;word-break:break-word}
 th{color:var(--mut);font-size:12px}
 .tabs{display:flex;gap:6px;margin:12px 0;flex-wrap:wrap;overflow-x:auto}
 .tabs button{padding:8px 12px}
@@ -88,7 +88,8 @@ const TABS = [
 ];
 let token = sessionStorage.getItem('ny_admin_token') || null;
 let cur = 'stats';
-let users=[], templates=[], modelsData=[], groupsData={}, packagesData=[], generalData={};
+let users=[], templates=[], modelsData=[], groupsData={}, providersData={}, packagesData=[], generalData={};
+const KINDNAME = {sys:'система', pay:'оплата', kie:'Kie', gen:'сбой', tpl:'шаблон'};
 let tplEdit = null, tplImage = '', tplImageTouched = false, modelsMsg = '';
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -227,21 +228,22 @@ function safeImg(u){
   if (/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(s)) return s;
   return '';
 }
+function serviceName(id){ return providersData[id] || id || 'Другой сервис'; }
 function modelOptions(current){
   const list = modelsData.slice();
-  if (current && !list.some(m=>m.key===current)) list.unshift({key:current, name:current+' (как сохранено)', cost:null, group:''});
-  if (!list.length) list.push({key:'nanobanana', name:'Картинка', cost:20, group:'image'});
-  const order = Object.keys(groupsData);
+  if (current && !list.some(m=>m.key===current)) list.unshift({key:current, name:current+' (как сохранено)', cost:null, provider:''});
+  if (!list.length) list.push({key:'nanobanana', name:'Картинка', cost:20, provider:'google', group:'image'});
+  const order = Object.keys(providersData);
   const used = {};
   let html = '';
   function opts(rows){
-    return rows.map(m=>'<option value="'+esc(m.key)+'"'+(m.key===current?' selected':'')+'>'+esc(m.name)+(m.cost!=null?' · '+m.cost+' кр':'')+'</option>').join('');
+    return rows.map(m=>'<option value="'+esc(m.key)+'"'+(m.key===current?' selected':'')+'>'+esc(m.name)+(groupsData[m.group]?' · '+esc(groupsData[m.group]):'')+(m.cost!=null?' · '+m.cost+' кр':'')+'</option>').join('');
   }
-  order.forEach(g=>{
-    const rows = list.filter(m=>m.group===g);
+  order.forEach(id=>{
+    const rows = list.filter(m=>m.provider===id);
     if (!rows.length) return;
     rows.forEach(m=>{ used[m.key]=1; });
-    html += '<optgroup label="'+esc(groupsData[g]||g)+'">'+opts(rows)+'</optgroup>';
+    html += '<optgroup label="'+esc(serviceName(id))+'">'+opts(rows)+'</optgroup>';
   });
   const rest = list.filter(m=>!used[m.key]);
   if (rest.length) html += '<optgroup label="Как сохранено">'+opts(rest)+'</optgroup>';
@@ -249,10 +251,11 @@ function modelOptions(current){
 }
 async function loadTpl(){
   const el = document.getElementById('section-tpl');
-  if (!modelsData.length || !Object.keys(groupsData).length) {
+  if (!modelsData.length || !Object.keys(providersData).length) {
     const md = await api('/api/admin/models');
     modelsData = md.models||[];
     groupsData = md.groups||{};
+    providersData = md.providers||{};
   }
   const d = await api('/api/admin/templates');
   templates = d.templates||[];
@@ -275,7 +278,7 @@ async function loadTpl(){
     '<label>4. Модель и цена для человека</label>'+
     '<div class="row"><select id="tm">'+modelOptions(currentModel)+'</select>'+
       '<input id="tcost" type="number" min="0" placeholder="Цена, кр" value="'+startCost+'"'+(editing?' data-lock="1"':'')+'></div>'+
-    '<p class="note">Для картинок берите Banana Lite: Nano Banana от Братухи сейчас часто отвечает, что нейросеть недоступна. Уже сохранённые шаблоны на ней сами запускаются через Banana Lite, цена на карточке не меняется. «pro» — это Чат Pro, текст, не картинка.</p>'+
+    '<p class="note">Список разбит по сервису. Если сервис молчит, откройте «Модели» и выключите его целиком: шаблоны и бот перестанут его вызывать. Шаблоны, сохранённые на Nano Banana Братухи, пока Kie включён, запускаются через Banana Lite. Цена на карточке не меняется.</p>'+
     '<label class="check"><input id="tactive" type="checkbox" '+(!editing||editing.active!==false?'checked':'')+'> Показывать в кабинете</label>'+
     '<details'+(editing?' open':'')+'><summary>Дополнительно: описание, раздел, ссылка, размеры</summary>'+
     '<label>Короткое описание под заголовком</label><input id="tdesc" placeholder="Что получится" value="'+esc(editing&&editing.description?editing.description:'')+'">'+
@@ -290,9 +293,11 @@ async function loadTpl(){
     '<div class="card"><h3>Как это видит человек</h3><p class="note">'+templates.length+' шаблон'+(templates.length===1?'':'ов')+'. Скрытые в кабинет не попадают. Карточка вертикальная, как на сайте: фото, название и цена.</p>'+
     (templates.length ? '<div class="agallery">'+templates.map(t=>{
       const src = safeImg(t.image);
-      const moved = t.model==='nano-banana' ? ' · запуск через Banana Lite' : '';
+      const saved = modelsData.find(m=>m.key===t.model);
+      const from = saved ? serviceName(saved.provider) : '';
+      const moved = t.model==='nano-banana' ? ' · запуск через Banana Lite, пока Kie включён' : '';
       return '<div class="acard'+(t.active?'':' off')+'">'+(src?'<img src="'+esc(src)+'" alt="">':'<div class="ph"></div>')+
-        '<div class="abody"><b>'+esc(t.title)+'</b><div><em>'+t.cost+' кр.</em></div><div class="note">'+esc(t.model||'')+(t.active?'':' · скрыт')+(t.hide_prompt?' · текст скрыт':'')+moved+'</div>'+
+        '<div class="abody"><b>'+esc(t.title)+'</b><div><em>'+t.cost+' кр.</em></div><div class="note">'+(from?esc(from)+' · ':'')+esc(t.model||'')+(t.active?'':' · скрыт')+(t.hide_prompt?' · текст скрыт':'')+moved+'</div>'+
         '<div class="row" style="margin:8px 0 0"><button class="ghost" onclick="editTpl('+t.id+')">Править</button>'+
         '<button class="ghost" onclick="toggleTpl('+t.id+')">'+(t.active?'Скрыть':'Показать')+'</button>'+
         '<button class="danger" onclick="delTpl('+t.id+')">Удалить</button></div></div></div>';
@@ -392,26 +397,45 @@ async function toggleTpl(id){
 async function delTpl(id){ if(!confirm('Удалить шаблон?'))return; await api('/api/admin/templates/delete',{method:'POST',body:JSON.stringify({id})}); loadTpl(); }
 
 /* ---- Модели ---- */
+function modelRow(m){
+  return '<div class="mrow" data-key="'+m.key+'" data-provider="'+esc(m.provider||'')+'">'+
+    '<div><div class="mname">'+esc(m.name)+'</div><div class="note">'+esc((groupsData[m.group]||m.group||'')+' · '+m.key)+'</div></div>'+
+    '<div><label style="margin:0">Цена</label><input type="number" class="f-cost" value="'+m.cost+'"></div>'+
+    (m.provider==='giga'
+      ? '<div class="lim"><label style="margin:0">В день</label><input type="number" min="0" class="f-limit" placeholder="без лимита" value="'+(m.limit==null?'':m.limit)+'"></div>'
+      : '<div class="lim"><label style="margin:0">В день</label><input class="f-limit" disabled value="—"></div>')+
+    '<div><label style="margin:0">Вкл</label><input type="checkbox" class="f-en" '+(m.enabled?'checked':'')+' style="width:auto;height:22px"></div>'+
+    '</div>';
+}
 async function loadModels(){
   const el = document.getElementById('section-models');
-  const d = await api('/api/admin/models'); modelsData = d.models||[]; groupsData = d.groups||{};
-  let html = '<div class="card"><h3>Модели</h3><p class="note">Поле «Цена» сохраняется и списывается. 0 — бесплатно, так можно сделать платными GigaChat 2 Pro, Max и Ultra. У моделей с режимами или секундами цена задаёт базовый запуск, остальные варианты меняются в ту же сторону. Для GigaChat поле «В день» — жёсткий потолок. Пустое поле снимает лимит. Счётчик обнуляется в полночь по Москве.</p><p class="note">Разделы «Текст дешевле» и «Картинки дешевле» — Kie. Ключ KIE_API_KEY сейчас '+(d.kie?'<b class="ok">задан</b>.':'<b class="bad">не задан</b>, раздел скрыт.')+' Его ставят в переменные Railway и перезапускают сервис.</p>'+(modelsMsg?'<p class="ok">'+esc(modelsMsg)+'</p>':'');
-  const order = Object.keys(groupsData);
-  for (const g of order){
-    const list = modelsData.filter(m=>m.group===g);
-    if (!list.length) continue;
-    html += '<div class="note" style="margin:10px 0 4px">'+esc(groupsData[g])+'</div>';
-    html += list.map(m=>'<div class="mrow" data-key="'+m.key+'">'+
-      '<div><div class="mname">'+esc(m.name)+'</div><div class="note">'+m.key+'</div></div>'+
-      '<div><label style="margin:0">Цена</label><input type="number" class="f-cost" value="'+m.cost+'"></div>'+
-      (m.provider==='giga'
-        ? '<div class="lim"><label style="margin:0">В день</label><input type="number" min="0" class="f-limit" placeholder="без лимита" value="'+(m.limit==null?'':m.limit)+'"></div>'
-        : '<div class="lim"><label style="margin:0">В день</label><input class="f-limit" disabled value="—"></div>')+
-      '<div><label style="margin:0">Вкл</label><input type="checkbox" class="f-en" '+(m.enabled?'checked':'')+' style="width:auto;height:22px"></div>'+
-      '</div>').join('');
+  const d = await api('/api/admin/models');
+  modelsData = d.models||[]; groupsData = d.groups||{}; providersData = d.providers||{};
+  let html = '<div class="card"><h3>Модели</h3><p class="note">Модели разложены по сервису, откуда идёт запрос. Если сервис упал, нажмите «Выключить» у его блока и сохраните: эти модели пропадут из бота, кабинета и шаблонов. «Включить» возвращает их. Цена сохраняется. 0 — бесплатно. У моделей с режимами цена задаёт базовый запуск. Для GigaChat поле «В день» — потолок, пустое поле снимает лимит.</p><p class="note">Kie сейчас '+(d.kie?'<b class="ok">подключён</b>.':'<b class="bad">без ключа</b>, раздел и так скрыт.')+'</p>'+(modelsMsg?'<p class="ok">'+esc(modelsMsg)+'</p>':'');
+  const order = Object.keys(providersData);
+  const used = {};
+  function block(id, title, list){
+    if (!list.length) return '';
+    const on = list.filter(m=>m.enabled).length;
+    return '<div class="note" style="margin:16px 0 6px"><b>'+esc(title)+'</b> · включено '+on+' из '+list.length+'</div>'+
+      '<div class="row" style="margin-bottom:6px"><button type="button" class="ghost" onclick="setService(\''+esc(id)+'\', false)">Выключить</button>'+
+      '<button type="button" class="ghost" onclick="setService(\''+esc(id)+'\', true)">Включить</button></div>'+
+      list.map(modelRow).join('');
   }
+  order.forEach(id=>{
+    const list = modelsData.filter(m=>m.provider===id);
+    list.forEach(m=>{ used[m.key]=1; });
+    html += block(id, serviceName(id), list);
+  });
+  const rest = modelsData.filter(m=>!used[m.key]);
+  html += block('', 'Другой сервис', rest);
   html += '<div class="row" style="margin-top:12px"><button onclick="saveModels()">Сохранить модели</button></div><p id="mmsg"></p></div>';
   el.innerHTML = html;
+}
+function setService(provider, on){
+  document.querySelectorAll('#section-models .mrow').forEach(row=>{
+    if ((row.dataset.provider||'')===provider) row.querySelector('.f-en').checked = on;
+  });
 }
 async function saveModels(){
   const models = {};
@@ -439,9 +463,10 @@ async function loadJournal(){
     const items = d.items || [];
     const rows = items.map(it=>{
       const t = it.created_at ? new Date(it.created_at).toLocaleString('ru-RU') : '';
-      return '<tr><td>'+esc(t)+'</td><td>'+esc(it.kind)+'</td><td>'+esc(it.message)+'</td></tr>';
+      const kind = KINDNAME[it.kind] || it.kind;
+      return '<tr><td>'+esc(t)+'</td><td>'+esc(kind)+'</td><td>'+esc(it.message)+'</td></tr>';
     }).join('');
-    el.innerHTML = '<div class="card"><h3>Журнал</h3><p class="note">Запуск, оплата ЮKassa, готовая картинка Kie и сбой генерации. Текст запроса сюда не пишется. Обычные подсказки вроде «недостаточно кредитов» не попадают.</p>'+
+    el.innerHTML = '<div class="card"><h3>Журнал</h3><p class="note">Шаблоны пишутся отдельно: старт, размер фото, модель и ответ сервиса, если фото или генерация не прошли. Текст запроса сюда не попадает. «Недостаточно кредитов» не пишется.</p>'+
       (rows?'<table><tr><th>Когда</th><th></th><th>Событие</th></tr>'+rows+'</table>':'<p class="note">Пока пусто. После перезапуска здесь появится «Бот запущен».</p>')+
       '<div class="row" style="margin-top:12px"><button class="ghost" onclick="loadJournal()">Обновить</button></div></div>';
   }catch(e){ el.innerHTML = '<div class="card"><p class="bad">'+esc(e.message)+'</p></div>'; }

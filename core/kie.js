@@ -154,6 +154,21 @@ function taskView(data) {
     };
 }
 
+function uploadView(data) {
+    let body = data;
+    if (typeof data === 'string') {
+        try { body = JSON.parse(data); } catch (e) { body = { msg: data.slice(0, 160) }; }
+    }
+    body = body && typeof body === 'object' ? body : {};
+    const bag = body.data && typeof body.data === 'object' ? body.data : {};
+    const url = [bag.downloadUrl, bag.fileUrl, bag.url, body.downloadUrl]
+        .find(item => typeof item === 'string' && item.startsWith('https://')) || '';
+    const code = Number(body.code);
+    const msg = String(body.msg || body.message || '').replace(/\s+/g, ' ').trim().slice(0, 180);
+    const failed = Number.isFinite(code) && code !== 0 && code !== 200;
+    return { url: failed ? '' : url, code: Number.isFinite(code) ? code : 0, msg };
+}
+
 function explainFailure(text) {
     const raw = String(text || '');
     if (/content moderation|blocked by|safety|nsfw/i.test(raw)) {
@@ -181,6 +196,7 @@ module.exports = {
     buildChat,
     textFromResponse,
     taskView,
+    uploadView,
     explainFailure,
     promptTooLong
 };

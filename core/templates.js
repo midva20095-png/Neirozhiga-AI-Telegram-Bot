@@ -37,7 +37,7 @@ function kieReady() {
 
 function mapModel(raw) {
     const key = String(raw || '').trim();
-    if (key === 'nano-banana' && kieReady() && catalog.getModel(STEADY_IMAGE, { includeDisabled: true })) return STEADY_IMAGE;
+    if (key === 'nano-banana' && kieReady() && catalog.getModel(STEADY_IMAGE)) return STEADY_IMAGE;
     if (key && catalog.getModel(key, { includeDisabled: true })) return key;
     const fallback = (process.env.TEMPLATE_MODEL || 'nanobanana').trim();
     if (catalog.getModel(fallback, { includeDisabled: true })) return fallback;
@@ -51,9 +51,15 @@ function serviceDown(error) {
 
 // Запасной запуск только для картинки, если выбранная модель молчит.
 function fallbackModel(modelKey, error) {
-    if (!serviceDown(error) || !kieReady()) return null;
+    const message = String((error && error.message) || '');
     const current = catalog.getModel(modelKey, { includeDisabled: true });
-    if (!current || current.kind !== 'image' || current.provider === 'kie' || current.key === STEADY_IMAGE) return null;
+    if (!current || current.kind !== 'image') return null;
+    if (/Фото не загрузилось/.test(message) && current.provider === 'kie') {
+        const google = catalog.getModel('nanobanana');
+        return google ? google.key : null;
+    }
+    if (!serviceDown(error) || !kieReady()) return null;
+    if (current.provider === 'kie' || current.key === STEADY_IMAGE) return null;
     const next = catalog.getModel(STEADY_IMAGE);
     return next ? next.key : null;
 }

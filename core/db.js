@@ -145,7 +145,7 @@ async function initDB() {
 }
 
 async function note(kind, message) {
-  const line = String(message || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  const line = String(message || '').replace(/\s+/g, ' ').trim().slice(0, 500);
   if (!line) return;
   console.log(`[${kind}] ${line}`);
   try {
@@ -155,7 +155,7 @@ async function note(kind, message) {
 }
 
 async function listJournal(limit) {
-  const n = Math.min(80, Math.max(1, Number(limit) || 60));
+  const n = Math.min(200, Math.max(1, Number(limit) || 80));
   const res = await pool.query(
     'SELECT id, kind, message, created_at FROM journal ORDER BY id DESC LIMIT $1',
     [n]

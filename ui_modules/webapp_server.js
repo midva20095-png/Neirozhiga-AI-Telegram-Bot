@@ -188,6 +188,7 @@ function startWebApp() {
             let aspect = body.format || null;
             let keepModel = false;
             let strict = false;
+            let templateTitle = '';
             if (body.templateId) {
                 const tpl = await templatesSrc.getFull(body.templateId);
                 if (!tpl) return res.status(404).json({ error: 'Шаблон не найден' });
@@ -196,6 +197,7 @@ function startWebApp() {
                 modelKey = tpl.model;
                 charge = tpl.cost;
                 reason = `Шаблон · ${tpl.title}`;
+                templateTitle = tpl.title || '';
                 keepModel = true;
                 strict = true;
                 const allowed = tpl.formats || [];
@@ -218,19 +220,27 @@ function startWebApp() {
                 keepModel,
                 strict
             };
+            const photoKb = file && file.buffer ? Math.max(1, Math.round(file.buffer.length / 1024)) : 0;
+            if (templateTitle) {
+                db.note('tpl', `старт «${templateTitle}» · ${modelKey} · фото ${photoKb ? photoKb + ' КБ' : 'нет'}`).catch(() => {});
+            }
+            let usedModel = modelKey;
             let result;
             try {
                 result = await gen.generateForWeb(fields);
             } catch (err) {
                 const next = body.templateId ? templatesSrc.fallbackModel(modelKey, err) : null;
                 if (!next) throw err;
-                db.note('gen', `шаблон: ${modelKey} не ответила, повтор через ${next}`).catch(() => {});
+                usedModel = next;
+                db.note('tpl', `«${templateTitle}» · ${modelKey} не прошла (${err.message}). Повтор через ${next}.`).catch(() => {});
                 result = await gen.generateForWeb(Object.assign({}, fields, { modelKey: next }));
             }
+            if (templateTitle) db.note('tpl', `готово «${templateTitle}» · ${usedModel}`).catch(() => {});
             res.json(result);
         } catch (e) {
             const shown = gen.userMessage(e);
-            if (shown === gen.QUIET_ERROR) db.note('gen', `кабинет: ${e.message}`).catch(() => {});
+            if (body.templateId) db.note('tpl', `сбой · ${modelKey || 'модель'} · ${e.message}`).catch(() => {});
+            else if (shown === gen.QUIET_ERROR) db.note('gen', `кабинет: ${e.message}`).catch(() => {});
             const code = e.code === 'busy' ? 429 : 400;
             res.status(code).json({ error: shown });
         }
@@ -449,13 +459,14 @@ function startWebApp() {
         res.json({
             models: catalog.listModels({ includeDisabled: true }),
             groups: catalog.GROUPS,
+            providers: catalog.PROVIDERS,
             kie: !!String(process.env.KIE_API_KEY || '').trim()
         });
     });
 
     app.get('/api/admin/journal', requireAdmin, async (req, res) => {
         try {
-            res.json({ items: await db.listJournal(80) });
+            res.json({ items: await db.listJournal(200) });
         } catch (e) {
             res.status(500).json({ error: 'Журнал недоступен' });
         }

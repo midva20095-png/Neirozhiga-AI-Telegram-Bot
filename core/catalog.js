@@ -2,6 +2,13 @@
 // Базовые значения заданы в коде, админка хранит поверх них правки в таблице settings.
 // Бот строит клавиатуры синхронно, поэтому всё держится в памяти и перечитывается после сохранения.
 
+const PROVIDERS = {
+    google: 'Google',
+    bratukha: 'Братуха · сайт',
+    kie: 'Kie · дешёвые',
+    giga: 'GigaChat'
+};
+
 const GROUPS = {
     text: '💬 Текст',
     text_pro: '💬 Текст · сильнее',
@@ -377,6 +384,7 @@ async function saveGeneral(db, input) {
 }
 
 module.exports = {
+    PROVIDERS,
     GROUPS,
     RATIOS,
     templateFormats,
