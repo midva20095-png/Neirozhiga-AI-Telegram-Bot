@@ -20,9 +20,23 @@ test('из события ВК берётся только входящий те
         type: 'message_new',
         object: { message: { from_id: 10, peer_id: 10, text: '  нарисуй кота ', out: 0 } }
     };
-    assert.deepEqual(vk.readIncoming(update), { fromId: 10, peerId: 10, text: 'нарисуй кота' });
+    assert.deepEqual(vk.readIncoming(update), { fromId: 10, peerId: 10, text: 'нарисуй кота', payload: null });
     assert.equal(vk.readIncoming({ type: 'message_new', object: { message: { from_id: 10, text: 'я', out: 1 } } }), null);
     assert.equal(vk.readIncoming({ type: 'message_reply' }), null);
     assert.equal(vk.isGreeting('Начать'), true);
     assert.equal(vk.isGreeting('нарисуй кота'), false);
+});
+
+test('меню ВК открывает кабинет и не считает кнопки запросом', () => {
+    const menu = JSON.parse(vk.mainMenu());
+    const labels = menu.buttons.flat().map(button => button.action.label);
+    assert.deepEqual(labels, ['Баланс', 'Модели', 'Пополнить', 'Кабинет', 'Справка']);
+    assert.equal(menu.buttons[1][1].action.link, 'https://babayagaland.ru');
+    assert.equal(vk.menuAction('Пополнить'), 'pay');
+    assert.equal(vk.menuAction('нарисуй кота'), '');
+    const event = vk.readEvent({
+        type: 'message_event',
+        object: { user_id: 10, peer_id: 10, event_id: 'e1', payload: '{"m":"flash"}' }
+    });
+    assert.equal(event.payload.m, 'flash');
 });

@@ -12,6 +12,12 @@ function accountId(vkUserId) {
     return -id;
 }
 
+function parsePayload(value) {
+    if (!value) return null;
+    if (typeof value === 'object') return value;
+    try { return JSON.parse(value); } catch (e) { return null; }
+}
+
 function readIncoming(update) {
     if (!update || update.type !== 'message_new') return null;
     const message = update.object && (update.object.message || update.object);
@@ -22,7 +28,22 @@ function readIncoming(update) {
     return {
         fromId,
         peerId,
-        text: String(message.text || '').trim()
+        text: String(message.text || '').trim(),
+        payload: parsePayload(message.payload)
+    };
+}
+
+function readEvent(update) {
+    if (!update || update.type !== 'message_event') return null;
+    const obj = update.object || {};
+    const userId = Number(obj.user_id);
+    const peerId = Number(obj.peer_id || userId);
+    if (!Number.isInteger(userId) || userId <= 0 || !Number.isInteger(peerId) || peerId <= 0) return null;
+    return {
+        userId,
+        peerId,
+        eventId: obj.event_id,
+        payload: parsePayload(obj.payload) || {}
     };
 }
 
@@ -39,8 +60,83 @@ function connectHint(error) {
 }
 
 function isGreeting(text) {
+    return menuAction(text) === 'hello' || menuAction(text) === 'balance';
+}
+
+function menuAction(text, payload) {
+    if (payload && payload.a) return String(payload.a);
     const value = String(text || '').trim().toLowerCase();
-    return value === 'начать' || value === 'start' || value === '/start' || value === 'привет' || value === 'баланс';
+    if (value === 'начать' || value === 'start' || value === '/start' || value === 'привет') return 'hello';
+    if (value === 'баланс') return 'balance';
+    if (value === 'модели' || value === 'модель') return 'models';
+    if (value === 'пополнить') return 'pay';
+    if (value === 'справка' || value === 'помощь') return 'help';
+    return '';
+}
+
+function fitLabel(text) {
+    const value = String(text || '').replace(/\s+/g, ' ').trim();
+    return value.length <= 40 ? value : value.slice(0, 39) + '…';
+}
+
+function siteLink() {
+    return catalog.getGeneral().site_url || 'https://babayagaland.ru';
+}
+
+function mainMenu() {
+    return JSON.stringify({
+        one_time: false,
+        buttons: [
+            [
+                { action: { type: 'text', label: 'Баланс', payload: '{"a":"balance"}' }, color: 'primary' },
+                { action: { type: 'text', label: 'Модели', payload: '{"a":"models"}' }, color: 'primary' }
+            ],
+            [
+                { action: { type: 'text', label: 'Пополнить', payload: '{"a":"pay"}' }, color: 'positive' },
+                { action: { type: 'open_link', label: 'Кабинет', link: siteLink() } }
+            ],
+            [
+                { action: { type: 'text', label: 'Справка', payload: '{"a":"help"}' }, color: 'secondary' }
+            ]
+        ]
+    });
+}
+
+function callbackButton(label, payload) {
+    return { action: { type: 'callback', label: fitLabel(label), payload: JSON.stringify(payload) } };
+}
+
+function inlineKeyboard(rows) {
+    return JSON.stringify({ inline: true, buttons: rows });
+}
+
+function groupButtons() {
+    const groups = Object.keys(catalog.GROUPS).filter(group => catalog.modelsByGroup(group).length > 0);
+    const rows = [];
+    for (let i = 0; i < groups.length; i += 2) {
+        const row = [callbackButton(catalog.GROUPS[groups[i]], { g: groups[i] })];
+        if (groups[i + 1]) row.push(callbackButton(catalog.GROUPS[groups[i + 1]], { g: groups[i + 1] }));
+        rows.push(row);
+    }
+    return rows.slice(0, 6);
+}
+
+function modelButtons(group) {
+    const models = catalog.modelsByGroup(group).slice(0, 10);
+    const rows = [];
+    for (let i = 0; i < models.length; i += 2) {
+        const row = [callbackButton(`${models[i].short} · ${catalog.priceLabel(models[i])}`, { m: models[i].key })];
+        if (models[i + 1]) row.push(callbackButton(`${models[i + 1].short} · ${catalog.priceLabel(models[i + 1])}`, { m: models[i + 1].key }));
+        rows.push(row);
+    }
+    rows.push([callbackButton('К разделам', { a: 'models' })]);
+    return rows.slice(0, 6);
+}
+
+function packageButtons() {
+    return catalog.listPackages().slice(0, 6).map(pkg => [
+        callbackButton(`${pkg.title} · ${pkg.price} ₽`, { p: pkg.id })
+    ]);
 }
 
 async function call(token, method, params) {
@@ -58,12 +154,14 @@ async function call(token, method, params) {
     return data.response;
 }
 
-async function sendText(token, peerId, message) {
-    await call(token, 'messages.send', {
+async function sendText(token, peerId, message, keyboard) {
+    const params = {
         peer_id: String(peerId),
         random_id: String(Math.floor(Math.random() * 2e9)),
-        message: String(message || '').slice(0, 3500)
-    });
+        message: String(message || '').slice(0, 3500),
+        keyboard: keyboard || mainMenu()
+    };
+    await call(token, 'messages.send', params);
 }
 
 async function sendImage(token, peerId, buffer, caption) {
@@ -82,21 +180,109 @@ async function sendImage(token, peerId, buffer, caption) {
         peer_id: String(peerId),
         random_id: String(Math.floor(Math.random() * 2e9)),
         message: String(caption || '').slice(0, 3500),
-        attachment: `photo${photo.owner_id}_${photo.id}`
+        attachment: `photo${photo.owner_id}_${photo.id}`,
+        keyboard: mainMenu()
     });
 }
 
-async function reply(token, peerId, account, text) {
-    if (isGreeting(text)) {
-        const balance = await db.getUserBalance(account);
-        const model = catalog.getModel((await db.getCurrentModel(account)) || catalog.defaultModelKey());
-        await sendText(token, peerId,
-            `НейроЯга во ВКонтакте.\n\nБаланс: ${balance} кр. Это отдельный счёт, не из Telegram.\nМодель: ${model ? model.name : 'текст'}.\n\nНапишите запрос своими словами.`
-        );
+const awaitingEmail = new Map();
+
+async function createPayment(amount, description, email, metadata) {
+    const shopId = process.env.YOOKASSA_SHOP_ID;
+    const secretKey = process.env.YOOKASSA_SECRET_KEY;
+    if (!shopId || !secretKey) return null;
+    const response = await axios.post('https://api.yookassa.ru/v3/payments', {
+        amount: { value: Number(amount).toFixed(2), currency: 'RUB' },
+        confirmation: { type: 'redirect', return_url: siteLink() },
+        capture: true,
+        description,
+        metadata,
+        receipt: {
+            customer: { email },
+            items: [{
+                description,
+                quantity: '1.00',
+                amount: { value: Number(amount).toFixed(2), currency: 'RUB' },
+                vat_code: Number(process.env.YOOKASSA_VAT_CODE || '1')
+            }]
+        }
+    }, {
+        auth: { username: shopId, password: secretKey },
+        headers: { 'Idempotence-Key': `${Date.now()}-${Math.random()}` },
+        timeout: 30000
+    });
+    return response.data && response.data.confirmation && response.data.confirmation.confirmation_url;
+}
+
+async function sendStatus(token, peerId, account) {
+    const balance = await db.getUserBalance(account);
+    const model = catalog.getModel((await db.getCurrentModel(account)) || catalog.defaultModelKey());
+    const empty = Number(balance) > 0 ? '' : '\n\nСейчас 0 кредитов. Нажмите «Пополнить». После оплаты они придут в этот чат.';
+    await sendText(token, peerId,
+        `НейроЯга во ВКонтакте.\n\nБаланс: ${balance} кр. Этот счёт только для ВК.\nМодель: ${model ? model.name : 'текст'}.${empty}\n\nКнопки внизу: Баланс, Модели, Пополнить. «Кабинет» открывает сайт. Дальше напишите запрос своими словами.`
+    );
+}
+
+async function sendHelp(token, peerId) {
+    await sendText(token, peerId,
+        'Кнопки под сообщением.\n\n«Баланс» — кредиты этого чата ВК. Они не общие с Telegram и сайтом.\n«Модели» — текст, картинки, видео или музыка.\n«Пополнить» — оплата, кредиты вернутся сюда.\n«Кабинет» — сайт с кабинетом.\n\nПосле выбора модели напишите запрос. Если модель просит фото, прикрепите его к тексту.'
+    );
+}
+
+async function openMenu(token, peerId, account, action) {
+    awaitingEmail.delete(account);
+    if (action === 'hello' || action === 'balance') return sendStatus(token, peerId, account);
+    if (action === 'help') return sendHelp(token, peerId);
+    if (action === 'models') {
+        const rows = groupButtons();
+        if (!rows.length) return sendText(token, peerId, 'Сейчас нет доступных моделей.');
+        return sendText(token, peerId, 'Выберите раздел.', inlineKeyboard(rows));
+    }
+    if (action === 'pay') {
+        const rows = packageButtons();
+        if (!rows.length) return sendText(token, peerId, `Пополнение в чате сейчас недоступно. Откройте кабинет: ${siteLink()}`);
+        return sendText(token, peerId, 'Выберите пакет. Кредиты придут в этот чат ВК.', inlineKeyboard(rows));
+    }
+}
+
+async function answerEvent(token, event, snackbar) {
+    const params = {
+        event_id: String(event.eventId || ''),
+        user_id: String(event.userId),
+        peer_id: String(event.peerId)
+    };
+    if (snackbar) params.event_data = JSON.stringify({ type: 'show_snackbar', text: String(snackbar).slice(0, 90) });
+    await call(token, 'messages.sendMessageEventAnswer', params);
+}
+
+async function reply(token, peerId, account, text, payload) {
+    const action = menuAction(text, payload);
+    if (action) return openMenu(token, peerId, account, action);
+    if (awaitingEmail.has(account)) {
+        const email = String(text || '').trim();
+        const pkg = catalog.getPackage(awaitingEmail.get(account));
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !pkg) {
+            await sendText(token, peerId, 'Для чека напишите почту одним сообщением. Или нажмите «Баланс», чтобы отменить.');
+            return;
+        }
+        awaitingEmail.delete(account);
+        let url = null;
+        try {
+            url = await createPayment(pkg.price, `Покупка ${pkg.title}`, email, { userId: String(account), credits: String(pkg.credits) });
+        } catch (error) {
+            url = null;
+        }
+        if (!url) {
+            await sendText(token, peerId, `Оплата из чата сейчас не открылась. Кабинет на сайте: ${siteLink()}`);
+            return;
+        }
+        await sendText(token, peerId, `Оплата ${pkg.title}. Кредиты придут в этот чат после платежа.\n${url}`);
         return;
     }
-    if (!text) return;
-    await sendText(token, peerId, 'Делаю ответ…');
+    if (!text) {
+        await sendText(token, peerId, 'Напишите запрос или нажмите кнопку внизу.');
+        return;
+    }
     try {
         const modelKey = (await db.getCurrentModel(account)) || catalog.defaultModelKey();
         const prepared = await gen.prepare({
@@ -105,6 +291,7 @@ async function reply(token, peerId, account, text) {
             hasImage: false,
             hasText: true
         });
+        await sendText(token, peerId, 'Делаю ответ…');
         const result = await gen.run({
             userId: account,
             prompt: text,
@@ -119,11 +306,50 @@ async function reply(token, peerId, account, text) {
         const answer = String(result.text || 'Готово').slice(0, 3200);
         await sendText(token, peerId, `${answer}\n\nСписано ${result.cost} кр. Осталось ${result.balance}.`);
     } catch (error) {
+        if (error && error.code === 'no_credits') {
+            await sendText(token, peerId, `${error.message}\n\nНажмите «Пополнить» внизу. Кредиты этого чата не берутся из Telegram.`);
+            return;
+        }
         await sendText(token, peerId, gen.userMessage(error));
     }
 }
 
+async function handleEvent(token, event) {
+    const account = accountId(event.userId);
+    if (!account) return;
+    const payload = event.payload || {};
+    let snackbar = '';
+    if (payload.m) {
+        const model = catalog.getModel(payload.m);
+        if (model) {
+            await db.setCurrentModel(account, model.key);
+            snackbar = `Выбрано: ${model.short}`;
+        }
+    } else if (payload.p) {
+        snackbar = 'Напишите почту для чека';
+    }
+    try { await answerEvent(token, event, snackbar); } catch (e) {}
+    await db.ensureUser(account, `vk:${event.userId}`);
+    if (payload.a) return openMenu(token, event.peerId, account, String(payload.a));
+    if (payload.g && catalog.GROUPS[payload.g]) {
+        return sendText(token, event.peerId, catalog.GROUPS[payload.g], inlineKeyboard(modelButtons(payload.g)));
+    }
+    if (payload.m) {
+        const model = catalog.getModel(payload.m);
+        if (!model) return sendText(token, event.peerId, 'Модель недоступна.');
+        return sendText(token, event.peerId, `${model.name}. ${catalog.priceLabel(model)}. Напишите запрос.`);
+    }
+    if (payload.p) {
+        const pkg = catalog.getPackage(payload.p);
+        if (!pkg) return sendText(token, event.peerId, 'Пакет недоступен.');
+        awaitingEmail.set(account, pkg.id);
+        return sendText(token, event.peerId, `Пакет «${pkg.title}», ${pkg.price} ₽. Напишите почту для чека.`);
+    }
+}
+
 async function handleUpdate(token, update) {
+    const event = readEvent(update);
+    if (event) return handleEvent(token, event);
     const incoming = readIncoming(update);
     if (!incoming) return;
     const account = accountId(incoming.fromId);
@@ -131,7 +357,16 @@ async function handleUpdate(token, update) {
     const { isNew } = await db.ensureUser(account, `vk:${incoming.fromId}`);
     const bonus = catalog.getGeneral().start_bonus;
     if (isNew && bonus > 0) await db.updateBalance(account, bonus, 'Приветственный бонус');
-    await reply(token, incoming.peerId, account, incoming.text);
+    await reply(token, incoming.peerId, account, incoming.text, incoming.payload);
+}
+
+async function notify(accountIdValue, message) {
+    const token = String(process.env.VK_GROUP_TOKEN || '').trim();
+    const id = Number(accountIdValue);
+    if (!token || !Number.isInteger(id) || id >= 0) return;
+    try {
+        await sendText(token, -id, message);
+    } catch (e) {}
 }
 
 async function poll(token, groupId) {
@@ -190,4 +425,6 @@ function startVk() {
     poll(token, groupId).catch(() => {});
 }
 
-module.exports = { accountId, readIncoming, isGreeting, connectHint, startVk };
+module.exports = {
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, connectHint, startVk, notify
+};
