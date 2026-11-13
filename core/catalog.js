@@ -5,6 +5,8 @@
 const GROUPS = {
     text: '💬 Текст',
     text_pro: '💬 Текст · сильнее',
+    cheap: '💚 Текст дешевле',
+    cheap_image: '💚 Картинки дешевле',
     image: '🖼 Картинки',
     video: '🎬 Видео · недорого',
     video_mid: '🎬 Видео',
@@ -23,6 +25,20 @@ const BASE_MODELS = [
     { key: 'flash', name: 'Чат Flash', short: 'Чат Flash', desc: 'Текст. Быстрые ответы, код и разбор фото', group: 'text', kind: 'text', provider: 'google', cost: 4, image: 'optional' },
     { key: 'flash_25', name: 'Чат Flash 2', short: 'Чат Flash 2', desc: 'Текст. Второй быстрый чат', group: 'text', kind: 'text', provider: 'google', cost: 4, image: 'optional' },
     { key: 'pro', name: 'Чат Pro', short: 'Чат Pro', desc: 'Текст. Длинные ответы, аналитика и код', group: 'text_pro', kind: 'text', provider: 'google', cost: 15, image: 'optional' },
+
+    // Kie.ai. Без KIE_API_KEY раздел скрыт. Длина текста ограничена в плагине.
+    { key: 'kie-deepseek', name: 'DeepSeek Flash', short: 'DeepSeek', desc: 'Дешёвый текст. Короткий ответ', group: 'cheap', kind: 'text', provider: 'kie', cost: 2, image: 'forbidden', kieChat: { style: 'responses', path: '/openai/v1/responses', model: 'deepseek-v4-1-flash', maxTokens: 800, maxChars: 3500 } },
+    { key: 'kie-haiku', name: 'Claude Haiku', short: 'Haiku', desc: 'Дешёвый текст. Короткий ответ', group: 'cheap', kind: 'text', provider: 'kie', cost: 2, image: 'forbidden', kieChat: { style: 'claude', path: '/claude/v1/messages', model: 'claude-haiku-5-5', maxTokens: 700, maxChars: 3500 } },
+    { key: 'kie-gemini', name: 'Gemini Pro дешевле', short: 'Gemini Pro', desc: 'Сильный текст, короче обычного Pro', group: 'cheap', kind: 'text', provider: 'kie', cost: 8, image: 'forbidden', kieChat: { style: 'openai', path: '/gemini-3.1-pro/v1/chat/completions', maxTokens: 800, maxChars: 2500 } },
+
+    { key: 'kie-flux', name: 'Flux Klein', short: 'Flux Klein', desc: 'Дешёвая картинка, можно с фото', group: 'cheap_image', kind: 'image', provider: 'kie', cost: 3, image: 'optional', ratio: true, aspects: ['1:1', '16:9', '9:16', '4:3', '3:4'], qualities: [{ id: '1K', name: '1K', desc: 'Самый дешёвый', cost: 3 }, { id: '2K', name: '2K', desc: 'Чётче', cost: 4 }, { id: '4K', name: '4K', desc: 'Крупно', cost: 10 }], quality: '1K', kieModel: 'flux-3/klein-text-to-image', kieEdit: 'flux-3/klein-edit-image', kieImage: 'image_urls', kieAspect: 'aspect_ratio', kieSize: 'resolution', kieExtra: { output_format: 'jpeg', num_images: 1, enhance_prompt: false } },
+    { key: 'kie-seedream', name: 'Seedream Flash', short: 'Seedream Flash', desc: 'Дешёвое фото, только 1K', group: 'cheap_image', kind: 'image', provider: 'kie', cost: 5, image: 'optional', ratio: true, aspects: ['1:1', '16:9', '9:16', '4:3', '3:4'], kieModel: 'seedream/5-flash-text-to-image', kieEdit: 'seedream/5-flash-image-to-image', kieImage: 'image_urls', kieAspect: 'aspect_ratio', kieSize: 'size', kieSizeValue: '1K', kieExtra: { output_format: 'jpeg', nsfw_checker: false } },
+    { key: 'kie-banana-lite', name: 'Nano Banana Lite', short: 'Banana Lite', desc: 'Дешёвая картинка, можно с фото', group: 'cheap_image', kind: 'image', provider: 'kie', cost: 6, image: 'optional', ratio: true, aspects: ['1:1', '16:9', '9:16', '4:3', '3:4'], kieModel: 'nano-banana-2-lite', kieEdit: 'nano-banana-2-lite', kieImage: 'image_urls', kieAspect: 'aspect_ratio' },
+    { key: 'kie-banana-21', name: 'Nano Banana 2.1', short: 'Banana 2.1', desc: 'Картинка дешевле обычной, можно с фото', group: 'cheap_image', kind: 'image', provider: 'kie', cost: 6, image: 'optional', ratio: true, aspects: ['1:1', '16:9', '9:16', '4:3', '3:4'], qualities: [{ id: '1K', name: '1K', desc: 'Обычный размер', cost: 6 }, { id: '2K', name: '2K', desc: 'Крупнее', cost: 9 }, { id: '4K', name: '4K', desc: 'Самый крупный', cost: 14 }], quality: '1K', kieModel: 'nano-banana-2-1', kieEdit: 'nano-banana-2-1', kieImage: 'image_input', kieAspect: 'aspect_ratio', kieSize: 'resolution', kieExtra: { output_format: 'jpg' } },
+    { key: 'kie-grok', name: 'Grok Image дешевле', short: 'Grok дешевле', desc: 'Дешёвая картинка, можно с фото', group: 'cheap_image', kind: 'image', provider: 'kie', cost: 6, image: 'optional', ratio: true, aspects: ['1:1', '16:9', '9:16', '3:2', '2:3'], kieModel: 'grok-imagine-image-2-0/text-to-image', kieEdit: 'grok-imagine-image-2-0/image-edit', kieImage: 'image_urls', kieAspect: 'aspect_ratio' },
+    { key: 'kie-ideogram', name: 'Ideogram быстрый', short: 'Ideogram', desc: 'Только текст, быстрый режим', group: 'cheap_image', kind: 'image', provider: 'kie', cost: 6, image: 'forbidden', ratio: true, aspects: ['1:1', '16:9', '9:16', '4:3', '3:4'], kieModel: 'ideogram/v3-text-to-image', kieAspect: 'image_size' },
+    { key: 'kie-gpt', name: 'GPT Image дешевле', short: 'GPT дешевле', desc: 'Текст на картинке дешевле обычного GPT', group: 'cheap_image', kind: 'image', provider: 'kie', cost: 9, image: 'optional', ratio: true, aspects: ['1:1', '4:3', '3:4', '3:2', '2:3'], qualities: [{ id: '1K', name: '1K', desc: 'Дешевле', cost: 9 }, { id: '2K', name: '2K', desc: 'Средний размер', cost: 15 }, { id: '4K', name: '4K', desc: 'Крупно', cost: 24 }], quality: '1K', kieModel: 'gpt-image-2-text-to-image', kieEdit: 'gpt-image-2-image-to-image', kieImage: 'input_urls', kieAspect: 'aspect_ratio', kieSize: 'resolution' },
+    { key: 'kie-banana-pro', name: 'Nano Banana Pro дешевле', short: 'Banana Pro', desc: 'Детальная картинка дешевле Картинки Pro', group: 'cheap_image', kind: 'image', provider: 'kie', cost: 27, image: 'optional', ratio: true, aspects: ['1:1', '16:9', '9:16', '4:3', '3:4'], qualities: [{ id: '1K', name: '1K', desc: 'Обычный размер', cost: 27 }, { id: '2K', name: '2K', desc: 'Крупнее', cost: 36 }], quality: '1K', kieModel: 'nano-banana-pro', kieEdit: 'nano-banana-pro', kieImage: 'image_input', kieAspect: 'aspect_ratio', kieSize: 'resolution', kieExtra: { output_format: 'jpg' } },
 
     { key: 'giga-lite', name: 'GigaChat 2 Lite', short: 'Giga Lite', desc: 'Бесплатно, лимит в день', group: 'free', kind: 'text', provider: 'giga', cost: 0, limit: 30, image: 'no' },
     { key: 'giga-pro', name: 'GigaChat 2 Pro', short: 'Giga Pro', desc: 'Текст. Цена задаётся в админке, 0 — бесплатно', group: 'text_pro', kind: 'text', provider: 'giga', cost: 0, limit: 10, image: 'no' },
@@ -117,6 +133,7 @@ let overrides = { models: {}, packages: null, general: {} };
 
 function defaultEnabled(m) {
     if (m.provider === 'giga') return !!process.env.GIGACHAT_AUTH_KEY;
+    if (m.provider === 'kie') return !!String(process.env.KIE_API_KEY || '').trim();
     return true;
 }
 

@@ -220,9 +220,10 @@ function startWebApp() {
             });
             res.json(result);
         } catch (e) {
-            console.error('API /api/generate:', e.message);
+            const shown = gen.userMessage(e);
+            if (shown === gen.QUIET_ERROR) db.note('gen', `кабинет: ${e.message}`).catch(() => {});
             const code = e.code === 'busy' ? 429 : 400;
-            res.status(code).json({ error: gen.userMessage(e) });
+            res.status(code).json({ error: shown });
         }
     });
 
@@ -436,7 +437,19 @@ function startWebApp() {
 
     // ---- Админка: модели / пакеты / общие настройки ----
     app.get('/api/admin/models', requireAdmin, (req, res) => {
-        res.json({ models: catalog.listModels({ includeDisabled: true }), groups: catalog.GROUPS });
+        res.json({
+            models: catalog.listModels({ includeDisabled: true }),
+            groups: catalog.GROUPS,
+            kie: !!String(process.env.KIE_API_KEY || '').trim()
+        });
+    });
+
+    app.get('/api/admin/journal', requireAdmin, async (req, res) => {
+        try {
+            res.json({ items: await db.listJournal(80) });
+        } catch (e) {
+            res.status(500).json({ error: 'Журнал недоступен' });
+        }
     });
 
     app.post('/api/admin/models', requireAdmin, async (req, res) => {

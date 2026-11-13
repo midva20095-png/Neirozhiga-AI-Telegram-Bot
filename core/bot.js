@@ -343,6 +343,7 @@ async function startBot(app) {
     try {
         await db.initDB();
         console.log('✅ База данных PostgreSQL инициализирована');
+        db.note('sys', 'Бот запущен').catch(() => {});
         try {
             const pending = await transferApi.resumePending();
             if (pending && pending.credited) console.log('✅ Доначислены кредиты с незавершённого переноса с сайта');
@@ -365,23 +366,36 @@ async function startBot(app) {
         app.get('/health', (req, res) => res.status(200).send('OK'));
         app.post('/yookassa-webhook', async (req, res) => {
             try {
-                const event = req.body;
-                if (event.event === 'payment.succeeded') {
-                    const metadata = event.object?.metadata;
-                    if (metadata && metadata.userId && metadata.credits) {
-                        const userId = metadata.userId;
-                        const creditsToAdd = parseInt(metadata.credits, 10);
-                        const newBalance = await db.updateBalance(userId, creditsToAdd, 'Пополнение ЮKassa');
-                        await bot.telegram.sendMessage(
-                            userId,
-                            `🎉 *Оплата успешно получена!*\n\n➕ Начислено: *${creditsToAdd} кредитов*\n💳 Баланс: *${newBalance} кредитов*`,
-                            { parse_mode: 'Markdown' }
-                        );
-                    }
+                const event = req.body || {};
+                if (event.event !== 'payment.succeeded') {
+                    await db.note('pay', `ЮKassa: ${event.event || 'пустое событие'}`);
+                    return res.status(200).send('OK');
+                }
+                const metadata = event.object?.metadata || {};
+                if (!metadata.userId || !metadata.credits) {
+                    await db.note('pay', 'ЮKassa: оплата прошла, но в платеже нет userId — кредиты бота не начислены');
+                    return res.status(200).send('OK');
+                }
+                const userId = metadata.userId;
+                const creditsToAdd = parseInt(metadata.credits, 10);
+                if (!Number.isFinite(creditsToAdd) || creditsToAdd <= 0) {
+                    await db.note('pay', 'ЮKassa: оплата прошла, сумма кредитов пустая');
+                    return res.status(200).send('OK');
+                }
+                const newBalance = await db.updateBalance(userId, creditsToAdd, 'Пополнение ЮKassa');
+                await db.note('pay', `ЮKassa: +${creditsToAdd} кр. пользователю ${userId}, баланс ${newBalance}`);
+                try {
+                    await bot.telegram.sendMessage(
+                        userId,
+                        `🎉 *Оплата успешно получена!*\n\n➕ Начислено: *${creditsToAdd} кредитов*\n💳 Баланс: *${newBalance} кредитов*`,
+                        { parse_mode: 'Markdown' }
+                    );
+                } catch (e) {
+                    await db.note('pay', `ЮKassa: кредиты начислены, сообщение в чат не ушло (${userId})`);
                 }
                 res.status(200).send('OK');
             } catch (error) {
-                console.error('❌ Ошибка вебхука ЮKassa:', error.message);
+                await db.note('pay', `ЮKassa: ошибка начисления — ${error.message}`);
                 res.status(500).send('Internal Server Error');
             }
         });
@@ -660,7 +674,7 @@ async function startBot(app) {
         const qualities = model.qualities || [];
         if (qualities.length > 1 && !job.quality) {
             const buttons = qualities.map(q => {
-                const price = q.perSec ? `${q.cost} кр/сек` : `${q.cost} кр`;
+                const price = q.perSec ? `${catalog.applyPrice(model, q.cost)} кр/сек` : `${catalog.quote(model, { quality: q.id })} кр`;
                 return Markup.button.callback(`${q.name} · ${price}`, `optq_${q.id}`);
             });
             buttons.push(Markup.button.callback('❌ Отмена', 'optq_cancel'));
@@ -756,7 +770,9 @@ async function startBot(app) {
             try { await ctx.deleteMessage(waitMessage.message_id); } catch (e) {}
             await sendResult(ctx, result, notes.length ? notes.join(' | ') + ' | ' : '');
         } catch (error) {
-            console.error('❌ Ошибка генерации:', error.message || error);
+            const { QUIET_ERROR } = gen;
+            const shown = gen.userMessage(error);
+            if (shown === QUIET_ERROR) db.note('gen', `${job.modelKey}: ${error.message || 'ошибка'}`).catch(() => {});
             try { await ctx.deleteMessage(waitMessage.message_id); } catch (e) {}
             if (error.code === 'no_credits') return notLowBalance(ctx, prepared.model, prepared.price);
             await ctx.reply(`⚠️ ${gen.userMessage(error)}`);
