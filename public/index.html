@@ -114,7 +114,7 @@ input{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1
 <script>
 const KIND = {text:'Текст', image:'Картинка', video:'Видео', audio:'Музыка'};
 let tab='gen', me=null, cfg=null, templates=[], works=null, worksLoading=false, userId=null, token=null, busy=false, last=null;
-let openTpl=null, photoData=null, pickedFormat=null, genPhoto=null, draft='', pendingTpl='';
+let openTpl=null, photoData=null, pickedFormat=null, genPhoto=null, draft='', pendingTpl='', pendingPkg='';
 let tplCat='', tplQuery='';
 const TCAT = {image:'Картинки', fix:'Улучшение', chat:'Текст', video:'Видео', audio:'Голос'};
 const TMARK = {image:'🪄', fix:'✨', chat:'✍️', video:'🎬', audio:'🎙'};
@@ -141,6 +141,7 @@ function detectAuth(){
   if (hp.get('tk')) token = hp.get('tk');
   else if (sp.get('tk')) token = sp.get('tk');
   if (hp.get('tpl') || sp.get('tpl')) pendingTpl = hp.get('tpl') || sp.get('tpl');
+  if (hp.get('pkg') || sp.get('pkg')) pendingPkg = hp.get('pkg') || sp.get('pkg');
   window.__vkPaid = hp.get('paid') === '1' || sp.get('paid') === '1';
   if (w && w.initDataUnsafe && w.initDataUnsafe.user && w.initDataUnsafe.user.id) userId = w.initDataUnsafe.user.id;
   else if (w && w.initData) userId = parseUser(w.initData);
@@ -239,6 +240,7 @@ async function load(){
     openTpl = pendingTpl;
     pendingTpl = '';
   }
+  if (pendingPkg) tab = 'top';
   document.getElementById('bal').textContent = (me.balance||0)+' кр';
   draw();
 }
@@ -386,8 +388,11 @@ function viewTop(){
   const head = paid+'<div class="card"><div class="now">Текущий баланс</div><div id="topbal" style="font-size:28px;font-weight:800">'+((me&&me.balance)||0)+' кр</div></div>';
   if (isVk()) {
     if (!packs.length) return head+'<div class="card"><div class="empty">Пакеты недоступны.</div></div>';
-    return head+'<div class="groupttl">Пополнение этого чата ВК</div><div class="card"><input id="paymail" type="email" inputmode="email" autocomplete="email" placeholder="почта для чека">'+
-      packs.map(p=>'<div class="pack"><div><div class="name">'+esc(p.title)+'</div><div class="meta">'+p.credits+' кредитов</div></div><button data-pkg="'+esc(p.id)+'">'+p.price+' ₽</button></div>').join('')+
+    const chosen = packs.filter(function(p){ return String(p.id)===String(pendingPkg); })[0];
+    const list = chosen ? [chosen].concat(packs.filter(function(p){ return p!==chosen; })) : packs;
+    const lead = chosen ? '<div class="now">К оплате: <b>'+esc(chosen.title)+'</b> · '+chosen.credits+' кредитов · '+chosen.price+' ₽</div>' : '';
+    return head+'<div class="groupttl">Пополнение этого чата ВК</div><div class="card">'+lead+'<input id="paymail" type="email" inputmode="email" autocomplete="email" placeholder="почта для чека">'+
+      list.map(p=>'<div class="pack"><div><div class="name">'+esc(p.title)+'</div><div class="meta">'+p.credits+' кредитов</div></div><button data-pkg="'+esc(p.id)+'">'+p.price+' ₽</button></div>').join('')+
       '<p class="hint">Оплата откроется отдельным окном: ЮMoney не работает внутри окна ВК. После оплаты кредиты придут в этот кабинет и в чат.</p></div>';
   }
   const move = '<div class="card"><div class="now">Перенос на сайт</div>'+
@@ -443,6 +448,8 @@ function bind(){
   if (tq) tq.oninput = function(){ tplQuery = tq.value; const pos = tq.selectionStart; draw(); const again = document.getElementById('tq'); if (again){ again.focus(); try{ again.setSelectionRange(pos, pos); }catch(e){} } };
   document.querySelectorAll('[data-fmt]').forEach(b=>b.onclick=()=>{ pickedFormat=b.dataset.fmt; draw(); });
   document.querySelectorAll('[data-pkg]').forEach(b=>b.onclick=()=>buy(b.dataset.pkg));
+  const paymail = document.getElementById('paymail');
+  if (paymail && pendingPkg) paymail.focus();
   const back=document.getElementById('back'); if (back) back.onclick=()=>{ openTpl=null; photoData=null; last=null; draw(); };
   const file=document.getElementById('file'); if (file) file.onchange=()=>onPhoto(file);
   const goTpl=document.getElementById('goTpl'); if (goTpl) goTpl.onclick=generateTemplate;
