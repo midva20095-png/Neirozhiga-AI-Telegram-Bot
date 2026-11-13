@@ -85,7 +85,7 @@ function decodeImage(input) {
 }
 
 function vkPageOrigin(origin) {
-    return /^https:\/\/([a-z0-9-]+\.)*(vk\.com|vk\.ru|vk-apps\.com|vkuser\.net|userapi\.com)$/i.test(String(origin || ''));
+    return /^https:\/\/([a-z0-9-]+\.)*(vk\.com|vk\.ru|vk-apps\.com|vk-apps\.ru|vkuser\.net|userapi\.com)$/i.test(String(origin || ''));
 }
 
 function startWebApp() {

@@ -7,6 +7,7 @@ test('кабинет на хостинге ВК может обращаться 
     assert.equal(vkPageOrigin('https://vk.ru'), true);
     assert.equal(vkPageOrigin('https://m.vk.ru'), true);
     assert.equal(vkPageOrigin('https://prod-app54895627-abc.pages.vk-apps.com'), true);
+    assert.equal(vkPageOrigin('https://prod-app54895627-13f25f9efcb2.pages-ac.vk-apps.ru'), true);
     assert.equal(vkPageOrigin('https://static.userapi.com'), true);
     assert.equal(vkPageOrigin('https://evilvk.com'), false);
     assert.equal(vkPageOrigin('https://vk.com.evil.com'), false);
