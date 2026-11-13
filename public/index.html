@@ -205,7 +205,21 @@ async function loadConfig(){
   const s = document.getElementById('site');
   if (cfg.site_url){ s.href = cfg.site_url; s.style.display=''; } else s.style.display='none';
 }
+async function adoptVkLaunch(){
+  if (token) return;
+  const sp = new URLSearchParams(location.search);
+  if (!sp.get('sign') || !sp.get('vk_user_id')) return;
+  try {
+    const r = await fetch('/api/vk/session' + location.search);
+    const d = await r.json();
+    if (d && d.tk) {
+      token = d.tk;
+      userId = String(token).split('.')[0];
+    } else if (d && d.error) window.__vkAuthError = d.error;
+  } catch (e) {}
+}
 async function load(){
+  await adoptVkLaunch();
   if (!userId) { draw(); return; }
   try {
     const r = await fetch('/api/me', {headers: authHeaders()});
@@ -232,7 +246,7 @@ function draw(){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.t===tab));
   const box = document.getElementById('view');
   if (!userId || (me && !me.user_id && me.error!==true && !me.balance)) {
-    box.innerHTML = '<div class="card"><p class="empty">Откройте кабинет кнопкой «Кабинет» в боте — ссылка из обычного браузера не передаёт аккаунт Telegram.</p></div>';
+    box.innerHTML = '<div class="card"><p class="empty">Откройте кабинет кнопкой «Кабинет» в боте.</p>'+(window.__vkAuthError?'<p class="err">'+esc(window.__vkAuthError)+'</p>':'')+'</div>';
     return;
   }
   if (me && me.channel) {
