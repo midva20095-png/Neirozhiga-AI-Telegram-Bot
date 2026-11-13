@@ -116,13 +116,19 @@ function urlOk(value) {
 
 async function downloadImage(axios, fileUrl) {
     if (!urlOk(fileUrl)) throw new Error('Пустая картинка. Кредиты не списаны.');
-    const file = await axios.get(fileUrl, {
-        responseType: 'arraybuffer',
-        timeout: 60000,
-        maxRedirects: 2,
-        maxContentLength: 12 * 1024 * 1024
-    });
-    const buffer = Buffer.from(file.data);
+    let file;
+    try {
+        file = await axios.get(fileUrl, {
+            responseType: 'arraybuffer',
+            timeout: 120000,
+            maxRedirects: 3,
+            maxContentLength: 40 * 1024 * 1024,
+            maxBodyLength: 40 * 1024 * 1024
+        });
+    } catch (e) {
+        throw new Error('Картинку не удалось забрать. Кредиты не списаны.');
+    }
+    const buffer = Buffer.from(file.data || []);
     if (!buffer.length) throw new Error('Пустая картинка. Кредиты не списаны.');
     return buffer;
 }

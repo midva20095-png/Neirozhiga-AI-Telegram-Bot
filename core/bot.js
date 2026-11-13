@@ -312,7 +312,17 @@ async function createYookassaPayment(amount, description, email, metadata) {
 async function sendResult(ctx, result, extra) {
     const suffix = `${extra || ''}💳 Списано: ${result.cost} кр. | Остаток: ${result.balance} кр.`;
     if (result.buffer && result.type === 'image') {
-        await ctx.replyWithPhoto({ source: result.buffer }, { caption: `${result.text || ''}\n\n${suffix}` });
+        const caption = `${result.text || ''}\n\n${suffix}`.trim();
+        const file = { source: result.buffer, filename: 'neuroyaga.png' };
+        if (result.buffer.length > 9 * 1024 * 1024) {
+            await ctx.replyWithDocument(file, { caption });
+        } else {
+            try {
+                await ctx.replyWithPhoto({ source: result.buffer }, { caption });
+            } catch (e) {
+                await ctx.replyWithDocument(file, { caption });
+            }
+        }
     } else if (result.buffer && result.type === 'video') {
         await ctx.replyWithVideo({ source: result.buffer }, { caption: `${result.text || ''}\n\n${suffix}` });
     } else if (result.buffer && result.type === 'audio') {

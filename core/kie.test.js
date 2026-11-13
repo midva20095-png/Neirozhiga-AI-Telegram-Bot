@@ -26,7 +26,7 @@ test('без ключа Kie раздел скрыт, Google и Братуха н
 test('цены Kie фиксированы и чужой размер не проходит', () => {
     assert.equal(catalog.quote(model('kie-deepseek'), {}), 2);
     assert.equal(catalog.quote(model('kie-haiku'), {}), 2);
-    assert.equal(catalog.quote(model('kie-gemini'), {}), 8);
+    assert.equal(catalog.getModel('kie-gemini', { includeDisabled: true }), null);
     assert.equal(catalog.quote(model('kie-flux'), { quality: '1K' }), 3);
     assert.equal(catalog.quote(model('kie-flux'), { quality: '2K' }), 4);
     assert.equal(catalog.quote(model('kie-flux'), { quality: '4K' }), 10);
@@ -87,12 +87,12 @@ test('текст Kie ограничен по длине и не включает
     assert.equal(haiku.body.max_tokens, 700);
     assert.equal(haiku.body.model, 'claude-haiku-5-5');
 
-    const gem = kie.buildChat(model('kie-gemini'), 'привет');
+    const gem = kie.buildChat({ kieChat: { style: 'openai', path: '/gemini-3.1-pro/v1/chat/completions', maxTokens: 800, maxChars: 2500 } }, 'привет');
     assert.equal(gem.path, '/gemini-3.1-pro/v1/chat/completions');
     assert.equal(gem.body.model, undefined);
     assert.equal(gem.body.reasoning_effort, 'low');
     assert.equal(gem.body.max_tokens, 800);
-    assert.equal(kie.promptTooLong(model('kie-gemini'), 'я'.repeat(2501)), true);
+    assert.equal(kie.promptTooLong({ kieChat: { maxChars: 2500 } }, 'я'.repeat(2501)), true);
 
     const text = kie.textFromResponse('responses', {
         output: [
@@ -106,6 +106,8 @@ test('текст Kie ограничен по длине и не включает
 
     const task = kie.taskView({ data: { state: 'success', resultJson: '{"resultUrls":["https://cdn.example/out.jpg"]}' } });
     assert.deepEqual(task.urls, ['https://cdn.example/out.jpg']);
+    const nested = kie.taskView({ data: { state: 'success', resultJson: '{"imageUrl":"https://cdn.example/4k.png"}' } });
+    assert.deepEqual(nested.urls, ['https://cdn.example/4k.png']);
     assert.equal(kie.taskView({ data: { state: 'fail', failMsg: 'плохо' } }).state, 'fail');
     assert.match(kie.explainFailure('The request was blocked by content moderation.'), /проверку/);
     assert.match(kie.explainFailure('Your input was rejected. Please try again with a different input.'), /не приняла/);
