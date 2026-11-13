@@ -30,7 +30,7 @@ test('из события ВК берётся только входящий те
 test('меню ВК открывает кабинет и не считает кнопки запросом', () => {
     const menu = JSON.parse(vk.mainMenu());
     const labels = menu.buttons.flat().map(button => button.action.label);
-    assert.deepEqual(labels, ['Баланс', 'Модели', 'Пополнить', 'Кабинет', 'Справка']);
+    assert.deepEqual(labels, ['Баланс', 'Модели', 'Пополнить', 'Кабинет', 'Перенос', 'Справка']);
     assert.equal(menu.buttons[1][1].action.link, 'https://babayagaland.ru');
     process.env.WEBAPP_URL = 'https://bot.example';
     const personal = JSON.parse(vk.mainMenu(10));
@@ -60,6 +60,7 @@ test('меню ВК открывает кабинет и не считает к�
     assert.equal(vk.menuAction('Картинки', { g: 'image' }), 'group');
     assert.equal(vk.menuAction('Чат', { m: 'flash' }), 'model');
     assert.equal(vk.menuAction('Пополнить'), 'pay');
+    assert.equal(vk.menuAction('Перенос'), 'move');
     assert.equal(vk.menuAction('', { command: 'start' }), 'hello');
     assert.equal(vk.menuAction('нарисуй кота'), '');
     const event = vk.readEvent({

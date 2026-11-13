@@ -13,6 +13,7 @@ const vk = require('./vk');
 const bridge = require('./bridge');
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 16 * 60 * 1000 });
+vk.setTelegramNotify((id, text) => bot.telegram.sendMessage(id, text));
 
 const userAwaitingEmail = new Map();
 const userAwaitingSupport = new Map();
@@ -26,7 +27,7 @@ const MENU_TEXTS = [
     '✨ Модель', '🤖 Модель', '🤖 Выбрать модель ИИ', '🤖 Сменить модель', '🤖 Модели',
     '💳 Мой баланс', '💳 Баланс',
     '💰 Пополнить', '💰 Пополнить баланс', '➕ Пополнить',
-    '↔️ Перенос', 'Перенос',
+    '↔️ Перенос', 'Перенос', 'Во ВК',
     '📢 Канал', 'Канал',
     'Ещё боты', 'Еще боты',
     'Сайт',
@@ -62,7 +63,7 @@ function mainKeyboard(userId) {
         [Markup.button.webApp('📱 Кабинет', webappUrlFor(userId))],
         ['✨ Модель', '💳 Баланс'],
         ['➕ Пополнить', '↔️ Перенос'],
-        ['📢 Канал'],
+        ['Во ВК', '📢 Канал'],
         ['Ещё боты', 'Сайт'],
         ['💬 Поддержка', '❓ Справка']
     ]).resize().persistent().placeholder('Напишите запрос или пришлите фото');
@@ -103,6 +104,16 @@ async function openSharedTemplate(ctx, id) {
     } else {
         await ctx.reply(caption, keyboard);
     }
+}
+
+async function beginVkMove(ctx) {
+    userAwaitingEmail.delete(ctx.from.id);
+    userAwaitingSupport.delete(ctx.from.id);
+    userTransfer.set(ctx.from.id, { dir: 'vk', step: 'id' });
+    await ctx.reply(
+        `Во ВКонтакте отдельный баланс.\nВаш номер в Telegram: ${ctx.from.id}\nЕго вписывают в чате ВК кнопкой «Перенос», чтобы прислать кредиты сюда.\n\nНапишите номер ВК. Он показан в чате ВК после кнопки «Перенос».`,
+        Markup.inlineKeyboard([[Markup.button.callback('Отмена', 'transfer_cancel')]])
+    );
 }
 
 async function showTransferMenu(ctx) {
@@ -656,6 +667,10 @@ async function startBot(app) {
         await showTransferMenu(ctx);
     });
 
+    bot.hears('Во ВК', async (ctx) => {
+        await beginVkMove(ctx);
+    });
+
     bot.hears(['📢 Канал', 'Канал'], async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
@@ -719,13 +734,7 @@ async function startBot(app) {
 
     bot.action('vk_move_start', async (ctx) => {
         await ctx.answerCbQuery();
-        userAwaitingEmail.delete(ctx.from.id);
-        userAwaitingSupport.delete(ctx.from.id);
-        userTransfer.set(ctx.from.id, { dir: 'vk', step: 'id' });
-        await ctx.reply(
-            `Во ВКонтакте отдельный баланс.\nВаш номер в Telegram: ${ctx.from.id}\nЕго вписывают в кабинете ВК на вкладке «Баланс», чтобы прислать кредиты сюда.\n\nНапишите номер ВК со вкладки «Баланс».`,
-            Markup.inlineKeyboard([[Markup.button.callback('Отмена', 'transfer_cancel')]])
-        );
+        await beginVkMove(ctx);
     });
 
     bot.action('vk_move_yes', async (ctx) => {

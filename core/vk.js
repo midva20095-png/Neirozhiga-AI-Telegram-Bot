@@ -76,6 +76,7 @@ function menuAction(text, payload) {
     if (value === 'баланс') return 'balance';
     if (value === 'модели' || value === 'модель') return 'models';
     if (value === 'пополнить') return 'pay';
+    if (value === 'перенос') return 'move';
     if (value === 'справка' || value === 'помощь') return 'help';
     return '';
 }
@@ -119,6 +120,7 @@ function mainMenu(peerId) {
                 cabinetButton(peerId)
             ],
             [
+                { action: { type: 'text', label: 'Перенос', payload: '{"a":"move"}' }, color: 'primary' },
                 { action: { type: 'text', label: 'Справка', payload: '{"a":"help"}' }, color: 'secondary' }
             ]
         ]
@@ -126,6 +128,12 @@ function mainMenu(peerId) {
 }
 
 const pendingPay = new Map();
+const pendingMove = new Map();
+let tellTelegram = async () => {};
+
+function setTelegramNotify(fn) {
+    if (typeof fn === 'function') tellTelegram = fn;
+}
 
 function emailOk(value) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
@@ -133,6 +141,13 @@ function emailOk(value) {
 
 function payLockKeyboard() {
     return asBoard([[textButton('Назад', { a: 'pay_back' }, 'secondary')]]);
+}
+
+function moveConfirmKeyboard() {
+    return asBoard([
+        [textButton('Перенести', { a: 'move_yes' }, 'positive')],
+        [textButton('Назад', { a: 'pay_back' }, 'secondary')]
+    ]);
 }
 
 function payLinkKeyboard(url) {
@@ -318,13 +333,13 @@ const USER_HELP = [
     '3. Ответ придёт в этот чат. Картинки также лежат в кабинете, вкладка «История».',
     '',
     'Как пополнить',
-    '1. Нажмите «Пополнить» здесь или кнопку «Пополнить» на вкладке «Баланс» в кабинете.',
+    '1. Нажмите «Пополнить» внизу или на вкладке «Баланс» в кабинете.',
     '2. Выберите пакет. Останутся только пакеты и «Назад».',
     '3. Напишите почту для чека одним сообщением.',
     '4. Нажмите «Оплатить». Если ВК спросит, подтвердите переход: откроется страница банка.',
     '5. После оплаты кредиты придут в этот чат. «Назад» возвращает меню.',
     '',
-    'Баланс ВК и Telegram разные. Перенос — на вкладке «Баланс» в кабинете. Ваш номер ВК указан там же: его вводят в Telegram, кнопка «Перенос» → «Во ВК».'
+    'Баланс ВК и Telegram разные. Кнопка «Перенос» внизу отправляет кредиты в Telegram. Чтобы получить кредиты из Telegram, там нажмите «Во ВК» и впишите номер, который бот покажет после «Перенос».'
 ].join('\n');
 
 async function sendHelp(token, peerId) {
@@ -412,15 +427,84 @@ async function holdPayment(token, peerId, account, text, action) {
     return true;
 }
 
+async function holdMove(token, peerId, account, text, action) {
+    const key = String(account);
+    const pending = pendingMove.get(key);
+    if (!pending) return false;
+    if (action === 'move_yes') {
+        if (pending.stage !== 'confirm' || !pending.to || !(pending.amount > 0)) {
+            await sendText(token, peerId, 'Сначала напишите номер Telegram.', payLockKeyboard());
+            return true;
+        }
+        const moved = await bridge.moveCredits(db, {
+            fromId: key,
+            toId: pending.to,
+            amount: pending.amount,
+            takeReason: `Перенос в Telegram ${pending.to}`,
+            giveReason: 'Перенос из ВК'
+        });
+        pendingMove.delete(key);
+        if (!moved.ok) {
+            await sendText(token, peerId, `${moved.error}\n\nВы в меню.`, mainMenu(peerId));
+            return true;
+        }
+        await sendText(token, peerId, `Перенесли ${pending.amount} кр. в Telegram. Здесь осталось ${moved.balance} кр.`, mainMenu(peerId));
+        try { await tellTelegram(pending.to, `Из ВК перенесли ${pending.amount} кр. Они уже на балансе Telegram.`); } catch (e) {}
+        return true;
+    }
+    const board = pending.stage === 'confirm' ? moveConfirmKeyboard() : payLockKeyboard();
+    if (action) {
+        await sendText(token, peerId, 'Сейчас перенос. Напишите данные или нажмите «Назад».', board);
+        return true;
+    }
+    if (pending.stage === 'who') {
+        const raw = String(text || '').trim();
+        let to = /^\d{5,15}$/.test(raw) ? raw : '';
+        if (!to) {
+            const found = await db.findTelegramUser(raw);
+            if (found && found.ambiguous) {
+                await sendText(token, peerId, 'Таких имён несколько. Напишите номер из Telegram.', payLockKeyboard());
+                return true;
+            }
+            if (found) to = String(found.user_id);
+        }
+        if (!to || Number(to) <= 0) {
+            await sendText(token, peerId, 'Это не номер Telegram. Напишите число или @имя, либо нажмите «Назад».', payLockKeyboard());
+            return true;
+        }
+        pending.to = to;
+        pending.stage = 'amount';
+        const balance = await db.getUserBalance(account);
+        await sendText(token, peerId, `Номер Telegram: ${to}\nНа балансе ${balance} кр.\nНапишите, сколько перенести.`, payLockKeyboard());
+        return true;
+    }
+    const amount = bridge.amountOf(text);
+    const balance = await db.getUserBalance(account);
+    if (!amount) {
+        await sendText(token, peerId, 'Напишите целое число кредитов или нажмите «Назад».', payLockKeyboard());
+        return true;
+    }
+    if (amount > balance) {
+        await sendText(token, peerId, `На балансе ${balance} кр. — больше перенести нельзя.`, payLockKeyboard());
+        return true;
+    }
+    pending.amount = amount;
+    pending.stage = 'confirm';
+    await sendText(token, peerId, `Перенести ${amount} кр. в Telegram ${pending.to}?`, moveConfirmKeyboard());
+    return true;
+}
+
 async function reply(token, peerId, account, text, payload) {
     const action = menuAction(text, payload);
     if (action === 'pay_back') {
         pendingPay.delete(String(account));
+        pendingMove.delete(String(account));
         return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId));
     }
     if (action === 'pack') {
         const pkg = catalog.getPackage(payload && payload.p);
         if (!pkg) return sendText(token, peerId, 'Пакет недоступен.');
+        pendingMove.delete(String(account));
         pendingPay.set(String(account), { stage: 'email', pkgId: pkg.id });
         return sendText(
             token,
@@ -429,7 +513,19 @@ async function reply(token, peerId, account, text, payload) {
             payLockKeyboard()
         );
     }
+    if (action === 'move') {
+        pendingPay.delete(String(account));
+        pendingMove.set(String(account), { stage: 'who' });
+        const shown = String(account).replace(/^-/, '');
+        return sendText(
+            token,
+            peerId,
+            `Перенос в Telegram.\n\nВаш номер ВК: ${shown}. В Telegram нажмите «Во ВК» и впишите этот номер, чтобы прислать кредиты сюда.\n\nЧтобы отправить кредиты в Telegram, напишите номер или @имя. Другие кнопки скрыты. «Назад» возвращает меню.`,
+            payLockKeyboard()
+        );
+    }
     if (await holdPayment(token, peerId, account, text, action)) return;
+    if (await holdMove(token, peerId, account, text, action)) return;
     if (action === 'group') {
         if (!payload || !catalog.GROUPS[payload.g]) return sendText(token, peerId, 'Раздел недоступен.');
         return sendText(token, peerId, `${catalog.GROUPS[payload.g]}. Выберите модель внизу.`, modelKeyboard(payload.g));
@@ -599,5 +695,5 @@ function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, connectHint, startVk, notify, sendToUser, askTopup, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, connectHint, startVk, notify, sendToUser, askTopup, setTelegramNotify, USER_HELP
 };
