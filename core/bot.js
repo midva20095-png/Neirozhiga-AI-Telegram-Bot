@@ -9,6 +9,7 @@ const transferApi = require('./transfer');
 const channel = require('./channel');
 const share = require('./share');
 const templatesSrc = require('./templates');
+const vk = require('./vk');
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 16 * 60 * 1000 });
 
@@ -453,14 +454,19 @@ async function startBot(app) {
                 }
                 const newBalance = await db.updateBalance(userId, creditsToAdd, 'Пополнение ЮKassa');
                 await db.note('pay', `ЮKassa: +${creditsToAdd} кр. пользователю ${userId}, баланс ${newBalance}`);
-                try {
-                    await bot.telegram.sendMessage(
-                        userId,
-                        `🎉 *Оплата успешно получена!*\n\n➕ Начислено: *${creditsToAdd} кредитов*\n💳 Баланс: *${newBalance} кредитов*`,
-                        { parse_mode: 'Markdown' }
-                    );
-                } catch (e) {
-                    await db.note('pay', `ЮKassa: кредиты начислены, сообщение в чат не ушло (${userId})`);
+                const paidText = `Оплата получена. Начислено ${creditsToAdd} кр. Баланс: ${newBalance} кр.`;
+                if (String(userId).startsWith('-')) {
+                    await vk.notify(userId, paidText);
+                } else {
+                    try {
+                        await bot.telegram.sendMessage(
+                            userId,
+                            `🎉 *Оплата успешно получена!*\n\n➕ Начислено: *${creditsToAdd} кредитов*\n💳 Баланс: *${newBalance} кредитов*`,
+                            { parse_mode: 'Markdown' }
+                        );
+                    } catch (e) {
+                        await db.note('pay', `ЮKassa: кредиты начислены, сообщение в чат не ушло (${userId})`);
+                    }
                 }
                 res.status(200).send('OK');
             } catch (error) {
