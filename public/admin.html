@@ -8,7 +8,7 @@
 <style>
 :root{--bg:#0b0614;--card:#140c24;--text:#f3efff;--mut:#a79cc4;--line:rgba(255,255,255,.12)}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 Manrope,sans-serif;padding:16px;max-width:960px;margin:0 auto}
+body{margin:0 auto;background:var(--bg);color:var(--text);font:15px/1.45 Manrope,sans-serif;padding:16px 16px calc(20px + env(safe-area-inset-bottom,0px));max-width:960px}
 h1{font-family:Unbounded,sans-serif;font-size:22px;margin:0 0 4px}
 h1 i{font-style:normal;background:linear-gradient(135deg,#00ffe0,#b366ff,#ff2d95);-webkit-background-clip:text;background-clip:text;color:transparent}
 h3{margin:0 0 10px}
@@ -25,7 +25,7 @@ button{cursor:pointer;border:0;border-radius:12px;padding:10px 14px;font-weight:
 table{width:100%;border-collapse:collapse;font-size:14px}
 th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
 th{color:var(--mut);font-size:12px}
-.tabs{display:flex;gap:6px;margin:12px 0;flex-wrap:wrap}
+.tabs{display:flex;gap:6px;margin:12px 0;flex-wrap:wrap;overflow-x:auto}
 .tabs button{padding:8px 12px}
 .tabs button.off{background:transparent;border:1px solid var(--line)}
 .ok{color:#3ee08f;font-weight:800}.bad{color:#ff8fb0;font-weight:800}
