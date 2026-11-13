@@ -16,8 +16,10 @@ button,textarea,input,select{font:inherit;color:inherit}
 .logo{font-family:Unbounded,sans-serif;font-weight:700;font-size:18px;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;flex:1}
 .bal{font-weight:800;border:1px solid var(--line);border-radius:12px;padding:6px 10px;white-space:nowrap}
 .site{text-decoration:none;color:#fff;border:1px solid var(--line);border-radius:12px;padding:6px 10px;font-size:13px}
-.bots{display:flex;gap:8px;margin:-2px 0 10px}
-.bots a{flex:1;text-align:center;text-decoration:none;color:#fff;border:1px solid var(--line);border-radius:12px;padding:8px 10px;font-weight:800;font-size:13px}
+.bots{margin:-2px 0 10px}
+.bots .lbl{color:var(--mut);font-size:12px;font-weight:800;margin:0 2px 6px}
+.bots .row{display:flex;gap:8px}
+.bots a{flex:1;text-align:center;text-decoration:none;color:#fff;border:1px solid var(--line);border-radius:12px;padding:8px 6px;font-weight:800;font-size:13px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
 textarea{width:100%;min-height:120px;border-radius:14px;border:1px solid var(--line);background:#1c1233;padding:12px;outline:none;resize:vertical}
 .btn{width:100%;border:0;border-radius:14px;padding:14px;font-weight:800;color:#fff;background:var(--grad);margin-top:10px}
@@ -92,8 +94,12 @@ input{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1
     <a class="site" id="site" href="#" target="_blank">Сайт</a>
   </div>
   <div class="bots">
-    <a href="https://vk.ru/write-236645486" data-out="https://vk.ru/write-236645486">ВК</a>
-    <a href="https://max.ru/se14387925_bot" data-out="https://max.ru/se14387925_bot">Макс</a>
+    <div class="lbl">Ещё боты</div>
+    <div class="row">
+      <a href="https://vk.ru/write-236645486" data-out="https://vk.ru/write-236645486">Бот ВК</a>
+      <a href="https://max.ru/se14387925_bot" data-out="https://max.ru/se14387925_bot">Бот Макс</a>
+      <a href="https://babayagaland.ru" data-out="https://babayagaland.ru">Сайт</a>
+    </div>
   </div>
   <div id="view"></div>
 </div>
@@ -376,9 +382,10 @@ function viewTop(){
 }
 function viewHelp(){
   if (cfg && cfg.support_enabled===false) return '<div class="card"><div class="empty">Поддержка временно недоступна.</div></div>';
-  return '<div class="card"><div class="now">Те же боты в других местах</div>'+
-    '<a class="btn ghost" href="https://vk.ru/write-236645486" data-out="https://vk.ru/write-236645486">ВКонтакте</a>'+
-    '<a class="btn ghost" href="https://max.ru/se14387925_bot" data-out="https://max.ru/se14387925_bot">Макс</a></div>'+
+  return '<div class="card"><div class="now">Ещё боты. Им можно писать, это не сообщества.</div>'+
+    '<a class="btn ghost" href="https://vk.ru/write-236645486" data-out="https://vk.ru/write-236645486">Бот во ВКонтакте</a>'+
+    '<a class="btn ghost" href="https://max.ru/se14387925_bot" data-out="https://max.ru/se14387925_bot">Бот в Макс</a>'+
+    '<a class="btn ghost" href="https://babayagaland.ru" data-out="https://babayagaland.ru">Сайт babayagaland.ru</a></div>'+
     '<div class="card"><div class="now">Напишите нам — ответ придёт в чат бота.</div>'+
     '<textarea id="supmsg" placeholder="Опишите вопрос или проблему"></textarea>'+
     '<button class="btn" id="supsend">Отправить</button><p id="supok" class="hint"></p></div>';

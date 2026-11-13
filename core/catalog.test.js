@@ -163,8 +163,10 @@ test('справка в боте объясняет кнопки и не сод�
     assert.match(text, /На сайт/);
     assert.match(text, /С сайта/);
     assert.match(text, /Поддержка/);
+    assert.match(text, /Ещё боты/);
     assert.match(text, /https:\/\/vk\.ru\/write-236645486/);
     assert.match(text, /https:\/\/max\.ru\/se14387925_bot/);
+    assert.match(text, /https:\/\/babayagaland\.ru/);
     assert.ok(text.length < 3900);
     assert.equal(/kie|railway|api[_ -]?key|себестоимость|оптом|\$0/i.test(text), false);
 });
