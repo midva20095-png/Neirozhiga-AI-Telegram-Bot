@@ -60,14 +60,24 @@ async function uploadImage(axios, key, buffer, mimeType) {
     return url;
 }
 
+function failureError(text, fallback) {
+    const message = kie.explainFailure(text);
+    if (message) return userError(message);
+    return new Error(fallback);
+}
+
 async function chat(axios, key, spec, prompt) {
     const built = kie.buildChat(spec, prompt);
     let res = await postJson(axios, key, built.path, built.body);
     if (res.status === 400 && built.retry && /max_output_tokens|max_tokens/i.test(errorText(res.data))) {
         res = await postJson(axios, key, built.path, built.retry);
     }
+    if (res.status >= 500) {
+        await wait(1500);
+        res = await postJson(axios, key, built.path, built.retry || built.body);
+    }
     if (res.status === 401 || res.status === 403) throw userError('Эта модель пока не подключена.');
-    if (res.status >= 400) throw new Error('Ответ не получился. Кредиты не списаны.');
+    if (res.status >= 400) throw failureError(errorText(res.data), 'Ответ не получился. Кредиты не списаны.');
     const text = kie.textFromResponse(spec.kieChat.style, res.data);
     if (!text) throw new Error('Пустой ответ. Кредиты не списаны.');
     return { type: 'text', text };
@@ -90,7 +100,7 @@ async function pollTask(axios, key, taskId) {
         if (res.status === 401 || res.status === 403) throw userError('Эта модель пока не подключена.');
         const view = kie.taskView(res.data);
         if (view.state === 'success' && view.urls.length) return view.urls[0];
-        if (view.state === 'fail') throw new Error('Картинка не получилась. Кредиты не списаны.');
+        if (view.state === 'fail') throw failureError(view.fail, 'Картинка не получилась. Кредиты не списаны.');
     }
     throw new Error('Картинка не успела за две минуты. Кредиты не списаны.');
 }
@@ -155,7 +165,7 @@ async function processRequest(context) {
     const created = await postJson(axios, key, '/api/v1/jobs/createTask', task);
     if (created.status === 401 || created.status === 403) throw userError('Эта модель пока не подключена.');
     const taskId = created.data && created.data.data && created.data.data.taskId;
-    if (created.status >= 400 || !taskId) throw new Error('Картинка не запустилась. Кредиты не списаны.');
+    if (created.status >= 400 || !taskId) throw failureError(errorText(created.data), 'Картинка не запустилась. Кредиты не списаны.');
     const fileUrl = await pollTask(axios, key, taskId);
     const buffer = await downloadImage(axios, fileUrl);
     note(`${label}: картинка готова`);

@@ -63,6 +63,8 @@ test('запрос картинки Kie берёт только разрешён
     const idea = kie.buildImageTask(model('kie-ideogram'), { prompt: 'кот', aspect: '9:16', quality: 'QUALITY' });
     assert.equal(idea.model, 'ideogram/v3-text-to-image');
     assert.equal(idea.input.rendering_speed, 'TURBO');
+    assert.equal(idea.input.expand_prompt, true);
+    assert.equal(idea.input.style, 'AUTO');
     assert.equal(idea.input.image_size, 'portrait_16_9');
     assert.throws(() => kie.buildImageTask(model('kie-ideogram'), { prompt: 'кот', imageUrls: ['https://cdn.example/a.jpg'] }));
 
@@ -105,4 +107,8 @@ test('текст Kie ограничен по длине и не включает
     const task = kie.taskView({ data: { state: 'success', resultJson: '{"resultUrls":["https://cdn.example/out.jpg"]}' } });
     assert.deepEqual(task.urls, ['https://cdn.example/out.jpg']);
     assert.equal(kie.taskView({ data: { state: 'fail', failMsg: 'плохо' } }).state, 'fail');
+    assert.match(kie.explainFailure('The request was blocked by content moderation.'), /проверку/);
+    assert.match(kie.explainFailure('Your input was rejected. Please try again with a different input.'), /не приняла/);
+    assert.match(kie.explainFailure('internal error, please try again later.'), /не отвечает/);
+    assert.equal(kie.explainFailure('что-то ещё'), '');
 });
