@@ -387,13 +387,7 @@ function viewTop(){
   const paid = window.__vkPaid ? '<div class="card"><p class="hint">Оплата принята банком. Кредиты появятся на этом балансе в течение минуты.</p></div>' : '';
   const head = paid+'<div class="card"><div class="now">Текущий баланс</div><div id="topbal" style="font-size:28px;font-weight:800">'+((me&&me.balance)||0)+' кр</div></div>';
   if (isVk()) {
-    if (!packs.length) return head+'<div class="card"><div class="empty">Пакеты недоступны.</div></div>';
-    const chosen = packs.filter(function(p){ return String(p.id)===String(pendingPkg); })[0];
-    const list = chosen ? [chosen].concat(packs.filter(function(p){ return p!==chosen; })) : packs;
-    const lead = chosen ? '<div class="now">К оплате: <b>'+esc(chosen.title)+'</b> · '+chosen.credits+' кредитов · '+chosen.price+' ₽</div>' : '';
-    return head+'<div class="groupttl">Пополнение этого чата ВК</div><div class="card">'+lead+'<input id="paymail" type="email" inputmode="email" autocomplete="email" placeholder="почта для чека">'+
-      list.map(p=>'<div class="pack"><div><div class="name">'+esc(p.title)+'</div><div class="meta">'+p.credits+' кредитов</div></div><button data-pkg="'+esc(p.id)+'">'+p.price+' ₽</button></div>').join('')+
-      '<p class="hint">Оплата откроется отдельным окном: ЮMoney не работает внутри окна ВК. После оплаты кредиты придут в этот кабинет и в чат.</p></div>';
+    return head+'<div class="card"><div class="now">Оплата в чате</div><p>Здесь кнопок оплаты нет: окно ВК их не проводит.</p><p class="hint">В чате нажмите «Пополнить», выберите пакет и напишите почту для чека. Пока идёт оплата, остальные кнопки скрыты. «Назад» возвращает меню. После оплаты кредиты появятся на этом балансе.</p></div>';
   }
   const move = '<div class="card"><div class="now">Перенос на сайт</div>'+
     '<p class="hint">Укажите почту, с которой входите на '+esc(site)+', и сколько кредитов перенести. Они спишутся здесь и появятся на сайте. Если почты нет или сайт не ответит — сумма вернётся.</p>'+

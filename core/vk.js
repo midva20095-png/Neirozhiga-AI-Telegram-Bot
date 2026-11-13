@@ -102,17 +102,6 @@ function cabinetLink(account, pkgId) {
 
 function cabinetButton(peerId) {
     const account = accountId(peerId);
-    const appId = String(process.env.VK_APP_ID || '').replace(/\D/g, '');
-    if (appId && account) {
-        return {
-            action: {
-                type: 'open_app',
-                app_id: Number(appId),
-                label: 'Кабинет',
-                hash: `tk=${auth.signUserId(account)}`
-            }
-        };
-    }
     return { action: { type: 'open_link', label: 'Кабинет', link: account ? cabinetLink(account) : siteLink(), payload: '{}' } };
 }
 
@@ -135,11 +124,31 @@ function mainMenu(peerId) {
     });
 }
 
-function payMessageKeyboard(account, pkgId) {
+const pendingPay = new Map();
+
+function emailOk(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+}
+
+function payLockKeyboard() {
+    return asBoard([[textButton('Назад', { a: 'pay_back' }, 'secondary')]]);
+}
+
+function payLinkKeyboard(url) {
     return JSON.stringify({
-        inline: true,
-        buttons: [[{ action: { type: 'open_link', label: 'Оплатить', link: cabinetLink(account, pkgId), payload: '{}' } }]]
+        one_time: false,
+        inline: false,
+        buttons: [
+            [{ action: { type: 'open_link', label: 'Оплатить', link: url, payload: '{}' } }],
+            [textButton('Назад', { a: 'pay_back' }, 'secondary')]
+        ]
     });
+}
+
+function chatReturnUrl() {
+    const groupId = String(process.env.VK_GROUP_ID || '').replace(/\D/g, '');
+    if (groupId) return `https://vk.com/im?sel=-${groupId}`;
+    return siteLink();
 }
 
 function textButton(label, payload, color) {
@@ -177,7 +186,7 @@ function payKeyboard() {
     const rows = catalog.listPackages().slice(0, 9).map(pkg => [
         textButton(`${pkg.title} · ${pkg.price} ₽`, { p: pkg.id }, 'positive')
     ]);
-    rows.push([textButton('Меню', { a: 'hello' }, 'secondary')]);
+    rows.push([textButton('Назад', { a: 'pay_back' }, 'secondary')]);
     return asBoard(rows);
 }
 
@@ -297,13 +306,13 @@ async function sendStatus(token, peerId, account) {
     const model = catalog.getModel((await db.getCurrentModel(account)) || catalog.defaultModelKey());
     const empty = Number(balance) > 0 ? '' : '\n\nСейчас 0 кредитов. Нажмите «Пополнить». После оплаты они придут в этот чат.';
     await sendText(token, peerId,
-        `НейроЯга во ВКонтакте.\n\nБаланс: ${balance} кр. Этот счёт только для ВК и хранится в базе бота.\nМодель: ${model ? model.name : 'текст'}.${empty}\n\n«Пополнить» и «Кабинет» открывают оплату этого счёта. Дальше напишите запрос своими словами.`
+        `НейроЯга во ВКонтакте.\n\nБаланс: ${balance} кр. Этот счёт только для ВК и хранится в базе бота.\nМодель: ${model ? model.name : 'текст'}.${empty}\n\n«Пополнить» — оплата в этом чате. «Кабинет» — генерация и история, без оплаты. Дальше напишите запрос своими словами.`
     );
 }
 
 async function sendHelp(token, peerId) {
     await sendText(token, peerId,
-        'Кнопки под сообщением.\n\n«Баланс» — кредиты этого чата ВК. Они не общие с Telegram и сайтом.\n«Модели» — текст, картинки, видео или музыка.\n«Пополнить» — пакеты. Кнопка «Оплатить» открывает кабинет, почту для чека и оплату. Кредиты записываются в базу и приходят в этот чат.\n«Кабинет» — тот же баланс и пополнение.\n\nПосле выбора модели напишите запрос. Если модель просит фото, прикрепите его к тексту.'
+        'Кнопки под сообщением.\n\n«Баланс» — кредиты этого чата ВК. Они не общие с Telegram и сайтом.\n«Модели» — текст, картинки, видео или музыка.\n«Пополнить» — пакет, затем почта для чека. Пока идёт оплата, остальные кнопки скрыты: можно отправить почту или нажать «Назад». «Оплатить» открывает страницу банка. Кредиты приходят в этот чат.\n«Кабинет» — генерация и история. Оплаты там нет.\n\nПосле выбора модели напишите запрос. Если модель просит фото, прикрепите его к тексту.'
     );
 }
 
@@ -318,7 +327,7 @@ async function openMenu(token, peerId, account, action) {
     if (action === 'pay') {
         const board = JSON.parse(payKeyboard());
         if (board.buttons.length < 2) return sendText(token, peerId, `Пополнение в чате сейчас недоступно. Откройте кабинет: ${siteLink()}`);
-        return sendText(token, peerId, 'Выберите пакет внизу. Кредиты придут в этот чат ВК.', payKeyboard());
+        return sendText(token, peerId, 'Выберите пакет внизу. Другие кнопки скрыты. «Назад» возвращает меню.', payKeyboard());
     }
 }
 
@@ -339,24 +348,79 @@ async function chooseModel(token, peerId, account, key) {
     return sendText(token, peerId, `${model.name}. ${catalog.priceLabel(model)}. Напишите запрос.`);
 }
 
+async function holdPayment(token, peerId, account, text, action) {
+    const key = String(account);
+    const pending = pendingPay.get(key);
+    if (!pending) return false;
+    if (pending.stage === 'link') {
+        await sendText(token, peerId, 'Оплата ещё открыта. Нажмите «Оплатить» или «Назад».', payLinkKeyboard(pending.url));
+        return true;
+    }
+    if (action) {
+        await sendText(token, peerId, 'Сейчас нужна почта для чека или кнопка «Назад».', payLockKeyboard());
+        return true;
+    }
+    const email = String(text || '').trim();
+    if (!emailOk(email)) {
+        await sendText(token, peerId, 'Это не почта. Напишите адрес для чека или нажмите «Назад».', payLockKeyboard());
+        return true;
+    }
+    const pkg = catalog.getPackage(pending.pkgId);
+    if (!pkg) {
+        pendingPay.delete(key);
+        await sendText(token, peerId, 'Пакет больше недоступен. Нажмите «Пополнить».', mainMenu(peerId));
+        return true;
+    }
+    let url = null;
+    try {
+        url = await createPayment(
+            pkg.price,
+            `Покупка ${pkg.title}`,
+            email,
+            { userId: key, credits: String(pkg.credits) },
+            chatReturnUrl()
+        );
+    } catch (e) {
+        url = null;
+    }
+    if (!url) {
+        await sendText(token, peerId, 'Оплата не открылась. Напишите почту ещё раз или нажмите «Назад».', payLockKeyboard());
+        return true;
+    }
+    pendingPay.set(key, { stage: 'link', pkgId: pkg.id, url });
+    await sendText(
+        token,
+        peerId,
+        'Почта принята. Нажмите «Оплатить» — откроется страница банка.\n\nЕсли ВК спросит, подтвердите переход: это оплата. После оплаты кредиты придут в этот чат. «Назад» возвращает меню.',
+        payLinkKeyboard(url)
+    );
+    return true;
+}
+
 async function reply(token, peerId, account, text, payload) {
     const action = menuAction(text, payload);
+    if (action === 'pay_back') {
+        pendingPay.delete(String(account));
+        return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId));
+    }
+    if (action === 'pack') {
+        const pkg = catalog.getPackage(payload && payload.p);
+        if (!pkg) return sendText(token, peerId, 'Пакет недоступен.');
+        pendingPay.set(String(account), { stage: 'email', pkgId: pkg.id });
+        return sendText(
+            token,
+            peerId,
+            `Пакет «${pkg.title}» — ${pkg.price} ₽, ${pkg.credits} кредитов.\n\nНапишите почту для чека. Другие кнопки скрыты: можно отправить почту или нажать «Назад».`,
+            payLockKeyboard()
+        );
+    }
+    if (await holdPayment(token, peerId, account, text, action)) return;
     if (action === 'group') {
         if (!payload || !catalog.GROUPS[payload.g]) return sendText(token, peerId, 'Раздел недоступен.');
         return sendText(token, peerId, `${catalog.GROUPS[payload.g]}. Выберите модель внизу.`, modelKeyboard(payload.g));
     }
     if (action === 'model') {
         return chooseModel(token, peerId, account, payload && payload.m);
-    }
-    if (action === 'pack') {
-        const pkg = catalog.getPackage(payload && payload.p);
-        if (!pkg) return sendText(token, peerId, 'Пакет недоступен.');
-        return sendText(
-            token,
-            peerId,
-            `Пакет «${pkg.title}» — ${pkg.price} ₽.\n\nНажмите «Оплатить». Если ВК предупредит о переходе, нажмите «Перейти»: откроется кабинет этого чата. Почта для чека и оплата уже там, не на подозрительной ссылке. Кредиты запишутся в базу и придут в этот чат.`,
-            payMessageKeyboard(account, pkg.id)
-        );
     }
     if (action) return openMenu(token, peerId, account, action);
     if (!text) {
@@ -406,7 +470,7 @@ async function handleEvent(token, event) {
             snackbar = `Выбрано: ${model.short}`;
         }
     } else if (payload.p) {
-        snackbar = 'Откройте оплату';
+        snackbar = 'Напишите почту для чека';
     }
     try { await answerEvent(token, event, snackbar); } catch (e) {}
     await db.ensureUser(account, `vk:${event.userId}`);
@@ -511,5 +575,5 @@ function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payMessageKeyboard, createPayment, sectionKeyboard, modelKeyboard, connectHint, startVk, notify, sendToUser
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, connectHint, startVk, notify, sendToUser
 };

@@ -36,9 +36,17 @@ test('меню ВК открывает кабинет и не считает к�
     const personal = JSON.parse(vk.mainMenu(10));
     assert.match(personal.buttons[1][1].action.link, /^https:\/\/bot\.example\/vk\.html\?tk=-10\./);
     assert.doesNotMatch(vk.cabinetLink(-10, 'pack_100'), /yookassa|yoomoney/);
-    const pay = JSON.parse(vk.payMessageKeyboard(-10, 'pack_100'));
-    assert.equal(pay.inline, true);
-    assert.equal(pay.buttons[0][0].action.label, 'Оплатить');
+    const pay = JSON.parse(vk.payKeyboard());
+    assert.equal(pay.buttons.at(-1)[0].action.label, 'Назад');
+    const locked = JSON.parse(vk.payLockKeyboard());
+    assert.deepEqual(locked.buttons.map(row => row.map(button => button.action.label)), [['Назад']]);
+    const link = JSON.parse(vk.payLinkKeyboard('https://yookassa.ru/checkout/test'));
+    assert.deepEqual(link.buttons.map(row => row.map(button => button.action.label)), [['Оплатить'], ['Назад']]);
+    assert.equal(link.buttons[0][0].action.type, 'open_link');
+    assert.equal(link.buttons[0][0].action.link, 'https://yookassa.ru/checkout/test');
+    assert.equal(vk.emailOk('user@example.com'), true);
+    assert.equal(vk.emailOk('не почта'), false);
+    assert.equal(vk.menuAction('Назад', { a: 'pay_back' }), 'pay_back');
     const auth = require('./auth');
     assert.equal(auth.verifyUserToken(auth.signUserId(-10)), '-10');
     assert.equal(auth.verifyUserToken(auth.signUserId(5)), '5');
@@ -59,15 +67,13 @@ test('меню ВК открывает кабинет и не считает к�
     assert.equal(event.payload.m, 'flash');
 });
 
-test('кабинет ВК открывает приложение напрямую, без сообщества', () => {
+test('кабинет ВК открывает рабочую страницу, а не пустое окно приложения', () => {
     process.env.VK_APP_ID = '54895627';
-    process.env.VK_GROUP_ID = '230706467';
+    process.env.WEBAPP_URL = 'https://bot.example';
     const personal = JSON.parse(vk.mainMenu(10));
     const action = personal.buttons[1][1].action;
-    assert.equal(action.type, 'open_app');
-    assert.equal(action.app_id, 54895627);
-    assert.equal(action.owner_id, undefined);
-    assert.match(action.hash, /^tk=-10\./);
+    assert.equal(action.type, 'open_link');
+    assert.equal(action.app_id, undefined);
+    assert.match(action.link, /^https:\/\/bot\.example\/vk\.html\?tk=-10\./);
     delete process.env.VK_APP_ID;
-    delete process.env.VK_GROUP_ID;
 });
