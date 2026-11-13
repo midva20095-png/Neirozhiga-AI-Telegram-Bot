@@ -388,7 +388,7 @@ function viewTop(){
     if (!packs.length) return head+'<div class="card"><div class="empty">Пакеты недоступны.</div></div>';
     return head+'<div class="groupttl">Пополнение этого чата ВК</div><div class="card"><input id="paymail" type="email" inputmode="email" autocomplete="email" placeholder="почта для чека">'+
       packs.map(p=>'<div class="pack"><div><div class="name">'+esc(p.title)+'</div><div class="meta">'+p.credits+' кредитов</div></div><button data-pkg="'+esc(p.id)+'">'+p.price+' ₽</button></div>').join('')+
-      '<p class="hint">Оплата откроется на следующей странице. Кредиты вернутся в этот кабинет и в чат ВК.</p></div>';
+      '<p class="hint">Оплата откроется отдельным окном: ЮMoney не работает внутри окна ВК. После оплаты кредиты придут в этот кабинет и в чат.</p></div>';
   }
   const move = '<div class="card"><div class="now">Перенос на сайт</div>'+
     '<p class="hint">Укажите почту, с которой входите на '+esc(site)+', и сколько кредитов перенести. Они спишутся здесь и появятся на сайте. Если почты нет или сайт не ответит — сумма вернётся.</p>'+
@@ -580,6 +580,20 @@ async function generateTemplate(){
   } catch(e){ last = {error:e.message}; }
   busy = false; draw();
 }
+function payHost(url){
+  try {
+    const host = new URL(url).hostname;
+    return host === 'yoomoney.ru' || host === 'yookassa.ru' || host.endsWith('.yoomoney.ru') || host.endsWith('.yookassa.ru');
+  } catch (e) { return false; }
+}
+function openPay(url){
+  if (!payHost(url)) { alert('Оплата не открылась'); return; }
+  const popup = window.open(url, '_blank', 'noopener');
+  try { if (parent && parent !== window) parent.postMessage({ type: 'ny-pay', url: url }, '*'); } catch (e) {}
+  if (popup) return;
+  if (window.top === window) location.href = url;
+  else alert('Разрешите всплывающие окна и нажмите оплату ещё раз.');
+}
 function buy(pkgId){
   if (isVk()) {
     const email = ((document.getElementById('paymail')||{}).value||'').trim();
@@ -588,7 +602,7 @@ function buy(pkgId){
       .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
       .then(function(x){
         if (!x.ok || !x.d.url) { alert((x.d && x.d.error) || 'Оплата не открылась'); return; }
-        location.href = x.d.url;
+        openPay(x.d.url);
       })
       .catch(function(){ alert('Оплата не открылась'); });
     return;

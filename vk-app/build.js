@@ -50,8 +50,20 @@ const here = new URLSearchParams(location.search);
 if ((here.get('sign') && here.get('vk_user_id')) || /(^|[?#&])tk=/.test(location.hash)) {
   openCabinet(location.search, location.hash);
 }
+function payHost(url){
+  try {
+    const host = new URL(url).hostname;
+    return host === 'yoomoney.ru' || host === 'yookassa.ru' || host.endsWith('.yoomoney.ru') || host.endsWith('.yookassa.ru');
+  } catch (e) { return false; }
+}
 window.addEventListener('message', function(event){
-  const search = queryFrom(event.data);
+  const data = event.data || {};
+  if (data.type === 'ny-pay' && payHost(data.url)) {
+    vkSend('VKWebAppOpenLink', { url: data.url });
+    window.open(data.url, '_blank', 'noopener');
+    return;
+  }
+  const search = queryFrom(data);
   if (search) openCabinet(search, location.hash);
 });
 setTimeout(function(){ openCabinet(location.search, location.hash); }, 1200);
