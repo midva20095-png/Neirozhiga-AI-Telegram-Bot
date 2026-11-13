@@ -47,6 +47,7 @@ test('тихий сбой картинки повторяется через Ban
         assert.equal(templates.fallbackModel('kie-banana-lite', err), null);
         assert.equal(templates.fallbackModel('flash', err), null);
         assert.equal(templates.fallbackModel('nanobanana', new Error('Прикрепите фото')), null);
+        assert.equal(templates.fallbackModel('kie-banana-lite', new Error('Фото не загрузилось. Кредиты не списаны.')), 'nanobanana');
     } finally {
         if (prev == null) delete process.env.KIE_API_KEY;
         else process.env.KIE_API_KEY = prev;

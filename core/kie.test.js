@@ -113,4 +113,10 @@ test('текст Kie ограничен по длине и не включает
     assert.match(kie.explainFailure('Your input was rejected. Please try again with a different input.'), /не приняла/);
     assert.match(kie.explainFailure('internal error, please try again later.'), /не отвечает/);
     assert.equal(kie.explainFailure('что-то ещё'), '');
+    const uploaded = kie.uploadView({ code: 200, msg: 'ok', data: { downloadUrl: 'https://cdn.example/in.jpg' } });
+    assert.equal(uploaded.url, 'https://cdn.example/in.jpg');
+    const refused = kie.uploadView({ code: 400, msg: 'Missing required parameter: uploadPath', data: {} });
+    assert.equal(refused.url, '');
+    assert.equal(refused.code, 400);
+    assert.match(refused.msg, /uploadPath/);
 });

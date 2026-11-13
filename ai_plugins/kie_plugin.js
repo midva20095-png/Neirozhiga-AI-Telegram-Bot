@@ -45,19 +45,56 @@ async function postJson(axios, key, path, body) {
     }
 }
 
-async function uploadImage(axios, key, buffer, mimeType) {
+function photoKb(buffer) {
+    return Math.max(1, Math.round((buffer && buffer.length ? buffer.length : 0) / 1024));
+}
+
+function uploadNote(label, text) {
+    note(`${label}: ${String(text || '').replace(/https?:\/\/\S+/g, '').slice(0, 220)}`);
+}
+
+async function postUpload(axios, key, path, body, contentType) {
+    const headers = { Authorization: `Bearer ${key}` };
+    if (contentType) headers['Content-Type'] = contentType;
+    return axios.post(`${API}${path}`, body, {
+        headers,
+        timeout: 90000,
+        maxBodyLength: 30 * 1024 * 1024,
+        maxContentLength: 2 * 1024 * 1024,
+        validateStatus: () => true
+    });
+}
+
+async function uploadImage(axios, key, buffer, mimeType, label) {
     const mime = mimeType && mimeType.startsWith('image/') ? mimeType : 'image/jpeg';
     const ext = mime.includes('png') ? 'png' : 'jpg';
-    const res = await postJson(axios, key, '/api/file-base64-upload', {
+    const fileName = `photo-${Date.now()}.${ext}`;
+    const kb = photoKb(buffer);
+    const name = label || 'kie';
+    let res = await postUpload(axios, key, '/api/file-base64-upload', {
         base64Data: `data:${mime};base64,${buffer.toString('base64')}`,
-        uploadPath: 'images/kie',
-        fileName: `in.${ext}`
-    });
-    const url = res.data && res.data.data && res.data.data.downloadUrl;
-    if (res.status >= 400 || !url || !String(url).startsWith('https://')) {
+        uploadPath: 'images/base64',
+        fileName
+    }, 'application/json');
+    let view = kie.uploadView(res.data);
+    if (!view.url && typeof FormData === 'function' && typeof Blob === 'function') {
+        uploadNote(name, `фото ${kb} КБ не принято, HTTP ${res.status}, код ${view.code || '—'}, ${view.msg || 'без текста'}. Повтор файлом.`);
+        try {
+            const form = new FormData();
+            form.append('uploadPath', 'images/base64');
+            form.append('fileName', fileName);
+            form.append('file', new Blob([buffer], { type: mime }), fileName);
+            res = await postUpload(axios, key, '/api/file-stream-upload', form);
+            view = kie.uploadView(res.data);
+        } catch (e) {
+            uploadNote(name, `повтор файлом не отправился, фото ${kb} КБ`);
+        }
+    }
+    if (!view.url) {
+        uploadNote(name, `фото ${kb} КБ не загрузилось, HTTP ${res.status}, код ${view.code || '—'}, ${view.msg || 'без текста'}`);
         throw new Error('Фото не загрузилось. Кредиты не списаны.');
     }
-    return url;
+    return view.url;
 }
 
 function failureError(text, fallback) {
@@ -160,7 +197,7 @@ async function processRequest(context) {
 
     let imageUrls = [];
     if (buffers.length) {
-        imageUrls = [await uploadImage(axios, key, buffers[0], context.mimeType)];
+        imageUrls = [await uploadImage(axios, key, buffers[0], context.mimeType, label)];
     }
     const task = kie.buildImageTask(spec, {
         prompt,
