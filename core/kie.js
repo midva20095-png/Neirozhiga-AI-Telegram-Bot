@@ -121,13 +121,30 @@ function textFromResponse(style, data) {
     return '';
 }
 
+function collectUrls(value, into) {
+    if (!value || into.length > 4) return;
+    if (typeof value === 'string') {
+        if (value.startsWith('https://')) into.push(value);
+        return;
+    }
+    if (Array.isArray(value)) {
+        value.forEach(item => collectUrls(item, into));
+        return;
+    }
+    if (typeof value === 'object') {
+        ['resultUrls', 'resultUrl', 'url', 'imageUrl', 'image_url', 'outputUrl', 'downloadUrl'].forEach(key => {
+            if (value[key]) collectUrls(value[key], into);
+        });
+    }
+}
+
 function taskView(data) {
     const row = (data && data.data) || {};
-    let urls = [];
+    const urls = [];
     if (row.resultJson) {
         try {
             const parsed = typeof row.resultJson === 'string' ? JSON.parse(row.resultJson) : row.resultJson;
-            if (parsed && Array.isArray(parsed.resultUrls)) urls = parsed.resultUrls.filter(u => typeof u === 'string');
+            collectUrls(parsed, urls);
         } catch (e) {}
     }
     return {
