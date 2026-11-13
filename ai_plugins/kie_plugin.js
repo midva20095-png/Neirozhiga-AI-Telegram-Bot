@@ -2,6 +2,7 @@ const kie = require('../core/kie');
 const db = require('../core/db');
 
 const API = 'https://api.kie.ai';
+const FILE_API = 'https://kieai.redpandaai.co';
 const POLL_MS = 2500;
 const POLL_TRIES = 48;
 
@@ -56,7 +57,7 @@ function uploadNote(label, text) {
 async function postUpload(axios, key, path, body, contentType) {
     const headers = { Authorization: `Bearer ${key}` };
     if (contentType) headers['Content-Type'] = contentType;
-    return axios.post(`${API}${path}`, body, {
+    return axios.post(`${FILE_API}${path}`, body, {
         headers,
         timeout: 90000,
         maxBodyLength: 30 * 1024 * 1024,
