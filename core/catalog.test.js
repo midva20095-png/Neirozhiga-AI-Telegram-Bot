@@ -151,3 +151,14 @@ test('цена из админки списывается, в том числе 
     assert.equal(saved.models['giga-pro'].cost, 15);
     assert.equal(saved.models['sora-2'].cost, 240);
 });
+
+test('справка в боте объясняет кнопки и не содержит внутренних пометок', () => {
+    const text = catalog.getGeneral().help_text;
+    assert.match(text, /Кредиты списываются только когда ответ готов/);
+    assert.match(text, /Кабинет/);
+    assert.match(text, /На сайт/);
+    assert.match(text, /С сайта/);
+    assert.match(text, /Поддержка/);
+    assert.ok(text.length < 3900);
+    assert.equal(/kie|railway|api[_ -]?key|себестоимость|оптом|\$0/i.test(text), false);
+});
