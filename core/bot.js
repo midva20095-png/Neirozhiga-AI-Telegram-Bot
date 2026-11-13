@@ -7,6 +7,8 @@ const gen = require('./generate');
 const auth = require('./auth');
 const transferApi = require('./transfer');
 const channel = require('./channel');
+const share = require('./share');
+const templatesSrc = require('./templates');
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 16 * 60 * 1000 });
 
@@ -23,6 +25,7 @@ const MENU_TEXTS = [
     '💳 Мой баланс', '💳 Баланс',
     '💰 Пополнить', '💰 Пополнить баланс', '➕ Пополнить',
     '↔️ Перенос', 'Перенос',
+    '📢 Канал', 'Канал',
     '↗️ На сайт', 'На сайт',
     '↙️ С сайта', 'С сайта',
     '💬 Поддержка', 'ℹ Справка', 'ℹ️ Справка', '❓ Справка'
@@ -46,7 +49,7 @@ function baseWebappUrl() {
 // Кнопка web_app в обычной клавиатуре открывает Mini App с пустым initData,
 // поэтому для надёжного определения пользователя подписываем id и кладём в ссылку.
 function webappUrlFor(userId) {
-    return `${baseWebappUrl()}/?v=17#tk=${auth.signUserId(userId)}`;
+    return `${baseWebappUrl()}/?v=18#tk=${auth.signUserId(userId)}`;
 }
 
 function mainKeyboard(userId) {
@@ -54,6 +57,7 @@ function mainKeyboard(userId) {
         [Markup.button.webApp('📱 Кабинет', webappUrlFor(userId))],
         ['✨ Модель', '💳 Баланс'],
         ['➕ Пополнить', '↔️ Перенос'],
+        ['📢 Канал'],
         ['💬 Поддержка', '❓ Справка']
     ]).resize().persistent().placeholder('Напишите запрос или пришлите фото');
 }
@@ -62,6 +66,25 @@ function transferMenuKeyboard() {
     return Markup.inlineKeyboard([
         [Markup.button.callback('↗️ На сайт', 'transfer_start'), Markup.button.callback('↙️ С сайта', 'pull_start')]
     ]);
+}
+
+async function openSharedTemplate(ctx, id) {
+    const tpl = await templatesSrc.getFull(id);
+    if (!tpl) {
+        await ctx.reply('Этот шаблон сейчас недоступен.');
+        return;
+    }
+    const url = `${webappUrlFor(ctx.from.id)}&tpl=${encodeURIComponent(tpl.id)}`;
+    const keyboard = Markup.inlineKeyboard([[Markup.button.webApp('Открыть шаблон', url)]]);
+    const caption = share.templateCaption(tpl);
+    const media = share.imagePayload(tpl.image);
+    if (media.bytes && /^image\/(jpeg|png)$/.test(media.mime)) {
+        await ctx.replyWithPhoto({ source: media.bytes }, { caption, ...keyboard });
+    } else if (media.photoUrl) {
+        await ctx.replyWithPhoto(media.photoUrl, { caption, ...keyboard });
+    } else {
+        await ctx.reply(caption, keyboard);
+    }
 }
 
 async function showTransferMenu(ctx) {
@@ -506,10 +529,15 @@ async function startBot(app) {
             `Весь функционал — в кабинете. Откройте его кнопкой ниже или кнопкой «Кабинет» рядом с полем ввода.`,
             {
                 parse_mode: 'Markdown',
-                ...Markup.inlineKeyboard([[Markup.button.webApp('📱 Открыть кабинет', webappUrlFor(ctx.from.id))]])
+                ...Markup.inlineKeyboard([
+                    [Markup.button.webApp('📱 Открыть кабинет', webappUrlFor(ctx.from.id))],
+                    [Markup.button.url('📢 Канал', channel.CHANNEL_URL)]
+                ])
             }
         );
-        await ctx.reply('Меню внизу. Кнопка «Перенос» открывает перенос кредитов на сайт и обратно.', mainKeyboard(ctx.from.id));
+        const templateId = share.parseStart(ctx.startPayload);
+        if (templateId) await openSharedTemplate(ctx, templateId);
+        await ctx.reply('Меню внизу. «Перенос» — кредиты между ботом и сайтом. «Канал» — новости и работы.', mainKeyboard(ctx.from.id));
         try {
             await ctx.telegram.setChatMenuButton({
                 chat_id: ctx.chat.id,
@@ -559,6 +587,15 @@ async function startBot(app) {
 
     bot.hears(['↔️ Перенос', 'Перенос'], async (ctx) => {
         await showTransferMenu(ctx);
+    });
+
+    bot.hears(['📢 Канал', 'Канал'], async (ctx) => {
+        userAwaitingEmail.delete(ctx.from.id);
+        userAwaitingSupport.delete(ctx.from.id);
+        await ctx.reply(
+            'Канал НейроЯга: новости, шаблоны и работы подписчиков.',
+            Markup.inlineKeyboard([[Markup.button.url('Открыть канал', channel.CHANNEL_URL)]])
+        );
     });
 
     bot.hears(['↗️ На сайт', 'На сайт'], async (ctx) => {
@@ -1037,8 +1074,13 @@ async function startBot(app) {
     });
 
     try {
+        const me = await bot.telegram.getMe();
+        if (me && me.username && app) app.locals.botUsername = me.username;
+    } catch (e) {}
+
+    try {
         await bot.telegram.setChatMenuButton({
-            menu_button: { type: 'web_app', text: 'Кабинет', web_app: { url: baseWebappUrl() + '/?v=17' } }
+            menu_button: { type: 'web_app', text: 'Кабинет', web_app: { url: baseWebappUrl() + '/?v=18' } }
         });
         console.log('✅ Кнопка меню Mini App установлена');
     } catch (e) {

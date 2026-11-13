@@ -126,6 +126,8 @@ async function initDB() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS works_user_id_idx ON works (user_id, id DESC)`);
+  await pool.query(`ALTER TABLE works ADD COLUMN IF NOT EXISTS template_id INTEGER`);
+  await pool.query(`ALTER TABLE works ADD COLUMN IF NOT EXISTS shared_at TIMESTAMP`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS journal (
       id SERIAL PRIMARY KEY,
@@ -524,10 +526,11 @@ async function getCurrentModel(userId) {
 async function saveWork(userId, input) {
   const row = worksLib.prepareWork(input);
   if (!row) return null;
+  const templateId = numericId(input && input.templateId);
   const ins = await pool.query(
-    `INSERT INTO works (user_id, kind, model, prompt, mime, bytes)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-    [String(userId), row.kind, row.model || null, row.prompt || null, row.mime, row.buffer]
+    `INSERT INTO works (user_id, kind, model, prompt, mime, bytes, template_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+    [String(userId), row.kind, row.model || null, row.prompt || null, row.mime, row.buffer, templateId]
   );
   await pool.query(
     `DELETE FROM works WHERE user_id = $1 AND id NOT IN (
@@ -541,7 +544,7 @@ async function saveWork(userId, input) {
 async function listWorks(userId, limit = 30) {
   const cap = Math.min(worksLib.KEEP, Math.max(1, Number(limit) || 30));
   const res = await pool.query(
-    `SELECT id, kind, model, prompt, created_at
+    `SELECT id, kind, model, prompt, template_id, shared_at, created_at
      FROM works WHERE user_id = $1 ORDER BY id DESC LIMIT $2`,
     [String(userId), cap]
   );
@@ -552,10 +555,46 @@ async function getWork(userId, id) {
   const n = Number(id);
   if (!Number.isInteger(n) || n <= 0) return null;
   const res = await pool.query(
-    'SELECT id, kind, mime, bytes FROM works WHERE id = $1 AND user_id = $2',
+    'SELECT id, kind, model, prompt, mime, bytes, template_id, shared_at FROM works WHERE id = $1 AND user_id = $2',
     [n, String(userId)]
   );
   return res.rows[0] || null;
+}
+
+function numericId(id) {
+  const n = String(id || '').replace(/^local:/, '');
+  return /^\d+$/.test(n) ? Number(n) : null;
+}
+
+async function recentShare(userId) {
+  const res = await pool.query(
+    `SELECT shared_at FROM works
+     WHERE user_id = $1 AND shared_at > NOW() - INTERVAL '10 minutes'
+     ORDER BY shared_at DESC LIMIT 1`,
+    [String(userId)]
+  );
+  return res.rows[0] || null;
+}
+
+async function claimShare(userId, id) {
+  const n = numericId(id);
+  if (!n) return false;
+  const res = await pool.query(
+    `UPDATE works SET shared_at = NOW()
+     WHERE id = $1 AND user_id = $2 AND shared_at IS NULL
+     RETURNING id`,
+    [n, String(userId)]
+  );
+  return !!res.rows.length;
+}
+
+async function releaseShare(userId, id) {
+  const n = numericId(id);
+  if (!n) return;
+  await pool.query(
+    'UPDATE works SET shared_at = NULL WHERE id = $1 AND user_id = $2',
+    [n, String(userId)]
+  );
 }
 
 async function listHistory(userId, limit = 40) {
@@ -701,6 +740,9 @@ module.exports = {
   saveWork,
   listWorks,
   getWork,
+  recentShare,
+  claimShare,
+  releaseShare,
   listHistory,
   listTemplates,
   saveTemplate,

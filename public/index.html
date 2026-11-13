@@ -75,7 +75,9 @@ textarea{width:100%;min-height:120px;border-radius:14px;border:1px solid var(--l
 .tile .cap{padding:8px 10px 10px}
 .tile .cap b{display:block}
 .tile .cap span{display:block;color:var(--mut);font-size:12px;font-weight:600}
-.tile .dl{display:block;width:100%;border:0;background:transparent;color:#00d4ff;font-weight:800;text-align:left;padding:0 10px 10px}
+.tile .dl,.tile .ch{display:block;width:100%;border:0;background:transparent;color:#00d4ff;font-weight:800;text-align:left;padding:0 10px 8px}
+.tile .ch{color:#d7b0ff;padding-bottom:10px}
+.btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.2)}
 input{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1233;padding:12px;outline:none;margin-top:8px}
 </style>
 </head>
@@ -99,7 +101,7 @@ input{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1
 <script>
 const KIND = {text:'Текст', image:'Картинка', video:'Видео', audio:'Музыка'};
 let tab='gen', me=null, cfg=null, templates=[], works=null, worksLoading=false, userId=null, token=null, busy=false, last=null;
-let openTpl=null, photoData=null, pickedFormat=null, genPhoto=null, draft='';
+let openTpl=null, photoData=null, pickedFormat=null, genPhoto=null, draft='', pendingTpl='';
 let tplCat='', tplQuery='';
 const TCAT = {image:'Картинки', fix:'Улучшение', chat:'Текст', video:'Видео', audio:'Голос'};
 const TMARK = {image:'🪄', fix:'✨', chat:'✍️', video:'🎬', audio:'🎙'};
@@ -118,6 +120,7 @@ function detectAuth(){
   const hash = (location.hash||'').replace(/^#/,'');
   const hp = new URLSearchParams(hash);
   if (hp.get('tk')) token = hp.get('tk');
+  if (hp.get('tpl')) pendingTpl = hp.get('tpl');
   if (w && w.initDataUnsafe && w.initDataUnsafe.user && w.initDataUnsafe.user.id) userId = w.initDataUnsafe.user.id;
   else if (w && w.initData) userId = parseUser(w.initData);
   else if (token) userId = token.split('.')[0];
@@ -196,6 +199,11 @@ async function load(){
     if (me.error) throw new Error(me.error);
   } catch(e){ me = {error:true, balance:0, history:[], current_model:(cfg&&cfg.default_model)||'flash'}; }
   try { templates = ((await (await fetch('/api/templates')).json()).templates)||[]; } catch(e){ templates=[]; }
+  if (pendingTpl && templates.some(function(t){ return String(t.id)===String(pendingTpl); })) {
+    tab = 'tpl';
+    openTpl = pendingTpl;
+    pendingTpl = '';
+  }
   document.getElementById('bal').textContent = (me.balance||0)+' кр';
   draw();
 }
@@ -296,7 +304,8 @@ function viewTplRun(){
     '<div class="name">'+esc(t.title)+'</div>'+
     '<div class="meta" style="margin:6px 0 12px">'+esc(lead)+'</div>'+
     sizeChips+photo+
-    '<button class="btn" id="goTpl"'+(busy?' disabled':'')+'>'+(busy?'<span class="spin"></span>Генерирую…':'Создать за '+(t.cost||0)+' кр.')+'</button>'+res+'</div>';
+    '<button class="btn" id="goTpl"'+(busy?' disabled':'')+'>'+(busy?'<span class="spin"></span>Генерирую…':'Создать за '+(t.cost||0)+' кр.')+'</button>'+
+    '<button class="btn ghost" id="shareTpl" type="button">Ссылка для канала</button>'+res+'</div>';
 }
 function ensureWorks(){
   if (works || worksLoading) return;
@@ -320,7 +329,8 @@ function viewWorks(){
     const when = w.created_at ? new Date(w.created_at).toLocaleString('ru-RU', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : '';
     const cap = (w.prompt||'').slice(0, 80);
     return '<div class="tile">'+media+'<div class="cap"><b>'+esc(w.model||'Работа')+'</b><span>'+esc(when)+(cap?' · '+esc(cap):'')+'</span></div>'+
-      '<button type="button" class="dl" data-dl="'+w.id+'" data-kind="'+esc(w.kind||'image')+'">Скачать</button></div>';
+      '<button type="button" class="dl" data-dl="'+w.id+'" data-kind="'+esc(w.kind||'image')+'">Скачать</button>'+
+      '<button type="button" class="ch" data-ch="'+w.id+'"'+(w.shared?' disabled':'')+'>'+(w.shared?'Уже в канале':'В канал')+'</button></div>';
   }).join('')+'</div>';
 }
 function viewHist(){
@@ -389,7 +399,9 @@ function bind(){
   const back=document.getElementById('back'); if (back) back.onclick=()=>{ openTpl=null; photoData=null; last=null; draw(); };
   const file=document.getElementById('file'); if (file) file.onchange=()=>onPhoto(file);
   const goTpl=document.getElementById('goTpl'); if (goTpl) goTpl.onclick=generateTemplate;
+  const shareTpl=document.getElementById('shareTpl'); if (shareTpl) shareTpl.onclick=function(){ shareTemplate(openTpl); };
   document.querySelectorAll('[data-dl]').forEach(function(el){ el.onclick = function(){ downloadWork(el.dataset.dl, el.dataset.kind); }; });
+  document.querySelectorAll('[data-ch]').forEach(function(el){ el.onclick = function(){ shareWork(el.dataset.ch, el); }; });
   document.querySelectorAll('[data-work]').forEach(function(el){
     fetch('/api/works/'+el.dataset.work, {headers: authHeaders()})
       .then(function(r){ if (!r.ok) throw new Error(); return r.blob(); })
@@ -424,6 +436,34 @@ async function downloadWork(id, kind){
     await sendWorkToChat(id);
     alert('Файл отправлен в чат бота. Сохраните его оттуда.');
   } catch (e) { alert(e.message); }
+}
+async function shareTemplate(id){
+  try {
+    const r = await fetch('/api/templates/'+encodeURIComponent(id)+'/link', {headers: authHeaders()});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok || !d.url) throw new Error(d.error || 'Не удалось собрать ссылку');
+    const shareUrl = 'https://t.me/share/url?url='+encodeURIComponent(d.url)+'&text='+encodeURIComponent('Шаблон «'+(d.title||'НейроЯга')+'»');
+    const w = tg();
+    if (w && w.openTelegramLink) w.openTelegramLink(shareUrl);
+    else window.open(shareUrl, '_blank');
+  } catch (e) { alert(e.message); }
+}
+async function shareWork(id, btn){
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('/api/works/'+id+'/channel', {method:'POST', headers: authHeaders()});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok || !d.ok) throw new Error(d.error || 'Не удалось отправить в канал');
+    if (works) {
+      const item = works.find(function(x){ return String(x.id)===String(id); });
+      if (item) item.shared = true;
+    }
+    alert('Работа опубликована в канале.');
+    if (tab==='hist') draw();
+  } catch (e) {
+    alert(e.message);
+    if (btn) btn.disabled = false;
+  }
 }
 async function setModel(model){
   if (me) me.current_model = model;
