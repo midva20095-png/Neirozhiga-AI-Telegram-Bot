@@ -22,6 +22,7 @@ const MENU_TEXTS = [
     '✨ Модель', '🤖 Модель', '🤖 Выбрать модель ИИ', '🤖 Сменить модель', '🤖 Модели',
     '💳 Мой баланс', '💳 Баланс',
     '💰 Пополнить', '💰 Пополнить баланс', '➕ Пополнить',
+    '↔️ Перенос', 'Перенос',
     '↗️ На сайт', 'На сайт',
     '↙️ С сайта', 'С сайта',
     '💬 Поддержка', 'ℹ Справка', 'ℹ️ Справка', '❓ Справка'
@@ -52,10 +53,29 @@ function mainKeyboard(userId) {
     return Markup.keyboard([
         [Markup.button.webApp('📱 Кабинет', webappUrlFor(userId))],
         ['✨ Модель', '💳 Баланс'],
-        ['➕ Пополнить', '↗️ На сайт'],
-        ['💬 Поддержка', '❓ Справка'],
-        ['↙️ С сайта']
+        ['➕ Пополнить', '↔️ Перенос'],
+        ['💬 Поддержка', '❓ Справка']
     ]).resize().persistent().placeholder('Напишите запрос или пришлите фото');
+}
+
+function transferMenuKeyboard() {
+    return Markup.inlineKeyboard([
+        [Markup.button.callback('↗️ На сайт', 'transfer_start'), Markup.button.callback('↙️ С сайта', 'pull_start')]
+    ]);
+}
+
+async function showTransferMenu(ctx) {
+    userAwaitingEmail.delete(ctx.from.id);
+    userAwaitingSupport.delete(ctx.from.id);
+    const balance = await getUserBalance(ctx.from.id);
+    const site = catalog.getGeneral().site_url || 'сайт';
+    await ctx.reply(
+        `↔️ Перенос баланса\n\n` +
+        `В боте сейчас: ${balance} кр.\n` +
+        `«На сайт» переносит кредиты на почту кабинета ${site}.\n` +
+        `«С сайта» возвращает их в бот. Нужны почта и пароль сайта, пароль не сохраняется.`,
+        transferMenuKeyboard()
+    );
 }
 
 function amountKeyboard(balance) {
@@ -489,7 +509,7 @@ async function startBot(app) {
                 ...Markup.inlineKeyboard([[Markup.button.webApp('📱 Открыть кабинет', webappUrlFor(ctx.from.id))]])
             }
         );
-        await ctx.reply('Меню внизу. «На сайт» переносит кредиты на почту кабинета, «С сайта» — обратно в бот.', mainKeyboard(ctx.from.id));
+        await ctx.reply('Меню внизу. Кнопка «Перенос» открывает перенос кредитов на сайт и обратно.', mainKeyboard(ctx.from.id));
         try {
             await ctx.telegram.setChatMenuButton({
                 chat_id: ctx.chat.id,
@@ -504,7 +524,7 @@ async function startBot(app) {
         const balance = await getUserBalance(ctx.from.id);
         const model = catalog.getModel((await db.getCurrentModel(ctx.from.id)) || catalog.defaultModelKey());
         await ctx.reply(
-            `💳 *Баланс:* ${balance} кр.\nМодель: ${model ? model.name : ''}\n\nПополнить, перенести на сайт или вернуть в бот — кнопками внизу.`,
+            `💳 *Баланс:* ${balance} кр.\nМодель: ${model ? model.name : ''}\n\nПополнить — кнопка внизу. Перенести кредиты на сайт или вернуть в бот — кнопка «Перенос».`,
             { parse_mode: 'Markdown', ...mainKeyboard(ctx.from.id) }
         );
     });
@@ -535,6 +555,10 @@ async function startBot(app) {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
         await ctx.reply(`💳 *Выберите пакет пополнения:*`, { parse_mode: 'Markdown', ...packagesKeyboard() });
+    });
+
+    bot.hears(['↔️ Перенос', 'Перенос'], async (ctx) => {
+        await showTransferMenu(ctx);
     });
 
     bot.hears(['↗️ На сайт', 'На сайт'], async (ctx) => {
@@ -573,6 +597,11 @@ async function startBot(app) {
     bot.action('transfer_start', async (ctx) => {
         await ctx.answerCbQuery();
         await beginTransfer(ctx);
+    });
+
+    bot.action('pull_start', async (ctx) => {
+        await ctx.answerCbQuery();
+        await beginPull(ctx);
     });
 
     bot.action('transfer_cancel', async (ctx) => {
