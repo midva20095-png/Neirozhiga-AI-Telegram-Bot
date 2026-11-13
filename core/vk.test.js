@@ -32,6 +32,17 @@ test('меню ВК открывает кабинет и не считает к�
     const labels = menu.buttons.flat().map(button => button.action.label);
     assert.deepEqual(labels, ['Баланс', 'Модели', 'Пополнить', 'Кабинет', 'Справка']);
     assert.equal(menu.buttons[1][1].action.link, 'https://babayagaland.ru');
+    process.env.WEBAPP_URL = 'https://bot.example';
+    const personal = JSON.parse(vk.mainMenu(10));
+    assert.match(personal.buttons[1][1].action.link, /^https:\/\/bot\.example\/vk\.html\?tk=-10\./);
+    assert.doesNotMatch(vk.cabinetLink(-10, 'pack_100'), /yookassa|yoomoney/);
+    const pay = JSON.parse(vk.payMessageKeyboard(-10, 'pack_100'));
+    assert.equal(pay.inline, true);
+    assert.equal(pay.buttons[0][0].action.label, 'Оплатить');
+    const auth = require('./auth');
+    assert.equal(auth.verifyUserToken(auth.signUserId(-10)), '-10');
+    assert.equal(auth.verifyUserToken(auth.signUserId(5)), '5');
+    assert.equal(auth.verifyUserToken('1.' + 'a'.repeat(32)), null);
     const sections = JSON.parse(vk.sectionKeyboard());
     assert.equal(sections.inline, false);
     assert.ok(sections.buttons.length <= 10);

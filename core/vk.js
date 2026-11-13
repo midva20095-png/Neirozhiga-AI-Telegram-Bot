@@ -2,6 +2,7 @@ const axios = require('axios');
 const db = require('./db');
 const catalog = require('./catalog');
 const gen = require('./generate');
+const auth = require('./auth');
 
 const API = 'https://api.vk.com/method';
 const VERSION = '5.199';
@@ -87,7 +88,37 @@ function siteLink() {
     return catalog.getGeneral().site_url || 'https://babayagaland.ru';
 }
 
-function mainMenu() {
+function appBase() {
+    return String(process.env.WEBAPP_URL || '').replace(/\/$/, '');
+}
+
+function cabinetLink(account, pkgId) {
+    const base = appBase();
+    if (!base || account == null) return siteLink();
+    const tk = auth.signUserId(account);
+    const pkg = pkgId ? `&pkg=${encodeURIComponent(pkgId)}` : '';
+    return `${base}/vk.html?tk=${encodeURIComponent(tk)}${pkg}`;
+}
+
+function cabinetButton(peerId) {
+    const account = accountId(peerId);
+    const appId = String(process.env.VK_APP_ID || '').replace(/\D/g, '');
+    const groupId = String(process.env.VK_GROUP_ID || '').replace(/\D/g, '');
+    if (appId && groupId && account) {
+        return {
+            action: {
+                type: 'open_app',
+                app_id: Number(appId),
+                owner_id: -Number(groupId),
+                label: 'Кабинет',
+                hash: `tk=${auth.signUserId(account)}`
+            }
+        };
+    }
+    return { action: { type: 'open_link', label: 'Кабинет', link: account ? cabinetLink(account) : siteLink(), payload: '{}' } };
+}
+
+function mainMenu(peerId) {
     return JSON.stringify({
         one_time: false,
         buttons: [
@@ -97,12 +128,19 @@ function mainMenu() {
             ],
             [
                 { action: { type: 'text', label: 'Пополнить', payload: '{"a":"pay"}' }, color: 'positive' },
-                { action: { type: 'open_link', label: 'Кабинет', link: siteLink(), payload: '{}' } }
+                cabinetButton(peerId)
             ],
             [
                 { action: { type: 'text', label: 'Справка', payload: '{"a":"help"}' }, color: 'secondary' }
             ]
         ]
+    });
+}
+
+function payMessageKeyboard(account, pkgId) {
+    return JSON.stringify({
+        inline: true,
+        buttons: [[{ action: { type: 'open_link', label: 'Оплатить', link: cabinetLink(account, pkgId), payload: '{}' } }]]
     });
 }
 
@@ -190,7 +228,7 @@ async function sendText(token, peerId, message, keyboard) {
         peer_id: String(peerId),
         random_id: String(Math.floor(Math.random() * 2e9)),
         message: String(message || '').slice(0, 3500),
-        keyboard: keyboard || mainMenu()
+        keyboard: keyboard || mainMenu(peerId)
     });
 }
 
@@ -225,19 +263,17 @@ async function sendImage(token, peerId, buffer, caption) {
         random_id: String(Math.floor(Math.random() * 2e9)),
         message: String(caption || '').slice(0, 3500),
         attachment: `photo${photo.owner_id}_${photo.id}`,
-        keyboard: mainMenu()
+        keyboard: mainMenu(peerId)
     });
 }
 
-const awaitingEmail = new Map();
-
-async function createPayment(amount, description, email, metadata) {
+async function createPayment(amount, description, email, metadata, returnUrl) {
     const shopId = process.env.YOOKASSA_SHOP_ID;
     const secretKey = process.env.YOOKASSA_SECRET_KEY;
     if (!shopId || !secretKey) return null;
     const response = await axios.post('https://api.yookassa.ru/v3/payments', {
         amount: { value: Number(amount).toFixed(2), currency: 'RUB' },
-        confirmation: { type: 'redirect', return_url: siteLink() },
+        confirmation: { type: 'redirect', return_url: returnUrl || siteLink() },
         capture: true,
         description,
         metadata,
@@ -263,18 +299,17 @@ async function sendStatus(token, peerId, account) {
     const model = catalog.getModel((await db.getCurrentModel(account)) || catalog.defaultModelKey());
     const empty = Number(balance) > 0 ? '' : '\n\nСейчас 0 кредитов. Нажмите «Пополнить». После оплаты они придут в этот чат.';
     await sendText(token, peerId,
-        `НейроЯга во ВКонтакте.\n\nБаланс: ${balance} кр. Этот счёт только для ВК.\nМодель: ${model ? model.name : 'текст'}.${empty}\n\nКнопки внизу: Баланс, Модели, Пополнить. «Кабинет» открывает сайт. Дальше напишите запрос своими словами.`
+        `НейроЯга во ВКонтакте.\n\nБаланс: ${balance} кр. Этот счёт только для ВК и хранится в базе бота.\nМодель: ${model ? model.name : 'текст'}.${empty}\n\n«Пополнить» и «Кабинет» открывают оплату этого счёта. Дальше напишите запрос своими словами.`
     );
 }
 
 async function sendHelp(token, peerId) {
     await sendText(token, peerId,
-        'Кнопки под сообщением.\n\n«Баланс» — кредиты этого чата ВК. Они не общие с Telegram и сайтом.\n«Модели» — текст, картинки, видео или музыка.\n«Пополнить» — оплата, кредиты вернутся сюда.\n«Кабинет» — сайт с кабинетом.\n\nПосле выбора модели напишите запрос. Если модель просит фото, прикрепите его к тексту.'
+        'Кнопки под сообщением.\n\n«Баланс» — кредиты этого чата ВК. Они не общие с Telegram и сайтом.\n«Модели» — текст, картинки, видео или музыка.\n«Пополнить» — пакеты. Кнопка «Оплатить» открывает кабинет, почту для чека и оплату. Кредиты записываются в базу и приходят в этот чат.\n«Кабинет» — тот же баланс и пополнение.\n\nПосле выбора модели напишите запрос. Если модель просит фото, прикрепите его к тексту.'
     );
 }
 
 async function openMenu(token, peerId, account, action) {
-    awaitingEmail.delete(account);
     if (action === 'hello' || action === 'balance') return sendStatus(token, peerId, account);
     if (action === 'help') return sendHelp(token, peerId);
     if (action === 'models') {
@@ -309,42 +344,23 @@ async function chooseModel(token, peerId, account, key) {
 async function reply(token, peerId, account, text, payload) {
     const action = menuAction(text, payload);
     if (action === 'group') {
-        awaitingEmail.delete(account);
         if (!payload || !catalog.GROUPS[payload.g]) return sendText(token, peerId, 'Раздел недоступен.');
         return sendText(token, peerId, `${catalog.GROUPS[payload.g]}. Выберите модель внизу.`, modelKeyboard(payload.g));
     }
     if (action === 'model') {
-        awaitingEmail.delete(account);
         return chooseModel(token, peerId, account, payload && payload.m);
     }
     if (action === 'pack') {
         const pkg = catalog.getPackage(payload && payload.p);
         if (!pkg) return sendText(token, peerId, 'Пакет недоступен.');
-        awaitingEmail.set(account, pkg.id);
-        return sendText(token, peerId, `Пакет «${pkg.title}», ${pkg.price} ₽. Напишите почту для чека.`);
+        return sendText(
+            token,
+            peerId,
+            `Пакет «${pkg.title}» — ${pkg.price} ₽.\n\nНажмите «Оплатить». Если ВК предупредит о переходе, нажмите «Перейти»: откроется кабинет этого чата. Почта для чека и оплата уже там, не на подозрительной ссылке. Кредиты запишутся в базу и придут в этот чат.`,
+            payMessageKeyboard(account, pkg.id)
+        );
     }
     if (action) return openMenu(token, peerId, account, action);
-    if (awaitingEmail.has(account)) {
-        const email = String(text || '').trim();
-        const pkg = catalog.getPackage(awaitingEmail.get(account));
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !pkg) {
-            await sendText(token, peerId, 'Для чека напишите почту одним сообщением. Или нажмите «Баланс», чтобы отменить.');
-            return;
-        }
-        awaitingEmail.delete(account);
-        let url = null;
-        try {
-            url = await createPayment(pkg.price, `Покупка ${pkg.title}`, email, { userId: String(account), credits: String(pkg.credits) });
-        } catch (error) {
-            url = null;
-        }
-        if (!url) {
-            await sendText(token, peerId, `Оплата из чата сейчас не открылась. Кабинет на сайте: ${siteLink()}`);
-            return;
-        }
-        await sendText(token, peerId, `Оплата ${pkg.title}. Кредиты придут в этот чат после платежа.\n${url}`);
-        return;
-    }
     if (!text) {
         await sendText(token, peerId, 'Напишите запрос или нажмите кнопку внизу.');
         return;
@@ -392,7 +408,7 @@ async function handleEvent(token, event) {
             snackbar = `Выбрано: ${model.short}`;
         }
     } else if (payload.p) {
-        snackbar = 'Напишите почту для чека';
+        snackbar = 'Откройте оплату';
     }
     try { await answerEvent(token, event, snackbar); } catch (e) {}
     await db.ensureUser(account, `vk:${event.userId}`);
@@ -480,5 +496,5 @@ function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, sectionKeyboard, modelKeyboard, connectHint, startVk, notify
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payMessageKeyboard, createPayment, sectionKeyboard, modelKeyboard, connectHint, startVk, notify
 };

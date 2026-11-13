@@ -8,6 +8,7 @@ const templatesSrc = require('../core/templates');
 const transfer = require('../core/transfer');
 const channel = require('../core/channel');
 const share = require('../core/share');
+const vk = require('../core/vk');
 
 // Определяет пользователя из initData Telegram или из подписанной ссылки.
 function resolveUserId(req) {
@@ -94,6 +95,59 @@ function startWebApp() {
     app.get('/admin', (req, res) => res.sendFile(path.join(publicPath, 'admin.html')));
 
     // ---- Публичная конфигурация витрины ----
+    function vkAccount(req) {
+        const body = req.body || {};
+        const query = Object.assign({}, req.query || {});
+        const tk = query.tk || body.tk;
+        const id = tk ? auth.verifyUserToken(tk) : null;
+        if (id && String(id).startsWith('-')) return String(id);
+        return auth.verifyVkLaunch(query) || auth.verifyVkLaunch(body.launch || {}) || null;
+    }
+
+    app.get('/api/vk/me', async (req, res) => {
+        try {
+            const account = vkAccount(req);
+            if (!account) return res.status(401).json({ error: 'Откройте кабинет кнопкой из чата ВК.' });
+            const user = await db.getUser(account);
+            const model = catalog.getModel(user.current_model) || catalog.getModel(catalog.defaultModelKey());
+            res.json({
+                balance: Number(user.balance) || 0,
+                model: model ? model.name : '',
+                packages: catalog.listPackages(),
+                tk: auth.signUserId(account)
+            });
+        } catch (e) {
+            res.status(500).json({ error: 'Не удалось открыть баланс.' });
+        }
+    });
+
+    app.post('/api/vk/pay', async (req, res) => {
+        try {
+            const account = vkAccount(req);
+            if (!account) return res.status(401).json({ error: 'Откройте кабинет кнопкой из чата ВК.' });
+            const pkg = catalog.getPackage(req.body && req.body.packageId);
+            const email = String((req.body && req.body.email) || '').trim();
+            if (!pkg || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                return res.status(400).json({ error: 'Выберите пакет и укажите почту для чека.' });
+            }
+            await db.ensureUser(account, `vk:${String(account).replace(/^-/, '')}`);
+            const tk = auth.signUserId(account);
+            const base = String(process.env.WEBAPP_URL || '').replace(/\/$/, '');
+            const back = `${base}/vk.html?tk=${encodeURIComponent(tk)}&paid=1`;
+            const url = await vk.createPayment(
+                pkg.price,
+                `Покупка ${pkg.title}`,
+                email,
+                { userId: String(account), credits: String(pkg.credits) },
+                back
+            );
+            if (!url) return res.status(502).json({ error: 'Оплата сейчас не открылась. Попробуйте ещё раз.' });
+            res.json({ url });
+        } catch (e) {
+            res.status(502).json({ error: 'Оплата сейчас не открылась. Попробуйте ещё раз.' });
+        }
+    });
+
     app.get('/api/config', (req, res) => {
         const g = catalog.getGeneral();
         res.json({
