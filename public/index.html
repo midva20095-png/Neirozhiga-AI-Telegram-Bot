@@ -16,9 +16,12 @@ button,textarea,input,select{font:inherit;color:inherit}
 .logo{font-family:Unbounded,sans-serif;font-weight:700;font-size:18px;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;flex:1}
 .bal{font-weight:800;border:1px solid var(--line);border-radius:12px;padding:6px 10px;white-space:nowrap}
 .site{text-decoration:none;color:#fff;border:1px solid var(--line);border-radius:12px;padding:6px 10px;font-size:13px}
+.bots{display:flex;gap:8px;margin:-2px 0 10px}
+.bots a{flex:1;text-align:center;text-decoration:none;color:#fff;border:1px solid var(--line);border-radius:12px;padding:8px 10px;font-weight:800;font-size:13px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
 textarea{width:100%;min-height:120px;border-radius:14px;border:1px solid var(--line);background:#1c1233;padding:12px;outline:none;resize:vertical}
 .btn{width:100%;border:0;border-radius:14px;padding:14px;font-weight:800;color:#fff;background:var(--grad);margin-top:10px}
+a.btn{display:block;text-align:center;text-decoration:none}
 .btn:disabled{opacity:.5}
 .now{color:var(--mut);font-size:13px;margin:0 0 8px}
 .now b{color:var(--text)}
@@ -88,6 +91,10 @@ input{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1
     <div class="bal" id="bal">—</div>
     <a class="site" id="site" href="#" target="_blank">Сайт</a>
   </div>
+  <div class="bots">
+    <a href="https://vk.ru/write-236645486" data-out="https://vk.ru/write-236645486">ВК</a>
+    <a href="https://max.ru/se14387925_bot" data-out="https://max.ru/se14387925_bot">Макс</a>
+  </div>
   <div id="view"></div>
 </div>
 <div class="tabbar" id="tabs">
@@ -108,6 +115,11 @@ const TMARK = {image:'🪄', fix:'✨', chat:'✍️', video:'🎬', audio:'🎙
 let pickedQuality=null, pickedDuration=null, pickedAspect=null;
 
 function tg(){ return window.Telegram && window.Telegram.WebApp; }
+function openOut(url){
+  const w = tg();
+  if (w && w.openLink) w.openLink(url);
+  else window.open(url, '_blank');
+}
 function parseUser(raw){
   if (!raw) return null;
   try { const p = new URLSearchParams(raw); const u = JSON.parse(p.get('user')||'null'); if (u && u.id) return u.id; } catch(e){}
@@ -364,7 +376,10 @@ function viewTop(){
 }
 function viewHelp(){
   if (cfg && cfg.support_enabled===false) return '<div class="card"><div class="empty">Поддержка временно недоступна.</div></div>';
-  return '<div class="card"><div class="now">Напишите нам — ответ придёт в чат бота.</div>'+
+  return '<div class="card"><div class="now">Те же боты в других местах</div>'+
+    '<a class="btn ghost" href="https://vk.ru/write-236645486" data-out="https://vk.ru/write-236645486">ВКонтакте</a>'+
+    '<a class="btn ghost" href="https://max.ru/se14387925_bot" data-out="https://max.ru/se14387925_bot">Макс</a></div>'+
+    '<div class="card"><div class="now">Напишите нам — ответ придёт в чат бота.</div>'+
     '<textarea id="supmsg" placeholder="Опишите вопрос или проблему"></textarea>'+
     '<button class="btn" id="supsend">Отправить</button><p id="supok" class="hint"></p></div>';
 }
@@ -400,6 +415,7 @@ function bind(){
   const file=document.getElementById('file'); if (file) file.onchange=()=>onPhoto(file);
   const goTpl=document.getElementById('goTpl'); if (goTpl) goTpl.onclick=generateTemplate;
   const shareTpl=document.getElementById('shareTpl'); if (shareTpl) shareTpl.onclick=function(){ shareTemplate(openTpl); };
+  document.querySelectorAll('[data-out]').forEach(function(el){ el.onclick = function(ev){ ev.preventDefault(); openOut(el.dataset.out); }; });
   document.querySelectorAll('[data-dl]').forEach(function(el){ el.onclick = function(){ downloadWork(el.dataset.dl, el.dataset.kind); }; });
   document.querySelectorAll('[data-ch]').forEach(function(el){ el.onclick = function(){ shareWork(el.dataset.ch, el); }; });
   document.querySelectorAll('[data-work]').forEach(function(el){
