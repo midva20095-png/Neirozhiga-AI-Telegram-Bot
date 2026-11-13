@@ -47,6 +47,8 @@ test('меню ВК открывает кабинет и не считает к�
     assert.equal(vk.emailOk('user@example.com'), true);
     assert.equal(vk.emailOk('не почта'), false);
     assert.equal(vk.menuAction('Назад', { a: 'pay_back' }), 'pay_back');
+    assert.match(vk.USER_HELP, /Как пополнить/);
+    assert.doesNotMatch(vk.USER_HELP, /окно ВК|базе бота/);
     const auth = require('./auth');
     assert.equal(auth.verifyUserToken(auth.signUserId(-10)), '-10');
     assert.equal(auth.verifyUserToken(auth.signUserId(5)), '5');

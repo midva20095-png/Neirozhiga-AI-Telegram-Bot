@@ -9,6 +9,7 @@ const transfer = require('../core/transfer');
 const channel = require('../core/channel');
 const share = require('../core/share');
 const vk = require('../core/vk');
+const bridge = require('../core/bridge');
 
 // Определяет пользователя из initData Telegram или из подписанной ссылки.
 function resolveUserId(req) {
@@ -39,8 +40,8 @@ function requireAdmin(req, res, next) {
     return res.status(401).json({ error: 'admin_auth_required' });
 }
 
-function publicModels() {
-    return catalog.listModels().map(m => ({
+function publicModels(audience) {
+    return catalog.listModels({ audience: audience === 'vk' ? 'vk' : 'tg' }).map(m => ({
         key: m.key, name: m.name, short: m.short, desc: m.desc,
         group: m.group, kind: m.kind || '',
         cost: m.cost, from: catalog.fromPrice(m), label: catalog.priceLabel(m),
@@ -176,11 +177,57 @@ function startWebApp() {
         }
     });
 
+    app.post('/api/vk/topup', async (req, res) => {
+        try {
+            const account = vkAccount(req);
+            if (!account) return res.status(401).json({ error: 'Откройте кабинет кнопкой из чата ВК.' });
+            const url = await vk.askTopup(account);
+            if (!url) return res.status(502).json({ error: 'Чат не открылся. Нажмите «Пополнить» в диалоге ВК.' });
+            res.json({ url });
+        } catch (e) {
+            res.status(502).json({ error: 'Чат не открылся. Нажмите «Пополнить» в диалоге ВК.' });
+        }
+    });
+
+    app.post('/api/vk/transfer', async (req, res) => {
+        try {
+            const account = vkAccount(req);
+            if (!account) return res.status(401).json({ error: 'Откройте кабинет кнопкой из чата ВК.' });
+            const amount = bridge.amountOf(req.body && req.body.amount);
+            const raw = String((req.body && req.body.telegram) || '').trim();
+            if (!amount) return res.status(400).json({ error: 'Укажите, сколько кредитов перенести.' });
+            let to = /^\d{5,15}$/.test(raw) ? raw : '';
+            if (!to) {
+                const found = await db.findTelegramUser(raw);
+                if (found && found.ambiguous) return res.status(400).json({ error: 'Таких имён несколько. Впишите номер из Telegram.' });
+                if (found) to = String(found.user_id);
+            }
+            if (!to || Number(to) <= 0) return res.status(400).json({ error: 'Впишите номер Telegram. Он показан в боте: «Перенос».' });
+            const moved = await bridge.moveCredits(db, {
+                fromId: account,
+                toId: to,
+                amount,
+                takeReason: `Перенос в Telegram ${to}`,
+                giveReason: 'Перенос из ВК'
+            });
+            if (!moved.ok) return res.status(400).json({ error: moved.error });
+            const bot = app.locals.bot;
+            if (bot) {
+                try { await bot.telegram.sendMessage(to, `Из ВК перенесли ${amount} кр. Они уже на балансе Telegram.`); } catch (e) {}
+            }
+            try { await vk.notify(account, `Перенесли ${amount} кр. в Telegram. Здесь осталось ${moved.balance} кр.`); } catch (e) {}
+            res.json({ ok: true, balance: moved.balance });
+        } catch (e) {
+            res.status(500).json({ error: 'Перенос не выполнился. Кредиты остались на месте.' });
+        }
+    });
+
     app.get('/api/config', (req, res) => {
         const g = catalog.getGeneral();
+        const audience = req.query.audience === 'vk' ? 'vk' : 'tg';
         res.json({
             groups: catalog.GROUPS,
-            models: publicModels(),
+            models: publicModels(audience),
             packages: catalog.listPackages(),
             site_url: g.site_url,
             support_enabled: !!g.support_enabled,
@@ -347,7 +394,8 @@ function startWebApp() {
 
     app.get('/api/templates', async (req, res) => {
         try {
-            res.json({ templates: await templatesSrc.listPublic() });
+            const audience = req.query.audience === 'vk' ? 'vk' : 'tg';
+            res.json({ templates: await templatesSrc.listPublic(audience) });
         } catch (e) {
             res.status(500).json({ error: e.message, templates: [] });
         }
@@ -356,7 +404,8 @@ function startWebApp() {
     app.post('/api/set-model', requireUser, async (req, res) => {
         try {
             const { model } = req.body || {};
-            if (!model || !catalog.getModel(model)) return res.status(400).json({ error: 'model required' });
+            const audience = String(req.userId).startsWith('-') ? 'vk' : 'tg';
+            if (!model || !catalog.getModel(model, { audience })) return res.status(400).json({ error: 'model required' });
             const user = await db.getUser(req.userId);
             if (user.blocked) return res.status(403).json({ error: 'blocked' });
             await db.setCurrentModel(req.userId, model);
@@ -380,8 +429,10 @@ function startWebApp() {
             let keepModel = false;
             let strict = false;
             let templateTitle = '';
+            let tpl = null;
+            const audience = String(req.userId).startsWith('-') ? 'vk' : 'tg';
             if (body.templateId) {
-                const tpl = await templatesSrc.getFull(body.templateId);
+                tpl = await templatesSrc.getFull(body.templateId, audience);
                 if (!tpl) return res.status(404).json({ error: 'Шаблон не найден' });
                 prompt = tpl.prompt || prompt;
                 if (!prompt) prompt = 'Сделай изображение по прикреплённому фото';
@@ -398,7 +449,9 @@ function startWebApp() {
                 if (tpl.photo && !body.image) return res.status(400).json({ error: 'Прикрепите фото' });
             }
             if (!prompt && !body.image) return res.status(400).json({ error: 'Введите промпт' });
-            const pickedModel = catalog.getModel(modelKey, { includeDisabled: true });
+            const liveModel = catalog.getModel(modelKey, { audience });
+            if (!liveModel) return res.status(400).json({ error: 'Эта модель сейчас выключена.' });
+            const pickedModel = catalog.getModel(modelKey, { includeDisabled: true, audience });
             const allowPhoto = !pickedModel || (pickedModel.image !== 'forbidden' && pickedModel.image !== 'no');
             const file = body.image && allowPhoto ? decodeImage(body.image) : null;
             const fields = {
@@ -413,7 +466,8 @@ function startWebApp() {
                 charge,
                 reason,
                 keepModel,
-                strict
+                strict,
+                audience
             };
             const photoKb = file && file.buffer ? Math.max(1, Math.round(file.buffer.length / 1024)) : 0;
             if (templateTitle) {
@@ -422,7 +476,7 @@ function startWebApp() {
                 const mode = pickedModel && (pickedModel.qualities || []).find(item => item.id === quality);
                 const modeText = [mode && mode.name, duration ? duration + ' сек' : ''].filter(Boolean).join(', ');
                 fields.workLabel = templateTitle;
-                fields.templateId = tpl.id;
+                fields.templateId = tpl && tpl.id;
                 db.note('tpl', `старт «${templateTitle}» · ${service} · ${modelKey} · ${remote}${modeText ? ' · ' + modeText : ''} · фото ${photoKb ? photoKb + ' КБ' : 'нет'}`).catch(() => {});
             }
             const result = await gen.generateForWeb(fields);
@@ -540,6 +594,24 @@ function startWebApp() {
     });
 
     app.get('/api/admin/me', requireAdmin, (req, res) => res.json({ ok: true }));
+
+    app.get('/api/admin/vk', requireAdmin, async (req, res) => {
+        try {
+            res.json({
+                stats: await db.getStats('vk'),
+                models: catalog.listModels({ includeDisabled: true }),
+                groups: catalog.GROUPS,
+                templates: await db.listTemplates(true)
+            });
+        } catch (e) {
+            res.status(500).json({ error: 'Раздел ВК не открылся.' });
+        }
+    });
+
+    app.post('/api/admin/vk/models', requireAdmin, async (req, res) => {
+        try { res.json({ ok: true, models: await catalog.saveVkModels(db, req.body.models || {}) }); }
+        catch (e) { res.status(500).json({ error: e.message }); }
+    });
 
     app.get('/api/admin/stats', requireAdmin, async (req, res) => {
         try { res.json({ stats: await db.getStats() }); }

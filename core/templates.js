@@ -68,6 +68,7 @@ function fromDb(row) {
         formats: catalog.templateFormats(spec, row.formats),
         hidePrompt: true,
         active: row.active !== false,
+        audience: ['tg', 'vk', 'all'].includes(row.audience) ? row.audience : 'all',
         photo: wantsPhoto(spec),
         sort: Number(row.sort) || 0
     };
@@ -89,19 +90,28 @@ function toPublic(item) {
     return out;
 }
 
-async function listPublic() {
-    const rows = await db.listTemplates(false);
+function visibleFor(item, audience) {
+    const place = item.audience || 'all';
+    if (audience === 'vk') return place === 'vk' || place === 'all';
+    if (audience === 'tg') return place === 'tg' || place === 'all';
+    return true;
+}
+
+async function listPublic(audience) {
+    const rows = await db.listTemplates(false, audience === 'vk' ? 'vk' : audience === 'tg' ? 'tg' : '');
     return rows.map(row => toPublic(fromDb(row)));
 }
 
-async function getFull(id) {
+async function getFull(id, audience) {
     const sid = String(id || '');
     const dbId = sid.startsWith('local:') ? sid.slice(6) : sid;
     if (!/^\d+$/.test(dbId)) return null;
     const rows = await db.listTemplates(true);
     const row = rows.find(item => String(item.id) === dbId);
     if (!row || row.active === false) return null;
-    return fromDb(row);
+    const item = fromDb(row);
+    if (audience && !visibleFor(item, audience)) return null;
+    return item;
 }
 
-module.exports = { listPublic, getFull, fromDb, toPublic, mapModel, wantsPhoto, savedMode };
+module.exports = { listPublic, getFull, fromDb, toPublic, mapModel, wantsPhoto, savedMode, visibleFor };

@@ -71,6 +71,7 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
 <div id="panel" style="display:none">
   <div class="tabs" id="tabs"></div>
   <div id="section-stats"></div>
+  <div id="section-vk"></div>
   <div id="section-users"></div>
   <div id="section-tpl"></div>
   <div id="section-models"></div>
@@ -83,7 +84,7 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
 
 <script>
 const TABS = [
-  ['stats','Статистика'],['users','Клиенты'],['tpl','Шаблоны'],['models','Модели'],
+  ['stats','Статистика'],['vk','ВК'],['users','Клиенты'],['tpl','Шаблоны'],['models','Модели'],
   ['packages','Пакеты'],['tickets','Поддержка'],['broadcast','Рассылка'],['journal','Журнал'],['settings','Настройки']
 ];
 let token = sessionStorage.getItem('ny_admin_token') || null;
@@ -132,6 +133,7 @@ async function showPanel(){
 
 async function loadSection(k){
   if (k==='stats') return loadStats();
+  if (k==='vk') return loadVk();
   if (k==='users') return loadUsers('');
   if (k==='tpl') return loadTpl();
   if (k==='models') return loadModels();
@@ -140,6 +142,77 @@ async function loadSection(k){
   if (k==='tickets') return loadTickets('open');
   if (k==='broadcast') return renderBroadcast();
   if (k==='settings') return loadSettings();
+}
+
+/* ---- ВК ---- */
+async function loadVk(){
+  const el = document.getElementById('section-vk');
+  el.innerHTML = '<div class="card">Загрузка…</div>';
+  try {
+    const d = await api('/api/admin/vk');
+    const s = d.stats || {};
+    const models = d.models || [];
+    const groups = d.groups || {};
+    const templates = (d.templates || []).filter(t => !t.audience || t.audience === 'all' || t.audience === 'vk');
+    const cards = [
+      ['Клиенты ВК', s.users_total], ['Активны за сутки', s.active_day],
+      ['Новые за сутки', s.new_day], ['В чёрном списке', s.users_blocked],
+      ['Кредитов на балансах ВК', s.balance_total], ['Генераций', s.gens_total],
+      ['Потрачено кредитов', s.spent_total], ['Начислено', s.credited_total]
+    ];
+    el.innerHTML =
+      '<div class="card"><h3>ВКонтакте</h3><p class="note">Баланс ВК не общий с Telegram. Здесь включаются модели и шаблоны только для кабинета и чата ВК. Выключение модели в Telegram этот список не меняет, и наоборот.</p>'+
+      '<div class="grid">'+cards.map(([n,v])=>'<div class="stat"><div class="n">'+(v==null?0:v)+'</div><div class="l">'+n+'</div></div>').join('')+'</div></div>'+
+      '<div class="card"><h3>Модели ВК</h3><p class="note">Снимите галочку, чтобы модель пропала из чата и кабинета ВК.</p>'+
+      models.map(m=>'<label class="check"><input type="checkbox" data-vkmodel="'+esc(m.key)+'" '+(m.vkEnabled?'checked':'')+'> '+esc(m.name)+' <span class="note">'+esc(groups[m.group]||'')+'</span></label>').join('')+
+      '<button onclick="saveVkModels()">Сохранить модели ВК</button><p id="vkmodelsmsg" class="note"></p></div>'+
+      '<div class="card"><h3>Шаблоны ВК</h3><p class="note">Общие шаблоны видны и в Telegram. «Только ВК» — только в кабинете ВК.</p>'+
+      '<label>Название</label><input id="vktitle" placeholder="Название шаблона">'+
+      '<label>Что сделать. Человек этот текст не видит</label><textarea id="vkprompt" placeholder="Опишите результат"></textarea>'+
+      '<div class="row"><select id="vkmodel">'+models.filter(m=>m.vkEnabled!==false).map(m=>'<option value="'+esc(m.key)+'">'+esc(m.name)+'</option>').join('')+'</select>'+
+      '<input id="vkcost" type="number" min="0" placeholder="Цена, кр" value="10"></div>'+
+      '<button onclick="addVkTemplate()">Добавить шаблон только для ВК</button>'+
+      (templates.length ? '<div style="margin-top:14px">'+templates.map(t=>{
+        const where = t.audience==='vk' ? 'Только ВК' : 'Telegram и ВК';
+        return '<div class="mrow"><div><div class="mname">'+esc(t.title)+'</div><div class="note">'+esc(where)+(t.active===false?' · скрыт':'')+' · '+(t.cost||0)+' кр</div></div>'+
+          '<button class="ghost" type="button" onclick="setTplAudience('+t.id+',\''+(t.audience==='vk'?'all':'vk')+'\')">'+(t.audience==='vk'?'Сделать общим':'Только ВК')+'</button></div>';
+      }).join('')+'</div>' : '<p class="note">Отдельных шаблонов ВК пока нет. Общие шаблоны уже открываются в кабинете ВК.</p>')+
+      '</div>';
+  } catch (e) {
+    el.innerHTML = '<div class="card">Раздел не открылся.</div>';
+  }
+}
+async function saveVkModels(){
+  const models = {};
+  document.querySelectorAll('[data-vkmodel]').forEach(box => { models[box.dataset.vkmodel] = { enabled: box.checked }; });
+  const d = await api('/api/admin/vk/models', {method:'POST', body: JSON.stringify({models})});
+  const msg = document.getElementById('vkmodelsmsg');
+  if (msg) msg.textContent = d.ok ? 'Сохранено. В чате ВК эти модели уже другие.' : (d.error||'Не сохранилось');
+}
+async function addVkTemplate(){
+  const title = document.getElementById('vktitle').value.trim();
+  const prompt = document.getElementById('vkprompt').value.trim();
+  const model = document.getElementById('vkmodel').value;
+  const cost = +document.getElementById('vkcost').value || 0;
+  if (!title || !prompt) return alert('Нужны название и текст задания');
+  const d = await api('/api/admin/templates', {method:'POST', body: JSON.stringify({
+    title, prompt, model, cost, category: 'image', audience: 'vk', active: true, hide_prompt: true
+  })});
+  if (!d.ok) return alert(d.error||'Не сохранилось');
+  loadVk();
+}
+async function setTplAudience(id, audience){
+  const pack = await api('/api/admin/templates');
+  const t = (pack.templates||[]).find(x=>x.id===id);
+  if (!t) return;
+  const d = await api('/api/admin/templates', {method:'POST', body: JSON.stringify({
+    id: t.id, title: t.title, category: t.category, model: t.model, cost: t.cost, sort: t.sort||0,
+    image: t.image, description: t.description, formats: t.formats, prompt: t.prompt,
+    quality: t.quality || '', duration: t.duration || '', hide_prompt: true,
+    active: t.active !== false, audience
+  })});
+  if (!d.ok) return alert(d.error||'Не сохранилось');
+  loadVk();
 }
 
 /* ---- Статистика ---- */
@@ -316,6 +389,10 @@ async function loadTpl(){
       '<input id="tcost" type="number" min="0" placeholder="Цена, кр" value="'+startCost+'"'+(editing?' data-lock="1"':'')+'></div>'+
     '<div id="tmodes">'+modeBlock(current, startQuality, startDuration)+'</div>'+
     '<p class="note">Запрос уходит в выбранную модель и в выбранный режим. У Nano Banana «Эконом» — 3 кредита, «Быстро» — 6. Цена подставляется из режима, её можно изменить. Если сервис молчит, выключите его на вкладке «Модели».</p>'+
+    '<label>Где показывать</label><select id="taud">'+
+      '<option value="all"'+((editing?editing.audience:'all')==='all'||!(editing&&editing.audience)?' selected':'')+'>Telegram и ВК</option>'+
+      '<option value="tg"'+(editing&&editing.audience==='tg'?' selected':'')+'>Только Telegram</option>'+
+      '<option value="vk"'+(editing&&editing.audience==='vk'?' selected':'')+'>Только ВК</option></select>'+
     '<label class="check"><input id="tactive" type="checkbox" '+(!editing||editing.active!==false?'checked':'')+'> Показывать в кабинете</label>'+
     '<details'+(editing?' open':'')+'><summary>Дополнительно: описание, раздел, ссылка, размеры</summary>'+
     '<label>Короткое описание под заголовком</label><input id="tdesc" placeholder="Что получится" value="'+esc(editing&&editing.description?editing.description:'')+'">'+
@@ -436,7 +513,8 @@ async function saveTpl(){
     quality: (document.getElementById('tqmode')||{}).value || '',
     duration: (document.getElementById('tdur')||{}).value || '',
     hide_prompt: true,
-    active: document.getElementById('tactive').checked
+    active: document.getElementById('tactive').checked,
+    audience: (document.getElementById('taud')||{}).value || 'all'
   };
   if (!body.title || !body.prompt) return alert('Нужны название и промпт');
   const d = await api('/api/admin/templates',{method:'POST',body:JSON.stringify(body)});
@@ -450,7 +528,7 @@ async function toggleTpl(id){
     id: t.id, title: t.title, category: t.category, model: t.model, cost: t.cost, sort: t.sort||0,
     image: t.image, description: t.description, formats: t.formats, prompt: t.prompt,
     quality: t.quality || '', duration: t.duration || '',
-    hide_prompt: true, active: !t.active
+    hide_prompt: true, active: !t.active, audience: t.audience || 'all'
   })});
   if (!d.ok) return alert(d.error||'Ошибка');
   loadTpl();

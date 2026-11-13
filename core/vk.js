@@ -1,5 +1,6 @@
 const axios = require('axios');
 const db = require('./db');
+const bridge = require('./bridge');
 const catalog = require('./catalog');
 const gen = require('./generate');
 const auth = require('./auth');
@@ -163,7 +164,7 @@ function asBoard(rows) {
 }
 
 function sectionKeyboard() {
-    const groups = Object.keys(catalog.GROUPS).filter(group => catalog.modelsByGroup(group).length > 0);
+    const groups = Object.keys(catalog.GROUPS).filter(group => catalog.modelsByGroup(group, 'vk').length > 0);
     const rows = [];
     for (let i = 0; i < groups.length; i += 2) {
         const row = [textButton(catalog.GROUPS[groups[i]], { g: groups[i] })];
@@ -175,7 +176,7 @@ function sectionKeyboard() {
 }
 
 function modelKeyboard(group) {
-    const rows = catalog.modelsByGroup(group).slice(0, 9).map(model => [
+    const rows = catalog.modelsByGroup(group, 'vk').slice(0, 9).map(model => [
         textButton(`${model.short} · ${catalog.priceLabel(model)}`, { m: model.key })
     ]);
     rows.push([textButton('К разделам', { a: 'models' }, 'primary')]);
@@ -303,17 +304,31 @@ async function createPayment(amount, description, email, metadata, returnUrl) {
 
 async function sendStatus(token, peerId, account) {
     const balance = await db.getUserBalance(account);
-    const model = catalog.getModel((await db.getCurrentModel(account)) || catalog.defaultModelKey());
+    const model = catalog.getModel((await db.getCurrentModel(account)) || catalog.defaultModelKey('vk'), { audience: 'vk' });
     const empty = Number(balance) > 0 ? '' : '\n\nСейчас 0 кредитов. Нажмите «Пополнить». После оплаты они придут в этот чат.';
     await sendText(token, peerId,
-        `НейроЯга во ВКонтакте.\n\nБаланс: ${balance} кр. Этот счёт только для ВК и хранится в базе бота.\nМодель: ${model ? model.name : 'текст'}.${empty}\n\n«Пополнить» — оплата в этом чате. «Кабинет» — генерация и история, без оплаты. Дальше напишите запрос своими словами.`
+        `НейроЯга во ВКонтакте.\n\nБаланс: ${balance} кр.\nМодель: ${model ? model.name : 'текст'}.${empty}\n\n«Модели» — выбрать, что генерировать. «Пополнить» — оплата. «Кабинет» — шаблоны, история и перенос в Telegram. Подробности — кнопка «Справка».`
     );
 }
 
+const USER_HELP = [
+    'Как пользоваться',
+    '1. Нажмите «Модели» и выберите раздел: текст, картинки, видео или музыка.',
+    '2. Напишите запрос своими словами. Если модель просит фото, прикрепите его к сообщению.',
+    '3. Ответ придёт в этот чат. Картинки также лежат в кабинете, вкладка «История».',
+    '',
+    'Как пополнить',
+    '1. Нажмите «Пополнить» здесь или кнопку «Пополнить» на вкладке «Баланс» в кабинете.',
+    '2. Выберите пакет. Останутся только пакеты и «Назад».',
+    '3. Напишите почту для чека одним сообщением.',
+    '4. Нажмите «Оплатить». Если ВК спросит, подтвердите переход: откроется страница банка.',
+    '5. После оплаты кредиты придут в этот чат. «Назад» возвращает меню.',
+    '',
+    'Баланс ВК и Telegram разные. Перенос — на вкладке «Баланс» в кабинете. Ваш номер ВК указан там же: его вводят в Telegram, кнопка «Перенос» → «Во ВК».'
+].join('\n');
+
 async function sendHelp(token, peerId) {
-    await sendText(token, peerId,
-        'Кнопки под сообщением.\n\n«Баланс» — кредиты этого чата ВК. Они не общие с Telegram и сайтом.\n«Модели» — текст, картинки, видео или музыка.\n«Пополнить» — пакет, затем почта для чека. Пока идёт оплата, остальные кнопки скрыты: можно отправить почту или нажать «Назад». «Оплатить» открывает страницу банка. Кредиты приходят в этот чат.\n«Кабинет» — генерация и история. Оплаты там нет.\n\nПосле выбора модели напишите запрос. Если модель просит фото, прикрепите его к тексту.'
-    );
+    await sendText(token, peerId, USER_HELP);
 }
 
 async function openMenu(token, peerId, account, action) {
@@ -342,7 +357,7 @@ async function answerEvent(token, event, snackbar) {
 }
 
 async function chooseModel(token, peerId, account, key) {
-    const model = catalog.getModel(key);
+    const model = catalog.getModel(key, { audience: 'vk' });
     if (!model) return sendText(token, peerId, 'Модель недоступна.');
     await db.setCurrentModel(account, model.key);
     return sendText(token, peerId, `${model.name}. ${catalog.priceLabel(model)}. Напишите запрос.`);
@@ -428,12 +443,13 @@ async function reply(token, peerId, account, text, payload) {
         return;
     }
     try {
-        const modelKey = (await db.getCurrentModel(account)) || catalog.defaultModelKey();
+        const modelKey = (await db.getCurrentModel(account)) || catalog.defaultModelKey('vk');
         const prepared = await gen.prepare({
             userId: account,
             modelKey,
             hasImage: false,
-            hasText: true
+            hasText: true,
+            audience: 'vk'
         });
         await sendText(token, peerId, 'Делаю ответ…');
         const result = await gen.run({
@@ -464,7 +480,7 @@ async function handleEvent(token, event) {
     const payload = event.payload || {};
     let snackbar = '';
     if (payload.m) {
-        const model = catalog.getModel(payload.m);
+        const model = catalog.getModel(payload.m, { audience: 'vk' });
         if (model) {
             await db.setCurrentModel(account, model.key);
             snackbar = `Выбрано: ${model.short}`;
@@ -505,6 +521,14 @@ async function sendToUser(accountIdValue, buffer, mime, caption) {
     } catch (e) {
         return false;
     }
+}
+
+async function askTopup(accountIdValue) {
+    const token = String(process.env.VK_GROUP_TOKEN || '').trim();
+    const id = Number(accountIdValue);
+    if (!token || !Number.isInteger(id) || id >= 0) return null;
+    await sendText(token, -id, 'Выберите пакет внизу. Другие кнопки скрыты. «Назад» возвращает меню.', payKeyboard());
+    return chatReturnUrl();
 }
 
 async function notify(accountIdValue, message) {
@@ -575,5 +599,5 @@ function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, connectHint, startVk, notify, sendToUser
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, connectHint, startVk, notify, sendToUser, askTopup, USER_HELP
 };

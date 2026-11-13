@@ -38,13 +38,14 @@ function limitMessage(slot) {
     return `Лимит бесплатной модели на сегодня исчерпан: ${slot.used}/${slot.limit}. Завтра по Москве счётчик обнулится.`;
 }
 
-async function prepare({ userId, modelKey, hasImage, hasText, charge, strict, duration, quality, audioSeconds }) {
+async function prepare({ userId, modelKey, hasImage, hasText, charge, strict, duration, quality, audioSeconds, audience }) {
     const id = String(userId);
     const user = await db.getUser(id);
     if (user.blocked) throw new GenError('Аккаунт в чёрном списке', 'blocked');
+    const place = audience === 'vk' ? 'vk' : 'tg';
 
-    let model = catalog.getModel(modelKey);
-    if (!model && !strict) model = catalog.getModel(catalog.defaultModelKey());
+    let model = catalog.getModel(modelKey, { audience: place });
+    if (!model && !strict) model = catalog.getModel(catalog.defaultModelKey(place), { audience: place });
     if (!model) throw new GenError('Модель недоступна', 'no_model');
     const plugin = getPlugin(model);
     if (!plugin || !plugin.processRequest) throw new GenError('Модель временно недоступна', 'no_plugin');
@@ -137,7 +138,7 @@ async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mim
 }
 
 // Удобная обёртка для веба: data: URL вместо бинарника.
-async function generateForWeb({ userId, prompt, modelKey, fileBuffer, mimeType, aspectRatio, duration, quality, charge, reason, keepModel, strict, workLabel, templateId }) {
+async function generateForWeb({ userId, prompt, modelKey, fileBuffer, mimeType, aspectRatio, duration, quality, charge, reason, keepModel, strict, workLabel, templateId, audience }) {
     const { model, plugin } = await prepare({
         userId,
         modelKey,
@@ -146,7 +147,8 @@ async function generateForWeb({ userId, prompt, modelKey, fileBuffer, mimeType, 
         charge,
         strict,
         duration,
-        quality
+        quality,
+        audience
     });
     const out = await run({ userId, prompt, model, plugin, fileBuffer, mimeType, aspectRatio, duration, quality, charge, reason, keepModel, workLabel, templateId });
     if (workLabel && out.type === 'image') out.text = 'Изображение готово';

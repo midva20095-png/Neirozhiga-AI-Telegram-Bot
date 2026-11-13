@@ -61,6 +61,7 @@ async function initDB() {
   await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS sort INTEGER DEFAULT 0`);
   await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS quality TEXT`);
   await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS duration INTEGER`);
+  await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS audience TEXT DEFAULT 'all'`);
   const count = await pool.query('SELECT COUNT(*)::int AS n FROM templates');
   if (count.rows[0].n === 0) {
     for (const row of SEED_TEMPLATES) {
@@ -226,20 +227,26 @@ async function listUserIds() {
   return res.rows.map(r => r.user_id);
 }
 
-async function getStats() {
+async function getStats(platform) {
+  const where = platform === 'vk' ? 'user_id < 0' : platform === 'tg' ? 'user_id > 0' : 'TRUE';
   const q = await pool.query(`
     SELECT
-      (SELECT COUNT(*)::int FROM users) AS users_total,
-      (SELECT COUNT(*)::int FROM users WHERE blocked) AS users_blocked,
-      (SELECT COUNT(*)::int FROM users WHERE last_seen >= NOW() - INTERVAL '1 day') AS active_day,
-      (SELECT COUNT(*)::int FROM users WHERE created_at >= NOW() - INTERVAL '1 day') AS new_day,
-      (SELECT COALESCE(SUM(balance),0)::int FROM users) AS balance_total,
-      (SELECT COALESCE(SUM(gens),0)::int FROM users) AS gens_total,
-      (SELECT COALESCE(SUM(spent),0)::int FROM users) AS spent_total,
-      (SELECT COALESCE(SUM(delta),0)::int FROM history WHERE delta > 0) AS credited_total,
-      (SELECT COUNT(*)::int FROM support_tickets WHERE status = 'open') AS tickets_open
+      (SELECT COUNT(*)::int FROM users WHERE ${where}) AS users_total,
+      (SELECT COUNT(*)::int FROM users WHERE blocked AND ${where}) AS users_blocked,
+      (SELECT COUNT(*)::int FROM users WHERE last_seen >= NOW() - INTERVAL '1 day' AND ${where}) AS active_day,
+      (SELECT COUNT(*)::int FROM users WHERE created_at >= NOW() - INTERVAL '1 day' AND ${where}) AS new_day,
+      (SELECT COALESCE(SUM(balance),0)::int FROM users WHERE ${where}) AS balance_total,
+      (SELECT COALESCE(SUM(gens),0)::int FROM users WHERE ${where}) AS gens_total,
+      (SELECT COALESCE(SUM(spent),0)::int FROM users WHERE ${where}) AS spent_total,
+      (SELECT COALESCE(SUM(delta),0)::int FROM history WHERE delta > 0 AND ${where}) AS credited_total,
+      (SELECT COUNT(*)::int FROM support_tickets WHERE status = 'open' ${platform === 'vk' ? 'AND user_id < 0' : platform === 'tg' ? 'AND user_id > 0' : ''}) AS tickets_open
   `);
   return q.rows[0];
+}
+
+async function findUser(userId) {
+  const res = await pool.query('SELECT user_id, blocked, balance FROM users WHERE user_id = $1', [String(userId)]);
+  return res.rows[0] || null;
 }
 
 async function getUser(userId) {
@@ -605,10 +612,21 @@ async function listHistory(userId, limit = 40) {
   return res.rows;
 }
 
-async function listTemplates(all = false) {
-  const res = all
-    ? await pool.query('SELECT * FROM templates ORDER BY sort ASC, id DESC')
-    : await pool.query('SELECT * FROM templates WHERE active = true ORDER BY sort ASC, id ASC');
+function audienceSql(audience, params) {
+  if (audience === 'vk') return `(audience = 'vk' OR audience = 'all' OR audience IS NULL)`;
+  if (audience === 'tg') return `(audience = 'tg' OR audience = 'all' OR audience IS NULL)`;
+  if (audience === 'vk-only') return `audience = 'vk'`;
+  return '';
+}
+
+async function listTemplates(all = false, audience) {
+  const parts = [];
+  if (!all) parts.push('active = true');
+  const gate = audienceSql(audience);
+  if (gate) parts.push(gate);
+  const where = parts.length ? `WHERE ${parts.join(' AND ')}` : '';
+  const order = all ? 'sort ASC, id DESC' : 'sort ASC, id ASC';
+  const res = await pool.query(`SELECT * FROM templates ${where} ORDER BY ${order}`);
   return res.rows;
 }
 
@@ -640,22 +658,23 @@ async function saveTemplate(data) {
     data.formats ? String(data.formats).trim().slice(0, 200) : null,
     Number.isFinite(Number(data.sort)) ? Math.round(Number(data.sort)) : 0,
     String(data.quality || '').trim().slice(0, 40) || null,
-    Number(data.duration) > 0 ? Math.round(Number(data.duration)) : null
+    Number(data.duration) > 0 ? Math.round(Number(data.duration)) : null,
+    ['tg', 'vk', 'all'].includes(data.audience) ? data.audience : 'all'
   ];
   if (data.id) {
     const res = await pool.query(
       `UPDATE templates
        SET title=$1, category=$2, prompt=$3, model=$4, cost=$5, active=$6,
            image=$7, description=$8, hide_prompt=$9, formats=$10, sort=$11,
-           quality=$12, duration=$13
-       WHERE id=$14 RETURNING *`,
+           quality=$12, duration=$13, audience=$14
+       WHERE id=$15 RETURNING *`,
       [...values, data.id]
     );
     return res.rows[0];
   }
   const res = await pool.query(
-    `INSERT INTO templates (title, category, prompt, model, cost, active, image, description, hide_prompt, formats, sort, quality, duration)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+    `INSERT INTO templates (title, category, prompt, model, cost, active, image, description, hide_prompt, formats, sort, quality, duration, audience)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
     values
   );
   return res.rows[0];
@@ -724,6 +743,7 @@ module.exports = {
   answerTicket,
   listUserIds,
   getStats,
+  findUser,
   getUserBalance,
   updateBalance,
   debitBalance,

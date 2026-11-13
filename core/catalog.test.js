@@ -167,6 +167,18 @@ test('справка в боте объясняет кнопки и не сод�
     assert.match(text, /https:\/\/vk\.ru\/write-236645486/);
     assert.match(text, /https:\/\/max\.ru\/se14387925_bot/);
     assert.match(text, /https:\/\/babayagaland\.ru/);
+    assert.match(text, /Во ВК/);
     assert.ok(text.length < 3900);
     assert.equal(/kie|railway|api[_ -]?key|себестоимость|оптом|\$0/i.test(text), false);
+});
+
+test('модель можно выключить только во ВК', async () => {
+    const db = { setSetting: async () => {} };
+    const key = 'flash';
+    assert.ok(catalog.getModel(key, { audience: 'vk' }));
+    await catalog.saveVkModels(db, { [key]: { enabled: false } });
+    assert.equal(catalog.getModel(key, { audience: 'vk' }), null);
+    assert.ok(catalog.getModel(key));
+    await catalog.saveVkModels(db, {});
+    assert.ok(catalog.getModel(key, { audience: 'vk' }));
 });

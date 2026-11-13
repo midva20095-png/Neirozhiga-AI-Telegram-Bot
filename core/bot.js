@@ -10,6 +10,7 @@ const channel = require('./channel');
 const share = require('./share');
 const templatesSrc = require('./templates');
 const vk = require('./vk');
+const bridge = require('./bridge');
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 16 * 60 * 1000 });
 
@@ -80,7 +81,8 @@ function otherBotsKeyboard() {
 
 function transferMenuKeyboard() {
     return Markup.inlineKeyboard([
-        [Markup.button.callback('↗️ На сайт', 'transfer_start'), Markup.button.callback('↙️ С сайта', 'pull_start')]
+        [Markup.button.callback('↗️ На сайт', 'transfer_start'), Markup.button.callback('↙️ С сайта', 'pull_start')],
+        [Markup.button.callback('Во ВК', 'vk_move_start')]
     ]);
 }
 
@@ -111,8 +113,10 @@ async function showTransferMenu(ctx) {
     await ctx.reply(
         `↔️ Перенос баланса\n\n` +
         `В боте сейчас: ${balance} кр.\n` +
+        `Ваш номер в Telegram: ${ctx.from.id}. Его вписывают в кабинете ВК, чтобы перенести кредиты сюда.\n` +
         `«На сайт» переносит кредиты на почту кабинета ${site}.\n` +
-        `«С сайта» возвращает их в бот. Нужны почта и пароль сайта, пароль не сохраняется.`,
+        `«С сайта» возвращает их в бот. Нужны почта и пароль сайта, пароль не сохраняется.\n` +
+        `«Во ВК» переносит кредиты на номер из кабинета ВКонтакте.`,
         transferMenuKeyboard()
     );
 }
@@ -252,6 +256,45 @@ async function handleTransferText(ctx, text) {
     if (!state) return;
     if (state.dir === 'in') {
         await handlePullText(ctx, text);
+        return;
+    }
+    if (state.dir === 'vk') {
+        if (state.step === 'id') {
+            const to = bridge.vkAccount(text);
+            if (!to) {
+                await ctx.reply('Это не номер ВК. Откройте кабинет ВК, вкладка «Баланс», и напишите число оттуда.');
+                return;
+            }
+            state.vkAccount = String(to);
+            state.vkShown = String(-to);
+            state.step = 'amount';
+            const balance = await getUserBalance(userId);
+            if (balance <= 0) {
+                userTransfer.delete(userId);
+                await ctx.reply('На балансе 0 кредитов. Сначала пополните его.', mainKeyboard(userId));
+                return;
+            }
+            await ctx.reply(`Номер ВК: ${state.vkShown}\nВ Telegram сейчас ${balance} кр.\nНапишите, сколько перенести.`);
+            return;
+        }
+        const n = bridge.amountOf(text);
+        if (!n) {
+            await ctx.reply('Напишите целое число кредитов.');
+            return;
+        }
+        const balance = await getUserBalance(userId);
+        if (n > balance) {
+            await ctx.reply(`На балансе ${balance} кр. — больше перенести нельзя.`);
+            return;
+        }
+        state.amount = n;
+        state.step = 'confirm';
+        await ctx.reply(
+            `Перенести ${n} кр. на номер ВК ${state.vkShown}?`,
+            Markup.inlineKeyboard([
+                [Markup.button.callback('Перенести', 'vk_move_yes'), Markup.button.callback('Отмена', 'transfer_cancel')]
+            ])
+        );
         return;
     }
     if (state.step === 'email') {
@@ -672,6 +715,41 @@ async function startBot(app) {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
         await ctx.reply(catalog.getGeneral().help_text, mainKeyboard(ctx.from.id));
+    });
+
+    bot.action('vk_move_start', async (ctx) => {
+        await ctx.answerCbQuery();
+        userAwaitingEmail.delete(ctx.from.id);
+        userAwaitingSupport.delete(ctx.from.id);
+        userTransfer.set(ctx.from.id, { dir: 'vk', step: 'id' });
+        await ctx.reply(
+            `Во ВКонтакте отдельный баланс.\nВаш номер в Telegram: ${ctx.from.id}\nЕго вписывают в кабинете ВК на вкладке «Баланс», чтобы прислать кредиты сюда.\n\nНапишите номер ВК со вкладки «Баланс».`,
+            Markup.inlineKeyboard([[Markup.button.callback('Отмена', 'transfer_cancel')]])
+        );
+    });
+
+    bot.action('vk_move_yes', async (ctx) => {
+        const state = userTransfer.get(ctx.from.id);
+        if (!state || state.dir !== 'vk' || state.step !== 'confirm' || !state.vkAccount || !(state.amount > 0)) {
+            await ctx.answerCbQuery('Начните перенос заново');
+            return;
+        }
+        userTransfer.delete(ctx.from.id);
+        const moved = await bridge.moveCredits(db, {
+            fromId: String(ctx.from.id),
+            toId: state.vkAccount,
+            amount: state.amount,
+            takeReason: `Перенос во ВК ${state.vkShown}`,
+            giveReason: 'Перенос из Telegram'
+        });
+        await ctx.answerCbQuery(moved.ok ? 'Готово' : 'Не вышло');
+        const text = moved.ok
+            ? `Перенесли ${state.amount} кр. во ВК ${state.vkShown}. В Telegram осталось ${moved.balance} кр.`
+            : moved.error;
+        try { await ctx.editMessageText(text); } catch (e) { await ctx.reply(text); }
+        if (moved.ok) {
+            try { await vk.notify(state.vkAccount, `Из Telegram перенесли ${state.amount} кр. Они уже на балансе ВК.`); } catch (e) {}
+        }
     });
 
     bot.action('transfer_start', async (ctx) => {

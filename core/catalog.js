@@ -139,6 +139,7 @@ const BASE_GENERAL = {
         'Баланс и сайт\n' +
         '«Баланс» показывает, сколько кредитов осталось. «Пополнить» присылает оплату в этот чат. После успешной оплаты кредиты приходят на этот аккаунт.\n' +
         '«Перенос» открывает перенос баланса. «На сайт» переносит кредиты на почту, с которой вы входите на сайт. «С сайта» возвращает их в бот: нужны почта и пароль сайта. Пароль только проверяется и в боте не сохраняется. Если перенос не подтвердился, сумма остаётся там, где была.\n' +
+        '«Во ВК» переносит кредиты на номер из кабинета ВКонтакте. Обратно их переносят на вкладке «Баланс» в кабинете ВК: туда вписывают номер Telegram из меню «Перенос». Пока кредиты не перенесли, балансы ВК и Telegram разные.\n' +
         '«Канал» открывает канал НейроЯга. Готовую работу из «Моих работ» можно отправить туда кнопкой «В канал». Если работа сделана по шаблону, в посте будет ссылка на этот шаблон. Текст задания в канал не попадает.\n' +
         '«Ещё боты» открывает ботов НейроЯги в других мессенджерах. Это боты, которым можно писать, а не сообщества.\n' +
         'Бот во ВКонтакте: https://vk.ru/write-236645486\n' +
@@ -152,7 +153,7 @@ const BASE_GENERAL = {
     site_url: 'https://babayagaland.ru'
 };
 
-let overrides = { models: {}, packages: null, general: {} };
+let overrides = { models: {}, packages: null, general: {}, vk_models: {} };
 
 function defaultEnabled(m) {
     if (m.provider === 'giga') return !!process.env.GIGACHAT_AUTH_KEY;
@@ -245,9 +246,12 @@ function quote(model, opts) {
     return Math.max(0, Math.round(Number(model.cost) || 0));
 }
 
-function listModels({ includeDisabled = false } = {}) {
+function listModels({ includeDisabled = false, audience = 'tg' } = {}) {
     const out = BASE_MODELS.map((m, idx) => {
         const o = overrides.models[m.key] || {};
+        const telegramOn = typeof o.enabled === 'boolean' ? o.enabled : defaultEnabled(m);
+        const vkFlag = overrides.vk_models[m.key];
+        const vkOn = vkFlag && typeof vkFlag.enabled === 'boolean' ? vkFlag.enabled : telegramOn;
         return {
             ...m,
             order: idx,
@@ -256,18 +260,19 @@ function listModels({ includeDisabled = false } = {}) {
             desc: o.desc !== undefined ? o.desc : m.desc,
             cost: Number.isFinite(Number(o.cost)) && o.cost !== '' && o.cost !== null ? Math.max(0, Math.round(Number(o.cost))) : m.cost,
             limit: resolvedLimit(m, Object.prototype.hasOwnProperty.call(overrides.models, m.key) ? overrides.models[m.key] : null),
-            enabled: typeof o.enabled === 'boolean' ? o.enabled : defaultEnabled(m)
+            vkEnabled: vkOn,
+            enabled: audience === 'vk' ? vkOn : telegramOn
         };
     });
     return includeDisabled ? out : out.filter(m => m.enabled);
 }
 
-function getModel(key, { includeDisabled = false } = {}) {
-    return listModels({ includeDisabled }).find(m => m.key === key) || null;
+function getModel(key, { includeDisabled = false, audience = 'tg' } = {}) {
+    return listModels({ includeDisabled, audience }).find(m => m.key === key) || null;
 }
 
-function modelsByGroup(group) {
-    return listModels()
+function modelsByGroup(group, audience) {
+    return listModels({ audience: audience === 'vk' ? 'vk' : 'tg' })
         .filter(m => m.group === group)
         .sort((a, b) => fromPrice(a) - fromPrice(b) || a.order - b.order);
 }
@@ -291,14 +296,16 @@ function getGeneral() {
     const previousChannelHelp = help.includes('«Перенос» открывает перенос баланса') && !help.includes('«Канал» открывает канал');
     const previousBotsHelp = help.includes('«Канал» открывает канал') && !help.includes('https://max.ru/se14387925_bot');
     const previousBotLabels = help.includes('«ВК» открывает бота во ВКонтакте') && !help.includes('«Ещё боты»');
-    if (!help || help.startsWith(LEGACY_HELP) || previousTransferHelp || previousChannelHelp || previousBotsHelp || previousBotLabels) general.help_text = BASE_GENERAL.help_text;
+    const missingVkMove = help.includes('Один кредит равен одному рублю.') && !help.includes('Во ВК');
+    if (!help || help.startsWith(LEGACY_HELP) || previousTransferHelp || previousChannelHelp || previousBotsHelp || previousBotLabels || missingVkMove) general.help_text = BASE_GENERAL.help_text;
     return general;
 }
 
-function defaultModelKey() {
+function defaultModelKey(audience) {
+    const place = audience === 'vk' ? 'vk' : 'tg';
     const wanted = getGeneral().default_model;
-    if (getModel(wanted)) return wanted;
-    const first = listModels()[0];
+    if (getModel(wanted, { audience: place })) return wanted;
+    const first = listModels({ audience: place })[0];
     return first ? first.key : 'flash';
 }
 
@@ -311,14 +318,16 @@ function asJson(value) {
 
 async function load(db) {
     try {
-        const rows = await db.getSettings(['models', 'packages', 'general']);
+        const rows = await db.getSettings(['models', 'packages', 'general', 'vk_models']);
         const models = asJson(rows.models);
         const packages = asJson(rows.packages);
         const general = asJson(rows.general);
+        const vkModels = asJson(rows.vk_models);
         overrides = {
             models: models && typeof models === 'object' && !Array.isArray(models) ? models : {},
             packages: Array.isArray(packages) ? packages : null,
-            general: general && typeof general === 'object' && !Array.isArray(general) ? general : {}
+            general: general && typeof general === 'object' && !Array.isArray(general) ? general : {},
+            vk_models: vkModels && typeof vkModels === 'object' && !Array.isArray(vkModels) ? vkModels : {}
         };
     } catch (e) {
         console.error('⚠️ Не удалось загрузить настройки каталога:', e.message);
@@ -373,6 +382,23 @@ function sanitizeGeneral(input) {
     return out;
 }
 
+function sanitizeVkModels(input) {
+    const known = new Set(BASE_MODELS.map(m => m.key));
+    const out = {};
+    for (const [key, o] of Object.entries(input || {})) {
+        if (!known.has(key) || !o || typeof o !== 'object' || typeof o.enabled !== 'boolean') continue;
+        out[key] = { enabled: o.enabled };
+    }
+    return out;
+}
+
+async function saveVkModels(db, input) {
+    const value = sanitizeVkModels(input);
+    await db.setSetting('vk_models', value);
+    overrides.vk_models = value;
+    return listModels({ includeDisabled: true, audience: 'vk' });
+}
+
 async function saveModels(db, input) {
     const value = sanitizeModelOverrides(input);
     await db.setSetting('models', value);
@@ -414,6 +440,7 @@ module.exports = {
     defaultModelKey,
     load,
     saveModels,
+    saveVkModels,
     savePackages,
     saveGeneral
 };
