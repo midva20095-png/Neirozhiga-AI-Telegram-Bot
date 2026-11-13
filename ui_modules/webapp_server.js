@@ -416,11 +416,11 @@ function startWebApp() {
     });
 
     app.post('/api/generate', requireUser, async (req, res) => {
+        const body = req.body || {};
+        let modelKey = body.model;
         try {
-            const body = req.body || {};
             if (!(await requireChannel(req, res))) return;
             let prompt = body.prompt ? String(body.prompt).trim() : '';
-            let modelKey = body.model;
             let charge;
             let reason;
             let aspect = body.format || null;

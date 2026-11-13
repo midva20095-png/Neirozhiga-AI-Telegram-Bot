@@ -282,7 +282,10 @@ function viewGen(){
   }
   const note = m && m.audio
     ? '<div class="hint">Говорящее фото запускается в чате бота: отправьте фото и голосовое сообщение.</div>' : '';
-  const go = m && m.audio ? '' : '<button class="btn" id="go"'+(busy?' disabled':'')+'>'+(busy?'<span class="spin"></span>Генерирую…':'Сгенерировать · '+price+' кр')+'</button>';
+  const lack = shortOf(price);
+  const go = m && m.audio ? '' : (lack
+    ? '<button class="btn" type="button" disabled>Недостаточно кредитов</button><p class="err">'+esc(lack)+'</p><button class="btn ghost" id="goTop" type="button">Пополнить</button>'
+    : '<button class="btn" id="go"'+(busy?' disabled':'')+'>'+(busy?'<span class="spin"></span>Генерирую…':'Сгенерировать · '+price+' кр')+'</button>');
   return '<div class="card">'+info+opts+
     '<textarea id="prompt" placeholder="Опишите, что сгенерировать">'+esc(draft || (last&&last._prompt) || '')+'</textarea>'+
     photo+go+note+res+'</div>';
@@ -337,12 +340,16 @@ function viewTplRun(){
   const photo = t.photo ? '<label class="filebtn">'+(photoData?'Фото прикреплено — заменить':'Прикрепить своё фото')+'<input id="file" type="file" accept="image/*"></label>'+(photoData?'<img class="preview" style="margin-top:10px" src="'+photoData+'" alt="">':'') : '';
   const res = last ? renderResult(last) : '';
   const lead = t.desc || (t.photo ? 'Готовая картинка появится здесь, её можно сразу сохранить' : 'Результат появится здесь');
+  const lack = shortOf(t.cost||0);
+  const create = lack
+    ? '<button class="btn" type="button" disabled>Недостаточно кредитов</button><p class="err">'+esc(lack)+'</p><button class="btn ghost" id="goTop" type="button">Пополнить</button>'
+    : '<button class="btn" id="goTpl"'+(busy?' disabled':'')+'>'+(busy?'<span class="spin"></span>Генерирую…':'Создать за '+(t.cost||0)+' кр.')+'</button>';
   return '<div class="card"><button class="back" id="back" type="button">← Шаблоны</button>'+
     (src?'<div class="thero"><img src="'+esc(src)+'" alt=""></div>':'')+
     '<div class="name">'+esc(t.title)+'</div>'+
     '<div class="meta" style="margin:6px 0 12px">'+esc(lead)+'</div>'+
     sizeChips+photo+
-    '<button class="btn" id="goTpl"'+(busy?' disabled':'')+'>'+(busy?'<span class="spin"></span>Генерирую…':'Создать за '+(t.cost||0)+' кр.')+'</button>'+
+    create+
     '<button class="btn ghost" id="shareTpl" type="button">Ссылка для канала</button>'+res+'</div>';
 }
 function ensureWorks(){
@@ -382,6 +389,12 @@ function viewHist(){
   return viewWorks()+ops;
 }
 function isVk(){ return String(token||userId||'').startsWith('-'); }
+function shortOf(cost){
+  const need = Number(cost) || 0;
+  const have = me ? Number(me.balance) : NaN;
+  if (!(need > 0) || !Number.isFinite(have) || have >= need) return '';
+  return 'Недостаточно кредитов. На балансе '+have+', нужно '+need+'.';
+}
 function viewTop(){
   const packs = (cfg&&cfg.packages)||[];
   const site = (cfg&&cfg.site_url) || 'сайт';
@@ -462,6 +475,7 @@ function bind(){
   const back=document.getElementById('back'); if (back) back.onclick=()=>{ openTpl=null; photoData=null; last=null; draw(); };
   const file=document.getElementById('file'); if (file) file.onchange=()=>onPhoto(file);
   const goTpl=document.getElementById('goTpl'); if (goTpl) goTpl.onclick=generateTemplate;
+  const goTop=document.getElementById('goTop'); if (goTop) goTop.onclick=function(){ tab='top'; last=null; draw(); };
   const shareTpl=document.getElementById('shareTpl'); if (shareTpl) shareTpl.onclick=function(){ shareTemplate(openTpl); };
   document.querySelectorAll('[data-out]').forEach(function(el){ el.onclick = function(ev){ ev.preventDefault(); openOut(el.dataset.out); }; });
   document.querySelectorAll('[data-dl]').forEach(function(el){ el.onclick = function(){ downloadWork(el.dataset.dl, el.dataset.kind); }; });
@@ -615,6 +629,8 @@ async function generateTemplate(){
   if (busy) return;
   const t = templates.find(x=>String(x.id)===String(openTpl));
   if (!t) return;
+  const lack = shortOf(t.cost||0);
+  if (lack) { last = {error:lack}; draw(); return; }
   if (t.photo && !photoData) { last = {error:'Прикрепите фото'}; draw(); return; }
   busy = true;
   last = { text: 'Создаю'+(pickedFormat?' · размер '+pickedFormat:'')+'…' };
@@ -665,6 +681,8 @@ async function generate(){
   if (busy) return;
   const prompt = ((document.getElementById('prompt')||{}).value||'').trim();
   const m = modelOf((me&&me.current_model)||'');
+  const lack = shortOf(m ? quote(m, {quality:pickedQuality, duration:pickedDuration}) : 0);
+  if (lack) { last = {_prompt:prompt, error:lack}; draw(); return; }
   if (m && m.audio) return;
   if (m && m.image === 'required' && !genPhoto) { last = {_prompt:prompt, error:'Прикрепите фото'}; draw(); return; }
   if (!prompt && !genPhoto) return;

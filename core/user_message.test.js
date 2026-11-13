@@ -10,6 +10,6 @@ test('пользователь не видит текст ошибки серв�
         userMessage({ code: 'need_image', message: 'Для этой модели нужно прикрепить изображение' }),
         'Для этой модели нужно прикрепить изображение'
     );
-    assert.match(userMessage({ code: 'no_credits', message: 'Недостаточно кредитов: 1, нужно 6' }), /Недостаточно кредитов/);
+    assert.match(userMessage({ code: 'no_credits', message: 'Недостаточно кредитов. На балансе 1, нужно 6. Пополните баланс.' }), /Недостаточно кредитов/);
     assert.equal(userMessage(null), QUIET_ERROR);
 });

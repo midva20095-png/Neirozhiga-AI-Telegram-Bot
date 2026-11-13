@@ -65,7 +65,7 @@ async function prepare({ userId, modelKey, hasImage, hasText, charge, strict, du
         ? Math.max(0, Math.round(Number(charge)))
         : catalog.quote(model, { duration, quality, seconds: audioSeconds });
     if (Number(user.balance) < price) {
-        throw new GenError(`Недостаточно кредитов: ${user.balance}, нужно ${price}`, 'no_credits');
+        throw new GenError(`Недостаточно кредитов. На балансе ${user.balance}, нужно ${price}. Пополните баланс.`, 'no_credits');
     }
 
     return { user, model, plugin, price };
