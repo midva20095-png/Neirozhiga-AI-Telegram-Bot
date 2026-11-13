@@ -26,6 +26,18 @@ function readIncoming(update) {
     };
 }
 
+function connectHint(error) {
+    const code = Number(error && error.code);
+    const msg = String((error && error.message) || '');
+    if (/longpoll for this group is not enabled/i.test(msg)) {
+        return 'В сообществе выключен Long Poll API.';
+    }
+    if (code === 5) return 'Ключ сообщества не принят. Создайте новый, с правом «Управление».';
+    if (code === 15 || code === 27 || code === 28) return 'Нужен ключ сообщества с правом «Управление», не сервисный ключ.';
+    if (code === 100) return 'Проверьте номер сообщества и включённый Long Poll API.';
+    return 'Проверьте ключ сообщества и Long Poll API.';
+}
+
 function isGreeting(text) {
     const value = String(text || '').trim().toLowerCase();
     return value === 'начать' || value === 'start' || value === '/start' || value === 'привет' || value === 'баланс';
@@ -123,12 +135,13 @@ async function handleUpdate(token, update) {
 }
 
 async function poll(token, groupId) {
-    let announced = false;
+    let online = false;
+    let failLogged = false;
     for (;;) {
         try {
             let server = await call(token, 'groups.getLongPollServer', { group_id: groupId });
-            if (!announced) {
-                announced = true;
+            if (!online) {
+                online = true;
                 console.log('ВК подключён, жду сообщения сообщества.');
             }
             for (;;) {
@@ -159,9 +172,11 @@ async function poll(token, groupId) {
                 }
             }
         } catch (error) {
-            if (!announced) {
-                announced = true;
-                console.error('ВК не подключился. Telegram работает как прежде. Проверьте ключ сообщества и Long Poll.');
+            online = false;
+            if (!failLogged) {
+                failLogged = true;
+                const code = Number(error && error.code);
+                console.error(`ВК не подключился${code ? ` (${code})` : ''}. ${connectHint(error)} Telegram работает как прежде.`);
             }
             await new Promise(r => setTimeout(r, 15000));
         }
@@ -175,4 +190,4 @@ function startVk() {
     poll(token, groupId).catch(() => {});
 }
 
-module.exports = { accountId, readIncoming, isGreeting, startVk };
+module.exports = { accountId, readIncoming, isGreeting, connectHint, startVk };

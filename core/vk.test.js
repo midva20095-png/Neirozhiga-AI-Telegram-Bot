@@ -9,6 +9,12 @@ test('аккаунт ВК не совпадает с числом Telegram', () 
     assert.equal(vk.accountId('нет'), null);
 });
 
+test('отказ ВК объясняется без ключа', () => {
+    assert.match(vk.connectHint({ code: 100, message: 'longpoll for this group is not enabled' }), /Long Poll API/);
+    assert.match(vk.connectHint({ code: 15, message: 'Access denied' }), /Управление/);
+    assert.match(vk.connectHint({ code: 5, message: 'invalid access_token vk1.a.secret' }), /Ключ сообщества/);
+});
+
 test('из события ВК берётся только входящий текст человека', () => {
     const update = {
         type: 'message_new',
