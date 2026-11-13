@@ -6,6 +6,7 @@ const catalog = require('./catalog');
 const gen = require('./generate');
 const auth = require('./auth');
 const transferApi = require('./transfer');
+const channel = require('./channel');
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 16 * 60 * 1000 });
 
@@ -44,7 +45,7 @@ function baseWebappUrl() {
 // Кнопка web_app в обычной клавиатуре открывает Mini App с пустым initData,
 // поэтому для надёжного определения пользователя подписываем id и кладём в ссылку.
 function webappUrlFor(userId) {
-    return `${baseWebappUrl()}/?v=16#tk=${auth.signUserId(userId)}`;
+    return `${baseWebappUrl()}/?v=17#tk=${auth.signUserId(userId)}`;
 }
 
 function mainKeyboard(userId) {
@@ -420,6 +421,43 @@ async function startBot(app) {
             userTransfer.delete(ctx.from.id);
         }
         return next();
+    });
+
+    function channelKeyboard() {
+        return Markup.inlineKeyboard([
+            [Markup.button.url('Подписаться на канал', channel.CHANNEL_URL)],
+            [Markup.button.callback('Я подписался', 'sub_check')]
+        ]);
+    }
+
+    async function requireChannel(ctx) {
+        const gate = await channel.subscribed(ctx.telegram, ctx.from.id);
+        if (gate.ok) return true;
+        const text = 'Чтобы пользоваться ботом, подпишитесь на канал НейроЯга. После подписки нажмите «Я подписался».';
+        if (ctx.callbackQuery) {
+            try { await ctx.answerCbQuery('Нужна подписка на канал'); } catch (e) {}
+        }
+        try { await ctx.reply(text, channelKeyboard()); } catch (e) {}
+        return false;
+    }
+
+    bot.use(async (ctx, next) => {
+        if (!ctx.from || ctx.from.is_bot) return next();
+        if (ctx.callbackQuery && ctx.callbackQuery.data === 'sub_check') return next();
+        if (!(await requireChannel(ctx))) return;
+        return next();
+    });
+
+    bot.action('sub_check', async (ctx) => {
+        channel.clear(ctx.from.id);
+        const gate = await channel.subscribed(ctx.telegram, ctx.from.id);
+        if (!gate.ok) {
+            try { await ctx.answerCbQuery('Подписки пока нет'); } catch (e) {}
+            await ctx.reply('Подписки на канал ещё нет. Откройте канал, подпишитесь и нажмите кнопку ещё раз.', channelKeyboard());
+            return;
+        }
+        try { await ctx.answerCbQuery('Подписка есть'); } catch (e) {}
+        await ctx.reply('Подписка есть. Можно пользоваться ботом.', mainKeyboard(ctx.from.id));
     });
 
     bot.start(async (ctx) => {
@@ -971,7 +1009,7 @@ async function startBot(app) {
 
     try {
         await bot.telegram.setChatMenuButton({
-            menu_button: { type: 'web_app', text: 'Кабинет', web_app: { url: baseWebappUrl() + '/?v=16' } }
+            menu_button: { type: 'web_app', text: 'Кабинет', web_app: { url: baseWebappUrl() + '/?v=17' } }
         });
         console.log('✅ Кнопка меню Mini App установлена');
     } catch (e) {

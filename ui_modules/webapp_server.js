@@ -6,6 +6,7 @@ const gen = require('../core/generate');
 const auth = require('../core/auth');
 const templatesSrc = require('../core/templates');
 const transfer = require('../core/transfer');
+const channel = require('../core/channel');
 
 // Определяет пользователя из initData Telegram или из подписанной ссылки.
 function resolveUserId(req) {
@@ -104,9 +105,22 @@ function startWebApp() {
         });
     });
 
+    async function requireChannel(req, res) {
+        const gateBot = app.locals.bot;
+        if (!gateBot) return true;
+        const gate = await channel.subscribed(gateBot.telegram, req.userId);
+        if (gate.ok) return true;
+        res.status(403).json({
+            error: 'Подпишитесь на канал https://t.me/neuroyaga_AI и нажмите «Я подписался» в боте.',
+            channel: channel.CHANNEL_URL
+        });
+        return false;
+    }
+
     // ---- Пользовательские эндпоинты ----
     app.get('/api/me', requireUser, async (req, res) => {
         try {
+            if (!(await requireChannel(req, res))) return;
             const user = await db.getUser(req.userId);
             const history = await db.listHistory(req.userId, 40);
             let current = user.current_model || catalog.defaultModelKey();
@@ -147,13 +161,41 @@ function startWebApp() {
             const row = await db.getWork(req.userId, req.params.id);
             if (!row || !row.bytes) return res.status(404).end();
             const allowed = ['image/png', 'image/jpeg', 'image/webp', 'video/mp4', 'audio/mpeg'];
-            res.set('Content-Type', allowed.includes(row.mime) ? row.mime : 'application/octet-stream');
+            const mime = allowed.includes(row.mime) ? row.mime : 'application/octet-stream';
+            const ext = mime === 'video/mp4' ? 'mp4' : mime === 'audio/mpeg' ? 'mp3' : mime === 'image/jpeg' ? 'jpg' : mime === 'image/webp' ? 'webp' : 'png';
+            res.set('Content-Type', mime);
             res.set('Cache-Control', 'private, max-age=86400');
             res.set('X-Content-Type-Options', 'nosniff');
+            if (req.query.dl) res.set('Content-Disposition', `attachment; filename="neuroyaga.${ext}"`);
             res.send(row.bytes);
         } catch (e) {
             console.error('API /api/works/:id:', e.message);
             res.status(500).end();
+        }
+    });
+
+    app.post('/api/works/:id/send', requireUser, async (req, res) => {
+        try {
+            const row = await db.getWork(req.userId, req.params.id);
+            if (!row || !row.bytes) return res.status(404).json({ error: 'Файл не найден' });
+            const bot = app.locals.bot;
+            if (!bot) return res.status(503).json({ error: 'Бот сейчас недоступен' });
+            const mime = row.mime || 'image/png';
+            const ext = mime === 'video/mp4' ? 'mp4' : mime === 'audio/mpeg' ? 'mp3' : mime === 'image/jpeg' ? 'jpg' : mime === 'image/webp' ? 'webp' : 'png';
+            const file = { source: row.bytes, filename: `neuroyaga.${ext}` };
+            if (mime.startsWith('image/') && mime !== 'image/webp' && row.bytes.length <= 9 * 1024 * 1024) {
+                await bot.telegram.sendPhoto(req.userId, file);
+            } else if (mime === 'video/mp4') {
+                await bot.telegram.sendVideo(req.userId, file);
+            } else if (mime === 'audio/mpeg') {
+                await bot.telegram.sendAudio(req.userId, file);
+            } else {
+                await bot.telegram.sendDocument(req.userId, file);
+            }
+            res.json({ ok: true });
+        } catch (e) {
+            console.error('API /api/works/:id/send:', e.message);
+            res.status(500).json({ error: 'Не удалось отправить файл в чат' });
         }
     });
 
@@ -181,6 +223,7 @@ function startWebApp() {
     app.post('/api/generate', requireUser, async (req, res) => {
         try {
             const body = req.body || {};
+            if (!(await requireChannel(req, res))) return;
             let prompt = body.prompt ? String(body.prompt).trim() : '';
             let modelKey = body.model;
             let charge;

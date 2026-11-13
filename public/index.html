@@ -75,6 +75,7 @@ textarea{width:100%;min-height:120px;border-radius:14px;border:1px solid var(--l
 .tile .cap{padding:8px 10px 10px}
 .tile .cap b{display:block}
 .tile .cap span{display:block;color:var(--mut);font-size:12px;font-weight:600}
+.tile .dl{display:block;width:100%;border:0;background:transparent;color:#00d4ff;font-weight:800;text-align:left;padding:0 10px 10px}
 input{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1233;padding:12px;outline:none;margin-top:8px}
 </style>
 </head>
@@ -185,6 +186,12 @@ async function load(){
   try {
     const r = await fetch('/api/me', {headers: authHeaders()});
     if (r.status === 401) { me = null; draw(); return; }
+    if (r.status === 403) {
+      const d = await r.json().catch(function(){ return {}; });
+      me = { channel: d.channel || 'https://t.me/neuroyaga_AI' };
+      draw();
+      return;
+    }
     me = await r.json();
     if (me.error) throw new Error(me.error);
   } catch(e){ me = {error:true, balance:0, history:[], current_model:(cfg&&cfg.default_model)||'flash'}; }
@@ -197,6 +204,10 @@ function draw(){
   const box = document.getElementById('view');
   if (!userId || (me && !me.user_id && me.error!==true && !me.balance)) {
     box.innerHTML = '<div class="card"><p class="empty">Откройте кабинет кнопкой «Кабинет» в боте — ссылка из обычного браузера не передаёт аккаунт Telegram.</p></div>';
+    return;
+  }
+  if (me && me.channel) {
+    box.innerHTML = '<div class="card"><p>Чтобы пользоваться ботом, подпишитесь на канал НейроЯга.</p><a class="btn" href="'+esc(me.channel)+'" target="_blank" rel="noopener">Подписаться</a><p class="empty">После подписки нажмите «Я подписался» в чате бота и откройте кабинет снова.</p></div>';
     return;
   }
   if (me && me.blocked) { box.innerHTML = '<div class="card err">Аккаунт в чёрном списке.</div>'; return; }
@@ -308,7 +319,8 @@ function viewWorks(){
         : '<img data-work="'+w.id+'" alt="">';
     const when = w.created_at ? new Date(w.created_at).toLocaleString('ru-RU', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : '';
     const cap = (w.prompt||'').slice(0, 80);
-    return '<div class="tile">'+media+'<div class="cap"><b>'+esc(w.model||'Работа')+'</b><span>'+esc(when)+(cap?' · '+esc(cap):'')+'</span></div></div>';
+    return '<div class="tile">'+media+'<div class="cap"><b>'+esc(w.model||'Работа')+'</b><span>'+esc(when)+(cap?' · '+esc(cap):'')+'</span></div>'+
+      '<button type="button" class="dl" data-dl="'+w.id+'" data-kind="'+esc(w.kind||'image')+'">Скачать</button></div>';
   }).join('')+'</div>';
 }
 function viewHist(){
@@ -377,6 +389,7 @@ function bind(){
   const back=document.getElementById('back'); if (back) back.onclick=()=>{ openTpl=null; photoData=null; last=null; draw(); };
   const file=document.getElementById('file'); if (file) file.onchange=()=>onPhoto(file);
   const goTpl=document.getElementById('goTpl'); if (goTpl) goTpl.onclick=generateTemplate;
+  document.querySelectorAll('[data-dl]').forEach(function(el){ el.onclick = function(){ downloadWork(el.dataset.dl, el.dataset.kind); }; });
   document.querySelectorAll('[data-work]').forEach(function(el){
     fetch('/api/works/'+el.dataset.work, {headers: authHeaders()})
       .then(function(r){ if (!r.ok) throw new Error(); return r.blob(); })
@@ -386,6 +399,31 @@ function bind(){
   const ss = document.getElementById('supsend'); if (ss) ss.onclick = sendSupport;
   const tr = document.getElementById('transfer'); if (tr) tr.onclick = sendTransfer;
   const pull = document.getElementById('pull'); if (pull) pull.onclick = sendPull;
+}
+function workFileName(id, kind){
+  const ext = kind==='video' ? 'mp4' : kind==='audio' ? 'mp3' : 'png';
+  return 'neuroyaga-'+id+'.'+ext;
+}
+async function sendWorkToChat(id){
+  const r = await fetch('/api/works/'+id+'/send', {method:'POST', headers: authHeaders()});
+  const d = await r.json().catch(function(){ return {}; });
+  if (!r.ok || !d.ok) throw new Error(d.error || 'Не удалось отправить файл');
+}
+async function downloadWork(id, kind){
+  const name = workFileName(id, kind);
+  const url = location.origin + '/api/works/' + id + '?tk=' + encodeURIComponent(token||'') + '&dl=1';
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg && typeof tg.downloadFile === 'function') {
+    tg.downloadFile({ url: url, file_name: name }, function(ok){
+      if (ok) return;
+      sendWorkToChat(id).then(function(){ alert('Файл отправлен в чат бота. Сохраните его оттуда.'); }).catch(function(e){ alert(e.message); });
+    });
+    return;
+  }
+  try {
+    await sendWorkToChat(id);
+    alert('Файл отправлен в чат бота. Сохраните его оттуда.');
+  } catch (e) { alert(e.message); }
 }
 async function setModel(model){
   if (me) me.current_model = model;
