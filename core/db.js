@@ -207,10 +207,17 @@ async function createTicket(userId, username, message, source) {
   return res.rows[0];
 }
 
-async function listTickets(status) {
-  const res = status && status !== 'all'
-    ? await pool.query('SELECT * FROM support_tickets WHERE status = $1 ORDER BY id DESC LIMIT 200', [status])
-    : await pool.query('SELECT * FROM support_tickets ORDER BY id DESC LIMIT 200');
+async function listTickets(status, platform) {
+  const params = [];
+  const parts = [];
+  if (status && status !== 'all') {
+    params.push(status);
+    parts.push(`status = $${params.length}`);
+  }
+  if (platform === 'vk') parts.push('user_id < 0');
+  if (platform === 'tg') parts.push('user_id > 0');
+  const where = parts.length ? `WHERE ${parts.join(' AND ')}` : '';
+  const res = await pool.query(`SELECT * FROM support_tickets ${where} ORDER BY id DESC LIMIT 200`, params);
   return res.rows;
 }
 
@@ -222,8 +229,9 @@ async function answerTicket(id, answer) {
   return res.rows[0];
 }
 
-async function listUserIds() {
-  const res = await pool.query('SELECT user_id FROM users WHERE blocked = false');
+async function listUserIds(platform) {
+  const gate = platform === 'vk' ? 'AND user_id < 0' : platform === 'tg' ? 'AND user_id > 0' : '';
+  const res = await pool.query(`SELECT user_id FROM users WHERE blocked = false ${gate}`);
   return res.rows.map(r => r.user_id);
 }
 

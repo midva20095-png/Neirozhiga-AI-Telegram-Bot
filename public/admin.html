@@ -56,22 +56,44 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
 .filebtn input{display:none}
 .check{display:flex;align-items:flex-start;gap:8px;margin-top:10px;color:var(--text);font-size:14px}
 .check input{width:auto;margin-top:2px}
-@media(max-width:640px){.mrow{grid-template-columns:1fr 1fr}}
+.door{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.door button{min-height:108px;font-size:18px;border-radius:18px}
+.head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.place{font-family:Unbounded,sans-serif;font-size:18px;margin:0}
+@media(max-width:640px){.mrow{grid-template-columns:1fr 1fr}.door{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <h1>Админ <i>НейроЯга</i></h1>
-<p class="note">Клиенты, кредиты, модели, пакеты, поддержка, рассылки и настройки бота.</p>
+<p class="note">После входа выберите Telegram или ВКонтакте. У каждого свои клиенты, баланс, модели и шаблоны.</p>
 
 <div class="card" id="login">
   <div class="row"><input id="pass" type="password" placeholder="Пароль администратора"><button onclick="login()">Войти</button></div>
   <p id="lerr" class="bad"></p>
 </div>
 
+<div class="card" id="door" style="display:none">
+  <h3>Куда войти</h3>
+  <p class="note">Это разные кабинеты. Клиент из Telegram не попадёт в список ВК, и наоборот.</p>
+  <div class="door">
+    <button type="button" onclick="enterPlace('tg')">Telegram</button>
+    <button type="button" class="ghost" onclick="enterPlace('vk')">ВКонтакте</button>
+  </div>
+</div>
+
 <div id="panel" style="display:none">
+  <div class="head">
+    <div>
+      <div class="place" id="placeTitle">Telegram</div>
+      <p class="note" id="placeNote"></p>
+    </div>
+    <div class="row" style="margin:0;flex:0 0 auto">
+      <button class="ghost" type="button" onclick="showDoor()">Другой вход</button>
+      <button class="ghost" type="button" onclick="logout()">Выйти</button>
+    </div>
+  </div>
   <div class="tabs" id="tabs"></div>
   <div id="section-stats"></div>
-  <div id="section-vk"></div>
   <div id="section-users"></div>
   <div id="section-tpl"></div>
   <div id="section-models"></div>
@@ -84,10 +106,11 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
 
 <script>
 const TABS = [
-  ['stats','Статистика'],['vk','ВК'],['users','Клиенты'],['tpl','Шаблоны'],['models','Модели'],
+  ['stats','Статистика'],['users','Клиенты'],['tpl','Шаблоны'],['models','Модели'],
   ['packages','Пакеты'],['tickets','Поддержка'],['broadcast','Рассылка'],['journal','Журнал'],['settings','Настройки']
 ];
 let token = sessionStorage.getItem('ny_admin_token') || null;
+let place = sessionStorage.getItem('ny_admin_place') || '';
 let cur = 'stats';
 let users=[], templates=[], modelsData=[], groupsData={}, providersData={}, packagesData=[], generalData={};
 const KINDNAME = {sys:'система', pay:'оплата', kie:'Kie', gen:'сбой', tpl:'шаблон'};
@@ -114,10 +137,37 @@ async function login(){
     const d = await r.json();
     if (!r.ok || !d.token) throw new Error(d.error||'Неверный пароль');
     token = d.token; sessionStorage.setItem('ny_admin_token', token);
+    place = ''; sessionStorage.removeItem('ny_admin_place');
     showPanel();
   }catch(e){ document.getElementById('lerr').textContent = e.message; }
 }
-function logout(){ token=null; sessionStorage.removeItem('ny_admin_token'); document.getElementById('login').style.display='block'; document.getElementById('panel').style.display='none'; }
+function logout(){
+  token=null; place='';
+  sessionStorage.removeItem('ny_admin_token');
+  sessionStorage.removeItem('ny_admin_place');
+  document.getElementById('login').style.display='block';
+  document.getElementById('panel').style.display='none';
+  document.getElementById('door').style.display='none';
+}
+function placeName(){ return place==='vk' ? 'ВКонтакте' : 'Telegram'; }
+function showDoor(){
+  document.getElementById('login').style.display='none';
+  document.getElementById('panel').style.display='none';
+  document.getElementById('door').style.display='block';
+}
+function enterPlace(next){
+  place = next==='vk' ? 'vk' : 'tg';
+  sessionStorage.setItem('ny_admin_place', place);
+  document.getElementById('door').style.display='none';
+  document.getElementById('login').style.display='none';
+  document.getElementById('panel').style.display='block';
+  document.getElementById('placeTitle').textContent = placeName();
+  document.getElementById('placeNote').textContent = place==='vk'
+    ? 'Клиенты, баланс, модели и шаблоны только ВКонтакте.'
+    : 'Клиенты, баланс, модели и шаблоны только Telegram.';
+  renderTabs();
+  go('stats');
+}
 
 function renderTabs(){
   document.getElementById('tabs').innerHTML = TABS.map(([k,l])=>'<button class="'+(k===cur?'':'off')+'" onclick="go(\''+k+'\')">'+l+'</button>').join('');
@@ -126,14 +176,13 @@ function go(k){ cur=k; renderTabs(); TABS.forEach(([t])=>{ document.getElementBy
 
 async function showPanel(){
   document.getElementById('login').style.display='none';
-  document.getElementById('panel').style.display='block';
   try{ await api('/api/admin/me'); }catch(e){ return; }
-  renderTabs(); go('stats');
+  if (place==='vk' || place==='tg') enterPlace(place);
+  else showDoor();
 }
 
 async function loadSection(k){
   if (k==='stats') return loadStats();
-  if (k==='vk') return loadVk();
   if (k==='users') return loadUsers('');
   if (k==='tpl') return loadTpl();
   if (k==='models') return loadModels();
@@ -144,91 +193,20 @@ async function loadSection(k){
   if (k==='settings') return loadSettings();
 }
 
-/* ---- ВК ---- */
-async function loadVk(){
-  const el = document.getElementById('section-vk');
-  el.innerHTML = '<div class="card">Загрузка…</div>';
-  try {
-    const d = await api('/api/admin/vk');
-    const s = d.stats || {};
-    const models = d.models || [];
-    const groups = d.groups || {};
-    const templates = (d.templates || []).filter(t => !t.audience || t.audience === 'all' || t.audience === 'vk');
-    const cards = [
-      ['Клиенты ВК', s.users_total], ['Активны за сутки', s.active_day],
-      ['Новые за сутки', s.new_day], ['В чёрном списке', s.users_blocked],
-      ['Кредитов на балансах ВК', s.balance_total], ['Генераций', s.gens_total],
-      ['Потрачено кредитов', s.spent_total], ['Начислено', s.credited_total]
-    ];
-    el.innerHTML =
-      '<div class="card"><h3>ВКонтакте</h3><p class="note">Баланс ВК не общий с Telegram. Здесь включаются модели и шаблоны только для кабинета и чата ВК. Выключение модели в Telegram этот список не меняет, и наоборот.</p>'+
-      '<div class="grid">'+cards.map(([n,v])=>'<div class="stat"><div class="n">'+(v==null?0:v)+'</div><div class="l">'+n+'</div></div>').join('')+'</div></div>'+
-      '<div class="card"><h3>Модели ВК</h3><p class="note">Снимите галочку, чтобы модель пропала из чата и кабинета ВК.</p>'+
-      models.map(m=>'<label class="check"><input type="checkbox" data-vkmodel="'+esc(m.key)+'" '+(m.vkEnabled?'checked':'')+'> '+esc(m.name)+' <span class="note">'+esc(groups[m.group]||'')+'</span></label>').join('')+
-      '<button onclick="saveVkModels()">Сохранить модели ВК</button><p id="vkmodelsmsg" class="note"></p></div>'+
-      '<div class="card"><h3>Шаблоны ВК</h3><p class="note">Общие шаблоны видны и в Telegram. «Только ВК» — только в кабинете ВК.</p>'+
-      '<label>Название</label><input id="vktitle" placeholder="Название шаблона">'+
-      '<label>Что сделать. Человек этот текст не видит</label><textarea id="vkprompt" placeholder="Опишите результат"></textarea>'+
-      '<div class="row"><select id="vkmodel">'+models.filter(m=>m.vkEnabled!==false).map(m=>'<option value="'+esc(m.key)+'">'+esc(m.name)+'</option>').join('')+'</select>'+
-      '<input id="vkcost" type="number" min="0" placeholder="Цена, кр" value="10"></div>'+
-      '<button onclick="addVkTemplate()">Добавить шаблон только для ВК</button>'+
-      (templates.length ? '<div style="margin-top:14px">'+templates.map(t=>{
-        const where = t.audience==='vk' ? 'Только ВК' : 'Telegram и ВК';
-        return '<div class="mrow"><div><div class="mname">'+esc(t.title)+'</div><div class="note">'+esc(where)+(t.active===false?' · скрыт':'')+' · '+(t.cost||0)+' кр</div></div>'+
-          '<button class="ghost" type="button" onclick="setTplAudience('+t.id+',\''+(t.audience==='vk'?'all':'vk')+'\')">'+(t.audience==='vk'?'Сделать общим':'Только ВК')+'</button></div>';
-      }).join('')+'</div>' : '<p class="note">Отдельных шаблонов ВК пока нет. Общие шаблоны уже открываются в кабинете ВК.</p>')+
-      '</div>';
-  } catch (e) {
-    el.innerHTML = '<div class="card">Раздел не открылся.</div>';
-  }
-}
-async function saveVkModels(){
-  const models = {};
-  document.querySelectorAll('[data-vkmodel]').forEach(box => { models[box.dataset.vkmodel] = { enabled: box.checked }; });
-  const d = await api('/api/admin/vk/models', {method:'POST', body: JSON.stringify({models})});
-  const msg = document.getElementById('vkmodelsmsg');
-  if (msg) msg.textContent = d.ok ? 'Сохранено. В чате ВК эти модели уже другие.' : (d.error||'Не сохранилось');
-}
-async function addVkTemplate(){
-  const title = document.getElementById('vktitle').value.trim();
-  const prompt = document.getElementById('vkprompt').value.trim();
-  const model = document.getElementById('vkmodel').value;
-  const cost = +document.getElementById('vkcost').value || 0;
-  if (!title || !prompt) return alert('Нужны название и текст задания');
-  const d = await api('/api/admin/templates', {method:'POST', body: JSON.stringify({
-    title, prompt, model, cost, category: 'image', audience: 'vk', active: true, hide_prompt: true
-  })});
-  if (!d.ok) return alert(d.error||'Не сохранилось');
-  loadVk();
-}
-async function setTplAudience(id, audience){
-  const pack = await api('/api/admin/templates');
-  const t = (pack.templates||[]).find(x=>x.id===id);
-  if (!t) return;
-  const d = await api('/api/admin/templates', {method:'POST', body: JSON.stringify({
-    id: t.id, title: t.title, category: t.category, model: t.model, cost: t.cost, sort: t.sort||0,
-    image: t.image, description: t.description, formats: t.formats, prompt: t.prompt,
-    quality: t.quality || '', duration: t.duration || '', hide_prompt: true,
-    active: t.active !== false, audience
-  })});
-  if (!d.ok) return alert(d.error||'Не сохранилось');
-  loadVk();
-}
-
 /* ---- Статистика ---- */
 async function loadStats(){
   const el = document.getElementById('section-stats');
   el.innerHTML = '<div class="card">Загрузка…</div>';
   try{
-    const {stats} = await api('/api/admin/stats');
+    const {stats} = await api('/api/admin/stats?platform='+place);
     const cells = [
-      ['Всего клиентов', stats.users_total],['Активны за сутки', stats.active_day],
+      ['Клиенты '+placeName(), stats.users_total],['Активны за сутки', stats.active_day],
       ['Новые за сутки', stats.new_day],['В чёрном списке', stats.users_blocked],
       ['Кредитов на балансах', stats.balance_total],['Генераций всего', stats.gens_total],
       ['Потрачено кредитов', stats.spent_total],['Начислено всего', stats.credited_total],
       ['Открытых обращений', stats.tickets_open]
     ];
-    el.innerHTML = '<div class="card"><h3>Статистика</h3><div class="grid">'+
+    el.innerHTML = '<div class="card"><h3>Статистика · '+placeName()+'</h3><div class="grid">'+
       cells.map(c=>'<div class="stat"><div class="n">'+(c[1]??0)+'</div><div class="l">'+c[0]+'</div></div>').join('')+'</div></div>';
   }catch(e){ el.innerHTML = '<div class="card bad">'+esc(e.message)+'</div>'; }
 }
@@ -236,19 +214,33 @@ async function loadStats(){
 /* ---- Клиенты ---- */
 async function loadUsers(q){
   const el = document.getElementById('section-users');
-  const d = await api('/api/admin/users?q='+encodeURIComponent(q||''));
+  const d = await api('/api/admin/users?platform='+place+'&q='+encodeURIComponent(q||''));
   users = d.users||[];
+  const hint = place==='vk' ? 'Номер ВК' : 'ID или @имя';
   el.innerHTML =
-    '<div class="card"><div class="row"><input id="q" placeholder="Поиск по ID или @username" value="'+esc(q||'')+'"><button onclick="loadUsers(document.getElementById(\'q\').value)">Найти</button></div>'+
-    '<table><tr><th>ID</th><th>Юзер</th><th>Баланс</th><th>Модель</th><th>Ген.</th><th>Статус</th><th></th></tr>'+
-    users.map(u=>'<tr><td>'+u.user_id+'</td><td>'+esc(u.username||'')+'</td><td class="ok">'+u.balance+'</td><td>'+esc(u.current_model||'')+'</td><td>'+(u.gens||0)+'</td><td>'+(u.blocked?'<span class="bad">ЧС</span>':'—')+'</td><td><button class="ghost" onclick="editUser('+"'"+u.user_id+"'"+')">Открыть</button></td></tr>').join('')+
+    '<div class="card"><h3>Клиенты · '+placeName()+'</h3><div class="row"><input id="q" placeholder="'+hint+'" value="'+esc(q||'')+'"><button onclick="loadUsers(document.getElementById(\'q\').value)">Найти</button></div>'+
+    '<table><tr><th>Откуда</th><th>Номер</th><th>Имя</th><th>Баланс</th><th>Модель</th><th>Ген.</th><th>Статус</th><th></th></tr>'+
+    users.map(u=>{
+      const who = clientWho(u);
+      return '<tr><td>'+who.where+'</td><td>'+esc(who.num)+'</td><td>'+esc(who.name)+'</td><td class="ok">'+u.balance+'</td><td>'+esc(u.current_model||'')+'</td><td>'+(u.gens||0)+'</td><td>'+(u.blocked?'<span class="bad">ЧС</span>':'—')+'</td><td><button class="ghost" onclick="editUser('+"'"+u.user_id+"'"+')">Открыть</button></td></tr>';
+    }).join('')+
+    (users.length?'':'<tr><td colspan="8" class="note">Таких клиентов нет.</td></tr>')+
     '</table></div><div class="card" id="uedit" style="display:none"></div>';
+}
+function clientWho(u){
+  const id = String(u.user_id);
+  const vk = id.startsWith('-') || Number(id) < 0;
+  const num = vk ? id.replace(/^-/, '') : id;
+  const raw = String(u.username || '');
+  const name = vk ? (raw.replace(/^vk:/, '') === num ? '' : raw) : (raw ? (raw.charAt(0)==='@' ? raw : '@'+raw) : '');
+  return { where: vk ? 'ВКонтакте' : 'Telegram', num, name };
 }
 function editUser(id){
   const u = users.find(x=>String(x.user_id)===String(id));
+  const who = clientWho(u || { user_id: id, username: '' });
   const box = document.getElementById('uedit');
   box.style.display='block';
-  box.innerHTML = '<h3>Клиент '+id+(u&&u.username?(' · '+esc(u.username)):'')+'</h3>'+
+  box.innerHTML = '<h3>'+who.where+' · '+esc(who.num)+(who.name?(' · '+esc(who.name)):'')+'</h3>'+
     '<div class="row"><input id="delta" type="number" placeholder="+100 или -50"><input id="reason" placeholder="Причина (видна в истории)"></div>'+
     '<div class="row"><button onclick="applyBal('+"'"+id+"'"+')">Начислить / списать</button>'+
     '<button class="danger" onclick="toggleBan('+"'"+id+"'"+','+(u&&u.blocked?'false':'true')+')">'+(u&&u.blocked?'Убрать из ЧС':'В чёрный список')+'</button></div>'+
@@ -303,7 +295,7 @@ function safeImg(u){
 }
 function serviceName(id){ return providersData[id] || id || 'Другой сервис'; }
 function modelOptions(current){
-  const list = modelsData.slice();
+  const list = (place==='vk' ? modelsData.filter(m=>m.vkEnabled!==false) : modelsData).slice();
   if (current && !list.some(m=>m.key===current)) list.unshift({key:current, name:current+' (как сохранено)', cost:null, provider:''});
   if (!list.length) list.push({key:'nanobanana', name:'Картинка', cost:20, provider:'google', group:'image'});
   const order = Object.keys(providersData);
@@ -364,7 +356,7 @@ async function loadTpl(){
     groupsData = md.groups||{};
     providersData = md.providers||{};
   }
-  const d = await api('/api/admin/templates');
+  const d = await api('/api/admin/templates?audience='+place);
   templates = d.templates||[];
   const editing = tplEdit;
   const preferred = modelsData.some(m=>m.key==='kie-banana-lite') ? 'kie-banana-lite' : 'nanobanana';
@@ -375,6 +367,7 @@ async function loadTpl(){
   const startQuality = editing && editing.quality ? editing.quality : (current && current.quality);
   const startDuration = editing && editing.duration ? editing.duration : (current && current.durations && current.durations[0]);
   const startCost = editing ? editing.cost : modeCost(current, startQuality, startDuration);
+  const aud = editing && (editing.audience==='vk' || editing.audience==='tg' || editing.audience==='all') ? editing.audience : (place==='vk' ? 'vk' : 'tg');
   el.innerHTML =
     '<div class="card"><h3>'+(editing?'Правка шаблона':'Новый шаблон')+'</h3>'+
     '<p class="note">Четыре поля. Фото — это пример, который человек видит на карточке. Название — подпись карточки. Текст ниже — что сделать с его фото; сам человек этот текст не видит. Цена — сколько списать в кабинете.</p>'+
@@ -390,9 +383,9 @@ async function loadTpl(){
     '<div id="tmodes">'+modeBlock(current, startQuality, startDuration)+'</div>'+
     '<p class="note">Запрос уходит в выбранную модель и в выбранный режим. У Nano Banana «Эконом» — 3 кредита, «Быстро» — 6. Цена подставляется из режима, её можно изменить. Если сервис молчит, выключите его на вкладке «Модели».</p>'+
     '<label>Где показывать</label><select id="taud">'+
-      '<option value="all"'+((editing?editing.audience:'all')==='all'||!(editing&&editing.audience)?' selected':'')+'>Telegram и ВК</option>'+
-      '<option value="tg"'+(editing&&editing.audience==='tg'?' selected':'')+'>Только Telegram</option>'+
-      '<option value="vk"'+(editing&&editing.audience==='vk'?' selected':'')+'>Только ВК</option></select>'+
+      '<option value="all"'+(aud==='all'?' selected':'')+'>Telegram и ВК</option>'+
+      '<option value="tg"'+(aud==='tg'?' selected':'')+'>Только Telegram</option>'+
+      '<option value="vk"'+(aud==='vk'?' selected':'')+'>Только ВК</option></select>'+
     '<label class="check"><input id="tactive" type="checkbox" '+(!editing||editing.active!==false?'checked':'')+'> Показывать в кабинете</label>'+
     '<details'+(editing?' open':'')+'><summary>Дополнительно: описание, раздел, ссылка, размеры</summary>'+
     '<label>Короткое описание под заголовком</label><input id="tdesc" placeholder="Что получится" value="'+esc(editing&&editing.description?editing.description:'')+'">'+
@@ -404,19 +397,20 @@ async function loadTpl(){
     '</details>'+
     '<div class="row" style="margin-top:12px"><button onclick="saveTpl()">'+(editing?'Сохранить изменения':'Добавить шаблон в кабинет')+'</button>'+
     (editing?'<button class="ghost" type="button" onclick="newTpl()">Отмена</button>':'')+'</div></div>'+
-    '<div class="card"><h3>Как это видит человек</h3><p class="note">'+templates.length+' шаблон'+(templates.length===1?'':'ов')+'. Скрытые в кабинет не попадают. Карточка вертикальная, как на сайте: фото, название и цена.</p>'+
+    '<div class="card"><h3>Шаблоны · '+placeName()+'</h3><p class="note">'+templates.length+' в этом входе. «Оба чата» видны и в Telegram, и во ВК. Скрытые в кабинет не попадают.</p>'+
     (templates.length ? '<div class="agallery">'+templates.map(t=>{
       const src = safeImg(t.image);
       const saved = modelsData.find(m=>m.key===t.model);
       const from = saved ? serviceName(saved.provider) : 'модель не из списка';
       const picked = saved && (saved.qualities||[]).find(x=>x.id===t.quality);
       const mode = picked ? ' · '+picked.name : (t.duration ? ' · '+t.duration+' сек' : '');
+      const where = t.audience==='vk' ? 'Только ВК' : t.audience==='tg' ? 'Только Telegram' : 'Оба чата';
+      const share = place==='vk' ? '' : '<button class="ghost" onclick="tplLink('+t.id+')">Ссылка</button><button class="ghost" onclick="tplChannel('+t.id+')">В канал</button>';
       return '<div class="acard'+(t.active?'':' off')+'">'+(src?'<img src="'+esc(src)+'" alt="">':'<div class="ph"></div>')+
-        '<div class="abody"><b>'+esc(t.title)+'</b><div><em>'+t.cost+' кр.</em></div><div class="note">'+esc(from)+' · '+esc((saved&&saved.name)||t.model||'')+esc(mode)+(t.active?'':' · скрыт')+'</div>'+
+        '<div class="abody"><b>'+esc(t.title)+'</b><div><em>'+t.cost+' кр.</em></div><div class="note">'+esc(where)+' · '+esc(from)+' · '+esc((saved&&saved.name)||t.model||'')+esc(mode)+(t.active?'':' · скрыт')+'</div>'+
         '<div class="row" style="margin:8px 0 0"><button class="ghost" onclick="editTpl('+t.id+')">Править</button>'+
         '<button class="ghost" onclick="toggleTpl('+t.id+')">'+(t.active?'Скрыть':'Показать')+'</button>'+
-        '<button class="ghost" onclick="tplLink('+t.id+')">Ссылка</button>'+
-        '<button class="ghost" onclick="tplChannel('+t.id+')">В канал</button>'+
+        share+
         '<button class="danger" onclick="delTpl('+t.id+')">Удалить</button></div></div></div>';
     }).join('')+'</div>' : '<p class="note">Пока пусто. Загрузите фото, напишите название и нажмите «Добавить шаблон в кабинет».</p>')+
     '</div>';
@@ -552,25 +546,29 @@ async function tplChannel(id){
 
 /* ---- Модели ---- */
 function modelRow(m){
+  const on = place==='vk' ? m.vkEnabled!==false : !!m.enabled;
   return '<div class="mrow" data-key="'+m.key+'" data-provider="'+esc(m.provider||'')+'">'+
     '<div><div class="mname">'+esc(m.name)+'</div><div class="note">'+esc((groupsData[m.group]||m.group||'')+' · '+m.key)+'</div></div>'+
     '<div><label style="margin:0">Цена</label><input type="number" class="f-cost" value="'+m.cost+'"></div>'+
     (m.provider==='giga'
       ? '<div class="lim"><label style="margin:0">В день</label><input type="number" min="0" class="f-limit" placeholder="без лимита" value="'+(m.limit==null?'':m.limit)+'"></div>'
       : '<div class="lim"><label style="margin:0">В день</label><input class="f-limit" disabled value="—"></div>')+
-    '<div><label style="margin:0">Вкл</label><input type="checkbox" class="f-en" '+(m.enabled?'checked':'')+' style="width:auto;height:22px"></div>'+
+    '<div><label style="margin:0">Вкл</label><input type="checkbox" class="f-en" '+(on?'checked':'')+' style="width:auto;height:22px"></div>'+
     '</div>';
 }
 async function loadModels(){
   const el = document.getElementById('section-models');
   const d = await api('/api/admin/models');
   modelsData = d.models||[]; groupsData = d.groups||{}; providersData = d.providers||{};
-  let html = '<div class="card"><h3>Модели</h3><p class="note">Модели разложены по сервису, откуда идёт запрос. Если сервис упал, нажмите «Выключить» у его блока и сохраните: эти модели пропадут из бота, кабинета и шаблонов. «Включить» возвращает их. Цена сохраняется. 0 — бесплатно. У моделей с режимами цена задаёт базовый запуск. Для GigaChat поле «В день» — потолок, пустое поле снимает лимит.</p><p class="note">Kie сейчас '+(d.kie?'<b class="ok">подключён</b>.':'<b class="bad">без ключа</b>, раздел и так скрыт.')+'</p>'+(modelsMsg?'<p class="ok">'+esc(modelsMsg)+'</p>':'');
+  const lead = place==='vk'
+    ? 'Галочка включает модель только в чате и кабинете ВК. Цена общая с Telegram: если изменить её здесь, она изменится и там. Выключение в Telegram эту галочку само не снимает.'
+    : 'Галочка включает модель в Telegram. Во ВК включение отдельное: его меняют, войдя в админку ВКонтакте. Цена общая для обоих чатов.';
+  let html = '<div class="card"><h3>Модели · '+placeName()+'</h3><p class="note">'+lead+' Если сервис упал, нажмите «Выключить» у его блока и сохраните. 0 — бесплатно. У моделей с режимами цена задаёт базовый запуск. Для GigaChat поле «В день» — потолок, пустое поле снимает лимит.</p><p class="note">Kie сейчас '+(d.kie?'<b class="ok">подключён</b>.':'<b class="bad">без ключа</b>, раздел и так скрыт.')+'</p>'+(modelsMsg?'<p class="ok">'+esc(modelsMsg)+'</p>':'');
   const order = Object.keys(providersData);
   const used = {};
   function block(id, title, list){
     if (!list.length) return '';
-    const on = list.filter(m=>m.enabled).length;
+    const on = list.filter(m=> place==='vk' ? m.vkEnabled!==false : m.enabled).length;
     return '<div class="note" style="margin:16px 0 6px"><b>'+esc(title)+'</b> · включено '+on+' из '+list.length+'</div>'+
       '<div class="row" style="margin-bottom:6px"><button type="button" class="ghost" onclick="setService(\''+esc(id)+'\', false)">Выключить</button>'+
       '<button type="button" class="ghost" onclick="setService(\''+esc(id)+'\', true)">Включить</button></div>'+
@@ -593,17 +591,24 @@ function setService(provider, on){
 }
 async function saveModels(){
   const models = {};
+  const flags = {};
   document.querySelectorAll('#section-models .mrow').forEach(row=>{
     const key = row.dataset.key;
     const limEl = row.querySelector('.f-limit');
-    models[key] = {
-      cost: row.querySelector('.f-cost').value,
-      enabled: row.querySelector('.f-en').checked
-    };
-    if (limEl && !limEl.disabled) models[key].limit = limEl.value.trim()==='' ? null : Number(limEl.value);
+    const item = { cost: row.querySelector('.f-cost').value };
+    if (place!=='vk') item.enabled = row.querySelector('.f-en').checked;
+    if (limEl && !limEl.disabled) item.limit = limEl.value.trim()==='' ? null : Number(limEl.value);
+    models[key] = item;
+    flags[key] = { enabled: row.querySelector('.f-en').checked };
   });
-  const d = await api('/api/admin/models',{method:'POST',body:JSON.stringify({models})});
+  const d = place==='vk'
+    ? await api('/api/admin/models',{method:'POST',body:JSON.stringify({models, pricesOnly:true})})
+    : await api('/api/admin/models',{method:'POST',body:JSON.stringify({models})});
   if (!d.ok) { modelsMsg = ''; alert(d.error||'Ошибка'); return; }
+  if (place==='vk') {
+    const v = await api('/api/admin/vk/models',{method:'POST',body:JSON.stringify({models:flags})});
+    if (!v.ok) { modelsMsg = ''; alert(v.error||'Модели ВК не сохранились'); return; }
+  }
   modelsMsg = 'Сохранено';
   await loadModels();
 }
@@ -620,7 +625,7 @@ async function loadJournal(){
       const kind = KINDNAME[it.kind] || it.kind;
       return '<tr><td>'+esc(t)+'</td><td>'+esc(kind)+'</td><td>'+esc(it.message)+'</td></tr>';
     }).join('');
-    el.innerHTML = '<div class="card"><h3>Журнал</h3><p class="note">Шаблоны пишутся отдельно: старт, размер фото, модель и ответ сервиса, если фото или генерация не прошли. Текст запроса сюда не попадает. «Недостаточно кредитов» не пишется.</p>'+
+    el.innerHTML = '<div class="card"><h3>Журнал</h3><p class="note">Общий журнал обоих чатов. Шаблоны пишутся отдельно: старт, размер фото, модель и ответ сервиса, если фото или генерация не прошли. Текст запроса сюда не попадает.</p>'+
       (rows?'<table><tr><th>Когда</th><th></th><th>Событие</th></tr>'+rows+'</table>':'<p class="note">Пока пусто. После перезапуска здесь появится «Бот запущен».</p>')+
       '<div class="row" style="margin-top:12px"><button class="ghost" onclick="loadJournal()">Обновить</button></div></div>';
   }catch(e){ el.innerHTML = '<div class="card"><p class="bad">'+esc(e.message)+'</p></div>'; }
@@ -633,7 +638,7 @@ async function loadPackages(){
 }
 function renderPackages(){
   const el = document.getElementById('section-packages');
-  el.innerHTML = '<div class="card"><h3>Пакеты пополнения</h3><div id="pkgrows">'+
+  el.innerHTML = '<div class="card"><h3>Пакеты · '+placeName()+'</h3><p class="note">Пакеты одни: их видят и в Telegram, и во ВК. Изменение здесь меняет оплату в обоих чатах.</p><div id="pkgrows">'+
     packagesData.map((p,i)=>pkgRow(p,i)).join('')+'</div>'+
     '<div class="row" style="margin-top:8px"><button class="ghost" onclick="addPkg()">+ Пакет</button><button onclick="savePackages()">Сохранить пакеты</button></div><p id="pmsg"></p></div>';
 }
@@ -661,13 +666,19 @@ async function savePackages(){
 /* ---- Поддержка ---- */
 async function loadTickets(status){
   const el = document.getElementById('section-tickets');
-  const d = await api('/api/admin/tickets?status='+encodeURIComponent(status||'open'));
+  const d = await api('/api/admin/tickets?platform='+place+'&status='+encodeURIComponent(status||'open'));
   const list = d.tickets||[];
-  el.innerHTML = '<div class="card"><div class="row">'+
+  el.innerHTML = '<div class="card"><h3>Поддержка · '+placeName()+'</h3><div class="row">'+
     ['open','answered','all'].map(s=>'<button class="'+(s===status?'':'ghost')+'" onclick="loadTickets(\''+s+'\')">'+({open:'Открытые',answered:'Отвеченные',all:'Все'}[s])+'</button>').join('')+'</div></div>'+
-    (list.length?list.map(t=>'<div class="card"><div class="note">#'+t.id+' · '+esc(t.username||t.user_id)+' · '+esc(t.source)+' · '+(t.status==='open'?'<span class="bad">открыт</span>':'<span class="ok">отвечен</span>')+'</div>'+
+    (list.length?list.map(t=>'<div class="card"><div class="note">#'+t.id+' · '+esc(ticketWho(t))+' · '+(t.status==='open'?'<span class="bad">открыт</span>':'<span class="ok">отвечен</span>')+'</div>'+
       '<p>'+esc(t.message)+'</p>'+(t.answer?('<p class="note">Ответ: '+esc(t.answer)+'</p>'):('<textarea id="ans-'+t.id+'" placeholder="Ответ клиенту"></textarea><div class="row" style="margin-top:8px"><button onclick="answer('+t.id+')">Ответить</button></div>'))+
       '</div>').join(''):'<div class="card"><div class="note">Нет обращений</div></div>');
+}
+function ticketWho(t){
+  const id = String(t.user_id);
+  if (id.startsWith('-') || Number(id) < 0) return 'ВКонтакте '+id.replace(/^-/, '');
+  const name = String(t.username || '');
+  return name ? (name.charAt(0)==='@' ? name : '@'+name) : id;
 }
 async function answer(id){
   const ta = document.getElementById('ans-'+id);
@@ -680,30 +691,33 @@ async function answer(id){
 /* ---- Рассылка ---- */
 function renderBroadcast(){
   document.getElementById('section-broadcast').innerHTML =
-    '<div class="card"><h3>Рассылка</h3><p class="note">Сообщение получат все клиенты, кроме чёрного списка. Поддерживается Markdown.</p>'+
+    '<div class="card"><h3>Рассылка · '+placeName()+'</h3><p class="note">'+(place==='vk'?'Сообщение получат клиенты ВКонтакте, кроме чёрного списка. Обычный текст.':'Сообщение получат клиенты Telegram, кроме чёрного списка. Поддерживается Markdown.')+'</p>'+
     '<textarea id="bcast" placeholder="Текст рассылки"></textarea>'+
-    '<div class="row" style="margin-top:8px"><button onclick="sendBroadcast()">Отправить всем</button></div><p id="bmsg"></p></div>';
+    '<div class="row" style="margin-top:8px"><button onclick="sendBroadcast()">Отправить клиентам '+placeName()+'</button></div><p id="bmsg"></p></div>';
 }
 async function sendBroadcast(){
   const text = document.getElementById('bcast').value.trim();
   if (!text) return alert('Введите текст');
-  if (!confirm('Отправить рассылку всем клиентам?')) return;
+  if (!confirm('Отправить рассылку клиентам '+placeName()+'?')) return;
   document.getElementById('bmsg').textContent = 'Отправка…';
-  const d = await api('/api/admin/broadcast',{method:'POST',body:JSON.stringify({text})});
+  const d = await api('/api/admin/broadcast',{method:'POST',body:JSON.stringify({text, platform:place})});
   document.getElementById('bmsg').textContent = d.ok?('Готово: доставлено '+d.sent+' из '+d.total+(d.failed?(', ошибок '+d.failed):'')):(d.error||'Ошибка');
 }
 
 /* ---- Настройки ---- */
 async function loadSettings(){
   const el = document.getElementById('section-settings');
-  const d = await api('/api/admin/general'); generalData = d.general||{};
+  const d = await api('/api/admin/general?platform='+place); generalData = d.general||{};
   const models = d.models||[];
-  el.innerHTML = '<div class="card"><h3>Общие настройки</h3>'+
-    '<label>Приветственный бонус (кредитов новым клиентам)</label><input id="g-bonus" type="number" value="'+(generalData.start_bonus||0)+'">'+
+  const help = place==='vk'
+    ? '<p class="note">Справка в чате ВК здесь не меняется. Приветственный бонус, модель по умолчанию, сайт и поддержка общие для обоих чатов. В списке только модели, включённые во ВК.</p>'
+    : '<label>Текст справки в Telegram</label><textarea id="g-help" style="min-height:140px">'+esc(generalData.help_text||'')+'</textarea>';
+  el.innerHTML = '<div class="card"><h3>Настройки · '+placeName()+'</h3>'+
+    '<label>Приветственный бонус новым клиентам, кредитов</label><input id="g-bonus" type="number" value="'+(generalData.start_bonus||0)+'">'+
     '<label>Модель по умолчанию</label><select id="g-model">'+models.map(m=>'<option value="'+m.key+'"'+(m.key===generalData.default_model?' selected':'')+'>'+esc(m.short||m.key)+'</option>').join('')+'</select>'+
-    '<label>Ссылка на сайт (кнопка в кабинете)</label><input id="g-site" value="'+esc(generalData.site_url||'')+'">'+
+    '<label>Ссылка на сайт</label><input id="g-site" value="'+esc(generalData.site_url||'')+'">'+
     '<label>Поддержка включена</label><select id="g-support"><option value="1"'+(generalData.support_enabled!==false?' selected':'')+'>Да</option><option value="0"'+(generalData.support_enabled===false?' selected':'')+'>Нет</option></select>'+
-    '<label>Текст справки</label><textarea id="g-help" style="min-height:140px">'+esc(generalData.help_text||'')+'</textarea>'+
+    help+
     '<div class="row" style="margin-top:12px"><button onclick="saveSettings()">Сохранить настройки</button></div><p id="gmsg"></p></div>';
 }
 async function saveSettings(){
@@ -711,9 +725,10 @@ async function saveSettings(){
     start_bonus: +document.getElementById('g-bonus').value||0,
     default_model: document.getElementById('g-model').value,
     site_url: document.getElementById('g-site').value.trim(),
-    support_enabled: document.getElementById('g-support').value==='1',
-    help_text: document.getElementById('g-help').value.trim()
+    support_enabled: document.getElementById('g-support').value==='1'
   };
+  const help = document.getElementById('g-help');
+  if (help) general.help_text = help.value.trim();
   const d = await api('/api/admin/general',{method:'POST',body:JSON.stringify({general})});
   document.getElementById('gmsg').textContent = d.ok?'Сохранено':(d.error||'Ошибка');
 }

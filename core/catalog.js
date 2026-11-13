@@ -406,6 +406,20 @@ async function saveModels(db, input) {
     return listModels({ includeDisabled: true });
 }
 
+async function saveModelPrices(db, input) {
+    const current = { ...overrides.models };
+    const patch = sanitizeModelOverrides(input);
+    for (const [key, item] of Object.entries(patch)) {
+        const prev = { ...(current[key] || {}) };
+        if (item.cost !== undefined) prev.cost = item.cost;
+        if (Object.prototype.hasOwnProperty.call(item, 'limit')) prev.limit = item.limit;
+        current[key] = prev;
+    }
+    await db.setSetting('models', current);
+    overrides.models = current;
+    return listModels({ includeDisabled: true });
+}
+
 async function savePackages(db, input) {
     const value = sanitizePackages(input);
     await db.setSetting('packages', value);
@@ -440,6 +454,7 @@ module.exports = {
     defaultModelKey,
     load,
     saveModels,
+    saveModelPrices,
     saveVkModels,
     savePackages,
     saveGeneral

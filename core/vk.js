@@ -722,10 +722,13 @@ async function askTopup(accountIdValue) {
 async function notify(accountIdValue, message) {
     const token = String(process.env.VK_GROUP_TOKEN || '').trim();
     const id = Number(accountIdValue);
-    if (!token || !Number.isInteger(id) || id >= 0) return;
+    if (!token || !Number.isInteger(id) || id >= 0) return false;
     try {
         await sendText(token, -id, message);
-    } catch (e) {}
+        return true;
+    } catch (e) {
+        return false;
+    }
 }
 
 async function poll(token, groupId) {

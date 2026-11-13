@@ -172,6 +172,18 @@ test('справка в боте объясняет кнопки и не сод�
     assert.equal(/kie|railway|api[_ -]?key|себестоимость|оптом|\$0/i.test(text), false);
 });
 
+test('цена из админки ВК не включает модель в Telegram', async () => {
+    const db = { setSetting: async () => {} };
+    await catalog.saveModels(db, { flash: { enabled: false, cost: 4 } });
+    await catalog.saveModelPrices(db, { flash: { cost: 9 } });
+    const tg = catalog.getModel('flash', { includeDisabled: true });
+    assert.equal(tg.enabled, false);
+    assert.equal(tg.cost, 9);
+    assert.equal(catalog.getModel('flash'), null);
+    await catalog.saveModels(db, {});
+    assert.equal(catalog.getModel('flash').cost, 4);
+});
+
 test('модель можно выключить только во ВК', async () => {
     const db = { setSetting: async () => {} };
     const key = 'flash';

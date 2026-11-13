@@ -613,18 +613,33 @@ function startWebApp() {
         catch (e) { res.status(500).json({ error: e.message }); }
     });
 
+    function adminPlatform(value) {
+        return value === 'vk' ? 'vk' : value === 'tg' ? 'tg' : '';
+    }
+
+    async function tellClient(userId, text, markdown) {
+        const id = String(userId);
+        if (Number(id) < 0) return vk.notify(id, text);
+        const bot = app.locals.bot;
+        if (!bot) return false;
+        await bot.telegram.sendMessage(id, text, markdown ? { parse_mode: 'Markdown' } : undefined);
+        return true;
+    }
+
     app.get('/api/admin/stats', requireAdmin, async (req, res) => {
-        try { res.json({ stats: await db.getStats() }); }
+        try { res.json({ stats: await db.getStats(adminPlatform(req.query.platform) || undefined) }); }
         catch (e) { res.status(500).json({ error: e.message }); }
     });
 
     app.get('/api/admin/users', requireAdmin, async (req, res) => {
         try {
             const q = (req.query.q || '').toString();
+            const platform = adminPlatform(req.query.platform);
+            const gate = platform === 'vk' ? 'AND user_id < 0' : platform === 'tg' ? 'AND user_id > 0' : '';
             const result = await db.pool.query(
                 `SELECT user_id, username, balance, current_model, blocked, gens, spent, created_at, last_seen
                  FROM users
-                 WHERE user_id::text ILIKE $1 OR COALESCE(username,'') ILIKE $1
+                 WHERE (user_id::text ILIKE $1 OR COALESCE(username,'') ILIKE $1) ${gate}
                  ORDER BY last_seen DESC NULLS LAST LIMIT 100`,
                 [`%${q}%`]
             );
@@ -639,10 +654,9 @@ function startWebApp() {
             const { userId, delta, reason } = req.body || {};
             if (!userId || delta === undefined) return res.status(400).json({ error: 'userId and delta required' });
             const newBalance = await db.updateBalance(userId, Number(delta), reason || 'Админ');
-            const bot = app.locals.bot;
-            if (bot && newBalance !== null && Number(delta) !== 0) {
-                const sign = Number(delta) > 0 ? `➕ Начислено ${delta}` : `➖ Списано ${Math.abs(delta)}`;
-                try { await bot.telegram.sendMessage(userId, `💳 ${sign} кредитов.\nБаланс: ${newBalance} кр.`); } catch (e) {}
+            if (newBalance !== null && Number(delta) !== 0) {
+                const sign = Number(delta) > 0 ? `Начислено ${delta}` : `Списано ${Math.abs(delta)}`;
+                try { await tellClient(userId, `${sign} кредитов.\nБаланс: ${newBalance} кр.`); } catch (e) {}
             }
             res.json({ ok: newBalance !== null, balance: newBalance });
         } catch (e) {
@@ -667,9 +681,10 @@ function startWebApp() {
         try {
             const { userId, text } = req.body || {};
             if (!userId || !text) return res.status(400).json({ error: 'userId and text required' });
-            const bot = app.locals.bot;
-            if (!bot) return res.status(503).json({ error: 'bot offline' });
-            await bot.telegram.sendMessage(userId, String(text), { parse_mode: 'Markdown' });
+            const vkUser = Number(userId) < 0;
+            if (!vkUser && !app.locals.bot) return res.status(503).json({ error: 'bot offline' });
+            const sent = await tellClient(userId, String(text), !vkUser);
+            if (!sent) return res.status(503).json({ error: vkUser ? 'Сообщение во ВК не ушло' : 'Сообщение не ушло' });
             res.json({ ok: true });
         } catch (e) {
             res.status(400).json({ error: e.message });
@@ -680,13 +695,15 @@ function startWebApp() {
         try {
             const text = String((req.body && req.body.text) || '').trim();
             if (!text) return res.status(400).json({ error: 'text required' });
-            const bot = app.locals.bot;
-            if (!bot) return res.status(503).json({ error: 'bot offline' });
-            const ids = await db.listUserIds();
+            const platform = adminPlatform(req.body && req.body.platform) || 'tg';
+            if (platform === 'tg' && !app.locals.bot) return res.status(503).json({ error: 'bot offline' });
+            const ids = await db.listUserIds(platform);
             let sent = 0, failed = 0;
             for (const id of ids) {
-                try { await bot.telegram.sendMessage(id, text, { parse_mode: 'Markdown' }); sent++; }
-                catch (e) { failed++; }
+                try {
+                    const ok = await tellClient(id, text, platform !== 'vk');
+                    if (ok) sent++; else failed++;
+                } catch (e) { failed++; }
                 await new Promise(r => setTimeout(r, 40));
             }
             res.json({ ok: true, sent, failed, total: ids.length });
@@ -698,7 +715,8 @@ function startWebApp() {
     // ---- Админка: шаблоны ----
     app.get('/api/admin/templates', requireAdmin, async (req, res) => {
         try {
-            res.json({ templates: await db.listTemplates(true) });
+            const audience = req.query.audience === 'vk' ? 'vk' : req.query.audience === 'tg' ? 'tg' : undefined;
+            res.json({ templates: await db.listTemplates(true, audience) });
         } catch (e) { res.status(500).json({ error: e.message }); }
     });
 
@@ -768,7 +786,10 @@ function startWebApp() {
     });
 
     app.post('/api/admin/models', requireAdmin, async (req, res) => {
-        try { res.json({ ok: true, models: await catalog.saveModels(db, req.body.models || {}) }); }
+        try {
+            const save = req.body && req.body.pricesOnly ? catalog.saveModelPrices : catalog.saveModels;
+            res.json({ ok: true, models: await save(db, req.body.models || {}) });
+        }
         catch (e) { res.status(500).json({ error: e.message }); }
     });
 
@@ -780,7 +801,8 @@ function startWebApp() {
     });
 
     app.get('/api/admin/general', requireAdmin, (req, res) => {
-        res.json({ general: catalog.getGeneral(), models: publicModels() });
+        const audience = req.query.platform === 'vk' ? 'vk' : 'tg';
+        res.json({ general: catalog.getGeneral(), models: publicModels(audience) });
     });
 
     app.post('/api/admin/general', requireAdmin, async (req, res) => {
@@ -790,7 +812,7 @@ function startWebApp() {
 
     // ---- Админка: поддержка ----
     app.get('/api/admin/tickets', requireAdmin, async (req, res) => {
-        try { res.json({ tickets: await db.listTickets(req.query.status || 'open') }); }
+        try { res.json({ tickets: await db.listTickets(req.query.status || 'open', adminPlatform(req.query.platform) || undefined) }); }
         catch (e) { res.status(500).json({ error: e.message }); }
     });
 
@@ -799,9 +821,10 @@ function startWebApp() {
             const { id, answer } = req.body || {};
             if (!id || !answer) return res.status(400).json({ error: 'id and answer required' });
             const ticket = await db.answerTicket(id, answer);
-            const bot = app.locals.bot;
-            if (bot && ticket) {
-                try { await bot.telegram.sendMessage(ticket.user_id, `💬 *Ответ поддержки:*\n\n${answer}`, { parse_mode: 'Markdown' }); } catch (e) {}
+            if (ticket) {
+                const vkUser = Number(ticket.user_id) < 0;
+                const text = vkUser ? `Ответ поддержки:\n\n${answer}` : `💬 *Ответ поддержки:*\n\n${answer}`;
+                try { await tellClient(ticket.user_id, text, !vkUser); } catch (e) {}
             }
             res.json({ ok: true, ticket });
         } catch (e) {
