@@ -104,6 +104,19 @@ function startWebApp() {
         return auth.verifyVkLaunch(query) || auth.verifyVkLaunch(body.launch || {}) || null;
     }
 
+    app.get('/api/vk/session', (req, res) => {
+        const account = auth.verifyVkLaunch(req.query || {});
+        if (!account) {
+            const missing = !String(process.env.VK_APP_SECRET || '').trim();
+            return res.status(401).json({
+                error: missing
+                    ? 'В настройках сервера нет VK_APP_SECRET — это защищённый ключ мини-приложения.'
+                    : 'ВК не подтвердил запуск приложения.'
+            });
+        }
+        res.json({ tk: auth.signUserId(account) });
+    });
+
     app.get('/api/vk/me', async (req, res) => {
         try {
             const account = vkAccount(req);
