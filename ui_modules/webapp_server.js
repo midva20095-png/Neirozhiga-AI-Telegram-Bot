@@ -205,7 +205,9 @@ function startWebApp() {
                 if (tpl.photo && !body.image) return res.status(400).json({ error: 'Прикрепите фото' });
             }
             if (!prompt && !body.image) return res.status(400).json({ error: 'Введите промпт' });
-            const file = body.image ? decodeImage(body.image) : null;
+            const pickedModel = catalog.getModel(modelKey, { includeDisabled: true });
+            const allowPhoto = !pickedModel || (pickedModel.image !== 'forbidden' && pickedModel.image !== 'no');
+            const file = body.image && allowPhoto ? decodeImage(body.image) : null;
             const fields = {
                 userId: req.userId,
                 prompt,
@@ -222,20 +224,13 @@ function startWebApp() {
             };
             const photoKb = file && file.buffer ? Math.max(1, Math.round(file.buffer.length / 1024)) : 0;
             if (templateTitle) {
-                db.note('tpl', `старт «${templateTitle}» · ${modelKey} · фото ${photoKb ? photoKb + ' КБ' : 'нет'}`).catch(() => {});
+                const service = pickedModel ? (catalog.PROVIDERS[pickedModel.provider] || pickedModel.provider) : 'модель не найдена';
+                const remote = (pickedModel && (file ? pickedModel.kieEdit : pickedModel.kieModel)) || (pickedModel && pickedModel.tool) || modelKey;
+                fields.workLabel = templateTitle;
+                db.note('tpl', `старт «${templateTitle}» · ${service} · ${modelKey} · ${remote} · фото ${photoKb ? photoKb + ' КБ' : 'нет'}`).catch(() => {});
             }
-            let usedModel = modelKey;
-            let result;
-            try {
-                result = await gen.generateForWeb(fields);
-            } catch (err) {
-                const next = body.templateId ? templatesSrc.fallbackModel(modelKey, err) : null;
-                if (!next) throw err;
-                usedModel = next;
-                db.note('tpl', `«${templateTitle}» · ${modelKey} не прошла (${err.message}). Повтор через ${next}.`).catch(() => {});
-                result = await gen.generateForWeb(Object.assign({}, fields, { modelKey: next }));
-            }
-            if (templateTitle) db.note('tpl', `готово «${templateTitle}» · ${usedModel}`).catch(() => {});
+            const result = await gen.generateForWeb(fields);
+            if (templateTitle) db.note('tpl', `готово «${templateTitle}» · ${modelKey}`).catch(() => {});
             res.json(result);
         } catch (e) {
             const shown = gen.userMessage(e);

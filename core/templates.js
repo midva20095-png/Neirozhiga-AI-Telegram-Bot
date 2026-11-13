@@ -27,52 +27,21 @@ function safeImage(url) {
     return '';
 }
 
-// Nano Banana у Братухи отвечает «нейросеть временно недоступна».
-// Banana Lite на Kie в тот же день картинку отдала, цена шаблона не меняется.
-const STEADY_IMAGE = 'kie-banana-lite';
-
-function kieReady() {
-    return !!String(process.env.KIE_API_KEY || '').trim();
-}
-
+// В шаблоне остаётся ровно та модель, которую выбрали в админке.
+// Другой сервис сам не подставляется: иначе запрос не попадает в журнал этого сервиса.
 function mapModel(raw) {
-    const key = String(raw || '').trim();
-    if (key === 'nano-banana' && kieReady() && catalog.getModel(STEADY_IMAGE)) return STEADY_IMAGE;
-    if (key && catalog.getModel(key, { includeDisabled: true })) return key;
-    const fallback = (process.env.TEMPLATE_MODEL || 'nanobanana').trim();
-    if (catalog.getModel(fallback, { includeDisabled: true })) return fallback;
-    return 'nanobanana';
+    return String(raw || '').trim();
 }
 
-function serviceDown(error) {
-    const message = String((error && error.message) || '');
-    return /временно недоступна|internal error|try again later|bad gateway|service unavailable/i.test(message);
-}
-
-// Запасной запуск только для картинки, если выбранная модель молчит.
-function fallbackModel(modelKey, error) {
-    const message = String((error && error.message) || '');
-    const current = catalog.getModel(modelKey, { includeDisabled: true });
-    if (!current || current.kind !== 'image') return null;
-    if (/Фото не загрузилось/.test(message) && current.provider === 'kie') {
-        const google = catalog.getModel('nanobanana');
-        return google ? google.key : null;
-    }
-    if (!serviceDown(error) || !kieReady()) return null;
-    if (current.provider === 'kie' || current.key === STEADY_IMAGE) return null;
-    const next = catalog.getModel(STEADY_IMAGE);
-    return next ? next.key : null;
-}
-
-function isPhotoModel(key) {
-    const model = catalog.getModel(key, { includeDisabled: true });
-    if (!model) return true;
-    return model.kind === 'image' || model.image === 'required';
+function wantsPhoto(model) {
+    if (!model) return false;
+    if (model.image === 'forbidden' || model.image === 'no') return false;
+    if (model.image === 'required') return true;
+    return model.kind === 'image';
 }
 
 function fromDb(row) {
     const model = mapModel(row.model);
-    const hidePrompt = !!row.hide_prompt;
     return {
         id: 'local:' + row.id,
         title: row.title,
@@ -83,9 +52,9 @@ function fromDb(row) {
         model,
         category: row.category || 'image',
         formats: catalog.templateFormats(catalog.getModel(model, { includeDisabled: true }), row.formats),
-        hidePrompt,
+        hidePrompt: true,
         active: row.active !== false,
-        photo: hidePrompt && isPhotoModel(model),
+        photo: wantsPhoto(catalog.getModel(model, { includeDisabled: true })),
         sort: Number(row.sort) || 0
     };
 }
@@ -101,9 +70,8 @@ function toPublic(item) {
         category: item.category,
         formats: item.formats || [],
         photo: !!item.photo,
-        hidePrompt: !!item.hidePrompt
+        hidePrompt: true
     };
-    if (!item.hidePrompt) out.prompt = item.prompt;
     return out;
 }
 
@@ -122,4 +90,4 @@ async function getFull(id) {
     return fromDb(row);
 }
 
-module.exports = { listPublic, getFull, fromDb, toPublic, fallbackModel, serviceDown };
+module.exports = { listPublic, getFull, fromDb, toPublic, mapModel, wantsPhoto };

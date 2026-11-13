@@ -210,6 +210,7 @@ async function processRequest(context) {
     if (created.status === 401 || created.status === 403) throw userError('Эта модель пока не подключена.');
     const taskId = created.data && created.data.data && created.data.data.taskId;
     if (created.status >= 400 || !taskId) throw failureError(errorText(created.data), 'Картинка не запустилась. Кредиты не списаны.');
+    note(`${label}: запрос ушёл, модель ${task.model}`);
     const fileUrl = await pollTask(axios, key, taskId);
     const buffer = await downloadImage(axios, fileUrl);
     note(`${label}: картинка готова`);
