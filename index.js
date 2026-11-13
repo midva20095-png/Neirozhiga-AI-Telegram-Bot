@@ -17,3 +17,9 @@ try {
 } catch (e) {
     console.error('⚠️ Ошибка запуска ядра бота:', e.message);
 }
+
+try {
+    require('./core/vk').startVk();
+} catch (e) {
+    console.error('⚠️ ВК не запущен:', e.message);
+}
