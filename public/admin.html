@@ -39,11 +39,18 @@ th{color:var(--mut);font-size:12px}
 .mrow .mname{font-weight:700}
 .mrow input{padding:7px 9px}
 .thumb{width:54px;height:54px;object-fit:cover;border-radius:8px;background:#1c1233}
-.agallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
-.acard{background:#1c1233;border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.agallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.acard{background:#140c24;border:1px solid var(--line);border-radius:18px;overflow:hidden}
 .acard.off{opacity:.55}
-.acard img,.acard .ph{width:100%;height:168px;object-fit:cover;display:block;background:#0b0614}
+.acard img,.acard .ph{width:100%;aspect-ratio:3/4;object-fit:cover;object-position:center top;display:block;background:linear-gradient(150deg,#22164a,#0d2b3a)}
 .abody{padding:10px 12px 12px}
+.abody em{display:inline-block;margin-top:6px;font-style:normal;font-weight:800;color:#00d4ff}
+.drop{display:block;margin-top:8px;border:1px dashed rgba(0,212,255,.55);border-radius:18px;background:#120a22;cursor:pointer;overflow:hidden;text-align:center}
+.drop input{display:none}
+.drop .pad{padding:28px 16px;font-weight:800}
+.drop img{width:100%;max-height:360px;object-fit:cover;object-position:center top;display:block}
+details{margin-top:12px}
+details summary{cursor:pointer;color:var(--mut);font-weight:700}
 .hero{width:100%;max-height:280px;object-fit:cover;border-radius:14px;background:#0b0614;margin-top:8px}
 .filebtn{display:block;text-align:center;border:1px dashed rgba(255,255,255,.28);border-radius:14px;padding:14px;margin-top:8px;font-weight:800;cursor:pointer}
 .filebtn input{display:none}
@@ -222,55 +229,85 @@ function safeImg(u){
 }
 function modelOptions(current){
   const list = modelsData.slice();
-  if (current && !list.some(m=>m.key===current)) list.unshift({key:current, name:current, cost:null});
-  if (!list.length) list.push({key:'nanobanana', name:'Nano Banana', cost:20});
-  return list.map(m=>'<option value="'+esc(m.key)+'"'+(m.key===current?' selected':'')+'>'+esc(m.name)+(m.cost!=null?' · '+m.cost+' кр':'')+'</option>').join('');
+  if (current && !list.some(m=>m.key===current)) list.unshift({key:current, name:current+' (как сохранено)', cost:null, group:''});
+  if (!list.length) list.push({key:'nanobanana', name:'Картинка', cost:20, group:'image'});
+  const order = Object.keys(groupsData);
+  const used = {};
+  let html = '';
+  function opts(rows){
+    return rows.map(m=>'<option value="'+esc(m.key)+'"'+(m.key===current?' selected':'')+'>'+esc(m.name)+(m.cost!=null?' · '+m.cost+' кр':'')+'</option>').join('');
+  }
+  order.forEach(g=>{
+    const rows = list.filter(m=>m.group===g);
+    if (!rows.length) return;
+    rows.forEach(m=>{ used[m.key]=1; });
+    html += '<optgroup label="'+esc(groupsData[g]||g)+'">'+opts(rows)+'</optgroup>';
+  });
+  const rest = list.filter(m=>!used[m.key]);
+  if (rest.length) html += '<optgroup label="Как сохранено">'+opts(rest)+'</optgroup>';
+  return html;
 }
 async function loadTpl(){
   const el = document.getElementById('section-tpl');
-  if (!modelsData.length) {
+  if (!modelsData.length || !Object.keys(groupsData).length) {
     const md = await api('/api/admin/models');
     modelsData = md.models||[];
+    groupsData = md.groups||{};
   }
   const d = await api('/api/admin/templates');
   templates = d.templates||[];
   const editing = tplEdit;
-  const currentModel = editing && editing.model ? editing.model : 'nanobanana';
+  const preferred = modelsData.some(m=>m.key==='kie-banana-lite') ? 'kie-banana-lite' : 'nanobanana';
+  const currentModel = editing && editing.model ? editing.model : preferred;
+  const current = modelsData.find(m=>m.key===currentModel);
   const link = editing && /^https?:\/\//i.test(editing.image||'') && !tplImageTouched ? editing.image : '';
   const preview = safeImg(tplImage);
+  const startCost = editing ? editing.cost : (current && current.cost!=null ? current.cost : 6);
   el.innerHTML =
     '<div class="card"><h3>'+(editing?'Правка шаблона':'Новый шаблон')+'</h3>'+
-    '<p class="note">Это единственный источник шаблонов. Цена здесь — та, которую видит человек в кабинете. Промпт на клиент не уходит: он прикрепляет своё фото и нажимает «Сгенерировать».</p>'+
-    '<div class="row"><input id="tt" placeholder="Название" value="'+esc(editing?editing.title:'')+'">'+
-      '<select id="tc">'+TCATS.map(c=>'<option value="'+c[0]+'"'+((editing?editing.category:'image')===c[0]?' selected':'')+'>'+c[1]+'</option>').join('')+'</select></div>'+
+    '<p class="note">Четыре поля. Фото — это пример, который человек видит на карточке. Название — подпись карточки. Текст ниже — что сделать с его фото; сам человек этот текст не видит. Цена — сколько списать в кабинете.</p>'+
+    '<label>1. Фото-пример</label>'+
+    '<label class="drop">'+(preview?'<img id="tpreview" src="'+esc(preview)+'" alt="">':'<div class="pad" id="tpad">Нажмите и выберите фото с телефона или компьютера</div>')+
+    '<input id="tfile" type="file" accept="image/*"></label>'+
+    (preview?'<button class="ghost" type="button" onclick="clearTplPhoto()" style="margin-top:8px">Убрать фото</button>':'')+
+    '<label>2. Название</label><input id="tt" placeholder="Например: Портрет в неоне" value="'+esc(editing?editing.title:'')+'">'+
+    '<label>3. Что должна сделать нейросеть. Человек это не видит</label><textarea id="tp" placeholder="Опишите стиль, свет и что оставить от фото человека">'+esc(editing?editing.prompt:'')+'</textarea>'+
+    '<label>4. Модель и цена для человека</label>'+
     '<div class="row"><select id="tm">'+modelOptions(currentModel)+'</select>'+
-      '<input id="tcost" type="number" min="0" placeholder="Цена, кр" value="'+(editing?editing.cost:20)+'">'+
-      '<input id="tsort" type="number" placeholder="Порядок" value="'+(editing&&editing.sort?editing.sort:0)+'"></div>'+
-    '<label>Короткое описание — его видно на карточке</label><input id="tdesc" placeholder="Что получится" value="'+esc(editing&&editing.description?editing.description:'')+'">'+
-    '<label>Фото-пример. Человек видит его до генерации</label>'+
-    (preview?'<img id="tpreview" class="hero" src="'+esc(preview)+'" alt="">':'<img id="tpreview" class="hero" alt="" style="display:none">')+
-    '<label class="filebtn">Загрузить фото<input id="tfile" type="file" accept="image/*"></label>'+
-    '<label>Или ссылка на картинку</label><input id="timg" placeholder="https://..." value="'+esc(link)+'">'+
-    '<label>Размеры. Пустое поле — в кабинете все размеры этой модели. Через запятую можно оставить только нужные</label><input id="tfmt" placeholder="пусто = все размеры модели" value="'+esc(editing&&editing.formats?editing.formats:'')+'">'+
-    '<label>Промпт. Клиент его не видит</label><textarea id="tp" placeholder="Что должна сделать модель с фото человека">'+esc(editing?editing.prompt:'')+'</textarea>'+
-    '<label class="check"><input id="thide" type="checkbox" '+(!editing||editing.hide_prompt!==false?'checked':'')+'> Скрыть промпт: в кабинете только пример, своё фото и кнопка «Сгенерировать»</label>'+
+      '<input id="tcost" type="number" min="0" placeholder="Цена, кр" value="'+startCost+'"'+(editing?' data-lock="1"':'')+'></div>'+
+    '<p class="note">Для картинок берите Banana Lite: Nano Banana от Братухи сейчас часто отвечает, что нейросеть недоступна. Уже сохранённые шаблоны на ней сами запускаются через Banana Lite, цена на карточке не меняется. «pro» — это Чат Pro, текст, не картинка.</p>'+
     '<label class="check"><input id="tactive" type="checkbox" '+(!editing||editing.active!==false?'checked':'')+'> Показывать в кабинете</label>'+
-    '<div class="row" style="margin-top:8px"><button onclick="saveTpl()">'+(editing?'Сохранить изменения':'Добавить шаблон')+'</button>'+
-    (preview?'<button class="ghost" onclick="clearTplPhoto()">Убрать фото</button>':'')+
-    (editing?'<button class="ghost" onclick="newTpl()">Отмена</button>':'')+'</div></div>'+
-    '<div class="card"><h3>Как это видит человек</h3><p class="note">'+templates.length+' шаблон'+(templates.length===1?'':'ов')+'. Скрытые в кабинет не попадают.</p>'+
+    '<details'+(editing?' open':'')+'><summary>Дополнительно: описание, раздел, ссылка, размеры</summary>'+
+    '<label>Короткое описание под заголовком</label><input id="tdesc" placeholder="Что получится" value="'+esc(editing&&editing.description?editing.description:'')+'">'+
+    '<label>Раздел в кабинете</label><select id="tc">'+TCATS.map(c=>'<option value="'+c[0]+'"'+((editing?editing.category:'image')===c[0]?' selected':'')+'>'+c[1]+'</option>').join('')+'</select>'+
+    '<label>Ссылка на картинку, если фото не загружаете файлом</label><input id="timg" placeholder="https://..." value="'+esc(link)+'">'+
+    '<label>Размеры через запятую. Пусто — все размеры выбранной модели</label><input id="tfmt" placeholder="9:16, 1:1" value="'+esc(editing&&editing.formats?editing.formats:'')+'">'+
+    '<label>Порядок. Меньше число — выше в списке</label><input id="tsort" type="number" placeholder="0" value="'+(editing&&editing.sort?editing.sort:0)+'">'+
+    '<label class="check"><input id="thide" type="checkbox" '+(!editing||editing.hide_prompt!==false?'checked':'')+'> Скрыть текст запроса: в кабинете пример, своё фото и кнопка «Создать»</label>'+
+    '</details>'+
+    '<div class="row" style="margin-top:12px"><button onclick="saveTpl()">'+(editing?'Сохранить изменения':'Добавить шаблон в кабинет')+'</button>'+
+    (editing?'<button class="ghost" type="button" onclick="newTpl()">Отмена</button>':'')+'</div></div>'+
+    '<div class="card"><h3>Как это видит человек</h3><p class="note">'+templates.length+' шаблон'+(templates.length===1?'':'ов')+'. Скрытые в кабинет не попадают. Карточка вертикальная, как на сайте: фото, название и цена.</p>'+
     (templates.length ? '<div class="agallery">'+templates.map(t=>{
       const src = safeImg(t.image);
+      const moved = t.model==='nano-banana' ? ' · запуск через Banana Lite' : '';
       return '<div class="acard'+(t.active?'':' off')+'">'+(src?'<img src="'+esc(src)+'" alt="">':'<div class="ph"></div>')+
-        '<div class="abody"><b>'+esc(t.title)+'</b><div class="note">'+t.cost+' кр · '+esc(t.model||'')+(t.active?'':' · скрыт')+(t.hide_prompt?' · промпт скрыт':'')+'</div>'+
-        (t.description?'<div class="note">'+esc(t.description)+'</div>':'')+
+        '<div class="abody"><b>'+esc(t.title)+'</b><div><em>'+t.cost+' кр.</em></div><div class="note">'+esc(t.model||'')+(t.active?'':' · скрыт')+(t.hide_prompt?' · текст скрыт':'')+moved+'</div>'+
         '<div class="row" style="margin:8px 0 0"><button class="ghost" onclick="editTpl('+t.id+')">Править</button>'+
         '<button class="ghost" onclick="toggleTpl('+t.id+')">'+(t.active?'Скрыть':'Показать')+'</button>'+
         '<button class="danger" onclick="delTpl('+t.id+')">Удалить</button></div></div></div>';
-    }).join('')+'</div>' : '<p class="note">Пока пусто. Добавьте шаблон с фото — он появится в кабинете.</p>')+
+    }).join('')+'</div>' : '<p class="note">Пока пусто. Загрузите фото, напишите название и нажмите «Добавить шаблон в кабинет».</p>')+
     '</div>';
   const file = document.getElementById('tfile');
   if (file) file.onchange = () => onTplPhoto(file);
+  const tm = document.getElementById('tm');
+  const tcost = document.getElementById('tcost');
+  if (tm && tcost) tm.onchange = () => {
+    if (tcost.dataset.lock === '1') return;
+    const m = modelsData.find(x=>x.key===tm.value);
+    if (m && m.cost != null) tcost.value = m.cost;
+  };
+  if (tcost) tcost.oninput = () => { tcost.dataset.lock = '1'; };
 }
 function newTpl(){ tplEdit = null; tplImage = ''; tplImageTouched = false; loadTpl(); }
 function editTpl(id){
@@ -282,9 +319,17 @@ function editTpl(id){
 function clearTplPhoto(){
   tplImage = '';
   tplImageTouched = true;
+  const drop = document.querySelector('#section-tpl .drop');
   const img = document.getElementById('tpreview');
   const link = document.getElementById('timg');
-  if (img) { img.removeAttribute('src'); img.style.display = 'none'; }
+  if (img) img.remove();
+  if (drop && !document.getElementById('tpad')) {
+    const pad = document.createElement('div');
+    pad.className = 'pad';
+    pad.id = 'tpad';
+    pad.textContent = 'Нажмите и выберите фото с телефона или компьютера';
+    drop.insertBefore(pad, drop.firstChild);
+  }
   if (link) link.value = '';
 }
 async function onTplPhoto(input){
@@ -295,7 +340,15 @@ async function onTplPhoto(input){
     if (data.length > 700000) data = await fileToJpeg(file, 640, 0.66);
     tplImage = data;
     tplImageTouched = true;
-    const img = document.getElementById('tpreview');
+    const drop = document.querySelector('#section-tpl .drop');
+    let img = document.getElementById('tpreview');
+    const pad = document.getElementById('tpad');
+    if (pad) pad.remove();
+    if (!img && drop) {
+      img = document.createElement('img');
+      img.id = 'tpreview';
+      drop.insertBefore(img, drop.firstChild);
+    }
     if (img) { img.src = data; img.style.display = 'block'; }
   } catch (e) { alert(e.message); }
 }
