@@ -111,6 +111,14 @@ async function initDB() {
     )
   `);
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS journal (
+      id SERIAL PRIMARY KEY,
+      kind TEXT NOT NULL,
+      message TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS site_pushes (
       id TEXT PRIMARY KEY,
       user_id BIGINT NOT NULL,
@@ -120,6 +128,25 @@ async function initDB() {
     )
   `);
   console.log('✅ Таблица users готова (PostgreSQL)');
+}
+
+async function note(kind, message) {
+  const line = String(message || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  if (!line) return;
+  console.log(`[${kind}] ${line}`);
+  try {
+    await pool.query('INSERT INTO journal (kind, message) VALUES ($1, $2)', [String(kind || 'sys').slice(0, 20), line]);
+    await pool.query('DELETE FROM journal WHERE id NOT IN (SELECT id FROM journal ORDER BY id DESC LIMIT 200)');
+  } catch (e) {}
+}
+
+async function listJournal(limit) {
+  const n = Math.min(80, Math.max(1, Number(limit) || 60));
+  const res = await pool.query(
+    'SELECT id, kind, message, created_at FROM journal ORDER BY id DESC LIMIT $1',
+    [n]
+  );
+  return res.rows;
 }
 
 async function getSettings(keys) {
@@ -593,6 +620,8 @@ module.exports = {
   ensureUser,
   getSettings,
   setSetting,
+  note,
+  listJournal,
   touchUser,
   recordGeneration,
   createTicket,

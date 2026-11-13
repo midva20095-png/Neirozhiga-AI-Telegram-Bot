@@ -43,7 +43,11 @@ function publicModels() {
         cost: m.cost, from: catalog.fromPrice(m), label: catalog.priceLabel(m),
         image: m.image, ratio: !!m.ratio && !m.noAspect,
         aspects: m.aspects || null,
-        qualities: (m.qualities || []).map(q => ({ id: q.id, name: q.name, desc: q.desc || '', cost: q.cost, perSec: !!q.perSec })),
+        qualities: (m.qualities || []).map(q => ({
+            id: q.id, name: q.name, desc: q.desc || '',
+            cost: q.perSec ? q.cost : catalog.quote(m, { quality: q.id }),
+            perSec: !!q.perSec
+        })),
         quality: m.quality || null,
         durations: m.durations || null,
         durationPrices: m.durationPrices || null,
@@ -178,7 +182,8 @@ function startWebApp() {
             });
             res.json(result);
         } catch (e) {
-            console.error('API /api/generate:', e.message);
+            const quiet = ['no_credits', 'user', 'need_image', 'need_text', 'need_audio', 'no_image', 'blocked', 'limit', 'busy'].includes(e.code);
+            if (!quiet) db.note('gen', `кабинет: ${e.message}`).catch(() => {});
             const code = e.code === 'busy' ? 429 : 400;
             res.status(code).json({ error: e.message || 'Ошибка генерации' });
         }
@@ -394,7 +399,19 @@ function startWebApp() {
 
     // ---- Админка: модели / пакеты / общие настройки ----
     app.get('/api/admin/models', requireAdmin, (req, res) => {
-        res.json({ models: catalog.listModels({ includeDisabled: true }), groups: catalog.GROUPS });
+        res.json({
+            models: catalog.listModels({ includeDisabled: true }),
+            groups: catalog.GROUPS,
+            kie: !!String(process.env.KIE_API_KEY || '').trim()
+        });
+    });
+
+    app.get('/api/admin/journal', requireAdmin, async (req, res) => {
+        try {
+            res.json({ items: await db.listJournal(80) });
+        } catch (e) {
+            res.status(500).json({ error: 'Журнал недоступен' });
+        }
     });
 
     app.post('/api/admin/models', requireAdmin, async (req, res) => {
