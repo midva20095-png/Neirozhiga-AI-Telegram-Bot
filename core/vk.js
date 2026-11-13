@@ -65,6 +65,9 @@ function isGreeting(text) {
 
 function menuAction(text, payload) {
     if (payload && payload.a) return String(payload.a);
+    if (payload && payload.g) return 'group';
+    if (payload && payload.m) return 'model';
+    if (payload && payload.p) return 'pack';
     if (payload && payload.command === 'start') return 'hello';
     const value = String(text || '').trim().toLowerCase();
     if (value === 'начать' || value === 'start' || value === '/start' || value === 'привет') return 'hello';
@@ -103,41 +106,43 @@ function mainMenu() {
     });
 }
 
-function callbackButton(label, payload) {
-    return { action: { type: 'callback', label: fitLabel(label), payload: JSON.stringify(payload) } };
+function textButton(label, payload, color) {
+    return {
+        action: { type: 'text', label: fitLabel(label), payload: JSON.stringify(payload) },
+        color: color || 'secondary'
+    };
 }
 
-function inlineKeyboard(rows) {
-    return JSON.stringify({ inline: true, buttons: rows });
+function asBoard(rows) {
+    return JSON.stringify({ one_time: false, inline: false, buttons: rows.slice(0, 10) });
 }
 
-function groupButtons() {
+function sectionKeyboard() {
     const groups = Object.keys(catalog.GROUPS).filter(group => catalog.modelsByGroup(group).length > 0);
     const rows = [];
     for (let i = 0; i < groups.length; i += 2) {
-        const row = [callbackButton(catalog.GROUPS[groups[i]], { g: groups[i] })];
-        if (groups[i + 1]) row.push(callbackButton(catalog.GROUPS[groups[i + 1]], { g: groups[i + 1] }));
+        const row = [textButton(catalog.GROUPS[groups[i]], { g: groups[i] })];
+        if (groups[i + 1]) row.push(textButton(catalog.GROUPS[groups[i + 1]], { g: groups[i + 1] }));
         rows.push(row);
     }
-    return rows.slice(0, 6);
+    rows.push([textButton('Меню', { a: 'hello' }, 'primary')]);
+    return asBoard(rows);
 }
 
-function modelButtons(group) {
-    const models = catalog.modelsByGroup(group).slice(0, 10);
-    const rows = [];
-    for (let i = 0; i < models.length; i += 2) {
-        const row = [callbackButton(`${models[i].short} · ${catalog.priceLabel(models[i])}`, { m: models[i].key })];
-        if (models[i + 1]) row.push(callbackButton(`${models[i + 1].short} · ${catalog.priceLabel(models[i + 1])}`, { m: models[i + 1].key }));
-        rows.push(row);
-    }
-    rows.push([callbackButton('К разделам', { a: 'models' })]);
-    return rows.slice(0, 6);
-}
-
-function packageButtons() {
-    return catalog.listPackages().slice(0, 6).map(pkg => [
-        callbackButton(`${pkg.title} · ${pkg.price} ₽`, { p: pkg.id })
+function modelKeyboard(group) {
+    const rows = catalog.modelsByGroup(group).slice(0, 9).map(model => [
+        textButton(`${model.short} · ${catalog.priceLabel(model)}`, { m: model.key })
     ]);
+    rows.push([textButton('К разделам', { a: 'models' }, 'primary')]);
+    return asBoard(rows);
+}
+
+function payKeyboard() {
+    const rows = catalog.listPackages().slice(0, 9).map(pkg => [
+        textButton(`${pkg.title} · ${pkg.price} ₽`, { p: pkg.id }, 'positive')
+    ]);
+    rows.push([textButton('Меню', { a: 'hello' }, 'secondary')]);
+    return asBoard(rows);
 }
 
 async function call(token, method, params) {
@@ -273,14 +278,14 @@ async function openMenu(token, peerId, account, action) {
     if (action === 'hello' || action === 'balance') return sendStatus(token, peerId, account);
     if (action === 'help') return sendHelp(token, peerId);
     if (action === 'models') {
-        const rows = groupButtons();
-        if (!rows.length) return sendText(token, peerId, 'Сейчас нет доступных моделей.');
-        return sendText(token, peerId, 'Выберите раздел.', inlineKeyboard(rows));
+        const board = JSON.parse(sectionKeyboard());
+        if (board.buttons.length < 2) return sendText(token, peerId, 'Сейчас нет доступных моделей.');
+        return sendText(token, peerId, 'Выберите раздел. Кнопки внизу, под полем ввода.', sectionKeyboard());
     }
     if (action === 'pay') {
-        const rows = packageButtons();
-        if (!rows.length) return sendText(token, peerId, `Пополнение в чате сейчас недоступно. Откройте кабинет: ${siteLink()}`);
-        return sendText(token, peerId, 'Выберите пакет. Кредиты придут в этот чат ВК.', inlineKeyboard(rows));
+        const board = JSON.parse(payKeyboard());
+        if (board.buttons.length < 2) return sendText(token, peerId, `Пополнение в чате сейчас недоступно. Откройте кабинет: ${siteLink()}`);
+        return sendText(token, peerId, 'Выберите пакет внизу. Кредиты придут в этот чат ВК.', payKeyboard());
     }
 }
 
@@ -294,8 +299,30 @@ async function answerEvent(token, event, snackbar) {
     await call(token, 'messages.sendMessageEventAnswer', params);
 }
 
+async function chooseModel(token, peerId, account, key) {
+    const model = catalog.getModel(key);
+    if (!model) return sendText(token, peerId, 'Модель недоступна.');
+    await db.setCurrentModel(account, model.key);
+    return sendText(token, peerId, `${model.name}. ${catalog.priceLabel(model)}. Напишите запрос.`);
+}
+
 async function reply(token, peerId, account, text, payload) {
     const action = menuAction(text, payload);
+    if (action === 'group') {
+        awaitingEmail.delete(account);
+        if (!payload || !catalog.GROUPS[payload.g]) return sendText(token, peerId, 'Раздел недоступен.');
+        return sendText(token, peerId, `${catalog.GROUPS[payload.g]}. Выберите модель внизу.`, modelKeyboard(payload.g));
+    }
+    if (action === 'model') {
+        awaitingEmail.delete(account);
+        return chooseModel(token, peerId, account, payload && payload.m);
+    }
+    if (action === 'pack') {
+        const pkg = catalog.getPackage(payload && payload.p);
+        if (!pkg) return sendText(token, peerId, 'Пакет недоступен.');
+        awaitingEmail.set(account, pkg.id);
+        return sendText(token, peerId, `Пакет «${pkg.title}», ${pkg.price} ₽. Напишите почту для чека.`);
+    }
     if (action) return openMenu(token, peerId, account, action);
     if (awaitingEmail.has(account)) {
         const email = String(text || '').trim();
@@ -369,21 +396,7 @@ async function handleEvent(token, event) {
     }
     try { await answerEvent(token, event, snackbar); } catch (e) {}
     await db.ensureUser(account, `vk:${event.userId}`);
-    if (payload.a) return openMenu(token, event.peerId, account, String(payload.a));
-    if (payload.g && catalog.GROUPS[payload.g]) {
-        return sendText(token, event.peerId, catalog.GROUPS[payload.g], inlineKeyboard(modelButtons(payload.g)));
-    }
-    if (payload.m) {
-        const model = catalog.getModel(payload.m);
-        if (!model) return sendText(token, event.peerId, 'Модель недоступна.');
-        return sendText(token, event.peerId, `${model.name}. ${catalog.priceLabel(model)}. Напишите запрос.`);
-    }
-    if (payload.p) {
-        const pkg = catalog.getPackage(payload.p);
-        if (!pkg) return sendText(token, event.peerId, 'Пакет недоступен.');
-        awaitingEmail.set(account, pkg.id);
-        return sendText(token, event.peerId, `Пакет «${pkg.title}», ${pkg.price} ₽. Напишите почту для чека.`);
-    }
+    return reply(token, event.peerId, account, '', payload);
 }
 
 async function handleUpdate(token, update) {
@@ -467,5 +480,5 @@ function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, connectHint, startVk, notify
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, sectionKeyboard, modelKeyboard, connectHint, startVk, notify
 };
