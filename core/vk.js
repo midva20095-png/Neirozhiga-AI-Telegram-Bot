@@ -65,6 +65,7 @@ function isGreeting(text) {
 
 function menuAction(text, payload) {
     if (payload && payload.a) return String(payload.a);
+    if (payload && payload.command === 'start') return 'hello';
     const value = String(text || '').trim().toLowerCase();
     if (value === 'начать' || value === 'start' || value === '/start' || value === 'привет') return 'hello';
     if (value === 'баланс') return 'balance';
@@ -93,7 +94,7 @@ function mainMenu() {
             ],
             [
                 { action: { type: 'text', label: 'Пополнить', payload: '{"a":"pay"}' }, color: 'positive' },
-                { action: { type: 'open_link', label: 'Кабинет', link: siteLink() } }
+                { action: { type: 'open_link', label: 'Кабинет', link: siteLink(), payload: '{}' } }
             ],
             [
                 { action: { type: 'text', label: 'Справка', payload: '{"a":"help"}' }, color: 'secondary' }
@@ -154,14 +155,52 @@ async function call(token, method, params) {
     return data.response;
 }
 
+let keyboardNoted = false;
+
+function noteKeyboard(error) {
+    if (keyboardNoted) return;
+    keyboardNoted = true;
+    if (Number(error && error.code) === 912) {
+        console.error('ВК не показывает кнопки. Сообщения → Настройки для бота → Возможности ботов → Включены.');
+        return;
+    }
+    console.error('ВК не принял клавиатуру. Ответ ушёл без кнопок.');
+}
+
+async function sendMessage(token, params) {
+    try {
+        await call(token, 'messages.send', params);
+    } catch (error) {
+        const code = Number(error && error.code);
+        if (!params.keyboard || (code !== 912 && code !== 911)) throw error;
+        noteKeyboard(error);
+        const plain = { ...params, random_id: String(Math.floor(Math.random() * 2e9)) };
+        delete plain.keyboard;
+        await call(token, 'messages.send', plain);
+    }
+}
+
 async function sendText(token, peerId, message, keyboard) {
-    const params = {
+    await sendMessage(token, {
         peer_id: String(peerId),
         random_id: String(Math.floor(Math.random() * 2e9)),
         message: String(message || '').slice(0, 3500),
         keyboard: keyboard || mainMenu()
-    };
-    await call(token, 'messages.send', params);
+    });
+}
+
+async function enableButtons(token, groupId) {
+    try {
+        await call(token, 'groups.setSettings', {
+            group_id: groupId,
+            messages: '1',
+            bots_capabilities: '1',
+            bots_start_button: '1'
+        });
+        console.log('ВК: возможности ботов включены, кнопки доступны.');
+    } catch (error) {
+        console.error('ВК не смог сам включить кнопки. Сообщения → Настройки для бота → Возможности ботов → Включены.');
+    }
 }
 
 async function sendImage(token, peerId, buffer, caption) {
@@ -176,7 +215,7 @@ async function sendImage(token, peerId, buffer, caption) {
     });
     const photo = Array.isArray(saved) ? saved[0] : null;
     if (!photo) throw new Error('vk photo');
-    await call(token, 'messages.send', {
+    await sendMessage(token, {
         peer_id: String(peerId),
         random_id: String(Math.floor(Math.random() * 2e9)),
         message: String(caption || '').slice(0, 3500),
@@ -378,6 +417,7 @@ async function poll(token, groupId) {
             if (!online) {
                 online = true;
                 console.log('ВК подключён, жду сообщения сообщества.');
+                await enableButtons(token, groupId);
             }
             for (;;) {
                 let res;
@@ -402,7 +442,8 @@ async function poll(token, groupId) {
                     try {
                         await handleUpdate(token, update);
                     } catch (error) {
-                        console.error('ВК: сообщение не обработано');
+                        const code = Number(error && error.code);
+                        console.error(`ВК: сообщение не обработано${code ? ` (${code})` : ''}.`);
                     }
                 }
             }
