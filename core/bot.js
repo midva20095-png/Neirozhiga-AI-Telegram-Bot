@@ -26,6 +26,7 @@ const MENU_TEXTS = [
     '💰 Пополнить', '💰 Пополнить баланс', '➕ Пополнить',
     '↔️ Перенос', 'Перенос',
     '📢 Канал', 'Канал',
+    'ВК', 'Макс',
     '↗️ На сайт', 'На сайт',
     '↙️ С сайта', 'С сайта',
     '💬 Поддержка', 'ℹ Справка', 'ℹ️ Справка', '❓ Справка'
@@ -49,7 +50,7 @@ function baseWebappUrl() {
 // Кнопка web_app в обычной клавиатуре открывает Mini App с пустым initData,
 // поэтому для надёжного определения пользователя подписываем id и кладём в ссылку.
 function webappUrlFor(userId) {
-    return `${baseWebappUrl()}/?v=18#tk=${auth.signUserId(userId)}`;
+    return `${baseWebappUrl()}/?v=19#tk=${auth.signUserId(userId)}`;
 }
 
 function mainKeyboard(userId) {
@@ -58,6 +59,7 @@ function mainKeyboard(userId) {
         ['✨ Модель', '💳 Баланс'],
         ['➕ Пополнить', '↔️ Перенос'],
         ['📢 Канал'],
+        ['ВК', 'Макс'],
         ['💬 Поддержка', '❓ Справка']
     ]).resize().persistent().placeholder('Напишите запрос или пришлите фото');
 }
@@ -531,13 +533,14 @@ async function startBot(app) {
                 parse_mode: 'Markdown',
                 ...Markup.inlineKeyboard([
                     [Markup.button.webApp('📱 Открыть кабинет', webappUrlFor(ctx.from.id))],
-                    [Markup.button.url('📢 Канал', channel.CHANNEL_URL)]
+                    [Markup.button.url('📢 Канал', channel.CHANNEL_URL)],
+                    [Markup.button.url('ВК', 'https://vk.ru/write-236645486'), Markup.button.url('Макс', 'https://max.ru/se14387925_bot')]
                 ])
             }
         );
         const templateId = share.parseStart(ctx.startPayload);
         if (templateId) await openSharedTemplate(ctx, templateId);
-        await ctx.reply('Меню внизу. «Перенос» — кредиты между ботом и сайтом. «Канал» — новости и работы.', mainKeyboard(ctx.from.id));
+        await ctx.reply('Меню внизу. «Перенос» — кредиты между ботом и сайтом. «Канал», «ВК» и «Макс» открывают НейроЯгу в этих местах.', mainKeyboard(ctx.from.id));
         try {
             await ctx.telegram.setChatMenuButton({
                 chat_id: ctx.chat.id,
@@ -595,6 +598,24 @@ async function startBot(app) {
         await ctx.reply(
             'Канал НейроЯга: новости, шаблоны и работы подписчиков.',
             Markup.inlineKeyboard([[Markup.button.url('Открыть канал', channel.CHANNEL_URL)]])
+        );
+    });
+
+    bot.hears('ВК', async (ctx) => {
+        userAwaitingEmail.delete(ctx.from.id);
+        userAwaitingSupport.delete(ctx.from.id);
+        await ctx.reply(
+            'Бот НейроЯга во ВКонтакте.',
+            Markup.inlineKeyboard([[Markup.button.url('Открыть ВК', 'https://vk.ru/write-236645486')]])
+        );
+    });
+
+    bot.hears('Макс', async (ctx) => {
+        userAwaitingEmail.delete(ctx.from.id);
+        userAwaitingSupport.delete(ctx.from.id);
+        await ctx.reply(
+            'Бот НейроЯга в Макс.',
+            Markup.inlineKeyboard([[Markup.button.url('Открыть Макс', 'https://max.ru/se14387925_bot')]])
         );
     });
 
@@ -1080,7 +1101,7 @@ async function startBot(app) {
 
     try {
         await bot.telegram.setChatMenuButton({
-            menu_button: { type: 'web_app', text: 'Кабинет', web_app: { url: baseWebappUrl() + '/?v=18' } }
+            menu_button: { type: 'web_app', text: 'Кабинет', web_app: { url: baseWebappUrl() + '/?v=19' } }
         });
         console.log('✅ Кнопка меню Mini App установлена');
     } catch (e) {
