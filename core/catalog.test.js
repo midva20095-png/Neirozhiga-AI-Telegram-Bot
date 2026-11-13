@@ -108,6 +108,10 @@ test('запрос в Братуху собирается как на сайте
     assert.equal(veoIn.input.model, 'veo3.1-lite');
     assert.equal(veoIn.input.image_urls, undefined);
 
+    const banana = input.buildSiteInput(model('nano-banana'), { prompt: 'портрет', quality: 'cheap', imageUrl: 'https://img' });
+    assert.equal(banana.input.mode, 'cheap');
+    assert.equal(banana.input.image_urls[0], 'https://img');
+
     const kling = model('kling-2-1-standard');
     const klingIn = input.buildSiteInput(kling, { prompt: 'оживи', imageUrl: 'https://img', duration: 10 });
     assert.equal(klingIn.input.image_url, 'https://img');

@@ -59,6 +59,8 @@ async function initDB() {
   await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS hide_prompt BOOLEAN DEFAULT false`);
   await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS formats TEXT`);
   await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS sort INTEGER DEFAULT 0`);
+  await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS quality TEXT`);
+  await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS duration INTEGER`);
   const count = await pool.query('SELECT COUNT(*)::int AS n FROM templates');
   if (count.rows[0].n === 0) {
     for (const row of SEED_TEMPLATES) {
@@ -597,21 +599,24 @@ async function saveTemplate(data) {
     data.description ? String(data.description).trim().slice(0, 500) : null,
     true,
     data.formats ? String(data.formats).trim().slice(0, 200) : null,
-    Number.isFinite(Number(data.sort)) ? Math.round(Number(data.sort)) : 0
+    Number.isFinite(Number(data.sort)) ? Math.round(Number(data.sort)) : 0,
+    String(data.quality || '').trim().slice(0, 40) || null,
+    Number(data.duration) > 0 ? Math.round(Number(data.duration)) : null
   ];
   if (data.id) {
     const res = await pool.query(
       `UPDATE templates
        SET title=$1, category=$2, prompt=$3, model=$4, cost=$5, active=$6,
-           image=$7, description=$8, hide_prompt=$9, formats=$10, sort=$11
-       WHERE id=$12 RETURNING *`,
+           image=$7, description=$8, hide_prompt=$9, formats=$10, sort=$11,
+           quality=$12, duration=$13
+       WHERE id=$14 RETURNING *`,
       [...values, data.id]
     );
     return res.rows[0];
   }
   const res = await pool.query(
-    `INSERT INTO templates (title, category, prompt, model, cost, active, image, description, hide_prompt, formats, sort)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+    `INSERT INTO templates (title, category, prompt, model, cost, active, image, description, hide_prompt, formats, sort, quality, duration)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
     values
   );
   return res.rows[0];

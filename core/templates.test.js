@@ -25,6 +25,16 @@ test('шаблон вызывает ровно выбранную модель',
     assert.equal(templates.fromDb(row('nanobanana')).model, 'nanobanana');
 });
 
+test('шаблон хранит дешёвый режим и не берёт чужой', () => {
+    const cheap = templates.fromDb(row('nano-banana', { quality: 'cheap', cost: 3 }));
+    assert.equal(cheap.quality, 'cheap');
+    assert.equal(cheap.cost, 3);
+    assert.equal(templates.fromDb(row('nano-banana', { quality: '4K' })).quality, '');
+    const clip = templates.fromDb(row('kling-2-1-standard', { category: 'video', duration: 10 }));
+    assert.equal(clip.duration, 10);
+    assert.equal(templates.fromDb(row('kling-2-1-standard', { duration: 7 })).duration, null);
+});
+
 test('pro остаётся Чат Pro, а не картинкой', () => {
     const item = templates.fromDb(row('pro', { category: 'video', cost: 15 }));
     assert.equal(item.model, 'pro');
