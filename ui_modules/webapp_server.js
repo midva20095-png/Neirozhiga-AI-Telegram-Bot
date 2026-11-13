@@ -186,6 +186,8 @@ function startWebApp() {
             let charge;
             let reason;
             let aspect = body.format || null;
+            let quality = body.quality || null;
+            let duration = body.duration || null;
             let keepModel = false;
             let strict = false;
             let templateTitle = '';
@@ -202,6 +204,8 @@ function startWebApp() {
                 strict = true;
                 const allowed = tpl.formats || [];
                 aspect = allowed.includes(String(aspect || '')) ? String(aspect) : (allowed[0] || null);
+                quality = tpl.quality || null;
+                duration = tpl.duration || null;
                 if (tpl.photo && !body.image) return res.status(400).json({ error: 'Прикрепите фото' });
             }
             if (!prompt && !body.image) return res.status(400).json({ error: 'Введите промпт' });
@@ -215,8 +219,8 @@ function startWebApp() {
                 fileBuffer: file && file.buffer,
                 mimeType: file && file.mime,
                 aspectRatio: aspect,
-                duration: body.duration,
-                quality: body.quality,
+                duration,
+                quality,
                 charge,
                 reason,
                 keepModel,
@@ -226,8 +230,10 @@ function startWebApp() {
             if (templateTitle) {
                 const service = pickedModel ? (catalog.PROVIDERS[pickedModel.provider] || pickedModel.provider) : 'модель не найдена';
                 const remote = (pickedModel && (file ? pickedModel.kieEdit : pickedModel.kieModel)) || (pickedModel && pickedModel.tool) || modelKey;
+                const mode = pickedModel && (pickedModel.qualities || []).find(item => item.id === quality);
+                const modeText = [mode && mode.name, duration ? duration + ' сек' : ''].filter(Boolean).join(', ');
                 fields.workLabel = templateTitle;
-                db.note('tpl', `старт «${templateTitle}» · ${service} · ${modelKey} · ${remote} · фото ${photoKb ? photoKb + ' КБ' : 'нет'}`).catch(() => {});
+                db.note('tpl', `старт «${templateTitle}» · ${service} · ${modelKey} · ${remote}${modeText ? ' · ' + modeText : ''} · фото ${photoKb ? photoKb + ' КБ' : 'нет'}`).catch(() => {});
             }
             const result = await gen.generateForWeb(fields);
             if (templateTitle) db.note('tpl', `готово «${templateTitle}» · ${modelKey}`).catch(() => {});

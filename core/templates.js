@@ -40,8 +40,20 @@ function wantsPhoto(model) {
     return model.kind === 'image';
 }
 
+function savedMode(modelKey, row) {
+    const spec = catalog.getModel(modelKey, { includeDisabled: true });
+    const qualities = (spec && spec.qualities) || [];
+    const id = String((row && row.quality) || '').trim();
+    const quality = qualities.some(item => item.id === id) ? id : '';
+    const durations = ((spec && spec.durations) || []).map(Number);
+    const duration = durations.includes(Number(row && row.duration)) ? Number(row.duration) : null;
+    return { quality, duration };
+}
+
 function fromDb(row) {
     const model = mapModel(row.model);
+    const mode = savedMode(model, row);
+    const spec = catalog.getModel(model, { includeDisabled: true });
     return {
         id: 'local:' + row.id,
         title: row.title,
@@ -50,11 +62,13 @@ function fromDb(row) {
         image: safeImage(row.image),
         cost: Number(row.cost) || 0,
         model,
+        quality: mode.quality,
+        duration: mode.duration,
         category: row.category || 'image',
-        formats: catalog.templateFormats(catalog.getModel(model, { includeDisabled: true }), row.formats),
+        formats: catalog.templateFormats(spec, row.formats),
         hidePrompt: true,
         active: row.active !== false,
-        photo: wantsPhoto(catalog.getModel(model, { includeDisabled: true })),
+        photo: wantsPhoto(spec),
         sort: Number(row.sort) || 0
     };
 }
@@ -90,4 +104,4 @@ async function getFull(id) {
     return fromDb(row);
 }
 
-module.exports = { listPublic, getFull, fromDb, toPublic, mapModel, wantsPhoto };
+module.exports = { listPublic, getFull, fromDb, toPublic, mapModel, wantsPhoto, savedMode };
