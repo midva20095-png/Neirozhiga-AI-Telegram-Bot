@@ -76,7 +76,7 @@ function menuAction(text, payload) {
     if (payload && payload.p) return 'pack';
     if (payload && payload.command === 'start') return 'hello';
     const value = String(text || '').trim().toLowerCase();
-    if (value === 'начать' || value === 'start' || value === '/start' || value === 'привет') return 'hello';
+    if (value === 'начать' || value === 'start' || value === '/start') return 'hello';
     if (value === 'баланс') return 'balance';
     if (value === 'модели' || value === 'модель') return 'models';
     if (value === 'пополнить') return 'pay';
@@ -112,34 +112,33 @@ function cabinetLink(account, pkgId) {
     return `${base}/vk.html?tk=${encodeURIComponent(tk)}${pkg}`;
 }
 
-function cabinetButton(peerId) {
-    const account = accountId(peerId);
-    return { action: { type: 'open_link', label: 'Кабинет', link: account ? cabinetLink(account) : siteLink(), payload: '{}' } };
+function linkButton(label, link) {
+    const safe = String(link || '').trim();
+    if (!/^https:\/\/\S+$/i.test(safe) || safe.length > 400) return null;
+    return { action: { type: 'open_link', label: fitLabel(label), link: safe, payload: '{}' } };
+}
+
+function textRows() {
+    return [
+        [textButton('Баланс', { a: 'balance' }, 'primary'), textButton('Модели', { a: 'models' }, 'primary')],
+        [textButton('Пополнить', { a: 'pay' }, 'positive'), textButton('Перенос', { a: 'move' }, 'primary')],
+        [textButton('Справка', { a: 'help' }, 'secondary'), textButton('Бот ИИ', { a: 'models' }, 'primary')],
+        [textButton('Рейтинг', { a: 'rate' }, 'secondary')]
+    ];
+}
+
+function textOnlyMenu() {
+    return JSON.stringify({ one_time: false, buttons: textRows() });
 }
 
 function mainMenu(peerId) {
-    return JSON.stringify({
-        one_time: false,
-        buttons: [
-            [
-                { action: { type: 'text', label: 'Баланс', payload: '{"a":"balance"}' }, color: 'primary' },
-                { action: { type: 'text', label: 'Модели', payload: '{"a":"models"}' }, color: 'primary' }
-            ],
-            [
-                { action: { type: 'text', label: 'Пополнить', payload: '{"a":"pay"}' }, color: 'positive' },
-                cabinetButton(peerId)
-            ],
-            [
-                { action: { type: 'text', label: 'Перенос', payload: '{"a":"move"}' }, color: 'primary' },
-                { action: { type: 'text', label: 'Справка', payload: '{"a":"help"}' }, color: 'secondary' }
-            ],
-            [
-                { action: { type: 'text', label: 'Бот ИИ', payload: '{"a":"models"}' }, color: 'primary' },
-                { action: { type: 'text', label: 'Рейтинг', payload: '{"a":"rate"}' }, color: 'secondary' },
-                { action: { type: 'open_link', label: 'На сайт', link: siteLink(), payload: '{}' } }
-            ]
-        ]
-    });
+    const rows = textRows();
+    const account = accountId(peerId);
+    const cabinet = linkButton('Кабинет', account ? cabinetLink(account) : siteLink());
+    const site = linkButton('На сайт', siteLink());
+    if (cabinet) rows.push([cabinet]);
+    if (site) rows.push([site]);
+    return JSON.stringify({ one_time: false, buttons: rows });
 }
 
 const pendingPay = new Map();
@@ -297,7 +296,16 @@ function noteKeyboard(error) {
         console.error('ВК не показывает кнопки. Сообщения → Настройки для бота → Возможности ботов → Включены.');
         return;
     }
-    console.error('ВК не принял клавиатуру. Ответ ушёл без кнопок.');
+    const detail = String(error && error.message || '').replace(/\s+/g, ' ').slice(0, 160);
+    console.error(`ВК не принял клавиатуру${detail ? `: ${detail}` : ''}. Ставлю меню без ссылок.`);
+}
+
+function spareKeyboard(failed) {
+    const plain = textOnlyMenu();
+    if (failed !== plain) return plain;
+    const clear = JSON.stringify({ buttons: [] });
+    if (failed !== clear) return clear;
+    return '';
 }
 
 async function sendMessage(token, params) {
@@ -307,6 +315,20 @@ async function sendMessage(token, params) {
         const code = Number(error && error.code);
         if (!params.keyboard || (code !== 912 && code !== 911)) throw error;
         noteKeyboard(error);
+        const next = spareKeyboard(params.keyboard);
+        if (next) {
+            try {
+                await call(token, 'messages.send', {
+                    ...params,
+                    random_id: String(Math.floor(Math.random() * 2e9)),
+                    keyboard: next
+                });
+                return;
+            } catch (again) {
+                const againCode = Number(again && again.code);
+                if (againCode !== 912 && againCode !== 911) throw again;
+            }
+        }
         const plain = { ...params, random_id: String(Math.floor(Math.random() * 2e9)) };
         delete plain.keyboard;
         await call(token, 'messages.send', plain);
@@ -476,10 +498,20 @@ async function askOrRun(token, peerId, account, job) {
         return sendText(token, peerId, step.text, step.keyboard);
     }
     pendingJob.delete(String(account));
-    return runJob(token, peerId, account, job);
+    runJob(token, peerId, account, job).catch(() => {
+        console.error('ВК: генерация не завершилась.');
+    });
 }
 
+const runningJob = new Set();
+
 async function runJob(token, peerId, account, job) {
+    const key = String(account);
+    if (runningJob.has(key) || gen.isBusy(account)) {
+        await sendText(token, peerId, 'Дождитесь завершения предыдущей генерации.', payLockKeyboard());
+        return;
+    }
+    runningJob.add(key);
     try {
         const prepared = await gen.prepare({
             userId: account,
@@ -490,7 +522,7 @@ async function runJob(token, peerId, account, job) {
             quality: job.quality || null,
             duration: job.duration || null
         });
-        await sendText(token, peerId, 'Делаю ответ…');
+        await sendText(token, peerId, 'Делаю ответ…', payLockKeyboard());
         const result = await gen.run({
             userId: account,
             prompt: job.prompt,
@@ -512,7 +544,9 @@ async function runJob(token, peerId, account, job) {
             await sendText(token, peerId, `${error.message}\n\nНажмите «Пополнить» внизу.`);
             return;
         }
-        await sendText(token, peerId, gen.userMessage(error));
+        await sendText(token, peerId, gen.userMessage(error), payLockKeyboard());
+    } finally {
+        runningJob.delete(key);
     }
 }
 
@@ -634,6 +668,9 @@ async function holdMove(token, peerId, account, text, action) {
 
 async function goBack(token, peerId, account) {
     const key = String(account);
+    if (runningJob.has(key) || gen.isBusy(account)) {
+        return sendText(token, peerId, 'Ответ ещё готовится.', payLockKeyboard());
+    }
     const job = pendingJob.get(key);
     if (job && (job.aspect || job.duration || job.quality)) {
         if (job.aspect) job.aspect = '';

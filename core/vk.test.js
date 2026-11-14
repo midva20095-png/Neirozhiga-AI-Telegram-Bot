@@ -30,13 +30,20 @@ test('из события ВК берётся только входящий те
 test('меню ВК открывает кабинет и не считает кнопки запросом', () => {
     const menu = JSON.parse(vk.mainMenu());
     const labels = menu.buttons.flat().map(button => button.action.label);
-    assert.deepEqual(labels, ['Баланс', 'Модели', 'Пополнить', 'Кабинет', 'Перенос', 'Справка', 'Бот ИИ', 'Рейтинг', 'На сайт']);
-    assert.equal(menu.buttons[3][2].action.type, 'open_link');
-    assert.equal(menu.buttons[3][2].action.link, 'https://babayagaland.ru');
-    assert.equal(menu.buttons[1][1].action.link, 'https://babayagaland.ru');
+    assert.deepEqual(labels, ['Баланс', 'Модели', 'Пополнить', 'Перенос', 'Справка', 'Бот ИИ', 'Рейтинг', 'Кабинет', 'На сайт']);
+    for (const row of menu.buttons) {
+        const links = row.filter(button => button.action.type === 'open_link');
+        if (!links.length) continue;
+        assert.equal(row.length, 1);
+        assert.equal(links[0].color, undefined);
+        assert.match(links[0].action.link, /^https:\/\//);
+    }
+    assert.equal(menu.buttons.at(-1)[0].action.link, 'https://babayagaland.ru');
+    assert.equal(menu.buttons.at(-2)[0].action.link, 'https://babayagaland.ru');
     process.env.WEBAPP_URL = 'https://bot.example';
     const personal = JSON.parse(vk.mainMenu(10));
-    assert.match(personal.buttons[1][1].action.link, /^https:\/\/bot\.example\/vk\.html\?tk=-10\./);
+    const cabinet = personal.buttons.flat().find(button => button.action.label === 'Кабинет');
+    assert.match(cabinet.action.link, /^https:\/\/bot\.example\/vk\.html\?tk=-10\./);
     assert.doesNotMatch(vk.cabinetLink(-10, 'pack_100'), /yookassa|yoomoney/);
     const pay = JSON.parse(vk.payKeyboard());
     assert.equal(pay.buttons.at(-1)[0].action.label, 'Назад');
@@ -82,6 +89,8 @@ test('меню ВК открывает кабинет и не считает к�
     assert.ok(sizeStep.rows.flat().some(item => item.payload.s === '9:16'));
     assert.equal(vk.menuAction('', { command: 'start' }), 'hello');
     assert.equal(vk.menuAction('нарисуй кота'), '');
+    assert.equal(vk.menuAction('Привет'), '');
+    assert.equal(vk.isGreeting('Привет'), false);
     const event = vk.readEvent({
         type: 'message_event',
         object: { user_id: 10, peer_id: 10, event_id: 'e1', payload: '{"m":"flash"}' }
@@ -93,7 +102,7 @@ test('кабинет ВК открывает рабочую страницу, а
     process.env.VK_APP_ID = '54895627';
     process.env.WEBAPP_URL = 'https://bot.example';
     const personal = JSON.parse(vk.mainMenu(10));
-    const action = personal.buttons[1][1].action;
+    const action = personal.buttons.flat().find(button => button.action.label === 'Кабинет').action;
     assert.equal(action.type, 'open_link');
     assert.equal(action.app_id, undefined);
     assert.match(action.link, /^https:\/\/bot\.example\/vk\.html\?tk=-10\./);
