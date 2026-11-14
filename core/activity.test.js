@@ -52,6 +52,15 @@ test('лайк, комментарий и репост считаются тол
         object: { from_id: 8, copy_history: [{ owner_id: -1, id: 9 }] }
     }, GROUP), null);
     assert.equal(activity.parseCommunityActivity({ type: 'message_new', object: {} }, GROUP), null);
+    const nested = activity.parseCommunityActivity({
+        type: 'wall_reply_new',
+        object: { comment: { from_id: 9, id: 4, post_id: 8, owner_id: -230706467 } }
+    }, GROUP);
+    assert.equal(nested.objectKey, 'comment:8:4');
+    const first = activity.freshIds(null, [5, 5, -1]);
+    assert.deepEqual(first.fresh, []);
+    const second = activity.freshIds(first.seen, [5, 6]);
+    assert.deepEqual(second.fresh, [6]);
 });
 
 test('имя и аватар берутся из профиля ВК', () => {

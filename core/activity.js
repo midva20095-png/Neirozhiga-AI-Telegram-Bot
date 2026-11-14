@@ -49,14 +49,16 @@ function parseCommunityActivity(update, groupId) {
         };
     }
     if (update.type === 'wall_reply_new' || update.type === 'wall_reply_delete' || update.type === 'wall_reply_restore') {
-        const owner = Number(obj.owner_id || obj.post_owner_id || 0);
+        const comment = obj.comment || obj;
+        const owner = Number(comment.owner_id || comment.post_owner_id || obj.post_owner_id || 0);
         if (owner && group && owner !== group) return null;
-        const vkId = person(obj.from_id);
-        if (!vkId || !obj.id) return null;
+        const vkId = person(comment.from_id || obj.from_id);
+        const commentId = comment.id || obj.id;
+        if (!vkId || !commentId) return null;
         return {
             vkId,
             kind: 'comment',
-            objectKey: `comment:${obj.post_id || 0}:${obj.id}`,
+            objectKey: `comment:${comment.post_id || obj.post_id || 0}:${commentId}`,
             remove: update.type === 'wall_reply_delete'
         };
     }
@@ -123,4 +125,17 @@ function formatRating(rows, meId, range) {
     return lines.join('\n').slice(0, 3500);
 }
 
-module.exports = { POINTS, rulesText, weekRange, parseCommunityActivity, faceOf, present, formatRating };
+function freshIds(seen, ids) {
+    const next = seen || new Set();
+    const first = !seen;
+    const fresh = [];
+    for (const item of ids || []) {
+        const id = Number(item && item.id ? item.id : item);
+        if (!Number.isInteger(id) || id <= 0 || next.has(id)) continue;
+        next.add(id);
+        if (!first) fresh.push(id);
+    }
+    return { seen: next, fresh };
+}
+
+module.exports = { POINTS, rulesText, weekRange, parseCommunityActivity, faceOf, present, formatRating, freshIds };

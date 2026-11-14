@@ -425,23 +425,127 @@ async function enableButtons(token, groupId) {
 }
 
 async function enableActivity(token, groupId) {
+    const params = {
+        group_id: groupId,
+        enabled: '1',
+        api_version: VERSION,
+        message_new: '1',
+        message_event: '1',
+        like_add: '1',
+        like_remove: '1',
+        wall_reply_new: '1',
+        wall_reply_delete: '1',
+        wall_reply_restore: '1',
+        wall_repost: '1'
+    };
     try {
-        await call(token, 'groups.setLongPollSettings', {
-            group_id: groupId,
-            enabled: '1',
-            api_version: VERSION,
-            message_new: '1',
-            message_event: '1',
-            like_add: '1',
-            like_remove: '1',
-            wall_reply_new: '1',
-            wall_reply_delete: '1',
-            wall_reply_restore: '1',
-            wall_repost: '1'
-        });
+        await call(token, 'groups.setLongPollSettings', params);
     } catch (error) {
-        console.error('ВК не включил события стены. Сообщения бота работают. Лайки и комментарии появятся в рейтинге после включения этих событий в сообществе.');
+        const code = Number(error && error.code);
+        console.error(`ВК ${groupId}: события стены не включились целиком${code ? ` (${code})` : ''}.`);
+        try {
+            const slim = Object.assign({}, params);
+            delete slim.like_add;
+            delete slim.like_remove;
+            delete slim.message_event;
+            await call(token, 'groups.setLongPollSettings', slim);
+        } catch (e) {}
     }
+    try {
+        const settings = await call(token, 'groups.getLongPollSettings', { group_id: groupId });
+        const events = (settings && settings.events) || {};
+        const on = ['like_add', 'wall_reply_new', 'wall_repost'].filter(name => Number(events[name]) === 1);
+        console.log(`ВК ${groupId}: события рейтинга ${on.join(', ') || 'добираю по стене'}.`);
+    } catch (e) {}
+}
+
+const reactionSeen = new Map();
+const reactionScanning = new Set();
+
+function pause(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function awardReaction(groupId, kind, objectKey, vkId) {
+    const account = accountId(vkId);
+    if (!account) return;
+    try {
+        await db.ensureUser(account, `vk:${vkId}`);
+        await db.recordActivity(account, kind, objectKey, activity.POINTS[kind] || 0, groupId);
+    } catch (e) {}
+}
+
+async function scanCommunityActivity(token, groupId) {
+    const owner = -Number(String(groupId || '').replace(/\D/g, ''));
+    if (!owner) return;
+    let wall;
+    try {
+        wall = await call(token, 'wall.get', { owner_id: String(owner), count: '15', filter: 'owner' });
+    } catch (error) {
+        if (Number(error && error.code) !== 100) return;
+        try {
+            wall = await call(token, 'wall.get', { owner_id: String(owner), count: '15' });
+        } catch (e) { return; }
+    }
+    const posts = (wall && wall.items) || [];
+    const started = scanCommunityActivity.started || (scanCommunityActivity.started = Math.floor(Date.now() / 1000) - 30);
+    for (const post of posts) {
+        await pause(280);
+        let likers = [];
+        try {
+            const likes = await call(token, 'likes.getList', {
+                type: 'post', owner_id: String(owner), item_id: String(post.id), count: '100', filter: 'likes'
+            });
+            likers = (likes && likes.items) || [];
+        } catch (e) {}
+        const likeKey = `${groupId}:like:${post.id}`;
+        const likePick = activity.freshIds(reactionSeen.get(likeKey), likers);
+        reactionSeen.set(likeKey, likePick.seen);
+        for (const id of likePick.fresh) await awardReaction(groupId, 'like', `post:${post.id}`, id);
+
+        await pause(280);
+        let comments = [];
+        try {
+            const thread = await call(token, 'wall.getComments', {
+                owner_id: String(owner), post_id: String(post.id), count: '40', thread_items_count: '5'
+            });
+            comments = (thread && thread.items) || [];
+        } catch (e) {}
+        const flat = [];
+        comments.forEach(comment => {
+            flat.push(comment);
+            ((comment.thread && comment.thread.items) || []).forEach(reply => flat.push(reply));
+        });
+        for (const comment of flat) {
+            const fromId = Number(comment && comment.from_id);
+            if (!Number.isInteger(fromId) || fromId <= 0 || !comment.id) continue;
+            if (Number(comment.date) < started) continue;
+            await awardReaction(groupId, 'comment', `comment:${post.id}:${comment.id}`, fromId);
+        }
+
+        await pause(280);
+        let copies = [];
+        try {
+            const reposts = await call(token, 'likes.getList', {
+                type: 'post', owner_id: String(owner), item_id: String(post.id), count: '100', filter: 'copies'
+            });
+            copies = (reposts && reposts.items) || [];
+        } catch (e) {}
+        const copyKey = `${groupId}:repost:${post.id}`;
+        const copyPick = activity.freshIds(reactionSeen.get(copyKey), copies);
+        reactionSeen.set(copyKey, copyPick.seen);
+        for (const id of copyPick.fresh) await awardReaction(groupId, 'repost', `repost:${post.id}:${id}`, id);
+    }
+}
+
+function watchCommunityActivity(token, groupId) {
+    if (reactionScanning.has(groupId)) return;
+    reactionScanning.add(groupId);
+    const tick = async () => {
+        try { await scanCommunityActivity(token, groupId); } catch (e) {}
+        setTimeout(tick, 3 * 60 * 1000);
+    };
+    tick();
 }
 
 function imageKind(buffer) {
@@ -1187,6 +1291,7 @@ async function poll(token, groupId) {
                 db.note('sys', `ВК ${groupId} подключён`).catch(() => {});
                 await enableButtons(token, groupId);
                 await enableActivity(token, groupId);
+                watchCommunityActivity(token, groupId);
             }
             for (;;) {
                 let res;
