@@ -171,8 +171,23 @@ function resultUrls(opData) {
 }
 
 async function downloadUrl(url) {
-    const mediaRes = await axios.get(url, { responseType: 'arraybuffer', timeout: 120_000 });
-    return Buffer.from(mediaRes.data);
+    let lastErr = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+            const mediaRes = await axios.get(url, {
+                responseType: 'arraybuffer',
+                timeout: 120_000,
+                headers: { Accept: 'image/*,*/*', 'User-Agent': 'NeiroYaga/1.0' }
+            });
+            const body = Buffer.from(mediaRes.data);
+            if (body.length > 32) return body;
+            lastErr = new Error('Пустой файл картинки');
+        } catch (err) {
+            lastErr = err;
+        }
+        await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    throw lastErr || new Error('Не удалось скачать картинку');
 }
 
 async function runSite(context) {

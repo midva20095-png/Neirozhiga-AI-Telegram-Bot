@@ -1,6 +1,17 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const sharp = require('sharp');
 const vk = require('./vk');
+
+test('картинка PNG для ВК становится JPEG', async () => {
+    const png = await sharp({
+        create: { width: 8, height: 8, channels: 3, background: { r: 20, g: 10, b: 40 } }
+    }).png().toBuffer();
+    const jpeg = await vk.jpegForVk(png);
+    assert.equal(jpeg[0], 0xff);
+    assert.equal(jpeg[1], 0xd8);
+    assert.equal(await vk.jpegForVk(jpeg), jpeg);
+});
 
 test('аккаунт ВК не совпадает с числом Telegram', () => {
     assert.equal(vk.accountId(236645486), -236645486);

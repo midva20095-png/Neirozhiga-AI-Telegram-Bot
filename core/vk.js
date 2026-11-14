@@ -1,4 +1,5 @@
 const axios = require('axios');
+const sharp = require('sharp');
 const db = require('./db');
 const bridge = require('./bridge');
 const catalog = require('./catalog');
@@ -384,10 +385,16 @@ async function enableActivity(token, groupId) {
     }
 }
 
+async function jpegForVk(buffer) {
+    if (buffer && buffer[0] === 0xff && buffer[1] === 0xd8) return buffer;
+    return sharp(buffer).rotate().jpeg({ quality: 90 }).toBuffer();
+}
+
 async function sendImage(token, peerId, buffer, caption) {
+    const jpeg = await jpegForVk(buffer);
     const server = await call(token, 'photos.getMessagesUploadServer', { peer_id: String(peerId) });
     const form = new FormData();
-    form.append('photo', new Blob([buffer], { type: 'image/jpeg' }), 'neuroyaga.jpg');
+    form.append('photo', new Blob([jpeg], { type: 'image/jpeg' }), 'neuroyaga.jpg');
     const uploaded = await axios.post(server.upload_url, form, { timeout: 60000 });
     const saved = await call(token, 'photos.saveMessagesPhoto', {
         photo: uploaded.data.photo,
@@ -540,12 +547,18 @@ async function runJob(token, peerId, account, job) {
             quality: job.quality || null,
             reason: `ВК · ${prepared.model.name}`
         });
-        if (result.buffer && result.type === 'image') {
-            await sendImage(token, peerId, result.buffer, `Готово. Списано ${result.cost} кр. Осталось ${result.balance}.`);
-            return;
+        const done = `Готово. Списано ${result.cost} кр. Осталось ${result.balance}.`;
+        try {
+            if (result.buffer && result.type === 'image') {
+                await sendImage(token, peerId, result.buffer, done);
+            } else {
+                const answer = String(result.text || 'Готово').slice(0, 3200);
+                await sendText(token, peerId, `${answer}\n\n${done}`);
+            }
+        } catch (sendError) {
+            await sendText(token, peerId, `${done} В чат картинка не вставилась, она лежит в кабинете на вкладке «История».`);
         }
-        const answer = String(result.text || 'Готово').slice(0, 3200);
-        await sendText(token, peerId, `${answer}\n\nСписано ${result.cost} кр. Осталось ${result.balance}.`);
+        return;
     } catch (error) {
         if (error && error.code === 'no_credits') {
             await sendText(token, peerId, `${error.message}\n\nНажмите «Пополнить» внизу.`);
@@ -961,5 +974,5 @@ function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, jpegForVk, USER_HELP
 };
