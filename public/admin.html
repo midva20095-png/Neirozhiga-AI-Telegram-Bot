@@ -117,6 +117,7 @@ let cur = 'stats';
 let users=[], templates=[], modelsData=[], groupsData={}, providersData={}, packagesData=[], generalData={};
 const KINDNAME = {sys:'система', pay:'оплата', kie:'Kie', gen:'сбой', tpl:'шаблон'};
 let tplEdit = null, tplImage = '', tplImageTouched = false, modelsMsg = '';
+let rateGroup = sessionStorage.getItem('ny_admin_group') || '';
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function tgInit(){ try{ return (window.Telegram&&window.Telegram.WebApp&&window.Telegram.WebApp.initData)||''; }catch(e){ return ''; } }
@@ -165,7 +166,7 @@ function enterPlace(next){
   document.getElementById('panel').style.display='block';
   document.getElementById('placeTitle').textContent = placeName();
   document.getElementById('placeNote').textContent = place==='vk'
-    ? 'Клиенты, баланс, модели и шаблоны только ВКонтакте. Рейтинг — вкладка рядом со статистикой.'
+    ? 'Два сообщества считаются отдельно: у каждого свой рейтинг. Клиенты, баланс, модели и рассылка общие.'
     : 'Клиенты, баланс, модели и шаблоны только Telegram.';
   renderTabs();
   go('stats');
@@ -206,13 +207,44 @@ async function loadSection(k){
   if (k==='settings') return loadSettings();
 }
 
+function communityTitle(item){
+  return item && item.name ? item.name : ('Сообщество '+(item && item.id || ''));
+}
+function renderCommunities(list){
+  if (!list.length) return '<div class="card"><h3>Сообщества</h3><p class="note">Ключи сообществ не заданы.</p></div>';
+  return '<div class="card"><h3>Сообщества</h3><p class="note">Рейтинг у каждого сообщества свой. Аудит и клуб есть только во втором. Клиенты, баланс и рассылка общие.</p>'+
+    list.map(item=>{
+      const tools = ['кабинет', 'модели'];
+      if (item.audit) tools.push('аудит');
+      if (item.club) tools.push('клуб');
+      return '<div class="stat" style="margin-top:8px"><div class="n" style="font-size:16px">'+esc(communityTitle(item))+'</div>'+
+        '<div class="l">'+esc(item.id)+' · '+(item.online?'<span class="ok">подключён</span>':'<span class="bad">нет связи</span>')+'</div>'+
+        (item.events?'<div class="note">События рейтинга: '+esc(item.events)+'</div>':'<div class="note">События рейтинга появятся после подключения.</div>')+
+        (item.hint?'<div class="note">'+esc(item.hint)+'</div>':'')+
+        '<div class="note">В чате: '+tools.join(', ')+'</div>'+
+        '<button class="ghost" type="button" style="margin-top:8px" onclick="openRate(\''+esc(item.id)+'\')">Рейтинг этого сообщества</button></div>';
+    }).join('')+'</div>';
+}
+function openRate(id){
+  rateGroup = String(id||'');
+  sessionStorage.setItem('ny_admin_group', rateGroup);
+  go('rate');
+}
 async function loadRate(){
   const el = document.getElementById('section-rate');
   el.innerHTML = '<div class="card">Считаю баллы…</div>';
   try {
-    const d = await api('/api/admin/vk/rating');
+    const pack = await api('/api/admin/vk/communities');
+    const list = pack.communities || [];
+    if (!list.some(item => item.id === rateGroup)) rateGroup = list[0] ? list[0].id : '';
+    const current = list.find(item => item.id === rateGroup) || null;
+    const d = await api('/api/admin/vk/rating?group='+encodeURIComponent(rateGroup));
     const rows = d.rows || [];
-    el.innerHTML = '<div class="card"><h3>Рейтинг · '+esc(d.week||'')+'</h3>'+
+    const switcher = list.map(item=>'<button type="button" class="'+(item.id===rateGroup?'':'ghost')+'" onclick="openRate(\''+esc(item.id)+'\')">'+esc(communityTitle(item))+'</button>').join('');
+    el.innerHTML = renderCommunities(list)+
+      '<div class="card"><h3>Рейтинг · '+esc(communityTitle(current))+'</h3>'+
+      '<div class="row">'+switcher+'</div>'+
+      '<p class="note">'+esc(d.week||'')+'</p>'+
       '<p class="note">'+esc(d.rules||'')+' Лайк, комментарий и репост приводят новых людей. Запрос боту приносит только оплату, поэтому за него балл один. В понедельник список начинается заново. Кредиты сами не приходят: впишите сумму и начислите человеку.</p>'+
       '<table><tr><th></th><th>Подписчик</th><th>Баллы</th><th>Лайки</th><th>Коммент.</th><th>Репосты</th><th>Бот</th><th>Кредиты</th></tr>'+
       rows.map((row, i)=>'<tr><td>'+(i+1)+'</td><td>'+rateFace(row)+esc(row.name)+'</td><td class="ok">'+row.points+'</td><td>'+row.likes+'</td><td>'+row.comments+'</td><td>'+row.reposts+'</td><td>'+row.bot+'</td>'+
@@ -238,6 +270,13 @@ async function loadStats(){
   el.innerHTML = '<div class="card">Загрузка…</div>';
   try{
     const {stats} = await api('/api/admin/stats?platform='+place);
+    let communities = '';
+    if (place==='vk') {
+      try {
+        const pack = await api('/api/admin/vk/communities');
+        communities = renderCommunities(pack.communities || []);
+      } catch (err) {}
+    }
     const cells = [
       ['Клиенты '+placeName(), stats.users_total],['Активны за сутки', stats.active_day],
       ['Новые за сутки', stats.new_day],['В чёрном списке', stats.users_blocked],
@@ -245,7 +284,7 @@ async function loadStats(){
       ['Потрачено кредитов', stats.spent_total],['Начислено всего', stats.credited_total],
       ['Открытых обращений', stats.tickets_open]
     ];
-    el.innerHTML = '<div class="card"><h3>Статистика · '+placeName()+'</h3><div class="grid">'+
+    el.innerHTML = communities+'<div class="card"><h3>Статистика · '+placeName()+'</h3><div class="grid">'+
       cells.map(c=>'<div class="stat"><div class="n">'+(c[1]??0)+'</div><div class="l">'+c[0]+'</div></div>').join('')+'</div></div>';
   }catch(e){ el.innerHTML = '<div class="card bad">'+esc(e.message)+'</div>'; }
 }
@@ -732,7 +771,7 @@ function renderBroadcast(){
   const vk = place==='vk';
   document.getElementById('section-broadcast').innerHTML =
     '<div class="card"><h3>Рассылка · '+placeName()+'</h3><p class="note">'+(vk
-      ? '«Подписавшимся» — только тем, кто нажал «Подписаться» в приложении сообщества. «Всем клиентам» — всем, кто уже открывал бота, кроме чёрного списка. Чужой сервис для этого не нужен.'
+      ? 'Рассылка общая для обоих сообществ. «Подписавшимся» — только тем, кто нажал «Подписаться». «Всем клиентам» — всем, кто уже открывал бота, кроме чёрного списка. Рейтинг при этом остаётся у каждого сообщества свой.'
       : 'Сообщение получат клиенты Telegram, кроме чёрного списка. Поддерживается Markdown.')+'</p>'+
     '<textarea id="bcast" placeholder="Текст рассылки"></textarea>'+
     '<div class="row" style="margin-top:8px">'+(vk

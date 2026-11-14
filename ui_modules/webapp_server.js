@@ -688,6 +688,10 @@ function startWebApp() {
         return true;
     }
 
+    app.get('/api/admin/vk/communities', requireAdmin, (req, res) => {
+        res.json({ communities: vk.communityStatus() });
+    });
+
     app.get('/api/admin/vk/rating', requireAdmin, async (req, res) => {
         try {
             const range = activity.weekRange(new Date());

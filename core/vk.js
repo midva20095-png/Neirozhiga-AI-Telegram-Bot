@@ -463,7 +463,9 @@ async function enableActivity(token, groupId) {
         const settings = await call(token, 'groups.getLongPollSettings', { group_id: groupId });
         const events = (settings && settings.events) || {};
         const on = ['like_add', 'wall_reply_new', 'wall_repost'].filter(name => Number(events[name]) === 1);
-        console.log(`ВК ${groupId}: события рейтинга ${on.join(', ') || 'добираю по стене'}.`);
+        const shown = on.join(', ') || 'по стене';
+        markCommunity(groupId, true, '', { events: shown });
+        console.log(`ВК ${groupId}: события рейтинга ${shown}.`);
     } catch (e) {}
 }
 
@@ -1315,14 +1317,29 @@ async function tokenNote(token) {
 
 const linkState = new Map();
 
-function markCommunity(groupId, online, hint) {
-    linkState.set(String(groupId), { online: !!online, hint: String(hint || '') });
+function markCommunity(groupId, online, hint, extra) {
+    const id = String(groupId);
+    const prev = linkState.get(id) || {};
+    linkState.set(id, Object.assign({}, prev, extra || {}, {
+        online: !!online,
+        hint: hint == null ? String(prev.hint || '') : String(hint || '')
+    }));
 }
 
 function communityStatus() {
+    const primary = String(process.env.VK_GROUP_ID || '').replace(/\D/g, '');
     return communityList().map(item => {
         const state = linkState.get(item.id) || { online: false, hint: 'Подключаюсь.' };
-        return { id: item.id, online: !!state.online, hint: state.hint || '' };
+        const extra = item.id !== primary;
+        return {
+            id: item.id,
+            name: item.name || '',
+            online: !!state.online,
+            hint: state.hint || '',
+            events: state.events || '',
+            audit: extra,
+            club: extra
+        };
     });
 }
 
@@ -1413,9 +1430,9 @@ async function communityFromToken(token, fallbackId) {
         const info = await call(token, 'groups.getById', {});
         const group = info && (info.groups ? info.groups[0] : (Array.isArray(info) ? info[0] : null));
         const id = group && String(group.id || '').replace(/\D/g, '');
-        if (id) return id;
+        if (id) return { id, name: String(group.name || '').trim() };
     } catch (e) {}
-    return String(fallbackId || '').replace(/\D/g, '');
+    return { id: String(fallbackId || '').replace(/\D/g, ''), name: '' };
 }
 
 function communityId(value) {
@@ -1430,10 +1447,11 @@ async function startVk() {
     const next = [];
     const seen = new Set();
     for (const item of raw) {
-        const id = await communityFromToken(item.token, item.id);
+        const found = await communityFromToken(item.token, item.id);
+        const id = found && found.id;
         if (!id || seen.has(id)) continue;
         seen.add(id);
-        next.push({ id, token: item.token });
+        next.push({ id, token: item.token, name: found.name || '' });
     }
     resolvedCommunities = next;
     const names = next.map(item => item.id).join(', ');
