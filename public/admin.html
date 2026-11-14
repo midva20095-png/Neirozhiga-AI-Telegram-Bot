@@ -729,17 +729,26 @@ async function answer(id){
 
 /* ---- Рассылка ---- */
 function renderBroadcast(){
+  const vk = place==='vk';
   document.getElementById('section-broadcast').innerHTML =
-    '<div class="card"><h3>Рассылка · '+placeName()+'</h3><p class="note">'+(place==='vk'?'Сообщение получат клиенты ВКонтакте, кроме чёрного списка. Обычный текст.':'Сообщение получат клиенты Telegram, кроме чёрного списка. Поддерживается Markdown.')+'</p>'+
+    '<div class="card"><h3>Рассылка · '+placeName()+'</h3><p class="note">'+(vk
+      ? '«Подписавшимся» — только тем, кто нажал «Подписаться» в приложении сообщества. «Всем клиентам» — всем, кто уже открывал бота, кроме чёрного списка. Чужой сервис для этого не нужен.'
+      : 'Сообщение получат клиенты Telegram, кроме чёрного списка. Поддерживается Markdown.')+'</p>'+
     '<textarea id="bcast" placeholder="Текст рассылки"></textarea>'+
-    '<div class="row" style="margin-top:8px"><button onclick="sendBroadcast()">Отправить клиентам '+placeName()+'</button></div><p id="bmsg"></p></div>';
+    '<div class="row" style="margin-top:8px">'+(vk
+      ? '<button onclick="sendBroadcast(true)">Подписавшимся</button><button class="ghost" onclick="sendBroadcast(false)">Всем клиентам</button>'
+      : '<button onclick="sendBroadcast(false)">Отправить клиентам Telegram</button>')+
+    '</div><p id="bmsg"></p></div>';
 }
-async function sendBroadcast(){
+async function sendBroadcast(subscribers){
   const text = document.getElementById('bcast').value.trim();
   if (!text) return alert('Введите текст');
-  if (!confirm('Отправить рассылку клиентам '+placeName()+'?')) return;
+  const who = subscribers ? 'подписавшимся' : ('клиентам '+placeName());
+  if (!confirm('Отправить рассылку '+who+'?')) return;
   document.getElementById('bmsg').textContent = 'Отправка…';
-  const d = await api('/api/admin/broadcast',{method:'POST',body:JSON.stringify({text, platform:place})});
+  const body = { text: text, platform: place };
+  if (subscribers) body.subscribers = true;
+  const d = await api('/api/admin/broadcast',{method:'POST',body:JSON.stringify(body)});
   document.getElementById('bmsg').textContent = d.ok?('Готово: доставлено '+d.sent+' из '+d.total+(d.failed?(', ошибок '+d.failed):'')):(d.error||'Ошибка');
 }
 

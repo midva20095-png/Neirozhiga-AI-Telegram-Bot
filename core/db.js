@@ -32,6 +32,7 @@ async function initDB() {
     )
   `);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS blocked BOOLEAN DEFAULT false`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS mail_ok BOOLEAN DEFAULT false`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS history (
       id SERIAL PRIMARY KEY,
@@ -311,9 +312,14 @@ async function listWeekActivity(since) {
   return res.rows;
 }
 
-async function listUserIds(platform) {
+async function setMail(userId, on) {
+  await pool.query('UPDATE users SET mail_ok = $2, updated_at = NOW() WHERE user_id = $1', [String(userId), !!on]);
+}
+
+async function listUserIds(platform, opts) {
   const gate = platform === 'vk' ? 'AND user_id < 0' : platform === 'tg' ? 'AND user_id > 0' : '';
-  const res = await pool.query(`SELECT user_id FROM users WHERE blocked = false ${gate}`);
+  const mail = opts && opts.mail ? 'AND mail_ok = true' : '';
+  const res = await pool.query(`SELECT user_id FROM users WHERE blocked = false ${gate} ${mail}`);
   return res.rows.map(r => r.user_id);
 }
 
@@ -836,6 +842,7 @@ module.exports = {
   listVkProfiles,
   saveVkProfiles,
   listWeekActivity,
+  setMail,
   listUserIds,
   getStats,
   findUser,

@@ -58,6 +58,10 @@ function payHost(url){
 }
 window.addEventListener('message', function(event){
   const data = event.data || {};
+  if (data.type === 'ny-open' && /^https:\\/\\//.test(String(data.url || ''))) {
+    vkSend('VKWebAppOpenLink', { url: data.url });
+    return;
+  }
   if (data.type === 'ny-pay' && payHost(data.url)) {
     vkSend('VKWebAppOpenLink', { url: data.url });
     window.open(data.url, '_blank', 'noopener');

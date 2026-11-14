@@ -100,6 +100,9 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .tile .dl,.tile .ch{display:block;width:100%;border:0;background:transparent;color:#00d4ff;font-weight:800;text-align:left;padding:0 10px 8px}
 .tile .ch{color:#d7b0ff;padding-bottom:10px}
 .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.2)}
+.doors{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.doors button{min-height:92px;border:0;border-radius:18px;background:#1c1233;color:#fff;font-weight:800;font-size:16px}
+.doors button.on{background:linear-gradient(135deg,#b366ff,#ff2d95)}
 input{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1233;padding:12px;outline:none;margin-top:8px}
 </style>
 </head>
@@ -121,6 +124,7 @@ input{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1
   <div id="view"></div>
 </div>
 <div class="tabbar" id="tabs">
+  <button data-t="menu" id="tabmenu" style="display:none"><span class="ic">⌂</span>Меню</button>
   <button data-t="gen" class="on"><span class="ic">✨</span>Генерация</button>
   <button data-t="models"><span class="ic">🤖</span>Модели</button>
   <button data-t="tpl"><span class="ic">📋</span>Шаблоны</button>
@@ -131,7 +135,7 @@ input{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1
 </div>
 <script>
 const KIND = {text:'Текст', image:'Картинка', video:'Видео', audio:'Музыка'};
-let tab='gen', me=null, cfg=null, templates=[], works=null, worksLoading=false, userId=null, token=null, busy=false, last=null;
+let tab='gen', me=null, cfg=null, templates=[], works=null, worksLoading=false, userId=null, token=null, busy=false, last=null, wantMenu=false;
 let openTpl=null, photoData=null, pickedFormat=null, genPhoto=null, draft='', pendingTpl='', pendingPkg='';
 let tplCat='', tplQuery='';
 const TCAT = {image:'Картинки', fix:'Улучшение', chat:'Текст', video:'Видео', audio:'Голос'};
@@ -141,8 +145,13 @@ let pickedQuality=null, pickedDuration=null, pickedAspect=null;
 function tg(){ return window.Telegram && window.Telegram.WebApp; }
 function openOut(url){
   const w = tg();
-  if (w && w.openLink) w.openLink(url);
-  else window.open(url, '_blank');
+  if (w && w.openLink) { w.openLink(url); return; }
+  let framed = false;
+  try { framed = parent && parent !== window; } catch (e) { framed = true; }
+  if (framed) {
+    try { parent.postMessage({ type: 'ny-open', url: url }, '*'); } catch (e) {}
+  }
+  window.open(url, '_blank', 'noopener');
 }
 function parseUser(raw){
   if (!raw) return null;
@@ -161,6 +170,7 @@ function detectAuth(){
   if (hp.get('tpl') || sp.get('tpl')) pendingTpl = hp.get('tpl') || sp.get('tpl');
   if (hp.get('pkg') || sp.get('pkg')) pendingPkg = hp.get('pkg') || sp.get('pkg');
   window.__vkPaid = hp.get('paid') === '1' || sp.get('paid') === '1';
+  if (sp.get('vk_user_id')) wantMenu = true;
   if (w && w.initDataUnsafe && w.initDataUnsafe.user && w.initDataUnsafe.user.id) userId = w.initDataUnsafe.user.id;
   else if (w && w.initData) userId = parseUser(w.initData);
   else if (token) userId = token.split('.')[0];
@@ -262,8 +272,13 @@ async function load(){
   if (pendingPkg) tab = 'top';
   document.getElementById('bal').textContent = (me.balance||0)+' кр';
   const rateTab = document.getElementById('tabrate');
+  const menuTab = document.getElementById('tabmenu');
   if (rateTab) rateTab.style.display = isVk() ? '' : 'none';
-  if (!isVk() && tab==='rate') tab = 'gen';
+  if (menuTab) menuTab.style.display = isVk() ? '' : 'none';
+  const bots = document.querySelector('.bots');
+  if (bots) bots.style.display = isVk() ? 'none' : '';
+  if (!isVk() && (tab==='rate' || tab==='menu')) tab = 'gen';
+  if (isVk() && wantMenu) tab = 'menu';
   draw();
 }
 function draw(){
@@ -278,7 +293,8 @@ function draw(){
     return;
   }
   if (me && me.blocked) { box.innerHTML = '<div class="card err">Аккаунт в чёрном списке.</div>'; return; }
-  if (tab==='gen') box.innerHTML = viewGen();
+  if (tab==='menu') box.innerHTML = viewMenu();
+  else if (tab==='gen') box.innerHTML = viewGen();
   else if (tab==='models') box.innerHTML = viewModels();
   else if (tab==='tpl') box.innerHTML = viewTpl();
   else if (tab==='hist') box.innerHTML = viewHist();
@@ -286,6 +302,16 @@ function draw(){
   else if (tab==='rate') { box.innerHTML = '<div class="card" id="ratebox"><p>Считаю баллы…</p></div>'; loadRating(); }
   else box.innerHTML = viewHelp();
   bind();
+}
+function viewMenu(){
+  const mail = !!(me && me.mail);
+  return '<div class="card"><div class="now">Кнопки сообщества</div><p>Чат, рейтинг, сайт и подписка на рассылку. Это ваше приложение, отдельный сервис не нужен.</p>'+
+    '<div class="doors">'+
+    '<button type="button" id="door-chat">Чат ИИ</button>'+
+    '<button type="button" id="door-rate">Рейтинг</button>'+
+    '<button type="button" id="door-site">На сайт</button>'+
+    '<button type="button" id="door-sub" class="'+(mail?'on':'')+'">'+(mail?'Вы подписаны':'Подписаться')+'</button>'+
+    '</div><p id="submsg" class="hint"></p></div>';
 }
 function viewGen(){
   const cur = (me&&me.current_model)||(cfg&&cfg.default_model)||'flash';
@@ -477,7 +503,33 @@ function renderResult(r){
   html += '</div>';
   return html;
 }
+async function toggleMail(){
+  const btn = document.getElementById('door-sub');
+  const msg = document.getElementById('submsg');
+  const on = !(me && me.mail);
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('/api/vk/subscribe', { method:'POST', headers: authHeaders(), body: JSON.stringify({ on: on }) });
+    const d = await r.json();
+    if (!r.ok || !d.ok) throw new Error(d.error || 'Не удалось сохранить');
+    if (me) me.mail = !!d.mail;
+    if (msg) msg.textContent = d.mail ? 'Готово. Рассылка будет приходить в чат бота.' : 'Вы отписались от рассылки.';
+    if (btn) { btn.textContent = d.mail ? 'Вы подписаны' : 'Подписаться'; btn.classList.toggle('on', !!d.mail); }
+  } catch (e) {
+    if (msg) msg.textContent = e.message;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
 function bind(){
+  const chat = document.getElementById('door-chat');
+  if (chat) chat.onclick = function(){ openOut('https://vk.me/tochki_linii'); };
+  const rate = document.getElementById('door-rate');
+  if (rate) rate.onclick = function(){ tab = 'rate'; wantMenu = false; draw(); };
+  const site = document.getElementById('door-site');
+  if (site) site.onclick = function(){ openOut((cfg && cfg.site_url) || 'https://babayagaland.ru'); };
+  const sub = document.getElementById('door-sub');
+  if (sub) sub.onclick = toggleMail;
   const promptBox = document.getElementById('prompt');
   if (promptBox) promptBox.addEventListener('input', function(){ draft = promptBox.value; });
   const go = document.getElementById('go'); if (go) go.onclick = generate;

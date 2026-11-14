@@ -190,6 +190,22 @@ function startWebApp() {
         }
     });
 
+    app.post('/api/vk/subscribe', requireUser, async (req, res) => {
+        try {
+            if (Number(req.userId) >= 0) return res.status(400).json({ error: 'Кнопка подписки работает во ВКонтакте.' });
+            const on = !(req.body && req.body.on === false);
+            await db.getUser(req.userId);
+            await db.setMail(req.userId, on);
+            const text = on
+                ? 'Вы подписались на рассылку сообщества. Новые сообщения придут в этот чат.'
+                : 'Вы отписались от рассылки сообщества.';
+            try { await vk.notify(req.userId, text); } catch (e) {}
+            res.json({ ok: true, mail: on });
+        } catch (e) {
+            res.status(500).json({ error: 'Не удалось сохранить подписку.' });
+        }
+    });
+
     app.post('/api/vk/transfer', async (req, res) => {
         try {
             const account = vkAccount(req);
@@ -279,6 +295,7 @@ function startWebApp() {
                 balance: user.balance,
                 current_model: current,
                 blocked: !!user.blocked,
+                mail: !!user.mail_ok,
                 history
             });
         } catch (e) {
@@ -725,7 +742,8 @@ function startWebApp() {
             if (!text) return res.status(400).json({ error: 'text required' });
             const platform = adminPlatform(req.body && req.body.platform) || 'tg';
             if (platform === 'tg' && !app.locals.bot) return res.status(503).json({ error: 'bot offline' });
-            const ids = await db.listUserIds(platform);
+            const onlyMail = platform === 'vk' && req.body && req.body.subscribers === true;
+            const ids = await db.listUserIds(platform, { mail: onlyMail });
             let sent = 0, failed = 0;
             for (const id of ids) {
                 try {
