@@ -351,12 +351,19 @@ function askCommunityToken(){
     parent.postMessage({ type: 'ny-community-token' }, '*');
   });
 }
+function vkGroupId(){
+  return new URLSearchParams(location.search).get('vk_group_id') || '230706467';
+}
+function chatLink(){
+  return 'https://vk.ru/write-' + String(vkGroupId()).replace(/\D/g, '');
+}
 function coverCode(groupId, ids){
-  const app = 'https://vk.com/app54895627_-' + groupId;
+  const app = 'https://vk.ru/app54895627_-' + groupId;
+  const chat = 'https://vk.ru/write-' + String(groupId).replace(/\D/g, '');
   const rows = [
-    { title: 'Чат', button: 'Написать', cover_id: ids.chat, url: 'https://vk.me/tochki_linii', button_url: 'https://vk.me/tochki_linii' },
-    { title: 'Рейтинг', button: 'Открыть', cover_id: ids.rate, url: app + '#rate', button_url: app + '#rate' },
-    { title: 'Сайт', button: 'Открыть', cover_id: ids.site, url: app + '#site', button_url: app + '#site' }
+    { title: 'Чат', button: 'Написать', cover_id: ids.chat, url: chat, button_url: chat, title_url: chat },
+    { title: 'Рейтинг', button: 'Открыть', cover_id: ids.rate, url: app + '#rate', button_url: app + '#rate', title_url: app + '#rate' },
+    { title: 'Сайт', button: 'Открыть', cover_id: ids.site, url: app + '#site', button_url: app + '#site', title_url: app + '#site' }
   ];
   return 'return ' + JSON.stringify({ title: 'НейроЯга', rows }) + ';';
 }
@@ -389,8 +396,16 @@ async function placeCovers(){
     if (pin) pin.disabled = false;
   }
 }
+function bridgeGoal(data){
+  const bag = data && (data.params || (data.data && data.data.data) || data.data || data) || {};
+  const raw = bag.location || bag.hash || '';
+  const goal = String(raw).replace(/^#/, '').split('&')[0].split('?')[0];
+  if (goal === 'rate' || goal === 'site' || goal === 'sub') applyGoal(goal);
+}
+window.addEventListener('hashchange', function(){ bridgeGoal({ hash: location.hash }); });
 window.addEventListener('message', function(event){
   const data = event.data || {};
+  bridgeGoal(data);
   if (data.type === 'ny-goal') { applyGoal(data.goal); return; }
   if (data.type !== 'ny-widget-fail') return;
   const note = document.getElementById('submsg');
@@ -658,7 +673,7 @@ function bind(){
     input.onchange = function(){ onCoverFile(input); };
   });
   const chat = document.getElementById('door-chat');
-  if (chat) chat.onclick = function(){ openOut('https://vk.me/tochki_linii'); };
+  if (chat) chat.onclick = function(){ openOut(chatLink()); };
   const rate = document.getElementById('door-rate');
   if (rate) rate.onclick = function(){ tab = 'rate'; wantMenu = false; draw(); };
   const site = document.getElementById('door-site');

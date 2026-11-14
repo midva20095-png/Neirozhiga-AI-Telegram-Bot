@@ -3,14 +3,21 @@ const path = require('path');
 const sharp = require('sharp');
 
 const COVERS = {
-    chat: { title: 'Чат', button: 'Написать', file: 'chat.jpg', link: 'https://vk.me/tochki_linii' },
+    chat: { title: 'Чат', button: 'Написать', file: 'chat.jpg', chat: true },
     rate: { title: 'Рейтинг', button: 'Открыть', file: 'rate.jpg', hash: '#rate' },
     site: { title: 'Сайт', button: 'Открыть', file: 'site.jpg', hash: '#site' }
 };
 
+function groupNumber(groupId) {
+    return String(groupId || '230706467').replace(/\D/g, '') || '230706467';
+}
+
+function chatLink(groupId) {
+    return `https://vk.ru/write-${groupNumber(groupId)}`;
+}
+
 function groupLink(groupId, hash) {
-    const id = String(groupId || '230706467').replace(/\D/g, '') || '230706467';
-    return `https://vk.com/app54895627_-${id}${hash || ''}`;
+    return `https://vk.ru/app54895627_-${groupNumber(groupId)}${hash || ''}`;
 }
 
 function coverWidgetCode(groupId, ids) {
@@ -18,9 +25,10 @@ function coverWidgetCode(groupId, ids) {
         const item = COVERS[key];
         const cover = String((ids && ids[key]) || '');
         if (!/^-?\d+_\d+$/.test(cover)) throw new Error('Нет картинки для кнопки.');
-        const url = item.link || groupLink(groupId, item.hash);
+        const url = item.chat ? chatLink(groupId) : groupLink(groupId, item.hash);
         return {
             title: item.title,
+            title_url: url,
             button: item.button,
             cover_id: cover,
             url,
@@ -124,4 +132,4 @@ async function uploadCover(token, jpeg) {
     return String(id);
 }
 
-module.exports = { COVERS, coverWidgetCode, uploadFields, fitCover, paintCover, coverSvg, defaultCover, uploadCover };
+module.exports = { COVERS, coverWidgetCode, chatLink, groupLink, uploadFields, fitCover, paintCover, coverSvg, defaultCover, uploadCover };

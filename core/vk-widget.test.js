@@ -8,8 +8,9 @@ test('код обложек содержит картинки и не содер
     assert.match(code, /^return \{.*\};$/);
     assert.match(code, /"cover_id":"1_2"/);
     assert.match(code, /Написать/);
-    assert.match(code, /vk\.me\/tochki_linii/);
-    assert.match(code, /#rate/);
+    assert.match(code, /vk\.ru\/write-230706467/);
+    assert.match(code, /vk\.ru\/app54895627_-230706467#rate/);
+    assert.match(code, /title_url/);
     assert.doesNotMatch(code, /descr/);
     assert.throws(() => widget.coverWidgetCode('1', { chat: 'bad' }));
 });

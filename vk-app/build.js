@@ -33,6 +33,7 @@ function openCabinet(search, hash){
   frame.addEventListener('load', function(){
     const note = document.getElementById('wait');
     if (note) note.remove();
+    if (fragment) tellCabinet({ type: 'ny-goal', goal: fragment });
   });
   document.body.appendChild(frame);
 }
@@ -51,11 +52,29 @@ function tellCabinet(msg){
   if (frame && frame.contentWindow) frame.contentWindow.postMessage(msg, '*');
 }
 let fragment = '';
-function rememberFragment(value){
+function goalOf(value){
   const goal = String(value || '').replace(/^#/, '').split('&')[0].split('?')[0];
-  if (goal !== 'rate' && goal !== 'site' && goal !== 'sub') return;
+  return goal === 'rate' || goal === 'site' || goal === 'sub' ? goal : '';
+}
+function rememberFragment(value){
+  const goal = goalOf(value);
+  if (!goal) return;
   fragment = goal;
   tellCabinet({ type: 'ny-goal', goal: goal });
+}
+function scanGoal(node, depth){
+  if (!node || depth > 4) return;
+  if (typeof node === 'string') {
+    rememberFragment(node);
+    if (node.charAt(0) === '{' || node.charAt(0) === '[') {
+      try { scanGoal(JSON.parse(node), depth + 1); } catch (e) {}
+    }
+    return;
+  }
+  if (typeof node !== 'object') return;
+  if (node.location) rememberFragment(node.location);
+  if (node.hash) rememberFragment(node.hash);
+  Object.keys(node).forEach(function(key){ scanGoal(node[key], depth + 1); });
 }
 function readFragment(){ rememberFragment(location.hash); }
 readFragment();
@@ -83,7 +102,11 @@ function payHost(url){
   } catch (e) { return false; }
 }
 window.addEventListener('message', function(event){
-  const data = event.data || {};
+  let data = event.data || {};
+  if (typeof data === 'string') {
+    try { data = JSON.parse(data); } catch (e) { data = {}; }
+  }
+  scanGoal(data);
   if (data.type === 'ny-goal-ask') {
     readFragment();
     if (fragment) tellCabinet({ type: 'ny-goal', goal: fragment });
