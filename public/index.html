@@ -170,7 +170,10 @@ function detectAuth(){
   if (hp.get('tpl') || sp.get('tpl')) pendingTpl = hp.get('tpl') || sp.get('tpl');
   if (hp.get('pkg') || sp.get('pkg')) pendingPkg = hp.get('pkg') || sp.get('pkg');
   window.__vkPaid = hp.get('paid') === '1' || sp.get('paid') === '1';
-  if (sp.get('vk_user_id')) wantMenu = true;
+  const goal = hash.split('&')[0].split('?')[0];
+  window.__vkGoal = (goal === 'rate' || goal === 'site' || goal === 'sub') ? goal : '';
+  if (sp.get('vk_user_id') && window.__vkGoal !== 'rate' && window.__vkGoal !== 'site') wantMenu = true;
+  if (window.__vkGoal === 'rate') { wantMenu = false; tab = 'rate'; }
   if (w && w.initDataUnsafe && w.initDataUnsafe.user && w.initDataUnsafe.user.id) userId = w.initDataUnsafe.user.id;
   else if (w && w.initData) userId = parseUser(w.initData);
   else if (token) userId = token.split('.')[0];
@@ -279,7 +282,10 @@ async function load(){
   if (bots) bots.style.display = isVk() ? 'none' : '';
   if (!isVk() && (tab==='rate' || tab==='menu')) tab = 'gen';
   if (isVk() && wantMenu) tab = 'menu';
+  if (window.__vkGoal === 'rate') tab = 'rate';
   draw();
+  if (window.__vkGoal === 'site') openOut((cfg && cfg.site_url) || 'https://babayagaland.ru');
+  if (window.__vkGoal === 'sub' && me && me.user_id && !me.mail) subscribeMail(true);
 }
 function draw(){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.t===tab));
@@ -303,9 +309,17 @@ function draw(){
   else box.innerHTML = viewHelp();
   bind();
 }
+function vkAdmin(){
+  const role = new URLSearchParams(location.search).get('vk_viewer_group_role') || '';
+  return role === 'admin' || role === 'editor';
+}
 function viewMenu(){
   const mail = !!(me && me.mail);
+  const pin = vkAdmin()
+    ? '<button class="btn" id="door-pin" type="button">Поставить кнопки на страницу</button><p class="hint">Откроется окно ВК, как у рассылок. Нажмите «Установить» — на странице сообщества появятся Чат, Рейтинг, Сайт и Подписка.</p>'
+    : '';
   return '<div class="card"><div class="now">Кнопки сообщества</div><p>Чат, рейтинг, сайт и подписка на рассылку. Это ваше приложение, отдельный сервис не нужен.</p>'+
+    pin+
     '<div class="doors">'+
     '<button type="button" id="door-chat">Чат ИИ</button>'+
     '<button type="button" id="door-rate">Рейтинг</button>'+
@@ -503,10 +517,9 @@ function renderResult(r){
   html += '</div>';
   return html;
 }
-async function toggleMail(){
+async function subscribeMail(on){
   const btn = document.getElementById('door-sub');
   const msg = document.getElementById('submsg');
-  const on = !(me && me.mail);
   if (btn) btn.disabled = true;
   try {
     const r = await fetch('/api/vk/subscribe', { method:'POST', headers: authHeaders(), body: JSON.stringify({ on: on }) });
@@ -521,7 +534,14 @@ async function toggleMail(){
     if (btn) btn.disabled = false;
   }
 }
+function toggleMail(){ subscribeMail(!(me && me.mail)); }
 function bind(){
+  const pin = document.getElementById('door-pin');
+  if (pin) pin.onclick = function(){
+    try { parent.postMessage({ type: 'ny-widget' }, '*'); } catch (e) {}
+    const msg = document.getElementById('submsg');
+    if (msg) msg.textContent = 'Если окно ВК не открылось, закройте приложение и откройте его снова из сообщества.';
+  };
   const chat = document.getElementById('door-chat');
   if (chat) chat.onclick = function(){ openOut('https://vk.me/tochki_linii'); };
   const rate = document.getElementById('door-rate');
