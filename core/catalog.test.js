@@ -127,6 +127,14 @@ test('запрос в Братуху собирается как на сайте
     const gpt = model('gpt-image-2');
     assert.deepEqual(input.siteModes(gpt, 'high'), ['cheap', 'normal']);
     assert.deepEqual(input.siteModes(gpt, 'low'), ['normal']);
+    assert.deepEqual(input.collectResultUrls({
+        status: 'completed',
+        input: { image_urls: ['https://cdn.example/source.jpg'] },
+        result: { type: 'image', urls: ['https://storage.example/result.png'] }
+    }), ['https://storage.example/result.png']);
+    assert.deepEqual(input.collectResultUrls({
+        result: { output: { images: [{ src: 'https://cdn.example/nested.jpg' }] } }
+    }), ['https://cdn.example/nested.jpg']);
 });
 
 test('цена из админки списывается, в том числе у GigaChat', async () => {

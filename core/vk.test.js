@@ -3,6 +3,12 @@ const assert = require('node:assert/strict');
 const sharp = require('sharp');
 const vk = require('./vk');
 
+test('фото для чата ВК содержит ключ доступа', () => {
+    assert.equal(vk.photoAttachment({ owner_id: -5, id: 9, access_key: 'abc' }), 'photo-5_9_abc');
+    assert.equal(vk.photoAttachment({ owner_id: -5, id: 9 }), 'photo-5_9');
+    assert.equal(vk.photoAttachment(null), '');
+});
+
 test('картинка PNG для ВК становится JPEG', async () => {
     const png = await sharp({
         create: { width: 8, height: 8, channels: 3, background: { r: 20, g: 10, b: 40 } }

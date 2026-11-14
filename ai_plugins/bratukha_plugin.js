@@ -1,6 +1,6 @@
 require('dotenv').config();
 const axios = require('axios');
-const { buildSiteInput, siteModes } = require('../core/bratukha_input');
+const { buildSiteInput, siteModes, collectResultUrls } = require('../core/bratukha_input');
 
 // Берем URL из переменных Railway или ставим рабочий дефолт
 const BRATUKHA_API_URL = process.env.BRATUKHA_API_URL || 'https://bratuha.ru/api/v1';
@@ -132,6 +132,7 @@ async function postOperation(apiKey, tool, input) {
 }
 
 async function waitOperation(apiKey, operationId, attempts) {
+    let emptyReady = 0;
     for (let attempt = 0; attempt < attempts; attempt++) {
         await new Promise(resolve => setTimeout(resolve, 3000));
         let statusRes;
@@ -150,8 +151,13 @@ async function waitOperation(apiKey, operationId, attempts) {
             continue;
         }
         const opData = statusRes.data || {};
-        if (opData.status === 'completed') return opData;
-        if (opData.status === 'failed') {
+        const status = String(opData.status || '');
+        if (status === 'completed' || status === 'success' || status === 'succeeded' || status === 'done') {
+            if (collectResultUrls(opData).length || emptyReady >= 4) return opData;
+            emptyReady += 1;
+            continue;
+        }
+        if (status === 'failed' || status === 'error' || status === 'cancelled' || status === 'canceled') {
             throw new Error(opData.error_message || opData.error?.message || 'Нейросеть не смогла выполнить задачу');
         }
     }
@@ -159,15 +165,16 @@ async function waitOperation(apiKey, operationId, attempts) {
 }
 
 function resultUrls(opData) {
-    const result = opData.result || opData;
-    const urls = []
-        .concat(result.urls || [], result.files || [], result.images || [], result.videos || [])
-        .map(x => (x && x.url) || x)
-        .filter(u => typeof u === 'string' && u.startsWith('http'));
-    for (const key of ['image_url', 'video_url', 'audio_url', 'url']) {
-        if (typeof result[key] === 'string' && result[key].startsWith('http') && !urls.includes(result[key])) urls.push(result[key]);
-    }
-    return urls;
+    return collectResultUrls(opData);
+}
+
+function isMedia(body) {
+    if (!body || body.length < 32) return false;
+    if (body[0] === 0x89 && body[1] === 0x50) return true;
+    if (body[0] === 0xff && body[1] === 0xd8) return true;
+    if (body[0] === 0x47 && body[1] === 0x49) return true;
+    const head = body.slice(0, 12).toString('ascii');
+    return head.startsWith('RIFF') || head.slice(4, 8) === 'ftyp' || head.startsWith('ID3') || head.startsWith('OggS');
 }
 
 async function downloadUrl(url) {
@@ -177,11 +184,12 @@ async function downloadUrl(url) {
             const mediaRes = await axios.get(url, {
                 responseType: 'arraybuffer',
                 timeout: 120_000,
-                headers: { Accept: 'image/*,*/*', 'User-Agent': 'NeiroYaga/1.0' }
+                maxRedirects: 5,
+                headers: { Accept: 'image/*,*/*', 'User-Agent': 'Mozilla/5.0' }
             });
             const body = Buffer.from(mediaRes.data);
-            if (body.length > 32) return body;
-            lastErr = new Error('Пустой файл картинки');
+            if (isMedia(body)) return body;
+            lastErr = new Error('По ссылке пришла не картинка');
         } catch (err) {
             lastErr = err;
         }

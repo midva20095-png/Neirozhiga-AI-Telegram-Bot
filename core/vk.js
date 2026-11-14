@@ -1,4 +1,5 @@
 const axios = require('axios');
+const FormData = require('form-data');
 const sharp = require('sharp');
 const db = require('./db');
 const bridge = require('./bridge');
@@ -315,30 +316,38 @@ function spareKeyboard(failed) {
     return '';
 }
 
+async function sendPlain(token, params) {
+    const plain = { ...params, random_id: String(Math.floor(Math.random() * 2e9)) };
+    delete plain.keyboard;
+    await call(token, 'messages.send', plain);
+}
+
 async function sendMessage(token, params) {
     try {
         await call(token, 'messages.send', params);
     } catch (error) {
         const code = Number(error && error.code);
-        if (!params.keyboard || (code !== 912 && code !== 911)) throw error;
-        noteKeyboard(error);
-        const next = spareKeyboard(params.keyboard);
-        if (next) {
-            try {
-                await call(token, 'messages.send', {
-                    ...params,
-                    random_id: String(Math.floor(Math.random() * 2e9)),
-                    keyboard: next
-                });
-                return;
-            } catch (again) {
-                const againCode = Number(again && again.code);
-                if (againCode !== 912 && againCode !== 911) throw again;
+        if (params.keyboard && (code === 912 || code === 911)) {
+            noteKeyboard(error);
+            const next = spareKeyboard(params.keyboard);
+            if (next) {
+                try {
+                    await call(token, 'messages.send', {
+                        ...params,
+                        random_id: String(Math.floor(Math.random() * 2e9)),
+                        keyboard: next
+                    });
+                    return;
+                } catch (again) {
+                    const againCode = Number(again && again.code);
+                    if (againCode !== 912 && againCode !== 911 && !params.attachment) throw again;
+                }
             }
+            await sendPlain(token, params);
+            return;
         }
-        const plain = { ...params, random_id: String(Math.floor(Math.random() * 2e9)) };
-        delete plain.keyboard;
-        await call(token, 'messages.send', plain);
+        if (!params.attachment) throw error;
+        await sendPlain(token, params);
     }
 }
 
@@ -386,30 +395,89 @@ async function enableActivity(token, groupId) {
 }
 
 async function jpegForVk(buffer) {
-    if (buffer && buffer[0] === 0xff && buffer[1] === 0xd8) return buffer;
-    return sharp(buffer).rotate().jpeg({ quality: 90 }).toBuffer();
+    const jpeg = buffer && buffer[0] === 0xff && buffer[1] === 0xd8;
+    if (jpeg && buffer.length < 4 * 1024 * 1024) {
+        const meta = await sharp(buffer).metadata();
+        const long = Math.max(meta.width || 0, meta.height || 0);
+        if (!long || long <= 2048) return buffer;
+    }
+    return sharp(buffer, { failOn: 'none' }).rotate().resize({
+        width: 2048,
+        height: 2048,
+        fit: 'inside',
+        withoutEnlargement: true
+    }).jpeg({ quality: 88 }).toBuffer();
 }
 
-async function sendImage(token, peerId, buffer, caption) {
-    const jpeg = await jpegForVk(buffer);
-    const server = await call(token, 'photos.getMessagesUploadServer', { peer_id: String(peerId) });
+function photoAttachment(photo) {
+    if (!photo || photo.id == null || photo.owner_id == null) return '';
+    const base = `photo${photo.owner_id}_${photo.id}`;
+    return photo.access_key ? `${base}_${photo.access_key}` : base;
+}
+
+function readUpload(data) {
+    let body = data;
+    if (typeof body === 'string') {
+        try { body = JSON.parse(body); } catch (e) { body = null; }
+    }
+    if (!body || typeof body !== 'object') throw new Error('ВК не принял файл');
+    if (body.error) throw new Error(typeof body.error === 'string' ? body.error : 'ВК не принял файл');
+    return body;
+}
+
+async function postFile(url, field, buffer, filename) {
     const form = new FormData();
-    form.append('photo', new Blob([jpeg], { type: 'image/jpeg' }), 'neuroyaga.jpg');
-    const uploaded = await axios.post(server.upload_url, form, { timeout: 60000 });
-    const saved = await call(token, 'photos.saveMessagesPhoto', {
-        photo: uploaded.data.photo,
-        server: String(uploaded.data.server),
-        hash: uploaded.data.hash
+    form.append(field, buffer, { filename, contentType: 'image/jpeg' });
+    const res = await axios.post(url, form, {
+        headers: form.getHeaders({ 'User-Agent': 'Mozilla/5.0' }),
+        timeout: 60000,
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity
     });
-    const photo = Array.isArray(saved) ? saved[0] : null;
-    if (!photo) throw new Error('vk photo');
+    return readUpload(res.data);
+}
+
+async function deliverFile(token, peerId, caption, attachment) {
     await sendMessage(token, {
         peer_id: String(peerId),
         random_id: String(Math.floor(Math.random() * 2e9)),
         message: String(caption || '').slice(0, 3500),
-        attachment: `photo${photo.owner_id}_${photo.id}`,
+        attachment,
         keyboard: mainMenu(peerId)
     });
+}
+
+async function sendPhoto(token, peerId, jpeg, caption) {
+    const server = await call(token, 'photos.getMessagesUploadServer', { peer_id: String(peerId) });
+    const uploaded = await postFile(server.upload_url, 'photo', jpeg, 'neuroyaga.jpg');
+    const saved = await call(token, 'photos.saveMessagesPhoto', {
+        photo: uploaded.photo,
+        server: String(uploaded.server),
+        hash: uploaded.hash
+    });
+    const list = Array.isArray(saved) ? saved : [saved];
+    const attachment = photoAttachment(list[0]);
+    if (!attachment) throw new Error('vk photo');
+    await deliverFile(token, peerId, caption, attachment);
+}
+
+async function sendDoc(token, peerId, jpeg, caption) {
+    const server = await call(token, 'docs.getMessagesUploadServer', { peer_id: String(peerId), type: 'doc' });
+    const uploaded = await postFile(server.upload_url, 'file', jpeg, 'neuroyaga.jpg');
+    const saved = await call(token, 'docs.save', { file: uploaded.file, title: 'Картинка' });
+    const doc = saved && (saved.doc || saved);
+    if (!doc || doc.id == null || doc.owner_id == null) throw new Error('vk doc');
+    await deliverFile(token, peerId, caption, `doc${doc.owner_id}_${doc.id}`);
+}
+
+async function sendImage(token, peerId, buffer, caption) {
+    const jpeg = await jpegForVk(buffer);
+    try {
+        await sendPhoto(token, peerId, jpeg, caption);
+    } catch (error) {
+        console.error(`ВК не вставил фото (${error.code || ''} ${error.message || ''}). Отправляю файлом.`);
+        await sendDoc(token, peerId, jpeg, caption);
+    }
 }
 
 async function createPayment(amount, description, email, metadata, returnUrl) {
@@ -974,5 +1042,5 @@ function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, jpegForVk, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, jpegForVk, photoAttachment, USER_HELP
 };

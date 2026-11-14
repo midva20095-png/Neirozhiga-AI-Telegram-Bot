@@ -223,4 +223,35 @@ function siteModes(spec, quality) {
     return [null];
 }
 
-module.exports = { buildSiteInput, siteModes, videoPrompt, imagePrompt };
+function pushUrl(found, value) {
+    const url = String(value || '').trim();
+    if (!/^https?:\/\//i.test(url) || found.includes(url)) return;
+    found.push(url);
+}
+
+function walkResult(node, found, depth) {
+    if (!node || depth > 6) return;
+    if (typeof node === 'string') {
+        pushUrl(found, node);
+        return;
+    }
+    if (Array.isArray(node)) {
+        node.forEach(item => walkResult(item, found, depth + 1));
+        return;
+    }
+    if (typeof node !== 'object') return;
+    for (const [key, value] of Object.entries(node)) {
+        if (key === 'prompt' || key === 'error' || key === 'error_message' || key === 'input') continue;
+        if (typeof value === 'string') pushUrl(found, value);
+        else walkResult(value, found, depth + 1);
+    }
+}
+
+function collectResultUrls(opData) {
+    const found = [];
+    const root = opData && Object.prototype.hasOwnProperty.call(opData, 'result') ? opData.result : opData;
+    walkResult(root, found, 0);
+    return found;
+}
+
+module.exports = { buildSiteInput, siteModes, videoPrompt, imagePrompt, collectResultUrls };
