@@ -35,6 +35,7 @@ test('аккаунт ВК не совпадает с числом Telegram', () 
 test('отказ ВК объясняется без ключа', () => {
     assert.match(vk.connectHint({ code: 100, message: 'longpoll for this group is not enabled' }), /Long Poll API/);
     assert.match(vk.connectHint({ code: 15, message: 'Access denied' }), /Управление/);
+    assert.match(vk.connectHint({ code: 27, message: 'Group authorization failed' }), /ключ сообщества/);
     assert.match(vk.connectHint({ code: 5, message: 'invalid access_token vk1.a.secret' }), /Ключ сообщества/);
 });
 
