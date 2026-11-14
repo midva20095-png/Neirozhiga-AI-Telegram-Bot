@@ -1,7 +1,11 @@
 // Баллы активности ВК. Неделя считается по Москве, с понедельника.
 // Лайк, комментарий и репост — только на стене сообщества. Запрос — удачная генерация бота.
 
-const POINTS = { like: 1, comment: 2, repost: 3, bot: 5 };
+const POINTS = { like: 3, comment: 6, repost: 10, bot: 1 };
+
+function rulesText() {
+    return `Лайк — ${POINTS.like}. Комментарий — ${POINTS.comment}. Репост — ${POINTS.repost}. Запрос боту — ${POINTS.bot}.`;
+}
 const MOSCOW = 3 * 60 * 60 * 1000;
 
 function weekRange(now) {
@@ -98,7 +102,8 @@ function present(row, face) {
 function formatRating(rows, meId, range) {
     const lines = [
         `Рейтинг · ${range.label}`,
-        'Лайк — 1 балл. Комментарий — 2. Репост — 3. Запрос боту — 5.',
+        rulesText(),
+        'Лайк, комментарий и репост приводят людей, поэтому баллов больше, чем за запрос боту.',
         'В понедельник баллы начинаются заново. Кредиты по этому списку начисляет администратор.',
         ''
     ];
@@ -118,4 +123,4 @@ function formatRating(rows, meId, range) {
     return lines.join('\n').slice(0, 3500);
 }
 
-module.exports = { POINTS, weekRange, parseCommunityActivity, faceOf, present, formatRating };
+module.exports = { POINTS, rulesText, weekRange, parseCommunityActivity, faceOf, present, formatRating };

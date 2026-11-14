@@ -293,10 +293,18 @@ async function saveVkProfiles(rows) {
 }
 
 async function listWeekActivity(since) {
+  const weights = require('./activity').POINTS;
+  const like = Math.max(0, Math.round(Number(weights.like) || 0));
+  const comment = Math.max(0, Math.round(Number(weights.comment) || 0));
+  const repost = Math.max(0, Math.round(Number(weights.repost) || 0));
+  const bot = Math.max(0, Math.round(Number(weights.bot) || 0));
   const res = await pool.query(
     `SELECT a.user_id,
             COALESCE(u.username, '') AS username,
-            SUM(a.points)::int AS points,
+            ($2::int * COUNT(*) FILTER (WHERE a.kind = 'like')
+             + $3::int * COUNT(*) FILTER (WHERE a.kind = 'comment')
+             + $4::int * COUNT(*) FILTER (WHERE a.kind = 'repost')
+             + $5::int * COUNT(*) FILTER (WHERE a.kind = 'bot'))::int AS points,
             COUNT(*) FILTER (WHERE a.kind = 'like')::int AS likes,
             COUNT(*) FILTER (WHERE a.kind = 'comment')::int AS comments,
             COUNT(*) FILTER (WHERE a.kind = 'repost')::int AS reposts,
@@ -307,7 +315,7 @@ async function listWeekActivity(since) {
      GROUP BY a.user_id, u.username
      ORDER BY points DESC, a.user_id
      LIMIT 50`,
-    [since]
+    [since, like, comment, repost, bot]
   );
   return res.rows;
 }

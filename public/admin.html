@@ -213,7 +213,7 @@ async function loadRate(){
     const d = await api('/api/admin/vk/rating');
     const rows = d.rows || [];
     el.innerHTML = '<div class="card"><h3>Рейтинг · '+esc(d.week||'')+'</h3>'+
-      '<p class="note">Лайк — 1, комментарий — 2, репост — 3, запрос боту — 5. В понедельник список начинается заново. Кредиты сами не приходят: впишите сумму и начислите человеку.</p>'+
+      '<p class="note">'+esc(d.rules||'')+' Лайк, комментарий и репост приводят новых людей. Запрос боту приносит только оплату, поэтому за него балл один. В понедельник список начинается заново. Кредиты сами не приходят: впишите сумму и начислите человеку.</p>'+
       '<table><tr><th></th><th>Подписчик</th><th>Баллы</th><th>Лайки</th><th>Коммент.</th><th>Репосты</th><th>Бот</th><th>Кредиты</th></tr>'+
       rows.map((row, i)=>'<tr><td>'+(i+1)+'</td><td>'+rateFace(row)+esc(row.name)+'</td><td class="ok">'+row.points+'</td><td>'+row.likes+'</td><td>'+row.comments+'</td><td>'+row.reposts+'</td><td>'+row.bot+'</td>'+
         '<td><div class="row" style="margin:0"><input id="cr'+esc(row.userId)+'" type="number" placeholder="100"><button onclick="grantRate(\''+esc(row.userId)+'\')">Начислить</button></div><p id="crm'+esc(row.userId)+'" class="note"></p></td></tr>').join('')+

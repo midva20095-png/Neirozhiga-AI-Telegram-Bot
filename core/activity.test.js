@@ -76,7 +76,11 @@ test('рейтинг показывает место и правила без с
     const text = activity.formatRating(rows, '-8', activity.weekRange(new Date('2026-11-14T12:00:00Z')));
     assert.match(text, /1\. Аня — 8 б\./);
     assert.match(text, /Ваши баллы: 3\. Место: 2\./);
-    assert.match(text, /Лайк — 1 балл/);
+    assert.match(text, /Лайк — 3/);
+    assert.match(text, /Репост — 10/);
+    assert.ok(activity.POINTS.repost > activity.POINTS.comment);
+    assert.ok(activity.POINTS.comment > activity.POINTS.like);
+    assert.ok(activity.POINTS.like > activity.POINTS.bot);
     assert.doesNotMatch(text, /https?:|vk\.com|error/i);
     const empty = activity.formatRating([], '-5', activity.weekRange(new Date('2026-11-14T12:00:00Z')));
     assert.match(empty, /пока тихо/);

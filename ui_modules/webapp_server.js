@@ -125,12 +125,7 @@ function startWebApp() {
     app.get('/api/vk/session', (req, res) => {
         const account = auth.verifyVkLaunch(req.query || {});
         if (!account) {
-            const missing = !String(process.env.VK_APP_SECRET || '').trim();
-            return res.status(401).json({
-                error: missing
-                    ? 'В настройках сервера нет VK_APP_SECRET — это защищённый ключ мини-приложения.'
-                    : 'ВК не подтвердил запуск приложения.'
-            });
+            return res.status(401).json({ error: 'Откройте кабинет из бота или из сообщества.' });
         }
         res.json({ tk: auth.signUserId(account) });
     });
@@ -300,6 +295,7 @@ function startWebApp() {
             res.json({
                 vk: true,
                 week: range.label,
+                rules: activity.POINTS,
                 rows: rows.slice(0, 20),
                 mine: place >= 0 ? Object.assign({ place: place + 1 }, rows[place]) : null
             });
@@ -690,7 +686,7 @@ function startWebApp() {
         try {
             const range = activity.weekRange(new Date());
             const rows = await vk.attachFaces(await db.listWeekActivity(range.start));
-            res.json({ week: range.label, rows });
+            res.json({ week: range.label, rules: activity.rulesText(), points: activity.POINTS, rows });
         } catch (e) {
             res.status(500).json({ error: 'Не удалось открыть рейтинг.' });
         }

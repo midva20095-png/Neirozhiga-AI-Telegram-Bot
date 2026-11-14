@@ -147,6 +147,7 @@ const TCAT = {image:'Картинки', fix:'Улучшение', chat:'Текс
 const TMARK = {image:'🪄', fix:'✨', chat:'✍️', video:'🎬', audio:'🎙'};
 let pickedQuality=null, pickedDuration=null, pickedAspect=null;
 const widgetPics = { chat: '', rate: '', site: '' };
+let showSetup = false;
 
 function tg(){ return window.Telegram && window.Telegram.WebApp; }
 function openOut(url){
@@ -297,7 +298,7 @@ function draw(){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.t===tab));
   const box = document.getElementById('view');
   if (!userId || (me && !me.user_id && me.error!==true && !me.balance)) {
-    box.innerHTML = '<div class="card"><p class="empty">Откройте кабинет кнопкой «Кабинет» в боте.</p>'+(window.__vkAuthError?'<p class="err">'+esc(window.__vkAuthError)+'</p>':'')+'</div>';
+    box.innerHTML = '<div class="card"><p class="empty">Откройте кабинет из чата бота или из сообщества.</p></div>';
     return;
   }
   if (me && me.channel) {
@@ -384,7 +385,7 @@ window.addEventListener('message', function(event){
   const data = event.data || {};
   if (data.type !== 'ny-widget-fail') return;
   const note = document.getElementById('submsg');
-  if (note) note.textContent = 'ВК не открыл окно кнопок. Откройте приложение из сообщества под администратором.';
+  if (note && vkAdmin()) note.textContent = 'ВК не открыл окно кнопок. Откройте приложение из сообщества ещё раз.';
 });
 function viewMenu(){
   const mail = !!(me && me.mail);
@@ -396,8 +397,11 @@ function viewMenu(){
     const src = widgetPics[row[0]] || ('/widget/' + row[0] + '.jpg');
     return '<button type="button" class="banner" id="door-'+row[0]+'"><img alt="'+row[1]+'" src="'+src+'"><span>'+row[2]+'</span></button>';
   }).join('');
-  const setup = vkAdmin()
-    ? '<div class="setup"><p class="hint">Эти картинки встанут на страницу сообщества. Можно заменить свою.</p>'+
+  const gear = vkAdmin()
+    ? '<button type="button" class="sub" id="door-setup">'+(showSetup?'Скрыть настройки':'Настройки')+'</button>'
+    : '';
+  const setup = vkAdmin() && showSetup
+    ? '<div class="setup"><p class="hint">Картинка встанет на страницу сообщества. Можно заменить свою.</p>'+
       '<label class="filebtn">Своя картинка для чата<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="chat"></label>'+
       '<label class="filebtn">Своя картинка для рейтинга<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="rate"></label>'+
       '<label class="filebtn">Своя картинка для сайта<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="site"></label>'+
@@ -405,7 +409,7 @@ function viewMenu(){
     : '';
   return '<div class="card"><div class="now">НейроЯга</div><div class="banners">'+cards+'</div>'+
     '<button type="button" id="door-sub" class="sub'+(mail?' on':'')+'">'+(mail?'Вы подписаны':'Подписаться')+'</button>'+
-    setup+'<p id="submsg" class="hint"></p></div>';
+    gear+setup+'<p id="submsg" class="hint"></p></div>';
 }
 function viewGen(){
   const cur = (me&&me.current_model)||(cfg&&cfg.default_model)||'flash';
@@ -639,6 +643,8 @@ function onCoverFile(input){
 function bind(){
   const pin = document.getElementById('door-pin');
   if (pin) pin.onclick = placeCovers;
+  const gear = document.getElementById('door-setup');
+  if (gear) gear.onclick = function(){ if (!vkAdmin()) return; showSetup = !showSetup; draw(); };
   document.querySelectorAll('[data-cover]').forEach(function(input){
     input.onchange = function(){ onCoverFile(input); };
   });
@@ -979,9 +985,10 @@ function renderRating(d){
   const own = mine
     ? '<div class="now">Ваше место: <b>'+mine.place+'</b> · '+mine.points+' б.</div>'
     : '<div class="now">Вас пока нет в списке этой недели.</div>';
+  const rules = d.rules || {};
   return '<h3 style="margin:0 0 6px">Рейтинг</h3><div class="now">'+esc(d.week||'')+'</div>'+
-    '<div class="rules"><span>лайк 1</span><span>комментарий 2</span><span>репост 3</span><span>запрос 5</span></div>'+
-    '<p class="now">В понедельник баллы начинаются заново. Кредиты по этому списку начисляет администратор.</p>'+
+    '<div class="rules"><span>лайк '+(rules.like||0)+'</span><span>комментарий '+(rules.comment||0)+'</span><span>репост '+(rules.repost||0)+'</span><span>запрос боту '+(rules.bot||0)+'</span></div>'+
+    '<p class="now">Лайк, комментарий и репост приводят людей, поэтому баллов больше, чем за запрос боту. В понедельник список начинается заново.</p>'+
     own+(list||'<p class="empty">На этой неделе пока тихо. Лайкайте записи, комментируйте, делайте репосты и пишите боту.</p>');
 }
 async function loadRating(){
