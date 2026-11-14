@@ -50,6 +50,18 @@ function tellCabinet(msg){
   const frame = document.querySelector('iframe');
   if (frame && frame.contentWindow) frame.contentWindow.postMessage(msg, '*');
 }
+let fragment = '';
+function rememberFragment(value){
+  const goal = String(value || '').replace(/^#/, '').split('&')[0].split('?')[0];
+  if (goal !== 'rate' && goal !== 'site' && goal !== 'sub') return;
+  fragment = goal;
+  tellCabinet({ type: 'ny-goal', goal: goal });
+}
+function readFragment(){ rememberFragment(location.hash); }
+readFragment();
+window.addEventListener('hashchange', readFragment);
+setTimeout(readFragment, 400);
+setTimeout(readFragment, 1500);
 function showCovers(groupId, code){
   const id = String(groupId || here.get('vk_group_id') || '230706467');
   const body = String(code || '');
@@ -72,6 +84,11 @@ function payHost(url){
 }
 window.addEventListener('message', function(event){
   const data = event.data || {};
+  if (data.type === 'ny-goal-ask') {
+    readFragment();
+    if (fragment) tellCabinet({ type: 'ny-goal', goal: fragment });
+    return;
+  }
   if (data.type === 'ny-community-token') {
     vkSend('VKWebAppGetCommunityToken', {
       app_id: 54895627,
@@ -86,6 +103,10 @@ window.addEventListener('message', function(event){
   if (!bridgeType && String(data.type || '').indexOf('VKWebApp') === 0) {
     bridgeType = data.type;
     bridgeData = data.data || {};
+  }
+  if (bridgeType === 'VKWebAppChangeFragment' || bridgeType === 'VKWebAppLocationChanged') {
+    rememberFragment((bridgeData && (bridgeData.location || bridgeData.hash)) || (data.data && data.data.location) || '');
+    return;
   }
   if (bridgeType === 'VKWebAppGetCommunityTokenResult' && bridgeData.access_token) {
     tellCabinet({ type: 'ny-community-token', token: bridgeData.access_token });

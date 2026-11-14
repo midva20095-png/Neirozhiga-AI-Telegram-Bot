@@ -293,6 +293,14 @@ async function load(){
   draw();
   if (window.__vkGoal === 'site') openOut((cfg && cfg.site_url) || 'https://babayagaland.ru');
   if (window.__vkGoal === 'sub' && me && me.user_id && !me.mail) subscribeMail(true);
+  try { parent.postMessage({ type: 'ny-goal-ask' }, '*'); } catch (e) {}
+}
+function applyGoal(goal){
+  if (goal !== 'rate' && goal !== 'site' && goal !== 'sub') return;
+  window.__vkGoal = goal;
+  if (goal === 'rate') { wantMenu = false; tab = 'rate'; draw(); }
+  if (goal === 'site') openOut((cfg && cfg.site_url) || 'https://babayagaland.ru');
+  if (goal === 'sub' && me && me.user_id && !me.mail) subscribeMail(true);
 }
 function draw(){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.t===tab));
@@ -383,6 +391,7 @@ async function placeCovers(){
 }
 window.addEventListener('message', function(event){
   const data = event.data || {};
+  if (data.type === 'ny-goal') { applyGoal(data.goal); return; }
   if (data.type !== 'ny-widget-fail') return;
   const note = document.getElementById('submsg');
   if (note && vkAdmin()) note.textContent = 'ВК не открыл окно кнопок. Откройте приложение из сообщества ещё раз.';
