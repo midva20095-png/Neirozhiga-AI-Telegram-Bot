@@ -174,3 +174,17 @@ test('второе сообщество считается отдельно и �
         else process.env[key] = saved[key];
     }
 });
+
+test('комментарий сообщества сначала уходит от имени ключа, а не чужим номером', () => {
+    const reply = vk.communityCommentAttempts('214554778', { postId: 9, replyTo: 4, message: 'урок', guid: 'reply-214554778-4' });
+    assert.equal(reply[0].from_group, '1');
+    assert.equal(reply[0].owner_id, '-214554778');
+    assert.equal(reply[0].reply_to_comment, '4');
+    assert.equal(reply[1].from_group, '1');
+    assert.equal(reply[1].reply_to_comment, undefined);
+    assert.equal(reply[2].from_group, '214554778');
+    const note = vk.communityCommentAttempts('214554778', { postId: 12, message: 'навигация', guid: 'lesson-214554778-12' });
+    assert.equal(note[0].from_group, '1');
+    assert.equal(note[0].reply_to_comment, undefined);
+    assert.doesNotMatch(JSON.stringify(reply), /access_token|vk1\.a\./);
+});

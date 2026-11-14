@@ -469,6 +469,13 @@ async function enableActivity(token, groupId) {
         markCommunity(groupId, true, '', { events: shown });
         console.log(`ВК ${groupId}: события рейтинга ${shown}.`);
     } catch (e) {}
+    try {
+        const perm = await call(token, 'groups.getTokenPermissions', {});
+        const names = ((perm && perm.permissions) || []).map(item => String(item.name || '')).filter(Boolean);
+        if (names.length && !names.includes('wall')) {
+            console.error(`ВК ${groupId}: у ключа нет права «Стена». Комментарии от имени сообщества ВК не примет. Сейчас у ключа: ${names.join(', ')}.`);
+        }
+    } catch (e) {}
 }
 
 const reactionSeen = new Map();
@@ -1266,6 +1273,44 @@ async function wallFinish(key) {
     try { await db.setSetting(key, { at: new Date().toISOString() }); } catch (error) {}
 }
 
+function communityCommentAttempts(groupId, fields) {
+    const id = String(groupId || '').replace(/\D/g, '');
+    const base = {
+        owner_id: String(-Number(id)),
+        post_id: String(fields.postId),
+        message: String(fields.message || '').slice(0, 1500),
+        guid: String(fields.guid || `c${id}`).slice(0, 32)
+    };
+    const modes = fields.replyTo ? [['1', true], ['1', false], [id, true]] : [['1', false], [id, false]];
+    return modes.filter(mode => mode[0]).map(mode => {
+        const item = Object.assign({ from_group: mode[0] }, base);
+        if (mode[1]) item.reply_to_comment = String(fields.replyTo);
+        return item;
+    });
+}
+
+const wallAccessHint = new Set();
+
+async function commentAsCommunity(token, groupId, fields) {
+    const attempts = communityCommentAttempts(groupId, fields);
+    let last = null;
+    for (const params of attempts) {
+        try {
+            return await call(token, 'wall.createComment', params);
+        } catch (error) {
+            last = error;
+            if (Number(error && error.code) !== 15) break;
+        }
+    }
+    throw last;
+}
+
+function wallAccessLine(groupId, code) {
+    if (code !== 15 || wallAccessHint.has(String(groupId))) return '';
+    wallAccessHint.add(String(groupId));
+    return ' В ключе сообщества нужно право «Стена», а в настройках сообщества — комментарии от имени сообщества.';
+}
+
 async function handleCommunityWall(token, update, groupId) {
     if (!auditHere(groupId)) return;
     const post = activity.readWallPost(update, groupId);
@@ -1274,17 +1319,15 @@ async function handleCommunityWall(token, update, groupId) {
         if (wallPending.has(key) || await wallMarked(key)) return;
         wallPending.add(key);
         try {
-            await call(token, 'wall.createComment', {
-                owner_id: String(-Number(groupId)),
-                post_id: String(post.postId),
-                from_group: String(groupId),
+            await commentAsCommunity(token, groupId, {
+                postId: post.postId,
                 message: club.lessonNote(),
-                guid: `lesson-${groupId}-${post.postId}`.slice(0, 32)
+                guid: `lesson-${groupId}-${post.postId}`
             });
             await wallFinish(key);
         } catch (error) {
             const code = Number(error && error.code);
-            console.error(`ВК ${groupId}: комментарий к уроку не отправился${code ? ` (${code})` : ''}.`);
+            console.error(`ВК ${groupId}: комментарий к уроку не отправился${code ? ` (${code})` : ''}.${wallAccessLine(groupId, code)}`);
         } finally {
             wallPending.delete(key);
         }
@@ -1298,18 +1341,16 @@ async function handleCommunityWall(token, update, groupId) {
     if (wallPending.has(key) || await wallMarked(key)) return;
     wallPending.add(key);
     try {
-        await call(token, 'wall.createComment', {
-            owner_id: String(-Number(groupId)),
-            post_id: String(comment.postId),
-            from_group: String(groupId),
-            reply_to_comment: String(comment.commentId),
+        await commentAsCommunity(token, groupId, {
+            postId: comment.postId,
+            replyTo: comment.commentId,
             message: answer.text,
-            guid: `reply-${groupId}-${comment.commentId}`.slice(0, 32)
+            guid: `reply-${groupId}-${comment.commentId}`
         });
         await wallFinish(key);
     } catch (error) {
         const code = Number(error && error.code);
-        console.error(`ВК ${groupId}: ответ на комментарий не отправился${code ? ` (${code})` : ''}.`);
+        console.error(`ВК ${groupId}: ответ на комментарий не отправился${code ? ` (${code})` : ''}.${wallAccessLine(groupId, code)}`);
     } finally {
         wallPending.delete(key);
     }
@@ -1578,5 +1619,5 @@ async function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, photoAttachment, communityList, communityId, communityStatus, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, photoAttachment, communityList, communityId, communityStatus, communityCommentAttempts, USER_HELP
 };
