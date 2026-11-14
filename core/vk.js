@@ -145,14 +145,11 @@ function textOnlyMenu() {
     return JSON.stringify({ one_time: false, buttons: textRows() });
 }
 
-function secondGroupId() {
-    return String(process.env.VK_GROUP_ID_2 || '').replace(/\D/g, '');
-}
-
 function auditHere(groupId) {
-    const second = secondGroupId();
     const current = String(groupId || currentGroup() || '').replace(/\D/g, '');
-    return !!(second && current && current === second);
+    const primary = String(process.env.VK_GROUP_ID || '').replace(/\D/g, '');
+    if (!current || current === primary) return false;
+    return communityList().some(item => item.id === current);
 }
 
 function mainMenu(peerId, groupId) {
@@ -892,7 +889,7 @@ async function holdAudit(token, peerId, account, text, action, groupId) {
     }
     runningAudit.add(key);
     await sendText(token, peerId, 'Смотрю сообщество. Отчёт придёт в этот чат.', payLockKeyboard());
-    audit.run(raw).then(async report => {
+    audit.run(raw, token).then(async report => {
         await sendParts(token, peerId, report, payLockKeyboard());
         await sendText(token, peerId, 'Можно прислать ещё одну ссылку. «Назад» возвращает меню.', payLockKeyboard());
     }).catch(async error => {

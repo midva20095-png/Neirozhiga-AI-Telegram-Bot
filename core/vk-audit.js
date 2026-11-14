@@ -519,15 +519,24 @@ ${CLUB_URL}
 Пересчитать через месяц — просто пришли ссылку ещё раз.`;
 }
 
-async function run(raw) {
-    const token = String(process.env.VK_AUDIT_TOKEN || '').trim();
-    if (!token) throw new AuditError('Аудит скоро заработает. Напишите чуть позже.');
-    try {
-        return formatReport(await analyzeOne(raw, token));
-    } catch (error) {
-        if (error && error.audit) throw error;
-        throw new AuditError('Не получилось разобрать это сообщество. Проверьте, что оно открытое и ссылка верная.');
+async function run(raw, fallbackToken) {
+    const tokens = [];
+    [process.env.VK_AUDIT_TOKEN, fallbackToken].forEach(value => {
+        const token = String(value || '').trim();
+        if (token && !tokens.includes(token)) tokens.push(token);
+    });
+    if (!tokens.length) throw new AuditError('Аудит скоро заработает. Напишите чуть позже.');
+    let failed = false;
+    for (const token of tokens) {
+        try {
+            return formatReport(await analyzeOne(raw, token));
+        } catch (error) {
+            if (error && error.audit) throw error;
+            failed = true;
+        }
     }
+    if (failed) throw new AuditError('Не получилось разобрать это сообщество. Проверьте, что оно открытое и ссылка верная.');
+    throw new AuditError('Аудит скоро заработает. Напишите чуть позже.');
 }
 
 module.exports = {
