@@ -47,6 +47,16 @@ test('из события ВК берётся только входящий те
     assert.deepEqual(vk.readIncoming(update), { fromId: 10, peerId: 10, text: 'нарисуй кота', payload: null });
     assert.equal(vk.readIncoming({ type: 'message_new', object: { message: { from_id: 10, text: 'я', out: 1 } } }), null);
     assert.equal(vk.readIncoming({ type: 'message_reply' }), null);
+    const shared = vk.readIncoming({
+        type: 'message_new',
+        object: { message: { from_id: 10, peer_id: 10, text: '', out: 0, attachments: [{ type: 'link', link: { url: 'https://vk.com/club777' } }] } }
+    });
+    assert.equal(shared.text, 'https://vk.com/club777');
+    const wall = vk.readIncoming({
+        type: 'message_new',
+        object: { message: { from_id: 10, peer_id: 10, text: 'пост', out: 0, attachments: [{ type: 'wall', wall: { owner_id: -42, id: 3 } }] } }
+    });
+    assert.equal(wall.text, 'пост\nhttps://vk.com/club42');
     assert.equal(vk.isGreeting('Начать'), true);
     assert.equal(vk.isGreeting('нарисуй кота'), false);
 });

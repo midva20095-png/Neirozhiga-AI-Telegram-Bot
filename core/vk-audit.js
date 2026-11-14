@@ -6,9 +6,10 @@ const CLUB_URL = 'https://m.vk.ru/@neuroyaga-navigator-po-klubu-babki-targetolog
 const CLUB_NAME = 'клуб «Бабки таргетолога»';
 
 class AuditError extends Error {
-    constructor(message) {
+    constructor(message, retry) {
         super(message);
         this.audit = true;
+        this.retry = !!retry;
     }
 }
 
@@ -22,12 +23,17 @@ function delay(ms) {
 }
 
 function extractScreenName(raw) {
-    let s = String(raw || '').trim().replace(/[\s\u200B]+/g, '');
+    const source = String(raw || '').trim();
+    const wall = source.match(/wall-(\d+)_\d+/i);
+    if (wall) return `club${wall[1]}`;
+    let s = source.replace(/[\s\u200B]+/g, '');
     s = s.split(/[?#&]/)[0];
     const m = s.match(/vk\.(?:com|ru)\/([A-Za-z0-9_.]+)/i);
     s = m ? m[1] : s.replace(/^@/, '');
     s = s.replace(/[^A-Za-z0-9_.]/g, '').replace(/\.+$/, '');
-    if (!s) throw new AuditError('Не понял ссылку. Пришлите её в виде vk.com/название');
+    if (!s || /^(away|im|feed|wall|write)$/i.test(s)) {
+        throw new AuditError('Не понял ссылку. Пришлите её в виде vk.com/название');
+    }
     return s;
 }
 
@@ -107,29 +113,89 @@ async function checkSpelling(text) {
 function groupOf(response) {
     if (!response) return null;
     if (response.groups && response.groups[0]) return response.groups[0];
+    if (response.items && response.items[0]) return response.items[0];
     if (Array.isArray(response) && response[0]) return response[0];
+    if (response.id) return response;
     return null;
+}
+
+const GROUP_FIELDS = 'description,members_count,cover,activity,status,site,contacts,market,verified,links,counters';
+
+async function fetchGroup(token, idOrScreen) {
+    let json;
+    try {
+        json = await vkCall('groups.getById', { group_ids: idOrScreen, fields: GROUP_FIELDS }, token);
+    } catch (error) {
+        if (Number(error && error.code) !== 100) throw error;
+        json = await vkCall('groups.getById', { group_id: idOrScreen, fields: GROUP_FIELDS }, token);
+    }
+    return groupOf(json.response);
+}
+
+async function resolveGroupId(token, screen) {
+    if (/^(club|public|event)?\d+$/i.test(screen)) return screen.replace(/\D/g, '');
+    try {
+        const resolved = (await vkCall('utils.resolveScreenName', { screen_name: screen }, token)).response;
+        if (resolved && resolved.type === 'user') throw new AuditError('Это личная страница. Пришлите ссылку на группу или паблик');
+        if (resolved && resolved.type === 'group' && resolved.object_id) return String(resolved.object_id);
+    } catch (error) {
+        if (error && error.audit) throw error;
+    }
+    const info = await fetchGroup(token, screen);
+    if (info && info.id) return String(info.id);
+    throw new AuditError(`Сообщество vk.com/${screen} не найдено или стена пустая`, true);
+}
+
+let serviceCache = { token: '', until: 0, failedUntil: 0 };
+
+async function serviceToken() {
+    if (serviceCache.token && serviceCache.until > Date.now()) return serviceCache.token;
+    if (serviceCache.failedUntil > Date.now()) return '';
+    const id = String(process.env.VK_APP_ID || '').trim();
+    const secret = String(process.env.VK_APP_SECRET || '').trim();
+    if (!id || !secret) return '';
+    const body = new URLSearchParams({
+        client_id: id,
+        client_secret: secret,
+        grant_type: 'client_credentials',
+        v: API_VERSION
+    });
+    for (const url of ['https://oauth.vk.com/access_token', 'https://oauth.vk.ru/access_token']) {
+        try {
+            const res = await axios.post(url, body.toString(), {
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                timeout: 15000,
+                validateStatus: () => true
+            });
+            const token = res.data && res.data.access_token;
+            if (!token) continue;
+            const expires = Number(res.data.expires_in);
+            const ttl = expires > 60 ? expires - 60 : 12 * 3600;
+            serviceCache = { token, until: Date.now() + ttl * 1000, failedUntil: 0 };
+            return token;
+        } catch (error) {}
+    }
+    serviceCache.failedUntil = Date.now() + 5 * 60 * 1000;
+    return '';
 }
 
 async function analyzeOne(raw, token) {
     const screen = extractScreenName(raw);
-    let groupId;
-    if (/^(club|public|event)?\d+$/i.test(screen)) {
-        groupId = screen.replace(/\D/g, '');
-    } else {
-        const wall = (await vkCall('wall.get', { domain: screen, count: 1 }, token)).response;
-        const first = wall && wall.items && wall.items[0];
-        if (!first) throw new AuditError(`Сообщество vk.com/${screen} не найдено или стена пустая`);
-        if (first.owner_id > 0) throw new AuditError('Это личная страница. Пришлите ссылку на группу или паблик');
-        groupId = String(-first.owner_id);
-    }
-
-    const info = groupOf((await vkCall('groups.getById', {
-        group_id: groupId,
-        fields: 'description,members_count,cover,photo_200,activity,status,site,contacts,addresses,menu,market,verified,can_message,screen_name,donut'
-    }, token)).response);
-    if (!info) throw new AuditError('Сообщество не найдено');
-    if (info.is_closed) throw new AuditError('Сообщество закрытое — анализ невозможен');
+    const groupId = await resolveGroupId(token, screen);
+    const info = await fetchGroup(token, groupId);
+    if (!info || !info.id) throw new AuditError('Сообщество не найдено', true);
+    try {
+        const rich = groupOf((await vkCall('groups.getById', {
+            group_ids: info.id,
+            fields: 'menu,addresses,donut,can_message'
+        }, token)).response);
+        if (rich) {
+            if (rich.menu) info.menu = rich.menu;
+            if (rich.addresses) info.addresses = rich.addresses;
+            if (rich.donut) info.donut = rich.donut;
+            if (rich.can_message != null) info.can_message = rich.can_message;
+        }
+    } catch (error) {}
 
     const members = info.members_count || 0;
     const cover = !!(info.cover && info.cover.enabled);
@@ -147,9 +213,18 @@ async function analyzeOne(raw, token) {
     const screenLatin = !screenIsDigits && /^[a-z0-9_.]+$/i.test(screenName);
     const isDonut = !!(info.donut && info.donut.is_donut);
 
-    const posts = ((await vkCall('wall.get', { owner_id: -info.id, count: POSTS_COUNT, filter: 'owner' }, token)).response || {}).items || [];
+    let posts = [];
+    try {
+        posts = ((await vkCall('wall.get', { owner_id: -info.id, count: POSTS_COUNT, filter: 'owner' }, token)).response || {}).items || [];
+    } catch (error) {
+        if (Number(error && error.code) !== 100) throw error;
+        posts = ((await vkCall('wall.get', { owner_id: -info.id, count: POSTS_COUNT }, token)).response || {}).items || [];
+    }
     const n = posts.length;
-    if (!n) throw new AuditError('На стене нет постов');
+    if (!n) {
+        if (info.is_closed) throw new AuditError('Сообщество закрытое — анализ невозможен', true);
+        throw new AuditError('На стене нет постов', true);
+    }
 
     const dates = posts.map(post => post.date);
     const newest = Math.max(...dates);
@@ -258,6 +333,10 @@ async function analyzeOne(raw, token) {
     } catch (e) {}
     try { albums = ((await vkCall('photos.getAlbums', { owner_id: -info.id }, token)).response || {}).count || 0; } catch (e) {}
     try { clips = ((await vkCall('video.get', { owner_id: -info.id, count: 1 }, token)).response || {}).count || 0; } catch (e) {}
+    const counters = info.counters || {};
+    if (!topics && counters.topics) topics = counters.topics;
+    if (!albums && counters.albums) albums = counters.albums;
+    if (!clips && (counters.videos || counters.clips)) clips = counters.videos || counters.clips || 0;
 
     const avg = value => Math.round(value / n);
     const top = (obj, count) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, count).map(item => item[0]).join(', ');
@@ -521,28 +600,50 @@ ${CLUB_URL}
 
 async function run(raw, fallbackToken) {
     const tokens = [];
-    [process.env.VK_AUDIT_TOKEN, fallbackToken].forEach(value => {
+    const add = value => {
         const token = String(value || '').trim();
         if (token && !tokens.includes(token)) tokens.push(token);
-    });
+    };
+    add(process.env.VK_AUDIT_TOKEN);
+    if (!tokens.length) {
+        try { add(await serviceToken()); } catch (error) {}
+        add(fallbackToken);
+    }
     if (!tokens.length) throw new AuditError('Аудит скоро заработает. Напишите чуть позже.');
-    let failed = false;
-    for (const token of tokens) {
+    let lastAudit = null;
+    let sawAccess = false;
+    let sawToken = false;
+    let openedSpare = tokens.length > 1;
+    for (let i = 0; i < tokens.length; i++) {
         try {
-            return formatReport(await analyzeOne(raw, token));
+            return formatReport(await analyzeOne(raw, tokens[i]));
         } catch (error) {
-            if (error && error.audit) throw error;
-            failed = true;
+            if (error && error.audit && !error.retry) throw error;
+            if (error && error.audit) lastAudit = error;
+            else {
+                const code = Number(error && error.code);
+                console.error(`ВК аудит: запрос не вышел${code ? ` (${code})` : ''}.`);
+                if (code === 5 || code === 27 || code === 28) sawToken = true;
+                else sawAccess = true;
+            }
+            if (!openedSpare) {
+                openedSpare = true;
+                try { add(await serviceToken()); } catch (e) {}
+                add(fallbackToken);
+            }
         }
     }
-    if (failed) throw new AuditError('Не получилось разобрать это сообщество. Проверьте, что оно открытое и ссылка верная.');
-    throw new AuditError('Аудит скоро заработает. Напишите чуть позже.');
+    if (lastAudit && !sawAccess) throw lastAudit;
+    if (sawAccess) throw new AuditError('Это сообщество не открыло стену. Пришлите ссылку на открытую группу или паблик.');
+    if (sawToken) throw new AuditError('Ключ аудита не читает чужие сообщества. Нужен пользовательский ключ.');
+    throw lastAudit || new AuditError('Не получилось разобрать это сообщество. Проверьте, что оно открытое и ссылка верная.');
 }
 
 module.exports = {
     AuditError,
     extractScreenName,
     formatReport,
+    groupOf,
     run,
     CLUB_URL
 };

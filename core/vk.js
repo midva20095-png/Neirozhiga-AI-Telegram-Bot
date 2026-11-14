@@ -31,6 +31,26 @@ function parsePayload(value) {
     try { return JSON.parse(value); } catch (e) { return null; }
 }
 
+function linkedText(message) {
+    const text = String((message && message.text) || '').trim();
+    const found = [];
+    const buckets = [message && message.attachments];
+    if (message && message.reply_message) buckets.push(message.reply_message.attachments);
+    const forwarded = message && message.fwd_messages;
+    if (Array.isArray(forwarded)) forwarded.forEach(item => buckets.push(item && item.attachments));
+    buckets.forEach(list => {
+        if (!Array.isArray(list)) return;
+        list.forEach(item => {
+            if (!item) return;
+            if (item.type === 'link' && item.link && item.link.url) found.push(String(item.link.url));
+            const owner = Number(item.wall && (item.wall.owner_id || item.wall.to_id));
+            if (Number.isInteger(owner) && owner < 0) found.push(`https://vk.com/club${-owner}`);
+        });
+    });
+    const extra = found.filter(link => link && !text.includes(link));
+    return [text, ...extra].filter(Boolean).join('\n');
+}
+
 function readIncoming(update) {
     if (!update || update.type !== 'message_new') return null;
     const message = update.object && (update.object.message || update.object);
@@ -41,7 +61,7 @@ function readIncoming(update) {
     return {
         fromId,
         peerId,
-        text: String(message.text || '').trim(),
+        text: linkedText(message),
         payload: parsePayload(message.payload)
     };
 }

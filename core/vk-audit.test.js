@@ -7,7 +7,11 @@ test('ссылка на сообщество приводится к корот�
     assert.equal(audit.extractScreenName('https://vk.com/club123?w=wall'), 'club123');
     assert.equal(audit.extractScreenName('https://vk.ru/babki_target'), 'babki_target');
     assert.equal(audit.extractScreenName('@public55'), 'public55');
+    assert.equal(audit.extractScreenName('https://vk.com/wall-214554778_90'), 'club214554778');
+    assert.equal(audit.extractScreenName('посмотри https://vk.com/babki_target'), 'babki_target');
     assert.throws(() => audit.extractScreenName('просто текст'), /Не понял ссылку/);
+    assert.equal(audit.groupOf({ items: [{ id: 7, name: 'Чужое' }] }).id, 7);
+    assert.equal(audit.groupOf({ groups: [{ id: 8 }] }).id, 8);
 });
 
 test('отчёт аудита ведёт в клуб и не содержит ключей', () => {
