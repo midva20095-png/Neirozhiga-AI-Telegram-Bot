@@ -139,7 +139,8 @@ test('второе сообщество считается отдельно и �
         VK_GROUP_ID: process.env.VK_GROUP_ID,
         VK_GROUP_TOKEN: process.env.VK_GROUP_TOKEN,
         VK_GROUP_ID_2: process.env.VK_GROUP_ID_2,
-        VK_GROUP_TOKEN_2: process.env.VK_GROUP_TOKEN_2
+        VK_GROUP_TOKEN_2: process.env.VK_GROUP_TOKEN_2,
+        WEBAPP_URL: process.env.WEBAPP_URL
     };
     process.env.VK_GROUP_ID = '230706467';
     process.env.VK_GROUP_TOKEN = 'token-one';
@@ -147,7 +148,10 @@ test('второе сообщество считается отдельно и �
     process.env.VK_GROUP_TOKEN_2 = 'token-two';
     assert.deepEqual(vk.communityList().map(item => item.id), ['230706467', '555']);
     assert.equal(vk.communityId('555'), '555');
-    assert.equal(vk.communityId('999'), '230706467');
+    assert.equal(vk.communityId('999'), '999');
+    assert.equal(vk.communityId(''), '230706467');
+    process.env.WEBAPP_URL = 'https://bot.example';
+    assert.match(vk.cabinetLink(-10, '', '555'), /vk_group_id=555/);
     process.env.VK_GROUP_ID_2 = '';
     process.env.VK_GROUP_TOKEN_2 = '';
     assert.deepEqual(vk.communityList().map(item => item.id), ['230706467']);

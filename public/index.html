@@ -245,6 +245,8 @@ async function loadConfig(){
   if (cfg.site_url){ s.href = cfg.site_url; s.style.display=''; } else s.style.display='none';
 }
 async function adoptVkLaunch(){
+  const gid = vkGroupId();
+  if (gid) window.__vkGroup = gid;
   if (token) return;
   const sp = new URLSearchParams(location.search);
   if (!sp.get('sign') || !sp.get('vk_user_id')) return;
@@ -254,6 +256,7 @@ async function adoptVkLaunch(){
     if (d && d.tk) {
       token = d.tk;
       userId = String(token).split('.')[0];
+      if (d.group) window.__vkGroup = String(d.group).replace(/\D/g, '');
     } else if (d && d.error) window.__vkAuthError = d.error;
   } catch (e) {}
 }
@@ -294,6 +297,7 @@ async function load(){
   if (window.__vkGoal === 'site') openOut((cfg && cfg.site_url) || 'https://babayagaland.ru');
   if (window.__vkGoal === 'sub' && me && me.user_id && !me.mail) subscribeMail(true);
   try { parent.postMessage({ type: 'ny-goal-ask' }, '*'); } catch (e) {}
+  try { parent.postMessage({ type: 'ny-group-ask' }, '*'); } catch (e) {}
 }
 function applyGoal(goal){
   if (goal !== 'rate' && goal !== 'site' && goal !== 'sub') return;
@@ -351,11 +355,17 @@ function askCommunityToken(){
     parent.postMessage({ type: 'ny-community-token' }, '*');
   });
 }
+function launchParam(name){
+  const search = new URLSearchParams(location.search).get(name);
+  if (search) return search;
+  return new URLSearchParams((location.hash || '').replace(/^#/, '')).get(name) || '';
+}
 function vkGroupId(){
-  return new URLSearchParams(location.search).get('vk_group_id') || '230706467';
+  return String(launchParam('vk_group_id') || window.__vkGroup || '').replace(/\D/g, '');
 }
 function chatLink(){
-  return 'https://vk.ru/write-' + String(vkGroupId()).replace(/\D/g, '');
+  const id = vkGroupId();
+  return id ? 'https://vk.ru/write-' + id : '';
 }
 function coverCode(groupId, ids){
   const app = 'https://vk.ru/app54895627_-' + groupId;
@@ -387,7 +397,12 @@ async function placeCovers(){
       if (!r.ok || !d.id) throw new Error(d.error || 'Картинка не загрузилась');
       ids[key] = d.id;
     }
-    const groupId = new URLSearchParams(location.search).get('vk_group_id') || '230706467';
+    const groupId = vkGroupId();
+    if (!groupId) {
+      if (msg) msg.textContent = 'Откройте приложение из этого сообщества и поставьте кнопки ещё раз.';
+      if (pin) pin.disabled = false;
+      return;
+    }
     parent.postMessage({ type: 'ny-widget-show', group_id: Number(groupId), code: coverCode(groupId, ids) }, '*');
     if (msg) msg.textContent = 'Подтвердите кнопки в окне ВК.';
   } catch (e) {
@@ -406,6 +421,11 @@ window.addEventListener('hashchange', function(){ bridgeGoal({ hash: location.ha
 window.addEventListener('message', function(event){
   const data = event.data || {};
   bridgeGoal(data);
+  if (data.type === 'ny-group' && data.id) {
+    window.__vkGroup = String(data.id).replace(/\D/g, '');
+    if (tab === 'rate') loadRating();
+    return;
+  }
   if (data.type === 'ny-goal') { applyGoal(data.goal); return; }
   if (data.type !== 'ny-widget-fail') return;
   const note = document.getElementById('submsg');
@@ -673,7 +693,7 @@ function bind(){
     input.onchange = function(){ onCoverFile(input); };
   });
   const chat = document.getElementById('door-chat');
-  if (chat) chat.onclick = function(){ openOut(chatLink()); };
+  if (chat) chat.onclick = function(){ const url = chatLink(); if (url) openOut(url); };
   const rate = document.getElementById('door-rate');
   if (rate) rate.onclick = function(){ tab = 'rate'; wantMenu = false; draw(); };
   const site = document.getElementById('door-site');
@@ -860,7 +880,7 @@ async function generateTemplate(){
   last = { text: 'Создаю'+(pickedFormat?' · размер '+pickedFormat:'')+'…' };
   draw();
   try {
-    const r = await fetch('/api/generate',{method:'POST',headers:authHeaders(),body:JSON.stringify({templateId:t.id, image:photoData, format:pickedFormat, group: new URLSearchParams(location.search).get('vk_group_id') || ''})});
+    const r = await fetch('/api/generate',{method:'POST',headers:authHeaders(),body:JSON.stringify({templateId:t.id, image:photoData, format:pickedFormat, group: vkGroupId()})});
     const d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error||'Ошибка');
     last = d;
@@ -916,7 +936,7 @@ async function generate(){
     const r = await fetch('/api/generate',{method:'POST',headers:authHeaders(),body:JSON.stringify({
       prompt, model: me&&me.current_model, image: (m && m.image !== 'forbidden') ? genPhoto : null,
       quality: pickedQuality, duration: pickedDuration, format: pickedAspect,
-      group: new URLSearchParams(location.search).get('vk_group_id') || ''
+      group: vkGroupId()
     })});
     const d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error||'Ошибка');
@@ -1020,7 +1040,7 @@ async function loadRating(){
   const box = document.getElementById('ratebox');
   if (!box) return;
   try {
-    const gid = new URLSearchParams(location.search).get('vk_group_id') || '';
+    const gid = vkGroupId();
     const r = await fetch('/api/rating' + (gid ? '?group=' + encodeURIComponent(gid) : ''), { headers: authHeaders() });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Не удалось открыть рейтинг');

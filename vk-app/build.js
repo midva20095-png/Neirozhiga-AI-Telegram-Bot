@@ -24,18 +24,34 @@ function vkSend(handler, params){
 }
 vkSend('VKWebAppInit');
 vkSend('VKWebAppGetLaunchParams');
-let opened = false;
-function openCabinet(search, hash){
-  if (opened) return;
-  opened = true;
-  const frame = document.createElement('iframe');
-  frame.src = API + '/' + (search || '') + (hash || '');
-  frame.addEventListener('load', function(){
-    const note = document.getElementById('wait');
-    if (note) note.remove();
-    if (fragment) tellCabinet({ type: 'ny-goal', goal: fragment });
+let openedSearch = '';
+function hasGroup(search){
+  return /(?:^|[?&])vk_group_id=\d+/.test(String(search || ''));
+}
+function rememberLaunch(search){
+  const params = new URLSearchParams(String(search || '').replace(/^\?/, ''));
+  params.forEach(function(value, key){
+    if (key === 'sign' || key.indexOf('vk_') === 0) here.set(key, value);
   });
-  document.body.appendChild(frame);
+}
+function openCabinet(search, hash){
+  const next = String(search || '');
+  if (openedSearch && (hasGroup(openedSearch) || !hasGroup(next))) return;
+  rememberLaunch(next);
+  openedSearch = next;
+  let frame = document.querySelector('iframe');
+  if (!frame) {
+    frame = document.createElement('iframe');
+    frame.addEventListener('load', function(){
+      const note = document.getElementById('wait');
+      if (note) note.remove();
+      if (fragment) tellCabinet({ type: 'ny-goal', goal: fragment });
+      const id = new URLSearchParams(openedSearch).get('vk_group_id') || '';
+      if (id) tellCabinet({ type: 'ny-group', id: id });
+    });
+    document.body.appendChild(frame);
+  }
+  frame.src = API + '/' + next + (hash || '');
 }
 function queryFrom(data){
   const src = data && (data.params || data.data || data);
@@ -82,7 +98,8 @@ window.addEventListener('hashchange', readFragment);
 setTimeout(readFragment, 400);
 setTimeout(readFragment, 1500);
 function showCovers(groupId, code){
-  const id = String(groupId || here.get('vk_group_id') || '230706467');
+  const id = String(groupId || here.get('vk_group_id') || '').replace(/\D/g, '');
+  if (!id) return;
   const body = String(code || '');
   if (body.indexOf('cover_id') < 0 || body.length > 12000) return;
   vkSend('VKWebAppShowCommunityWidgetPreviewBox', {
@@ -112,10 +129,17 @@ window.addEventListener('message', function(event){
     if (fragment) tellCabinet({ type: 'ny-goal', goal: fragment });
     return;
   }
+  if (data.type === 'ny-group-ask') {
+    const id = here.get('vk_group_id') || '';
+    if (id) tellCabinet({ type: 'ny-group', id: id });
+    return;
+  }
   if (data.type === 'ny-community-token') {
+    const id = here.get('vk_group_id') || '';
+    if (!id) return;
     vkSend('VKWebAppGetCommunityToken', {
       app_id: 54895627,
-      group_id: Number(here.get('vk_group_id') || '230706467'),
+      group_id: Number(id),
       scope: 'app_widget'
     });
     return;

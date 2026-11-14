@@ -1,3 +1,4 @@
+const { AsyncLocalStorage } = require('async_hooks');
 const axios = require('axios');
 const FormData = require('form-data');
 const sharp = require('sharp');
@@ -10,6 +11,12 @@ const activity = require('./activity');
 
 const API = 'https://api.vk.com/method';
 const VERSION = '5.199';
+const communityContext = new AsyncLocalStorage();
+
+function currentGroup() {
+    const store = communityContext.getStore();
+    return String((store && store.groupId) || '').replace(/\D/g, '');
+}
 
 function accountId(vkUserId) {
     const id = Number(vkUserId);
@@ -107,12 +114,14 @@ function appBase() {
     return String(process.env.WEBAPP_URL || '').replace(/\/$/, '');
 }
 
-function cabinetLink(account, pkgId) {
+function cabinetLink(account, pkgId, groupId) {
     const base = appBase();
     if (!base || account == null) return siteLink();
     const tk = auth.signUserId(account);
     const pkg = pkgId ? `&pkg=${encodeURIComponent(pkgId)}` : '';
-    return `${base}/vk.html?tk=${encodeURIComponent(tk)}${pkg}`;
+    const group = String(groupId || currentGroup() || '').replace(/\D/g, '');
+    const groupQuery = group ? `&vk_group_id=${encodeURIComponent(group)}` : '';
+    return `${base}/vk.html?tk=${encodeURIComponent(tk)}${pkg}${groupQuery}`;
 }
 
 function linkButton(label, link) {
@@ -1047,7 +1056,7 @@ async function poll(token, groupId) {
                 const updates = Array.isArray(data.updates) ? data.updates : [];
                 for (const update of updates) {
                     try {
-                        await handleUpdate(token, update, groupId);
+                        await communityContext.run({ groupId }, () => handleUpdate(token, update, groupId));
                     } catch (error) {
                         const code = Number(error && error.code);
                         console.error(`ВК: сообщение не обработано${code ? ` (${code})` : ''}.`);
@@ -1083,13 +1092,16 @@ function communityList() {
 
 function communityId(value) {
     const id = String(value || '').replace(/\D/g, '');
+    if (id) return id;
     const list = communityList();
-    if (id && list.some(item => item.id === id)) return id;
     return list[0] ? list[0].id : '';
 }
 
 function startVk() {
-    for (const item of communityList()) {
+    const list = communityList();
+    const names = list.map(item => item.id).join(', ');
+    db.note('sys', names ? `ВК сообщества: ${names}` : 'ВК сообщества не заданы').catch(() => {});
+    for (const item of list) {
         poll(item.token, item.id).catch(() => {});
     }
 }

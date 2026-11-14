@@ -9,11 +9,14 @@
 <p>Открываю кабинет…</p>
 <script>
 const q = new URLSearchParams(location.search);
-const parts = [];
-if (q.get('tk')) parts.push('tk=' + encodeURIComponent(q.get('tk')));
-if (q.get('paid') === '1') parts.push('paid=1');
-if (q.get('pkg')) parts.push('pkg=' + encodeURIComponent(q.get('pkg')));
-location.replace('/?v=21#' + parts.join('&'));
+const dest = new URLSearchParams();
+dest.set('v', '22');
+q.forEach(function(value, key){
+  if (key === 'sign' || key.indexOf('vk_') === 0 || key === 'tk' || key === 'pkg' || key === 'paid') dest.set(key, value);
+});
+const goal = (location.hash || '').replace(/^#/, '').split('&')[0].split('?')[0];
+const hash = (goal === 'rate' || goal === 'site' || goal === 'sub') ? '#' + goal : '';
+location.replace('/?' + dest.toString() + hash);
 </script>
 </body>
 </html>

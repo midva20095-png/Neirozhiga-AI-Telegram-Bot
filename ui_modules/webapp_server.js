@@ -127,7 +127,8 @@ function startWebApp() {
         if (!account) {
             return res.status(401).json({ error: 'Откройте кабинет из бота или из сообщества.' });
         }
-        res.json({ tk: auth.signUserId(account) });
+        const group = String((req.query && req.query.vk_group_id) || '').replace(/\D/g, '');
+        res.json({ tk: auth.signUserId(account), group });
     });
 
     app.post('/api/vk/widget-image', async (req, res) => {
