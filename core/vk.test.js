@@ -9,14 +9,20 @@ test('фото для чата ВК содержит ключ доступа', (
     assert.equal(vk.photoAttachment(null), '');
 });
 
-test('картинка PNG для ВК становится JPEG', async () => {
+test('PNG для чата ВК остаётся PNG, JPEG не перекодируется', async () => {
     const png = await sharp({
         create: { width: 8, height: 8, channels: 3, background: { r: 20, g: 10, b: 40 } }
     }).png().toBuffer();
-    const jpeg = await vk.jpegForVk(png);
-    assert.equal(jpeg[0], 0xff);
-    assert.equal(jpeg[1], 0xd8);
-    assert.equal(await vk.jpegForVk(jpeg), jpeg);
+    const file = await vk.fileForVk(png);
+    assert.equal(file.type, 'image/png');
+    assert.equal(file.filename, 'neuroyaga.png');
+    assert.equal(file.buffer[0], 0x89);
+    const jpeg = await sharp({
+        create: { width: 8, height: 8, channels: 3, background: { r: 1, g: 2, b: 3 } }
+    }).jpeg().toBuffer();
+    const same = await vk.fileForVk(jpeg);
+    assert.equal(same.buffer, jpeg);
+    assert.equal(same.type, 'image/jpeg');
 });
 
 test('аккаунт ВК не совпадает с числом Telegram', () => {

@@ -394,19 +394,34 @@ async function enableActivity(token, groupId) {
     }
 }
 
-async function jpegForVk(buffer) {
-    const jpeg = buffer && buffer[0] === 0xff && buffer[1] === 0xd8;
-    if (jpeg && buffer.length < 4 * 1024 * 1024) {
-        const meta = await sharp(buffer).metadata();
-        const long = Math.max(meta.width || 0, meta.height || 0);
-        if (!long || long <= 2048) return buffer;
+function imageKind(buffer) {
+    if (!buffer || buffer.length < 12) return null;
+    if (buffer[0] === 0x89 && buffer[1] === 0x50) return { ext: 'png', type: 'image/png' };
+    if (buffer[0] === 0xff && buffer[1] === 0xd8) return { ext: 'jpg', type: 'image/jpeg' };
+    if (buffer[0] === 0x47 && buffer[1] === 0x49) return { ext: 'gif', type: 'image/gif' };
+    return null;
+}
+
+async function fileForVk(buffer) {
+    const kind = imageKind(buffer);
+    if (kind && buffer.length <= 20 * 1024 * 1024) {
+        try {
+            const meta = await sharp(buffer, { failOn: 'none' }).metadata();
+            const width = meta.width || 0;
+            const height = meta.height || 0;
+            const ratio = width && height ? Math.max(width, height) / Math.min(width, height) : 1;
+            if (width && height && width + height <= 14000 && ratio <= 20) {
+                return { buffer, filename: `neuroyaga.${kind.ext}`, type: kind.type };
+            }
+        } catch (error) {}
     }
-    return sharp(buffer, { failOn: 'none' }).rotate().resize({
-        width: 2048,
-        height: 2048,
+    const jpeg = await sharp(buffer, { failOn: 'none', limitInputPixels: false }).rotate().resize({
+        width: 1920,
+        height: 1920,
         fit: 'inside',
         withoutEnlargement: true
-    }).jpeg({ quality: 88 }).toBuffer();
+    }).flatten({ background: '#ffffff' }).jpeg({ quality: 85, progressive: false }).toBuffer();
+    return { buffer: jpeg, filename: 'neuroyaga.jpg', type: 'image/jpeg' };
 }
 
 function photoAttachment(photo) {
@@ -425,9 +440,9 @@ function readUpload(data) {
     return body;
 }
 
-async function postFile(url, field, buffer, filename) {
+async function postFile(url, field, file) {
     const form = new FormData();
-    form.append(field, buffer, { filename, contentType: 'image/jpeg' });
+    form.append(field, file.buffer, { filename: file.filename, contentType: file.type });
     const res = await axios.post(url, form, {
         headers: form.getHeaders({ 'User-Agent': 'Mozilla/5.0' }),
         timeout: 60000,
@@ -438,18 +453,19 @@ async function postFile(url, field, buffer, filename) {
 }
 
 async function deliverFile(token, peerId, caption, attachment) {
-    await sendMessage(token, {
+    const params = {
         peer_id: String(peerId),
         random_id: String(Math.floor(Math.random() * 2e9)),
-        message: String(caption || '').slice(0, 3500),
         attachment,
         keyboard: mainMenu(peerId)
-    });
+    };
+    if (caption) params.message = String(caption).slice(0, 3500);
+    await sendMessage(token, params);
 }
 
-async function sendPhoto(token, peerId, jpeg, caption) {
+async function sendPhoto(token, peerId, file, caption) {
     const server = await call(token, 'photos.getMessagesUploadServer', { peer_id: String(peerId) });
-    const uploaded = await postFile(server.upload_url, 'photo', jpeg, 'neuroyaga.jpg');
+    const uploaded = await postFile(server.upload_url, 'photo', file);
     const saved = await call(token, 'photos.saveMessagesPhoto', {
         photo: uploaded.photo,
         server: String(uploaded.server),
@@ -461,9 +477,9 @@ async function sendPhoto(token, peerId, jpeg, caption) {
     await deliverFile(token, peerId, caption, attachment);
 }
 
-async function sendDoc(token, peerId, jpeg, caption) {
+async function sendDoc(token, peerId, file, caption) {
     const server = await call(token, 'docs.getMessagesUploadServer', { peer_id: String(peerId), type: 'doc' });
-    const uploaded = await postFile(server.upload_url, 'file', jpeg, 'neuroyaga.jpg');
+    const uploaded = await postFile(server.upload_url, 'file', file);
     const saved = await call(token, 'docs.save', { file: uploaded.file, title: 'Картинка' });
     const doc = saved && (saved.doc || saved);
     if (!doc || doc.id == null || doc.owner_id == null) throw new Error('vk doc');
@@ -471,12 +487,12 @@ async function sendDoc(token, peerId, jpeg, caption) {
 }
 
 async function sendImage(token, peerId, buffer, caption) {
-    const jpeg = await jpegForVk(buffer);
+    const file = await fileForVk(buffer);
     try {
-        await sendPhoto(token, peerId, jpeg, caption);
+        await sendPhoto(token, peerId, file, caption);
     } catch (error) {
         console.error(`ВК не вставил фото (${error.code || ''} ${error.message || ''}). Отправляю файлом.`);
-        await sendDoc(token, peerId, jpeg, caption);
+        await sendDoc(token, peerId, file, caption);
     }
 }
 
@@ -618,7 +634,18 @@ async function runJob(token, peerId, account, job) {
         const done = `Готово. Списано ${result.cost} кр. Осталось ${result.balance}.`;
         try {
             if (result.buffer && result.type === 'image') {
-                await sendImage(token, peerId, result.buffer, done);
+                const pictures = [result.buffer].concat(result.extra || []).filter(Boolean);
+                let sent = 0;
+                let lastError = null;
+                for (const picture of pictures) {
+                    try {
+                        await sendImage(token, peerId, picture, sent === 0 ? done : '');
+                        sent += 1;
+                    } catch (pictureError) {
+                        lastError = pictureError;
+                    }
+                }
+                if (!sent) throw lastError || new Error('vk photo');
             } else {
                 const answer = String(result.text || 'Готово').slice(0, 3200);
                 await sendText(token, peerId, `${answer}\n\n${done}`);
@@ -1042,5 +1069,5 @@ function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, jpegForVk, photoAttachment, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, photoAttachment, USER_HELP
 };

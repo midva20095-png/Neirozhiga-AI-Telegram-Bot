@@ -231,7 +231,7 @@ async function runSite(context) {
             const opData = await waitOperation(apiKey, operationId, attempts);
             const urls = resultUrls(opData);
             if (!urls.length) throw new Error('Результат готов, но ссылки на него нет');
-            const limit = spec.kind === 'audio' ? Math.min(2, urls.length) : 1;
+            const limit = spec.kind === 'video' ? 1 : Math.min(2, urls.length);
             const files = [];
             for (let i = 0; i < limit; i++) files.push(await downloadUrl(urls[i]));
             const type = spec.kind === 'audio' ? 'audio' : spec.kind === 'video' ? 'video' : 'image';
