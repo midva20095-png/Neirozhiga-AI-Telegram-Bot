@@ -73,7 +73,7 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .chips button{border:1px solid var(--line);background:#1c1233;border-radius:999px;padding:6px 10px;font-weight:700}
 .chips button.on{border-color:#b366ff;color:#fff}
-.back{border:0;background:transparent;color:var(--mut);font-weight:800;padding:0 0 8px}
+.back{position:relative;z-index:2;border:0;background:transparent;color:var(--mut);font-weight:800;padding:0 0 8px;min-height:36px}
 .gallery{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .tcats{display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;scrollbar-width:none}
 .tcats button{flex:0 0 auto;border:1px solid rgba(255,255,255,.16);background:transparent;color:var(--mut);border-radius:999px;padding:7px 12px;font-weight:700;font-size:13px}
@@ -88,7 +88,7 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .tcap{padding:10px 12px 12px}
 .tcap b{display:block;font-size:14px;line-height:1.3;font-weight:600}
 .tcap em{display:inline-block;margin-top:6px;font-style:normal;font-size:13px;font-weight:700;color:#00d4ff}
-.thero{position:relative;margin:-14px -14px 14px;height:min(52vh,420px);background:#07041a;overflow:hidden;border-radius:16px 16px 0 0}
+.thero{position:relative;z-index:1;margin:8px -14px 14px;height:min(52vh,420px);background:#07041a;overflow:hidden;border-radius:16px}
 .thero img{display:block;width:100%;height:100%;object-fit:cover;object-position:center top}
 .thero:after{content:'';position:absolute;left:0;right:0;bottom:0;height:80px;background:linear-gradient(transparent,#140c24)}
 .tile{padding:0;border:1px solid var(--line);background:#1c1233;border-radius:16px;overflow:hidden;text-align:left}

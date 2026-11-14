@@ -84,6 +84,10 @@ function menuAction(text, payload) {
     if (value === 'справка' || value === 'помощь') return 'help';
     if (value === 'рейтинг') return 'rate';
     if (value === 'бот ии') return 'models';
+    if (value === 'назад') return 'pay_back';
+    if (value === 'отмена') return 'opt_cancel';
+    if (value === 'меню') return 'hello';
+    if (value === 'к разделам') return 'models';
     return '';
 }
 
@@ -198,7 +202,7 @@ function sectionKeyboard() {
         if (groups[i + 1]) row.push(textButton(catalog.GROUPS[groups[i + 1]], { g: groups[i + 1] }));
         rows.push(row);
     }
-    rows.push([textButton('Меню', { a: 'hello' }, 'primary')]);
+    rows.push([textButton('Назад', { a: 'pay_back' }, 'secondary')]);
     return asBoard(rows);
 }
 
@@ -206,7 +210,7 @@ function modelKeyboard(group) {
     const rows = catalog.modelsByGroup(group, 'vk').slice(0, 9).map(model => [
         textButton(`${model.short} · ${catalog.priceLabel(model)}`, { m: model.key })
     ]);
-    rows.push([textButton('К разделам', { a: 'models' }, 'primary')]);
+    rows.push([textButton('Назад', { a: 'models' }, 'secondary')]);
     return asBoard(rows);
 }
 
@@ -257,7 +261,7 @@ function choiceKeyboard(model, job) {
     const step = nextChoice(model, job);
     if (!step) return null;
     const rows = step.rows.map(row => row.map(item => textButton(item.label, item.payload)));
-    rows.push([textButton('Отмена', { a: 'opt_cancel' }, 'secondary')]);
+    rows.push([textButton('Назад', { a: 'pay_back' }, 'secondary')]);
     return { text: step.text, keyboard: asBoard(rows) };
 }
 
@@ -628,14 +632,45 @@ async function holdMove(token, peerId, account, text, action) {
     return true;
 }
 
+async function goBack(token, peerId, account) {
+    const key = String(account);
+    const job = pendingJob.get(key);
+    if (job && (job.aspect || job.duration || job.quality)) {
+        if (job.aspect) job.aspect = '';
+        else if (job.duration) job.duration = 0;
+        else job.quality = '';
+        return askOrRun(token, peerId, account, job);
+    }
+    pendingJob.delete(key);
+    const pay = pendingPay.get(key);
+    if (pay && (pay.stage === 'email' || pay.stage === 'link')) {
+        pendingPay.delete(key);
+        return sendText(token, peerId, 'Выберите пакет внизу. «Назад» возвращает меню.', payKeyboard());
+    }
+    pendingPay.delete(key);
+    const move = pendingMove.get(key);
+    if (move && move.stage === 'confirm') {
+        move.stage = 'amount';
+        move.amount = 0;
+        return sendText(token, peerId, 'Напишите, сколько кредитов перенести. «Назад» — к номеру Telegram.', payLockKeyboard());
+    }
+    if (move && move.stage === 'amount') {
+        move.stage = 'who';
+        return sendText(token, peerId, 'Напишите номер или @имя в Telegram. «Назад» возвращает меню.', payLockKeyboard());
+    }
+    pendingMove.delete(key);
+    return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId));
+}
+
 async function reply(token, peerId, account, text, payload) {
     const action = menuAction(text, payload);
-    if (action === 'pay_back' || action === 'opt_cancel') {
+    if (action === 'opt_cancel') {
         pendingPay.delete(String(account));
         pendingMove.delete(String(account));
         pendingJob.delete(String(account));
-        return sendText(token, peerId, action === 'opt_cancel' ? 'Запрос отменён.' : 'Вы в меню.', mainMenu(peerId));
+        return sendText(token, peerId, 'Запрос отменён.', mainMenu(peerId));
     }
+    if (action === 'pay_back') return goBack(token, peerId, account);
     if (action === 'quality' || action === 'duration' || action === 'size') {
         const job = pendingJob.get(String(account));
         if (!job) return sendText(token, peerId, 'Запрос устарел. Напишите его ещё раз.', mainMenu(peerId));

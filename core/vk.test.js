@@ -58,7 +58,10 @@ test('меню ВК открывает кабинет и не считает к�
     const sections = JSON.parse(vk.sectionKeyboard());
     assert.equal(sections.inline, false);
     assert.ok(sections.buttons.length <= 10);
-    assert.equal(sections.buttons.at(-1)[0].action.label, 'Меню');
+    assert.equal(sections.buttons.at(-1)[0].action.label, 'Назад');
+    assert.equal(vk.menuAction('Назад'), 'pay_back');
+    assert.equal(vk.menuAction('Отмена'), 'opt_cancel');
+    assert.equal(vk.menuAction('К разделам'), 'models');
     assert.equal(vk.menuAction('Картинки', { g: 'image' }), 'group');
     assert.equal(vk.menuAction('Чат', { m: 'flash' }), 'model');
     assert.equal(vk.menuAction('Пополнить'), 'pay');
