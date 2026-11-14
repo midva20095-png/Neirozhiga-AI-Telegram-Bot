@@ -20,6 +20,18 @@ test('ответ загрузки картинки готовится для с�
     assert.equal(Buffer.from(fields.image, 'base64').toString(), '{"hash":"abc","server":"1"}');
 });
 
+test('обложка для телефона держит короткое слово по центру', async () => {
+    for (const name of ['chat', 'rate', 'site']) {
+        const svg = widget.coverSvg(name);
+        assert.match(svg, /font-size="92"/);
+        assert.match(svg, /text-anchor="middle"/);
+        const cover = await widget.paintCover(name);
+        const meta = await sharp(cover).metadata();
+        assert.equal(meta.width, 1530);
+        assert.equal(meta.height, 384);
+    }
+});
+
 test('картинка обрезается под обложку ВК', async () => {
     const source = await sharp({
         create: { width: 40, height: 40, channels: 3, background: { r: 20, g: 10, b: 40 } }
