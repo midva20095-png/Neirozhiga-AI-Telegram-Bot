@@ -100,9 +100,14 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .tile .dl,.tile .ch{display:block;width:100%;border:0;background:transparent;color:#00d4ff;font-weight:800;text-align:left;padding:0 10px 8px}
 .tile .ch{color:#d7b0ff;padding-bottom:10px}
 .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.2)}
-.doors{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
-.doors button{min-height:92px;border:0;border-radius:18px;background:#1c1233;color:#fff;font-weight:800;font-size:16px}
-.doors button.on{background:linear-gradient(135deg,#b366ff,#ff2d95)}
+.banners{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.banner{position:relative;display:block;width:100%;padding:0;border:0;border-radius:18px;overflow:hidden;background:#140c24;cursor:pointer;transition:transform .18s ease}
+.banner:active{transform:scale(.98)}
+.banner img{display:block;width:100%;height:86px;object-fit:cover;object-position:left center}
+.banner span{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:#fff;color:#111;border-radius:999px;padding:8px 14px;font-weight:800;font-size:14px}
+.sub{width:100%;margin-top:10px;min-height:52px;border:0;border-radius:16px;background:#1c1233;color:#fff;font-weight:800}
+.sub.on{background:linear-gradient(135deg,#b366ff,#ff2d95)}
+.setup{margin-top:14px}
 input{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1233;padding:12px;outline:none;margin-top:8px}
 </style>
 </head>
@@ -141,6 +146,7 @@ let tplCat='', tplQuery='';
 const TCAT = {image:'Картинки', fix:'Улучшение', chat:'Текст', video:'Видео', audio:'Голос'};
 const TMARK = {image:'🪄', fix:'✨', chat:'✍️', video:'🎬', audio:'🎙'};
 let pickedQuality=null, pickedDuration=null, pickedAspect=null;
+const widgetPics = { chat: '', rate: '', site: '' };
 
 function tg(){ return window.Telegram && window.Telegram.WebApp; }
 function openOut(url){
@@ -313,47 +319,93 @@ function vkAdmin(){
   const role = new URLSearchParams(location.search).get('vk_viewer_group_role') || '';
   return role === 'admin' || role === 'editor';
 }
-function pinWidget(){
-  const groupId = new URLSearchParams(location.search).get('vk_group_id') || '230706467';
-  const app = 'https://vk.com/app54895627_-' + groupId;
-  const code = 'return {"title":"НейроЯга","rows":[' +
-    '{"title":"Чат","button":"Написать","button_url":"https://vk.me/tochki_linii","title_url":"https://vk.me/tochki_linii"},' +
-    '{"title":"Рейтинг","button":"Открыть","button_url":"' + app + '#rate","title_url":"' + app + '#rate"},' +
-    '{"title":"Сайт","button":"Открыть","button_url":"' + app + '#site","title_url":"' + app + '#site"},' +
-    '{"title":"Подписка","button":"Включить","button_url":"' + app + '#sub","title_url":"' + app + '#sub"}' +
-  ']};';
-  const send = function(msg){
-    const seen = [];
-    const put = function(win){
-      try {
-        if (!win || win === window || seen.indexOf(win) >= 0) return;
-        seen.push(win);
-        win.postMessage(msg, '*');
-      } catch (e) {}
-    };
-    put(parent);
-    try { put(parent.parent); } catch (e) {}
-    try { put(window.top); } catch (e) {}
-  };
-  send({ type: 'ny-widget' });
-  send({ handler: 'VKWebAppAddToCommunity', params: {}, type: 'vk-connect', sendTime: Date.now() });
-  setTimeout(function(){
-    send({ handler: 'VKWebAppShowCommunityWidgetPreviewBox', params: { group_id: Number(groupId), type: 'compact_list', code: code }, type: 'vk-connect', sendTime: Date.now() });
-  }, 700);
+function askCommunityToken(){
+  return new Promise(function(resolve, reject){
+    const timer = setTimeout(function(){
+      window.removeEventListener('message', onMsg);
+      reject(new Error('ВК не открыл разрешение. Откройте приложение из сообщества.'));
+    }, 20000);
+    function onMsg(event){
+      const data = event.data || {};
+      if (data.type === 'ny-community-token' && data.token) {
+        clearTimeout(timer);
+        window.removeEventListener('message', onMsg);
+        resolve(data.token);
+      }
+      if (data.type === 'ny-community-token-fail') {
+        clearTimeout(timer);
+        window.removeEventListener('message', onMsg);
+        reject(new Error('Разрешите кнопки сообщества в окне ВК.'));
+      }
+    }
+    window.addEventListener('message', onMsg);
+    parent.postMessage({ type: 'ny-community-token' }, '*');
+  });
 }
+function coverCode(groupId, ids){
+  const app = 'https://vk.com/app54895627_-' + groupId;
+  const rows = [
+    { title: 'Чат', button: 'Написать', cover_id: ids.chat, url: 'https://vk.me/tochki_linii', button_url: 'https://vk.me/tochki_linii' },
+    { title: 'Рейтинг', button: 'Открыть', cover_id: ids.rate, url: app + '#rate', button_url: app + '#rate' },
+    { title: 'Сайт', button: 'Открыть', cover_id: ids.site, url: app + '#site', button_url: app + '#site' }
+  ];
+  return 'return ' + JSON.stringify({ title: 'НейроЯга', rows }) + ';';
+}
+async function placeCovers(){
+  const msg = document.getElementById('submsg');
+  const pin = document.getElementById('door-pin');
+  if (pin) pin.disabled = true;
+  if (msg) msg.textContent = 'Загружаю картинки…';
+  try {
+    const token = await askCommunityToken();
+    const ids = {};
+    const keys = ['chat', 'rate', 'site'];
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      const r = await fetch('/api/vk/widget-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: key, token: token, image: widgetPics[key] || '' })
+      });
+      const d = await r.json();
+      if (!r.ok || !d.id) throw new Error(d.error || 'Картинка не загрузилась');
+      ids[key] = d.id;
+    }
+    const groupId = new URLSearchParams(location.search).get('vk_group_id') || '230706467';
+    parent.postMessage({ type: 'ny-widget-show', group_id: Number(groupId), code: coverCode(groupId, ids) }, '*');
+    if (msg) msg.textContent = 'Подтвердите кнопки в окне ВК.';
+  } catch (e) {
+    if (msg) msg.textContent = e.message || 'Не удалось поставить кнопки.';
+  } finally {
+    if (pin) pin.disabled = false;
+  }
+}
+window.addEventListener('message', function(event){
+  const data = event.data || {};
+  if (data.type !== 'ny-widget-fail') return;
+  const note = document.getElementById('submsg');
+  if (note) note.textContent = 'ВК не открыл окно кнопок. Откройте приложение из сообщества под администратором.';
+});
 function viewMenu(){
   const mail = !!(me && me.mail);
-  const pin = vkAdmin()
-    ? '<button class="btn" id="door-pin" type="button">Обновить кнопки на странице</button>'
+  const cards = [
+    ['chat', 'Чат', 'Написать'],
+    ['rate', 'Рейтинг', 'Открыть'],
+    ['site', 'Сайт', 'Открыть']
+  ].map(function(row){
+    const src = widgetPics[row[0]] || ('/widget/' + row[0] + '.jpg');
+    return '<button type="button" class="banner" id="door-'+row[0]+'"><img alt="'+row[1]+'" src="'+src+'"><span>'+row[2]+'</span></button>';
+  }).join('');
+  const setup = vkAdmin()
+    ? '<div class="setup"><p class="hint">Эти картинки встанут на страницу сообщества. Можно заменить свою.</p>'+
+      '<label class="filebtn">Своя картинка для чата<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="chat"></label>'+
+      '<label class="filebtn">Своя картинка для рейтинга<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="rate"></label>'+
+      '<label class="filebtn">Своя картинка для сайта<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="site"></label>'+
+      '<button class="btn" id="door-pin" type="button">Поставить на страницу</button></div>'
     : '';
-  return '<div class="card"><div class="now">НейроЯга</div>'+
-    pin+
-    '<div class="doors">'+
-    '<button type="button" id="door-chat">Чат ИИ</button>'+
-    '<button type="button" id="door-rate">Рейтинг</button>'+
-    '<button type="button" id="door-site">На сайт</button>'+
-    '<button type="button" id="door-sub" class="'+(mail?'on':'')+'">'+(mail?'Вы подписаны':'Подписаться')+'</button>'+
-    '</div><p id="submsg" class="hint"></p></div>';
+  return '<div class="card"><div class="now">НейроЯга</div><div class="banners">'+cards+'</div>'+
+    '<button type="button" id="door-sub" class="sub'+(mail?' on':'')+'">'+(mail?'Вы подписаны':'Подписаться')+'</button>'+
+    setup+'<p id="submsg" class="hint"></p></div>';
 }
 function viewGen(){
   const cur = (me&&me.current_model)||(cfg&&cfg.default_model)||'flash';
@@ -563,13 +615,33 @@ async function subscribeMail(on){
   }
 }
 function toggleMail(){ subscribeMail(!(me && me.mail)); }
+function onCoverFile(input){
+  const key = input.getAttribute('data-cover');
+  const file = input.files && input.files[0];
+  const msg = document.getElementById('submsg');
+  if (!file || !key) return;
+  if (file.size > 6 * 1024 * 1024) {
+    if (msg) msg.textContent = 'Картинка слишком большая.';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(){
+    const value = String(reader.result || '');
+    if (!/^data:image\/(?:jpeg|jpg|png|webp);base64,[a-z0-9+/=\s]+$/i.test(value)) {
+      if (msg) msg.textContent = 'Нужна картинка JPEG, PNG или WebP.';
+      return;
+    }
+    widgetPics[key] = value;
+    draw();
+  };
+  reader.readAsDataURL(file);
+}
 function bind(){
   const pin = document.getElementById('door-pin');
-  if (pin) pin.onclick = function(){
-    pinWidget();
-    const msg = document.getElementById('submsg');
-    if (msg) msg.textContent = 'Подтвердите кнопки в окне ВК.';
-  };
+  if (pin) pin.onclick = placeCovers;
+  document.querySelectorAll('[data-cover]').forEach(function(input){
+    input.onchange = function(){ onCoverFile(input); };
+  });
   const chat = document.getElementById('door-chat');
   if (chat) chat.onclick = function(){ openOut('https://vk.me/tochki_linii'); };
   const rate = document.getElementById('door-rate');

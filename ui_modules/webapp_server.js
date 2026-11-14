@@ -9,6 +9,7 @@ const transfer = require('../core/transfer');
 const channel = require('../core/channel');
 const share = require('../core/share');
 const vk = require('../core/vk');
+const widget = require('../core/vk-widget');
 const bridge = require('../core/bridge');
 const activity = require('../core/activity');
 
@@ -132,6 +133,30 @@ function startWebApp() {
             });
         }
         res.json({ tk: auth.signUserId(account) });
+    });
+
+    app.post('/api/vk/widget-image', async (req, res) => {
+        try {
+            const name = String((req.body && req.body.name) || '');
+            const token = String((req.body && req.body.token) || '');
+            const image = String((req.body && req.body.image) || '');
+            let buffer;
+            if (image) {
+                const match = image.match(/^data:image\/(?:jpeg|jpg|png|webp);base64,([a-z0-9+/=\s]+)$/i);
+                if (!match) return res.status(400).json({ error: 'Нужна картинка JPEG, PNG или WebP.' });
+                buffer = Buffer.from(match[1].replace(/\s/g, ''), 'base64');
+                if (buffer.length < 32 || buffer.length > 6 * 1024 * 1024) {
+                    return res.status(400).json({ error: 'Картинка слишком большая.' });
+                }
+            } else {
+                buffer = await widget.defaultCover(name);
+            }
+            const jpeg = await widget.fitCover(buffer);
+            const id = await widget.uploadCover(token, jpeg);
+            res.json({ ok: true, id });
+        } catch (e) {
+            res.status(400).json({ error: e.message || 'Не удалось загрузить картинку.' });
+        }
     });
 
     app.get('/api/vk/me', async (req, res) => {

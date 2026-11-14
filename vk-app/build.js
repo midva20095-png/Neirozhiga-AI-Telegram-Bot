@@ -16,8 +16,6 @@ p{margin:24px;text-align:center}
 </head>
 <body>
 <p id="wait">Открываю кабинет…</p>
-<button id="pin" type="button" style="display:none;position:fixed;z-index:5;top:10px;left:10px;right:10px;border:0;border-radius:14px;padding:12px;font-weight:700;color:#fff;background:#6d28d9">Обновить кнопки на странице</button>
-<p id="pinnote" style="display:none;position:fixed;z-index:5;top:62px;left:10px;right:10px;margin:0;text-align:center"></p>
 <script>
 const API = ${JSON.stringify(api)};
 function vkSend(handler, params){
@@ -48,40 +46,21 @@ function queryFrom(data){
   });
   return '?' + q.toString();
 }
-function widgetCode(groupId){
-  const app = 'https://vk.com/app54895627_-' + groupId;
-  return 'return {"title":"НейроЯга","rows":[' +
-    '{"title":"Чат","button":"Написать","button_url":"https://vk.me/tochki_linii","title_url":"https://vk.me/tochki_linii"},' +
-    '{"title":"Рейтинг","button":"Открыть","button_url":"' + app + '#rate","title_url":"' + app + '#rate"},' +
-    '{"title":"Сайт","button":"Открыть","button_url":"' + app + '#site","title_url":"' + app + '#site"},' +
-    '{"title":"Подписка","button":"Включить","button_url":"' + app + '#sub","title_url":"' + app + '#sub"}' +
-  ']};';
+function tellCabinet(msg){
+  const frame = document.querySelector('iframe');
+  if (frame && frame.contentWindow) frame.contentWindow.postMessage(msg, '*');
 }
-let armWidget = false;
-function showWidget(groupId){
+function showCovers(groupId, code){
   const id = String(groupId || here.get('vk_group_id') || '230706467');
+  const body = String(code || '');
+  if (body.indexOf('cover_id') < 0 || body.length > 12000) return;
   vkSend('VKWebAppShowCommunityWidgetPreviewBox', {
     group_id: Number(id),
-    type: 'compact_list',
-    code: widgetCode(id)
+    type: 'cover_list',
+    code: body
   });
 }
-function installWidget(){
-  armWidget = true;
-  vkSend('VKWebAppAddToCommunity');
-  setTimeout(function(){
-    if (!armWidget) return;
-    armWidget = false;
-    showWidget();
-  }, 1600);
-}
 const here = new URLSearchParams(location.search);
-const role = here.get('vk_viewer_group_role') || '';
-if (here.get('vk_group_id') && (role === 'admin' || role === 'editor')) {
-  const pin = document.getElementById('pin');
-  pin.style.display = 'block';
-  pin.onclick = installWidget;
-}
 if ((here.get('sign') && here.get('vk_user_id')) || /(^|[?#&])tk=/.test(location.hash)) {
   openCabinet(location.search, location.hash);
 }
@@ -93,18 +72,31 @@ function payHost(url){
 }
 window.addEventListener('message', function(event){
   const data = event.data || {};
-  if (data.type === 'ny-widget') { installWidget(); return; }
-  const bridgeType = (data.data && data.data.type) || data.handler || '';
-  const bridgeData = (data.data && data.data.data) || data.params || {};
-  if (armWidget && (bridgeType === 'VKWebAppAddToCommunityResult' || bridgeType === 'VKWebAppAddToCommunityFailed')) {
-    armWidget = false;
-    showWidget(bridgeData.group_id);
+  if (data.type === 'ny-community-token') {
+    vkSend('VKWebAppGetCommunityToken', {
+      app_id: 54895627,
+      group_id: Number(here.get('vk_group_id') || '230706467'),
+      scope: 'app_widget'
+    });
+    return;
+  }
+  if (data.type === 'ny-widget-show') { showCovers(data.group_id, data.code); return; }
+  let bridgeType = (data.data && data.data.type) || data.handler || '';
+  let bridgeData = (data.data && data.data.data) || data.params || {};
+  if (!bridgeType && String(data.type || '').indexOf('VKWebApp') === 0) {
+    bridgeType = data.type;
+    bridgeData = data.data || {};
+  }
+  if (bridgeType === 'VKWebAppGetCommunityTokenResult' && bridgeData.access_token) {
+    tellCabinet({ type: 'ny-community-token', token: bridgeData.access_token });
+    return;
+  }
+  if (bridgeType === 'VKWebAppGetCommunityTokenFailed') {
+    tellCabinet({ type: 'ny-community-token-fail' });
     return;
   }
   if (String(bridgeType).indexOf('WidgetPreviewBoxFailed') >= 0) {
-    const note = document.getElementById('pinnote');
-    note.style.display = 'block';
-    note.textContent = 'ВК не открыл окно кнопок. Откройте приложение из сообщества под администратором.';
+    tellCabinet({ type: 'ny-widget-fail' });
     return;
   }
   if (data.type === 'ny-open' && /^https:\\/\\//.test(String(data.url || ''))) {
