@@ -185,7 +185,52 @@ async function initDB() {
       updated_at TIMESTAMP DEFAULT NOW()
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vk_donut_survey (
+      user_id BIGINT NOT NULL,
+      group_id BIGINT NOT NULL,
+      step INTEGER NOT NULL DEFAULT 0,
+      gaps JSONB NOT NULL DEFAULT '[]',
+      updated_at TIMESTAMP DEFAULT NOW(),
+      PRIMARY KEY (user_id, group_id)
+    )
+  `);
   console.log('✅ Таблица users готова (PostgreSQL)');
+}
+
+function surveyGaps(value) {
+  if (Array.isArray(value)) return value.map(Number).filter(item => Number.isInteger(item) && item >= 0);
+  if (typeof value === 'string') {
+    try { return surveyGaps(JSON.parse(value)); } catch (e) { return []; }
+  }
+  return [];
+}
+
+async function getDonutSurvey(userId, groupId) {
+  const res = await pool.query(
+    'SELECT step, gaps FROM vk_donut_survey WHERE user_id = $1 AND group_id = $2',
+    [String(userId), String(groupId)]
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+  return { step: Number(row.step) || 0, gaps: surveyGaps(row.gaps) };
+}
+
+async function saveDonutSurvey(userId, groupId, step, gaps) {
+  await pool.query(
+    `INSERT INTO vk_donut_survey (user_id, group_id, step, gaps, updated_at)
+     VALUES ($1, $2, $3, $4::jsonb, NOW())
+     ON CONFLICT (user_id, group_id)
+     DO UPDATE SET step = $3, gaps = $4::jsonb, updated_at = NOW()`,
+    [String(userId), String(groupId), Math.max(0, Number(step) || 0), JSON.stringify(surveyGaps(gaps))]
+  );
+}
+
+async function clearDonutSurvey(userId, groupId) {
+  await pool.query(
+    'DELETE FROM vk_donut_survey WHERE user_id = $1 AND group_id = $2',
+    [String(userId), String(groupId)]
+  );
 }
 
 async function note(kind, message) {
@@ -908,5 +953,8 @@ module.exports = {
   peekGiga,
   consumeGiga,
   releaseGiga,
+  getDonutSurvey,
+  saveDonutSurvey,
+  clearDonutSurvey,
   pool,
 };

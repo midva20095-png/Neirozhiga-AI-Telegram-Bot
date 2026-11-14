@@ -205,4 +205,4 @@ async function searchPosts(query) {
     });
 }
 
-module.exports = { overview, reply, searchPosts, commentAnswer, looksLikeLesson, lessonNote, JOIN_URL, SITE_URL, ASK_URL };
+module.exports = { overview, reply, searchPosts, commentAnswer, looksLikeLesson, lessonNote, LESSONS, JOIN_URL, SITE_URL, ASK_URL };

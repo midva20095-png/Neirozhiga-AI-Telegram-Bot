@@ -10,6 +10,7 @@ const auth = require('./auth');
 const activity = require('./activity');
 const audit = require('./vk-audit');
 const club = require('./vk-club');
+const donut = require('./vk-donut');
 
 const API = 'https://api.vk.com/method';
 const VERSION = '5.199';
@@ -476,6 +477,14 @@ async function enableActivity(token, groupId) {
             console.error(`ВК ${groupId}: у ключа нет права «Стена». Комментарии от имени сообщества ВК не примет. Сейчас у ключа: ${names.join(', ')}.`);
         }
     } catch (e) {}
+    if (!auditHere(groupId)) return;
+    try {
+        await call(token, 'groups.setLongPollSettings', Object.assign({}, params, { donut_subscription_create: '1' }));
+        console.log(`ВК ${groupId}: событие доната donut_subscription_create.`);
+    } catch (error) {
+        const code = Number(error && error.code);
+        console.error(`ВК ${groupId}: событие доната не включилось${code ? ` (${code})` : ''}.`);
+    }
 }
 
 const reactionSeen = new Map();
@@ -1080,9 +1089,14 @@ async function reply(token, peerId, account, text, payload, groupId) {
         pendingJob.delete(String(account));
         pendingAudit.delete(String(account));
         pendingClub.delete(String(account));
+        try { await db.clearDonutSurvey(account, groupId); } catch (error) {}
         return sendText(token, peerId, 'Запрос отменён.', mainMenu(peerId));
     }
-    if (action === 'pay_back') return goBack(token, peerId, account);
+    if (action === 'pay_back') {
+        try { await db.clearDonutSurvey(account, groupId); } catch (error) {}
+        return goBack(token, peerId, account);
+    }
+    if (await holdDonutSurvey(token, peerId, account, text, action, payload, groupId)) return;
     if (action === 'quality' || action === 'duration' || action === 'size') {
         const job = pendingJob.get(String(account));
         if (!job) return sendText(token, peerId, 'Запрос устарел. Напишите его ещё раз.', mainMenu(peerId));
@@ -1397,9 +1411,75 @@ function watchWeeklyRating() {
     tick();
 }
 
+function surveyKeyboard() {
+    return JSON.stringify({
+        one_time: false,
+        buttons: [
+            [textButton('Да', { a: 'survey', y: 1 }, 'positive'), textButton('Нет', { a: 'survey', y: 0 }, 'secondary')],
+            [textButton('Назад', { a: 'pay_back' }, 'secondary')]
+        ]
+    });
+}
+
+async function holdDonutSurvey(token, peerId, account, text, action, payload, groupId) {
+    if (!auditHere(groupId)) return false;
+    let survey = null;
+    try { survey = await db.getDonutSurvey(account, groupId); } catch (error) { return false; }
+    if (!survey) return false;
+    if (action && action !== 'survey' && action !== 'hello') return false;
+    pendingJob.delete(String(account));
+    pendingAudit.delete(String(account));
+    pendingClub.delete(String(account));
+    const answer = donut.parseAnswer(text, payload);
+    if (!answer) {
+        try {
+            if (survey.step === 0) await sendText(token, peerId, donut.welcomeText(), surveyKeyboard());
+            await sendText(token, peerId, donut.prompt(survey.step), surveyKeyboard());
+        } catch (error) {}
+        return true;
+    }
+    const gaps = survey.gaps.slice();
+    if (answer === 'no') gaps.push(survey.step);
+    const next = survey.step + 1;
+    try {
+        if (next >= donut.QUESTIONS.length) {
+            await db.clearDonutSurvey(account, groupId);
+            await sendParts(token, peerId, donut.resultText(gaps), mainMenu(peerId, groupId));
+            return true;
+        }
+        await db.saveDonutSurvey(account, groupId, next, gaps);
+    } catch (error) {
+        await sendText(token, peerId, 'Не сохранила ответ. Нажмите «Да» или «Нет» ещё раз.', surveyKeyboard());
+        return true;
+    }
+    await sendText(token, peerId, donut.prompt(next), surveyKeyboard());
+    return true;
+}
+
+async function handleDonutJoin(token, update, groupId) {
+    if (!auditHere(groupId)) return;
+    const joined = donut.readSubscription(update);
+    if (!joined) return;
+    const account = accountId(joined.userId);
+    if (!account) return;
+    let existing = null;
+    try { existing = await db.getDonutSurvey(account, groupId); } catch (error) { return; }
+    if (existing) return;
+    try {
+        await db.ensureUser(account, `vk:${joined.userId}`);
+        await db.saveDonutSurvey(account, groupId, 0, []);
+        await sendText(token, joined.userId, donut.welcomeText(), surveyKeyboard());
+        await sendText(token, joined.userId, donut.prompt(0), surveyKeyboard());
+    } catch (error) {
+        const code = Number(error && error.code);
+        console.error(`ВК ${groupId}: опрос доната не доставлен${code ? ` (${code})` : ''}.`);
+    }
+}
+
 async function handleUpdate(token, update, groupId) {
     try { await noteActivity(update, groupId); } catch (error) {}
     try { await handleCommunityWall(token, update, groupId); } catch (error) {}
+    try { await handleDonutJoin(token, update, groupId); } catch (error) {}
     const event = readEvent(update);
     if (event) {
         if (keepsQuiet(groupId, event.peerId)) return;
