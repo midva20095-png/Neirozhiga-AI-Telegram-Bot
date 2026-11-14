@@ -43,6 +43,21 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .pack button{border:0;border-radius:10px;padding:8px 14px;font-weight:800;color:#fff;background:var(--grad)}
 .tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;gap:4px;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:rgba(11,6,20,.96);border-top:1px solid var(--line);backdrop-filter:blur(8px)}
 .tabbar button{flex:1;border:0;background:transparent;color:var(--mut);font-size:11px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0}
+.tabbar:has(#tabrate:not([style*="display:none"])){gap:2px;padding-left:6px;padding-right:6px;overflow-x:auto}
+.tabbar:has(#tabrate:not([style*="display:none"])) button{min-width:52px;font-size:10px}
+.rank{display:flex;gap:10px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--line)}
+.rank:last-child{border-bottom:0}
+.rank .medal{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;background:#1c1233;flex:0 0 auto}
+.rank.top1 .medal{background:#c9a227;color:#1a1204}
+.rank.top2 .medal{background:#c5c9d6;color:#1a1204}
+.rank.top3 .medal{background:#c47a4a;color:#1a1204}
+.rank.me{background:rgba(179,102,255,.16);border-radius:14px;margin:4px 0;padding:10px}
+.rank .who{min-width:0}
+.rank .who b{display:block}
+.rank .who span{color:var(--mut);font-size:12px}
+.rank .pts{margin-left:auto;font-size:20px;font-weight:800;white-space:nowrap}
+.rules{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 4px}
+.rules span{border:1px solid var(--line);border-radius:999px;padding:4px 8px;font-size:12px;color:var(--mut)}
 .tabbar button .ic{font-size:19px}
 .tabbar button.on{color:#fff}
 .spin{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-3px;margin-right:6px}
@@ -110,6 +125,7 @@ input{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1
   <button data-t="hist"><span class="ic">🧾</span>История</button>
   <button data-t="top"><span class="ic">💳</span>Баланс</button>
   <button data-t="help"><span class="ic">💬</span>Помощь</button>
+  <button data-t="rate" id="tabrate" style="display:none"><span class="ic">🏆</span>Рейтинг</button>
 </div>
 <script>
 const KIND = {text:'Текст', image:'Картинка', video:'Видео', audio:'Музыка'};
@@ -243,6 +259,9 @@ async function load(){
   }
   if (pendingPkg) tab = 'top';
   document.getElementById('bal').textContent = (me.balance||0)+' кр';
+  const rateTab = document.getElementById('tabrate');
+  if (rateTab) rateTab.style.display = isVk() ? '' : 'none';
+  if (!isVk() && tab==='rate') tab = 'gen';
   draw();
 }
 function draw(){
@@ -262,6 +281,7 @@ function draw(){
   else if (tab==='tpl') box.innerHTML = viewTpl();
   else if (tab==='hist') box.innerHTML = viewHist();
   else if (tab==='top') box.innerHTML = viewTop();
+  else if (tab==='rate') { box.innerHTML = '<div class="card" id="ratebox"><p>Считаю баллы…</p></div>'; loadRating(); }
   else box.innerHTML = viewHelp();
   bind();
 }
@@ -768,6 +788,35 @@ async function sendSupport(){
     if (!r.ok || d.error) throw new Error(d.error||'Ошибка');
     if (ta) ta.value=''; if (ok) ok.textContent='Отправлено! Ответ придёт в чат бота.';
   } catch(e){ if (ok) ok.textContent='Не удалось отправить: '+e.message; }
+}
+function renderRating(d){
+  const rows = d.rows || [];
+  const mine = d.mine;
+  const list = rows.map(function(row, i){
+    const place = i + 1;
+    const cls = 'rank'+(place<=3?' top'+place:'')+(mine && String(mine.userId)===String(row.userId)?' me':'');
+    return '<div class="'+cls+'"><div class="medal">'+place+'</div><div class="who"><b>'+esc(row.name)+'</b><span>лайки '+row.likes+' · комментарии '+row.comments+' · репосты '+row.reposts+' · бот '+row.bot+'</span></div><div class="pts">'+row.points+'</div></div>';
+  }).join('');
+  const own = mine
+    ? '<div class="now">Ваше место: <b>'+mine.place+'</b> · '+mine.points+' б.</div>'
+    : '<div class="now">Вас пока нет в списке этой недели.</div>';
+  return '<h3 style="margin:0 0 6px">Рейтинг</h3><div class="now">'+esc(d.week||'')+'</div>'+
+    '<div class="rules"><span>лайк 1</span><span>комментарий 2</span><span>репост 3</span><span>запрос 5</span></div>'+
+    '<p class="now">В понедельник баллы начинаются заново. Кредиты по этому списку начисляет администратор.</p>'+
+    own+(list||'<p class="empty">На этой неделе пока тихо. Лайкайте записи, комментируйте, делайте репосты и пишите боту.</p>');
+}
+async function loadRating(){
+  const box = document.getElementById('ratebox');
+  if (!box) return;
+  try {
+    const r = await fetch('/api/rating', { headers: authHeaders() });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Не удалось открыть рейтинг');
+    if (document.getElementById('ratebox')) document.getElementById('ratebox').innerHTML = renderRating(d);
+  } catch (e) {
+    const live = document.getElementById('ratebox');
+    if (live) live.innerHTML = '<p class="err">'+esc(e.message)+'</p>';
+  }
 }
 document.getElementById('tabs').onclick = function(e){
   const b = e.target.closest('button'); if (!b) return;

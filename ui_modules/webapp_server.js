@@ -10,6 +10,7 @@ const channel = require('../core/channel');
 const share = require('../core/share');
 const vk = require('../core/vk');
 const bridge = require('../core/bridge');
+const activity = require('../core/activity');
 
 // Определяет пользователя из initData Telegram или из подписанной ссылки.
 function resolveUserId(req) {
@@ -249,6 +250,23 @@ function startWebApp() {
     }
 
     // ---- Пользовательские эндпоинты ----
+    app.get('/api/rating', requireUser, async (req, res) => {
+        try {
+            const range = activity.weekRange(new Date());
+            if (Number(req.userId) >= 0) return res.json({ vk: false, week: range.label, rows: [], mine: null });
+            const rows = (await db.listWeekActivity(range.start)).map(activity.present);
+            const place = rows.findIndex(row => String(row.userId) === String(req.userId));
+            res.json({
+                vk: true,
+                week: range.label,
+                rows: rows.slice(0, 20),
+                mine: place >= 0 ? Object.assign({ place: place + 1 }, rows[place]) : null
+            });
+        } catch (e) {
+            res.status(500).json({ error: 'Не удалось открыть рейтинг.' });
+        }
+    });
+
     app.get('/api/me', requireUser, async (req, res) => {
         try {
             if (!(await requireChannel(req, res))) return;
@@ -625,6 +643,16 @@ function startWebApp() {
         await bot.telegram.sendMessage(id, text, markdown ? { parse_mode: 'Markdown' } : undefined);
         return true;
     }
+
+    app.get('/api/admin/vk/rating', requireAdmin, async (req, res) => {
+        try {
+            const range = activity.weekRange(new Date());
+            const rows = (await db.listWeekActivity(range.start)).map(activity.present);
+            res.json({ week: range.label, rows });
+        } catch (e) {
+            res.status(500).json({ error: 'Не удалось открыть рейтинг.' });
+        }
+    });
 
     app.get('/api/admin/stats', requireAdmin, async (req, res) => {
         try { res.json({ stats: await db.getStats(adminPlatform(req.query.platform) || undefined) }); }

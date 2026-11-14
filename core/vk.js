@@ -4,6 +4,7 @@ const bridge = require('./bridge');
 const catalog = require('./catalog');
 const gen = require('./generate');
 const auth = require('./auth');
+const activity = require('./activity');
 
 const API = 'https://api.vk.com/method';
 const VERSION = '5.199';
@@ -81,6 +82,7 @@ function menuAction(text, payload) {
     if (value === 'пополнить') return 'pay';
     if (value === 'перенос') return 'move';
     if (value === 'справка' || value === 'помощь') return 'help';
+    if (value === 'рейтинг') return 'rate';
     return '';
 }
 
@@ -125,6 +127,9 @@ function mainMenu(peerId) {
             [
                 { action: { type: 'text', label: 'Перенос', payload: '{"a":"move"}' }, color: 'primary' },
                 { action: { type: 'text', label: 'Справка', payload: '{"a":"help"}' }, color: 'secondary' }
+            ],
+            [
+                { action: { type: 'text', label: 'Рейтинг', payload: '{"a":"rate"}' }, color: 'secondary' }
             ]
         ]
     });
@@ -324,6 +329,26 @@ async function enableButtons(token, groupId) {
     }
 }
 
+async function enableActivity(token, groupId) {
+    try {
+        await call(token, 'groups.setLongPollSettings', {
+            group_id: groupId,
+            enabled: '1',
+            api_version: VERSION,
+            message_new: '1',
+            message_event: '1',
+            like_add: '1',
+            like_remove: '1',
+            wall_reply_new: '1',
+            wall_reply_delete: '1',
+            wall_reply_restore: '1',
+            wall_repost: '1'
+        });
+    } catch (error) {
+        console.error('ВК не включил события стены. Сообщения бота работают. Лайки и комментарии появятся в рейтинге после включения этих событий в сообществе.');
+    }
+}
+
 async function sendImage(token, peerId, buffer, caption) {
     const server = await call(token, 'photos.getMessagesUploadServer', { peer_id: String(peerId) });
     const form = new FormData();
@@ -386,6 +411,7 @@ const USER_HELP = [
     '1. Нажмите «Модели» и выберите раздел: текст, картинки, видео или музыка.',
     '2. Напишите запрос своими словами. Если у модели несколько цен или размеров, выберите их кнопками внизу. Если модель просит фото, прикрепите его к сообщению.',
     '3. Ответ придёт в этот чат. Картинки также лежат в кабинете, вкладка «История».',
+    'Баллы за лайки, комментарии, репосты и запросы — кнопка «Рейтинг». Кредиты по рейтингу начисляет администратор.',
     '',
     'Как пополнить',
     '1. Нажмите «Пополнить» внизу или на вкладке «Баланс» в кабинете.',
@@ -404,6 +430,7 @@ async function sendHelp(token, peerId) {
 async function openMenu(token, peerId, account, action) {
     if (action === 'hello' || action === 'balance') return sendStatus(token, peerId, account);
     if (action === 'help') return sendHelp(token, peerId);
+    if (action === 'rate') return sendRating(token, peerId, account);
     if (action === 'models') {
         const board = JSON.parse(sectionKeyboard());
         if (board.buttons.length < 2) return sendText(token, peerId, 'Сейчас нет доступных моделей.');
@@ -681,7 +708,30 @@ async function handleEvent(token, event) {
     return reply(token, event.peerId, account, '', payload);
 }
 
-async function handleUpdate(token, update) {
+async function noteActivity(update, groupId) {
+    const hit = activity.parseCommunityActivity(update, groupId);
+    if (!hit) return;
+    const account = accountId(hit.vkId);
+    if (!account) return;
+    if (hit.remove) {
+        await db.removeActivity(account, hit.kind, hit.objectKey);
+        return;
+    }
+    const saved = await db.recordActivity(account, hit.kind, hit.objectKey, activity.POINTS[hit.kind] || 0);
+    if (saved) await db.getUser(account);
+}
+
+async function sendRating(token, peerId, account) {
+    const range = activity.weekRange(new Date());
+    let rows = [];
+    try {
+        rows = (await db.listWeekActivity(range.start)).map(activity.present);
+    } catch (error) {}
+    await sendText(token, peerId, activity.formatRating(rows, account, range));
+}
+
+async function handleUpdate(token, update, groupId) {
+    try { await noteActivity(update, groupId); } catch (error) {}
     const event = readEvent(update);
     if (event) return handleEvent(token, event);
     const incoming = readIncoming(update);
@@ -741,6 +791,7 @@ async function poll(token, groupId) {
                 online = true;
                 console.log('ВК подключён, жду сообщения сообщества.');
                 await enableButtons(token, groupId);
+                await enableActivity(token, groupId);
             }
             for (;;) {
                 let res;
@@ -763,7 +814,7 @@ async function poll(token, groupId) {
                 const updates = Array.isArray(data.updates) ? data.updates : [];
                 for (const update of updates) {
                     try {
-                        await handleUpdate(token, update);
+                        await handleUpdate(token, update, groupId);
                     } catch (error) {
                         const code = Number(error && error.code);
                         console.error(`ВК: сообщение не обработано${code ? ` (${code})` : ''}.`);

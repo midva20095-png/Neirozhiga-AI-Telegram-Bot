@@ -146,6 +146,18 @@ async function initDB() {
       created_at TIMESTAMP DEFAULT NOW()
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vk_activity (
+      id SERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      kind TEXT NOT NULL,
+      object_key TEXT NOT NULL,
+      points INTEGER NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE (user_id, kind, object_key)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS vk_activity_week_idx ON vk_activity (created_at DESC)`);
   console.log('✅ Таблица users готова (PostgreSQL)');
 }
 
@@ -227,6 +239,46 @@ async function answerTicket(id, answer) {
     [id, String(answer).slice(0, 4000)]
   );
   return res.rows[0];
+}
+
+async function recordActivity(userId, kind, objectKey, points) {
+  const key = String(objectKey || '').slice(0, 160);
+  if (!key) return false;
+  const res = await pool.query(
+    `INSERT INTO vk_activity (user_id, kind, object_key, points)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (user_id, kind, object_key) DO NOTHING
+     RETURNING id`,
+    [String(userId), String(kind), key, Math.max(0, Math.round(Number(points) || 0))]
+  );
+  return res.rows.length > 0;
+}
+
+async function removeActivity(userId, kind, objectKey) {
+  await pool.query(
+    'DELETE FROM vk_activity WHERE user_id = $1 AND kind = $2 AND object_key = $3',
+    [String(userId), String(kind), String(objectKey || '').slice(0, 160)]
+  );
+}
+
+async function listWeekActivity(since) {
+  const res = await pool.query(
+    `SELECT a.user_id,
+            COALESCE(u.username, '') AS username,
+            SUM(a.points)::int AS points,
+            COUNT(*) FILTER (WHERE a.kind = 'like')::int AS likes,
+            COUNT(*) FILTER (WHERE a.kind = 'comment')::int AS comments,
+            COUNT(*) FILTER (WHERE a.kind = 'repost')::int AS reposts,
+            COUNT(*) FILTER (WHERE a.kind = 'bot')::int AS bot
+     FROM vk_activity a
+     LEFT JOIN users u ON u.user_id = a.user_id
+     WHERE a.created_at >= $1
+     GROUP BY a.user_id, u.username
+     ORDER BY points DESC, a.user_id
+     LIMIT 50`,
+    [since]
+  );
+  return res.rows;
 }
 
 async function listUserIds(platform) {
@@ -749,6 +801,9 @@ module.exports = {
   createTicket,
   listTickets,
   answerTicket,
+  recordActivity,
+  removeActivity,
+  listWeekActivity,
   listUserIds,
   getStats,
   findUser,

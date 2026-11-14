@@ -94,6 +94,7 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
   </div>
   <div class="tabs" id="tabs"></div>
   <div id="section-stats"></div>
+  <div id="section-rate"></div>
   <div id="section-users"></div>
   <div id="section-tpl"></div>
   <div id="section-models"></div>
@@ -163,16 +164,21 @@ function enterPlace(next){
   document.getElementById('panel').style.display='block';
   document.getElementById('placeTitle').textContent = placeName();
   document.getElementById('placeNote').textContent = place==='vk'
-    ? 'Клиенты, баланс, модели и шаблоны только ВКонтакте.'
+    ? 'Клиенты, баланс, модели и шаблоны только ВКонтакте. Рейтинг — вкладка рядом со статистикой.'
     : 'Клиенты, баланс, модели и шаблоны только Telegram.';
   renderTabs();
   go('stats');
 }
 
-function renderTabs(){
-  document.getElementById('tabs').innerHTML = TABS.map(([k,l])=>'<button class="'+(k===cur?'':'off')+'" onclick="go(\''+k+'\')">'+l+'</button>').join('');
+function currentTabs(){
+  const tabs = TABS.slice();
+  if (place==='vk') tabs.splice(1, 0, ['rate','Рейтинг']);
+  return tabs;
 }
-function go(k){ cur=k; renderTabs(); TABS.forEach(([t])=>{ document.getElementById('section-'+t).style.display = t===k?'block':'none'; }); loadSection(k); }
+function renderTabs(){
+  document.getElementById('tabs').innerHTML = currentTabs().map(([k,l])=>'<button class="'+(k===cur?'':'off')+'" onclick="go(\''+k+'\')">'+l+'</button>').join('');
+}
+function go(k){ cur=k; renderTabs(); currentTabs().forEach(([t])=>{ document.getElementById('section-'+t).style.display = t===k?'block':'none'; }); loadSection(k); }
 
 async function showPanel(){
   document.getElementById('login').style.display='none';
@@ -183,6 +189,7 @@ async function showPanel(){
 
 async function loadSection(k){
   if (k==='stats') return loadStats();
+  if (k==='rate') return loadRate();
   if (k==='users') return loadUsers('');
   if (k==='tpl') return loadTpl();
   if (k==='models') return loadModels();
@@ -191,6 +198,32 @@ async function loadSection(k){
   if (k==='tickets') return loadTickets('open');
   if (k==='broadcast') return renderBroadcast();
   if (k==='settings') return loadSettings();
+}
+
+async function loadRate(){
+  const el = document.getElementById('section-rate');
+  el.innerHTML = '<div class="card">Считаю баллы…</div>';
+  try {
+    const d = await api('/api/admin/vk/rating');
+    const rows = d.rows || [];
+    el.innerHTML = '<div class="card"><h3>Рейтинг · '+esc(d.week||'')+'</h3>'+
+      '<p class="note">Лайк — 1, комментарий — 2, репост — 3, запрос боту — 5. В понедельник список начинается заново. Кредиты сами не приходят: впишите сумму и начислите человеку.</p>'+
+      '<table><tr><th></th><th>Подписчик</th><th>Баллы</th><th>Лайки</th><th>Коммент.</th><th>Репосты</th><th>Бот</th><th>Кредиты</th></tr>'+
+      rows.map((row, i)=>'<tr><td>'+(i+1)+'</td><td>'+esc(row.name)+'</td><td class="ok">'+row.points+'</td><td>'+row.likes+'</td><td>'+row.comments+'</td><td>'+row.reposts+'</td><td>'+row.bot+'</td>'+
+        '<td><div class="row" style="margin:0"><input id="cr'+esc(row.userId)+'" type="number" placeholder="100"><button onclick="grantRate(\''+esc(row.userId)+'\')">Начислить</button></div><p id="crm'+esc(row.userId)+'" class="note"></p></td></tr>').join('')+
+      (rows.length?'':'<tr><td colspan="8" class="note">На этой неделе пока нет активности.</td></tr>')+
+      '</table></div>';
+  } catch (e) {
+    el.innerHTML = '<div class="card bad">'+esc(e.message)+'</div>';
+  }
+}
+async function grantRate(id){
+  const input = document.getElementById('cr'+id);
+  const delta = parseInt(input && input.value, 10);
+  const msg = document.getElementById('crm'+id);
+  if (!delta) { if (msg) msg.textContent = 'Укажите сумму'; return; }
+  const d = await api('/api/admin/balance',{method:'POST',body:JSON.stringify({userId:id,delta,reason:'Рейтинг · неделя'})});
+  if (msg) msg.textContent = d.ok ? ('Начислено. Баланс: '+d.balance) : (d.error||'Не получилось');
 }
 
 /* ---- Статистика ---- */
