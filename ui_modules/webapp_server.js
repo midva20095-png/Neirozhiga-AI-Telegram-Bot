@@ -692,6 +692,30 @@ function startWebApp() {
         res.json({ communities: vk.communityStatus() });
     });
 
+    app.get('/api/admin/vk/donut', requireAdmin, async (req, res) => {
+        try {
+            const groupId = vk.communityId(req.query.group);
+            const report = await vk.communityDonut(groupId);
+            const rows = await db.listDonutLog(report.id, 200);
+            const faces = await vk.attachFaces(rows.map(row => ({ user_id: String(-Number(row.user_id)) })));
+            const named = new Map(faces.map(row => [String(row.userId), row]));
+            const events = rows.map(row => {
+                const face = named.get(String(-Number(row.user_id))) || {};
+                return {
+                    userId: Number(row.user_id),
+                    name: face.name || `ВК ${row.user_id}`,
+                    photo: face.photo || '',
+                    kind: row.kind,
+                    amount: Number(row.amount) || 0,
+                    at: row.created_at
+                };
+            });
+            res.json({ report, events });
+        } catch (e) {
+            res.status(500).json({ error: 'Не удалось открыть донаты.' });
+        }
+    });
+
     app.get('/api/admin/vk/rating', requireAdmin, async (req, res) => {
         try {
             const range = activity.weekRange(new Date());

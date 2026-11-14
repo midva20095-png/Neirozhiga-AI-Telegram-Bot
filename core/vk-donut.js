@@ -83,12 +83,27 @@ function resultText(steps) {
     return `Уроки по темам, где вы ответили «нет»:\n\n${blocks.join('\n')}\n\nКредиты не списаны.`;
 }
 
-function readSubscription(update) {
-    if (!update || update.type !== 'donut_subscription_create') return null;
+const DONUT_KINDS = {
+    donut_subscription_create: 'create',
+    donut_subscription_prolonged: 'prolong',
+    donut_subscription_cancelled: 'cancel',
+    donut_subscription_expired: 'expire'
+};
+
+function readDonutEvent(update) {
+    const kind = DONUT_KINDS[update && update.type];
+    if (!kind) return null;
     const obj = update.object || {};
     const userId = Number(obj.user_id || obj.userId || obj.from_id);
     if (!Number.isInteger(userId) || userId <= 0) return null;
-    return { userId };
+    const amount = Number(obj.amount);
+    return { userId, kind, amount: Number.isFinite(amount) ? Math.round(amount) : 0 };
 }
 
-module.exports = { QUESTIONS, welcomeText, prompt, parseAnswer, lessonsFor, resultText, readSubscription };
+function readSubscription(update) {
+    const hit = readDonutEvent(update);
+    if (!hit || hit.kind !== 'create') return null;
+    return { userId: hit.userId };
+}
+
+module.exports = { QUESTIONS, welcomeText, prompt, parseAnswer, lessonsFor, resultText, readSubscription, readDonutEvent };

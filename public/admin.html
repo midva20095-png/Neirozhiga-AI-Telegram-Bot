@@ -96,6 +96,7 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
   <div class="tabs" id="tabs"></div>
   <div id="section-stats"></div>
   <div id="section-rate"></div>
+  <div id="section-donut"></div>
   <div id="section-users"></div>
   <div id="section-tpl"></div>
   <div id="section-models"></div>
@@ -118,6 +119,7 @@ let users=[], templates=[], modelsData=[], groupsData={}, providersData={}, pack
 const KINDNAME = {sys:'система', pay:'оплата', kie:'Kie', gen:'сбой', tpl:'шаблон'};
 let tplEdit = null, tplImage = '', tplImageTouched = false, modelsMsg = '';
 let rateGroup = sessionStorage.getItem('ny_admin_group') || '';
+let donutGroup = sessionStorage.getItem('ny_admin_donut') || '';
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function tgInit(){ try{ return (window.Telegram&&window.Telegram.WebApp&&window.Telegram.WebApp.initData)||''; }catch(e){ return ''; } }
@@ -166,7 +168,7 @@ function enterPlace(next){
   document.getElementById('panel').style.display='block';
   document.getElementById('placeTitle').textContent = placeName();
   document.getElementById('placeNote').textContent = place==='vk'
-    ? 'Два сообщества считаются отдельно: у каждого свой рейтинг. Клиенты, баланс, модели и рассылка общие.'
+    ? 'У каждого сообщества свой рейтинг и свой список донов. Клиенты, баланс, модели и рассылка общие.'
     : 'Клиенты, баланс, модели и шаблоны только Telegram.';
   renderTabs();
   go('stats');
@@ -174,7 +176,7 @@ function enterPlace(next){
 
 function currentTabs(){
   const tabs = TABS.slice();
-  if (place==='vk') tabs.splice(1, 0, ['rate','Рейтинг']);
+  if (place==='vk') tabs.splice(1, 0, ['rate','Рейтинг'], ['donut','Донат']);
   return tabs;
 }
 function rateFace(row){
@@ -197,6 +199,7 @@ async function showPanel(){
 async function loadSection(k){
   if (k==='stats') return loadStats();
   if (k==='rate') return loadRate();
+  if (k==='donut') return loadDonut();
   if (k==='users') return loadUsers('');
   if (k==='tpl') return loadTpl();
   if (k==='models') return loadModels();
@@ -222,13 +225,80 @@ function renderCommunities(list){
         (item.events?'<div class="note">События рейтинга: '+esc(item.events)+'</div>':'<div class="note">События рейтинга появятся после подключения.</div>')+
         (item.hint?'<div class="note">'+esc(item.hint)+'</div>':'')+
         '<div class="note">В чате: '+tools.join(', ')+'</div>'+
-        '<button class="ghost" type="button" style="margin-top:8px" onclick="openRate(\''+esc(item.id)+'\')">Рейтинг этого сообщества</button></div>';
+        '<div class="row" style="margin-top:8px"><button class="ghost" type="button" onclick="openRate(\''+esc(item.id)+'\')">Рейтинг</button><button class="ghost" type="button" onclick="openDonut(\''+esc(item.id)+'\')">Донаты</button></div></div>';
     }).join('')+'</div>';
 }
 function openRate(id){
   rateGroup = String(id||'');
   sessionStorage.setItem('ny_admin_group', rateGroup);
   go('rate');
+}
+function openDonut(id){
+  donutGroup = String(id||'');
+  sessionStorage.setItem('ny_admin_donut', donutGroup);
+  go('donut');
+}
+const DONUT_KIND = { create:'подписка', prolong:'продление', cancel:'отписка', expire:'срок истёк' };
+function donutWhen(value){
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+}
+async function loadDonut(){
+  const el = document.getElementById('section-donut');
+  el.innerHTML = '<div class="card">Смотрю донаты…</div>';
+  try {
+    const pack = await api('/api/admin/vk/communities');
+    const list = pack.communities || [];
+    if (!list.some(item => item.id === donutGroup)) donutGroup = list[0] ? list[0].id : '';
+    const data = await api('/api/admin/vk/donut?group='+encodeURIComponent(donutGroup));
+    if (data.error) throw new Error(data.error);
+    const report = data.report || {};
+    const events = data.events || [];
+    const donors = report.donors || [];
+    const donorIds = new Set(donors.map(item => Number(item.id)));
+    const left = [];
+    const seenLeft = new Set();
+    events.forEach(item => {
+      if (item.kind !== 'cancel' && item.kind !== 'expire') return;
+      if (donorIds.has(Number(item.userId)) || seenLeft.has(item.userId)) return;
+      seenLeft.add(item.userId);
+      left.push(item);
+    });
+    const joins = events.filter(item => item.kind === 'create').length;
+    const renews = events.filter(item => item.kind === 'prolong').length;
+    const drops = events.filter(item => item.kind === 'cancel' || item.kind === 'expire').length;
+    const others = report.donorError ? '—' : Math.max(0, (report.members || 0) - (report.donorTotal || 0));
+    const switcher = list.map(item => '<button type="button" class="'+(item.id===donutGroup?'':'ghost')+'" onclick="openDonut(\''+esc(item.id)+'\')">'+esc(communityTitle(item))+'</button>').join('');
+    const person = item => rateFace(item)+esc(item.name || ('ВК '+item.id));
+    el.innerHTML = '<div class="card"><h3>Донат · '+esc(report.name || communityTitle({id:report.id}))+'</h3><div class="row">'+switcher+'</div>'+
+      '<div class="grid">'+
+      '<div class="stat"><div class="n">'+(report.members||0)+'</div><div class="l">Участники</div></div>'+
+      '<div class="stat"><div class="n">'+(report.donorTotal||0)+'</div><div class="l">Доны сейчас</div></div>'+
+      '<div class="stat"><div class="n">'+others+'</div><div class="l">Не доны</div></div>'+
+      '<div class="stat"><div class="n">'+(report.weekPoints||0)+'</div><div class="l">Баллы · '+esc(report.week||'')+'</div></div>'+
+      '<div class="stat"><div class="n">'+(report.weekPeople||0)+'</div><div class="l">Людей в рейтинге</div></div>'+
+      '<div class="stat"><div class="n">'+joins+'</div><div class="l">Новые подписки</div></div>'+
+      '<div class="stat"><div class="n">'+renews+'</div><div class="l">Продления</div></div>'+
+      '<div class="stat"><div class="n">'+drops+'</div><div class="l">Отписки</div></div>'+
+      '</div>'+
+      (report.donorError?'<p class="bad">'+esc(report.donorError)+'</p>':'')+
+      '<p class="note">Доны — живой список ВК. Подписки и отписки копятся с этого обновления: более ранние отписки ВК списком не отдаёт. Не доны — участники минус текущие доны.</p></div>'+
+      '<div class="card"><h3>Доны сейчас</h3><table><tr><th>Человек</th><th>Номер</th></tr>'+
+      donors.map(item => '<tr><td>'+person({name:item.name, photo:item.photo})+'</td><td>'+esc(item.id)+'</td></tr>').join('')+
+      (donors.length?'':'<tr><td colspan="2" class="note">Сейчас донов нет или список ещё не открылся.</td></tr>')+
+      '</table></div>'+
+      '<div class="card"><h3>Отписались</h3><table><tr><th>Человек</th><th>Когда</th><th></th></tr>'+
+      left.map(item => '<tr><td>'+person(item)+'</td><td>'+esc(donutWhen(item.at))+'</td><td>'+esc(DONUT_KIND[item.kind]||item.kind)+'</td></tr>').join('')+
+      (left.length?'':'<tr><td colspan="3" class="note">Пока никто не отписался после запуска учёта.</td></tr>')+
+      '</table></div>'+
+      '<div class="card"><h3>Журнал подписок</h3><table><tr><th>Человек</th><th>Событие</th><th>Когда</th></tr>'+
+      events.map(item => '<tr><td>'+person(item)+'</td><td>'+esc(DONUT_KIND[item.kind]||item.kind)+(item.amount?' · '+item.amount+' ₽':'')+'</td><td>'+esc(donutWhen(item.at))+'</td></tr>').join('')+
+      (events.length?'':'<tr><td colspan="3" class="note">Новых событий доната ещё не было.</td></tr>')+
+      '</table></div>';
+  } catch (e) {
+    el.innerHTML = '<div class="card bad">'+esc(e.message)+'</div>';
+  }
 }
 async function loadRate(){
   const el = document.getElementById('section-rate');

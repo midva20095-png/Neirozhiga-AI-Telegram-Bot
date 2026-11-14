@@ -479,8 +479,13 @@ async function enableActivity(token, groupId) {
     } catch (e) {}
     if (!auditHere(groupId)) return;
     try {
-        await call(token, 'groups.setLongPollSettings', Object.assign({}, params, { donut_subscription_create: '1' }));
-        console.log(`ВК ${groupId}: событие доната donut_subscription_create.`);
+        await call(token, 'groups.setLongPollSettings', Object.assign({}, params, {
+            donut_subscription_create: '1',
+            donut_subscription_prolonged: '1',
+            donut_subscription_cancelled: '1',
+            donut_subscription_expired: '1'
+        }));
+        console.log(`ВК ${groupId}: события доната подписка, продление, отписка, окончание.`);
     } catch (error) {
         const code = Number(error && error.code);
         console.error(`ВК ${groupId}: событие доната не включилось${code ? ` (${code})` : ''}.`);
@@ -1458,22 +1463,99 @@ async function holdDonutSurvey(token, peerId, account, text, action, payload, gr
 
 async function handleDonutJoin(token, update, groupId) {
     if (!auditHere(groupId)) return;
-    const joined = donut.readSubscription(update);
-    if (!joined) return;
-    const account = accountId(joined.userId);
+    const hit = donut.readDonutEvent(update);
+    if (!hit) return;
+    try { await db.recordDonut(groupId, hit.userId, hit.kind, hit.amount); } catch (error) {}
+    if (hit.kind !== 'create') return;
+    const account = accountId(hit.userId);
     if (!account) return;
     let existing = null;
     try { existing = await db.getDonutSurvey(account, groupId); } catch (error) { return; }
     if (existing) return;
     try {
-        await db.ensureUser(account, `vk:${joined.userId}`);
+        await db.ensureUser(account, `vk:${hit.userId}`);
         await db.saveDonutSurvey(account, groupId, 0, []);
-        await sendText(token, joined.userId, donut.welcomeText(), surveyKeyboard());
-        await sendText(token, joined.userId, donut.prompt(0), surveyKeyboard());
+        await sendText(token, hit.userId, donut.welcomeText(), surveyKeyboard());
+        await sendText(token, hit.userId, donut.prompt(0), surveyKeyboard());
     } catch (error) {
         const code = Number(error && error.code);
         console.error(`ВК ${groupId}: опрос доната не доставлен${code ? ` (${code})` : ''}.`);
     }
+}
+
+function memberFace(item) {
+    if (!item || typeof item !== 'object') return null;
+    const id = Number(item.id);
+    if (!Number.isInteger(id) || id <= 0) return null;
+    const name = [item.first_name, item.last_name].map(part => String(part || '').trim()).filter(Boolean).join(' ');
+    const photo = String(item.photo_100 || item.photo_200 || '');
+    return { id, name: name || `ВК ${id}`, photo: /^https:\/\//i.test(photo) ? photo : '' };
+}
+
+async function collectDonors(token, groupId) {
+    const items = [];
+    let total = 0;
+    let offset = 0;
+    for (let page = 0; page < 3; page++) {
+        const pack = await call(token, 'groups.getMembers', {
+            group_id: String(groupId),
+            filter: 'donut',
+            fields: 'photo_100',
+            count: '1000',
+            offset: String(offset)
+        });
+        total = Number(pack && pack.count) || total;
+        const chunk = Array.isArray(pack && pack.items) ? pack.items : [];
+        chunk.forEach(item => {
+            if (typeof item === 'number') items.push({ id: item, name: `ВК ${item}`, photo: '' });
+            else {
+                const face = memberFace(item);
+                if (face) items.push(face);
+            }
+        });
+        offset += chunk.length;
+        if (!chunk.length || offset >= total) break;
+    }
+    return { total: total || items.length, items };
+}
+
+async function communityDonut(groupId) {
+    const id = String(groupId || '').replace(/\D/g, '');
+    const item = communityList().find(entry => entry.id === id);
+    const status = communityStatus().find(entry => entry.id === id) || null;
+    if (!item) return { id, name: '', members: 0, donors: [], donorTotal: 0, donorError: 'Сообщество не подключено.', status };
+    let name = item.name || (status && status.name) || '';
+    let members = 0;
+    try {
+        const info = await call(item.token, 'groups.getById', { group_id: id, fields: 'members_count' });
+        const group = info && (info.groups ? info.groups[0] : (Array.isArray(info) ? info[0] : null));
+        if (group) {
+            name = String(group.name || name);
+            members = Number(group.members_count) || 0;
+        }
+    } catch (error) {}
+    let donors = [];
+    let donorTotal = 0;
+    let donorError = '';
+    try {
+        const pack = await collectDonors(item.token, id);
+        donors = pack.items;
+        donorTotal = pack.total;
+    } catch (error) {
+        donorError = 'Список донов сейчас не открылся.';
+    }
+    const range = activity.weekRange(new Date());
+    let weekPeople = 0;
+    let weekPoints = 0;
+    try {
+        const rows = await db.listWeekActivity(range.start, id);
+        weekPeople = rows.length;
+        weekPoints = rows.reduce((sum, row) => sum + (Number(row.points) || 0), 0);
+    } catch (error) {}
+    return {
+        id, name, members, donors, donorTotal, donorError, status,
+        week: range.label, weekPeople, weekPoints
+    };
 }
 
 async function handleUpdate(token, update, groupId) {
@@ -1699,5 +1781,5 @@ async function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, photoAttachment, communityList, communityId, communityStatus, communityCommentAttempts, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, photoAttachment, communityList, communityId, communityStatus, communityDonut, communityCommentAttempts, USER_HELP
 };

@@ -195,6 +195,17 @@ async function initDB() {
       PRIMARY KEY (user_id, group_id)
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vk_donut_log (
+      id SERIAL PRIMARY KEY,
+      group_id BIGINT NOT NULL,
+      user_id BIGINT NOT NULL,
+      kind TEXT NOT NULL,
+      amount INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS vk_donut_log_group_idx ON vk_donut_log (group_id, id DESC)`);
   console.log('✅ Таблица users готова (PostgreSQL)');
 }
 
@@ -231,6 +242,39 @@ async function clearDonutSurvey(userId, groupId) {
     'DELETE FROM vk_donut_survey WHERE user_id = $1 AND group_id = $2',
     [String(userId), String(groupId)]
   );
+}
+
+async function recordDonut(groupId, userId, kind, amount) {
+  const allowed = new Set(['create', 'prolong', 'cancel', 'expire']);
+  const eventKind = allowed.has(kind) ? kind : '';
+  const id = String(groupId || '').replace(/\D/g, '');
+  const person = Number(userId);
+  if (!eventKind || !id || !Number.isInteger(person) || person <= 0) return false;
+  const recent = await pool.query(
+    `SELECT id FROM vk_donut_log
+     WHERE group_id = $1 AND user_id = $2 AND kind = $3 AND created_at > NOW() - INTERVAL '2 minutes'
+     LIMIT 1`,
+    [id, person, eventKind]
+  );
+  if (recent.rows.length) return false;
+  await pool.query(
+    'INSERT INTO vk_donut_log (group_id, user_id, kind, amount) VALUES ($1, $2, $3, $4)',
+    [id, person, eventKind, Math.max(0, Math.round(Number(amount) || 0))]
+  );
+  return true;
+}
+
+async function listDonutLog(groupId, limit) {
+  const id = String(groupId || '').replace(/\D/g, '');
+  const n = Math.min(200, Math.max(1, Number(limit) || 100));
+  if (!id) return [];
+  const res = await pool.query(
+    `SELECT user_id, kind, amount, created_at
+     FROM vk_donut_log WHERE group_id = $1
+     ORDER BY id DESC LIMIT $2`,
+    [id, n]
+  );
+  return res.rows;
 }
 
 async function note(kind, message) {
@@ -956,5 +1000,7 @@ module.exports = {
   getDonutSurvey,
   saveDonutSurvey,
   clearDonutSurvey,
+  recordDonut,
+  listDonutLog,
   pool,
 };
