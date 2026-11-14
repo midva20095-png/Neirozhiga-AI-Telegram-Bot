@@ -105,6 +105,7 @@ async function initDB() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS spent INTEGER DEFAULT 0`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gens INTEGER DEFAULT 0`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP DEFAULT NOW()`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS vk_group BIGINT NOT NULL DEFAULT 0`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS site_pulls (
       id TEXT PRIMARY KEY,
@@ -335,7 +336,7 @@ async function createTicket(userId, username, message, source) {
   return res.rows[0];
 }
 
-async function listTickets(status, platform) {
+async function listTickets(status, platform, groupId) {
   const params = [];
   const parts = [];
   if (status && status !== 'all') {
@@ -344,9 +345,20 @@ async function listTickets(status, platform) {
   }
   if (platform === 'vk') parts.push('user_id < 0');
   if (platform === 'tg') parts.push('user_id > 0');
+  const group = String(groupId || '').replace(/\D/g, '');
+  if (group) {
+    params.push(group);
+    parts.push(`user_id IN (SELECT user_id FROM users WHERE vk_group = $${params.length})`);
+  }
   const where = parts.length ? `WHERE ${parts.join(' AND ')}` : '';
   const res = await pool.query(`SELECT * FROM support_tickets ${where} ORDER BY id DESC LIMIT 200`, params);
   return res.rows;
+}
+
+async function rememberCommunity(userId, groupId) {
+  const group = String(groupId || '').replace(/\D/g, '');
+  if (!group) return;
+  await pool.query('UPDATE users SET vk_group = $2 WHERE user_id = $1', [String(userId), group]);
 }
 
 async function answerTicket(id, answer) {
@@ -448,8 +460,10 @@ async function listUserIds(platform, opts) {
   return res.rows.map(r => r.user_id);
 }
 
-async function getStats(platform) {
-  const where = platform === 'vk' ? 'user_id < 0' : platform === 'tg' ? 'user_id > 0' : 'TRUE';
+async function getStats(platform, groupId) {
+  const group = String(groupId || '').replace(/\D/g, '');
+  const groupSql = group ? ` AND vk_group = ${group}` : '';
+  const where = (platform === 'vk' ? 'user_id < 0' : platform === 'tg' ? 'user_id > 0' : 'TRUE') + groupSql;
   const q = await pool.query(`
     SELECT
       (SELECT COUNT(*)::int FROM users WHERE ${where}) AS users_total,
@@ -460,7 +474,7 @@ async function getStats(platform) {
       (SELECT COALESCE(SUM(gens),0)::int FROM users WHERE ${where}) AS gens_total,
       (SELECT COALESCE(SUM(spent),0)::int FROM users WHERE ${where}) AS spent_total,
       (SELECT COALESCE(SUM(delta),0)::int FROM history WHERE delta > 0 AND ${where}) AS credited_total,
-      (SELECT COUNT(*)::int FROM support_tickets WHERE status = 'open' ${platform === 'vk' ? 'AND user_id < 0' : platform === 'tg' ? 'AND user_id > 0' : ''}) AS tickets_open
+      (SELECT COUNT(*)::int FROM support_tickets WHERE status = 'open' ${platform === 'vk' ? 'AND user_id < 0' : platform === 'tg' ? 'AND user_id > 0' : ''} ${group ? `AND user_id IN (SELECT user_id FROM users WHERE vk_group = ${group})` : ''}) AS tickets_open
   `);
   return q.rows[0];
 }
@@ -961,6 +975,7 @@ module.exports = {
   recordGeneration,
   createTicket,
   listTickets,
+  rememberCommunity,
   answerTicket,
   recordActivity,
   removeActivity,

@@ -66,7 +66,7 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
 </head>
 <body>
 <h1>Админ <i>НейроЯга</i></h1>
-<p class="note">После входа выберите Telegram или ВКонтакте. У каждого свои клиенты, баланс, модели и шаблоны.</p>
+<p class="note">Сначала вход. Потом Telegram или ВКонтакте. Во ВК дальше выбирается одно сообщество.</p>
 
 <div class="card" id="login">
   <div class="row"><input id="pass" type="password" placeholder="Пароль администратора"><button onclick="login()">Войти</button></div>
@@ -75,10 +75,20 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
 
 <div class="card" id="door" style="display:none">
   <h3>Куда войти</h3>
-  <p class="note">Это разные кабинеты. Клиент из Telegram не попадёт в список ВК, и наоборот.</p>
+  <p class="note">Telegram и ВКонтакте не смешиваются.</p>
   <div class="door">
     <button type="button" onclick="enterPlace('tg')">Telegram</button>
     <button type="button" class="ghost" onclick="enterPlace('vk')">ВКонтакте</button>
+  </div>
+</div>
+
+<div class="card" id="communities" style="display:none">
+  <h3>Сообщество</h3>
+  <p class="note">Дальше откроется кабинет только выбранного сообщества.</p>
+  <div class="door" id="communityDoor"></div>
+  <div class="row">
+    <button type="button" onclick="enterShared()">Общее ВК: клиенты, модели, рассылка</button>
+    <button class="ghost" type="button" onclick="showDoor()">К выбору Telegram или ВК</button>
   </div>
 </div>
 
@@ -89,11 +99,12 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
       <p class="note" id="placeNote"></p>
     </div>
     <div class="row" style="margin:0;flex:0 0 auto">
-      <button class="ghost" type="button" onclick="showDoor()">Другой вход</button>
+      <button class="ghost" type="button" id="backPlace" onclick="place==='vk'?showCommunities():showDoor()">Другой вход</button>
       <button class="ghost" type="button" onclick="logout()">Выйти</button>
     </div>
   </div>
   <div class="tabs" id="tabs"></div>
+  <div id="section-home"></div>
   <div id="section-stats"></div>
   <div id="section-rate"></div>
   <div id="section-donut"></div>
@@ -114,6 +125,8 @@ const TABS = [
 ];
 let token = sessionStorage.getItem('ny_admin_token') || null;
 let place = sessionStorage.getItem('ny_admin_place') || '';
+let vkHome = sessionStorage.getItem('ny_admin_home') || '';
+let homes = [];
 let cur = 'stats';
 let users=[], templates=[], modelsData=[], groupsData={}, providersData={}, packagesData=[], generalData={};
 const KINDNAME = {sys:'система', pay:'оплата', kie:'Kie', gen:'сбой', tpl:'шаблон'};
@@ -147,37 +160,91 @@ async function login(){
   }catch(e){ document.getElementById('lerr').textContent = e.message; }
 }
 function logout(){
-  token=null; place='';
+  token=null; place=''; vkHome='';
   sessionStorage.removeItem('ny_admin_token');
   sessionStorage.removeItem('ny_admin_place');
+  sessionStorage.removeItem('ny_admin_home');
   document.getElementById('login').style.display='block';
   document.getElementById('panel').style.display='none';
   document.getElementById('door').style.display='none';
+  document.getElementById('communities').style.display='none';
 }
-function placeName(){ return place==='vk' ? 'ВКонтакте' : 'Telegram'; }
+function inCommunity(){ return place==='vk' && /^\d+$/.test(vkHome); }
+function groupQuery(){ return inCommunity() ? '&group='+encodeURIComponent(vkHome) : ''; }
+function homeNow(){ return homes.find(item => item.id === vkHome) || null; }
+function placeName(){
+  if (place!=='vk') return 'Telegram';
+  if (vkHome==='shared') return 'Общее ВК';
+  const home = homeNow();
+  return home ? home.title : 'ВКонтакте';
+}
 function showDoor(){
   document.getElementById('login').style.display='none';
   document.getElementById('panel').style.display='none';
+  document.getElementById('communities').style.display='none';
   document.getElementById('door').style.display='block';
 }
-function enterPlace(next){
+function showCommunities(){
+  document.getElementById('login').style.display='none';
+  document.getElementById('panel').style.display='none';
+  document.getElementById('door').style.display='none';
+  document.getElementById('communities').style.display='block';
+  renderCommunityDoor();
+}
+function renderCommunityDoor(){
+  document.getElementById('communityDoor').innerHTML = homes.map(item =>
+    '<button type="button" class="'+(item.title==='НейроЯга'?'ghost':'')+'" onclick="enterCommunity(\''+esc(item.id)+'\')">'+
+    esc(item.title)+'<br><span class="note">'+esc(item.id)+' · '+(item.online?'на связи':'нет связи')+'</span></button>'
+  ).join('');
+}
+async function enterPlace(next){
   place = next==='vk' ? 'vk' : 'tg';
   sessionStorage.setItem('ny_admin_place', place);
   document.getElementById('door').style.display='none';
   document.getElementById('login').style.display='none';
+  if (place==='tg') {
+    vkHome = '';
+    sessionStorage.removeItem('ny_admin_home');
+    openCabinet('stats');
+    return;
+  }
+  try {
+    const pack = await api('/api/admin/vk/communities');
+    homes = pack.communities || [];
+  } catch (e) { homes = []; }
+  showCommunities();
+}
+function enterCommunity(id){
+  vkHome = String(id||'');
+  sessionStorage.setItem('ny_admin_home', vkHome);
+  openCabinet('home');
+}
+function enterShared(){
+  vkHome = 'shared';
+  sessionStorage.setItem('ny_admin_home', vkHome);
+  openCabinet('stats');
+}
+function openCabinet(tab){
+  document.getElementById('communities').style.display='none';
+  document.getElementById('door').style.display='none';
+  document.getElementById('login').style.display='none';
   document.getElementById('panel').style.display='block';
   document.getElementById('placeTitle').textContent = placeName();
-  document.getElementById('placeNote').textContent = place==='vk'
-    ? 'У каждого сообщества свой рейтинг и свой список донов. Клиенты, баланс, модели и рассылка общие.'
-    : 'Клиенты, баланс, модели и шаблоны только Telegram.';
+  const home = homeNow();
+  document.getElementById('placeNote').textContent = place!=='vk'
+    ? 'Клиенты, баланс, модели и шаблоны только Telegram.'
+    : (vkHome==='shared'
+      ? 'Модели, пакеты, шаблоны и рассылка общие для обоих сообществ. Рейтинг и донат — внутри сообщества.'
+      : (home && home.online ? 'Кабинет только этого сообщества.' : 'Кабинет этого сообщества. Сейчас нет связи с ключом.'));
+  const back = document.getElementById('backPlace');
+  if (back) back.textContent = place==='vk' ? 'К сообществам' : 'Другой вход';
   renderTabs();
-  go('stats');
+  go(tab);
 }
 
 function currentTabs(){
-  const tabs = TABS.slice();
-  if (place==='vk') tabs.splice(1, 0, ['rate','Рейтинг'], ['donut','Донат']);
-  return tabs;
+  if (inCommunity()) return [['home','Обзор'],['rate','Рейтинг'],['donut','Донат'],['users','Клиенты'],['tickets','Поддержка']];
+  return TABS.slice();
 }
 function rateFace(row){
   const photo = String(row.photo||'');
@@ -187,16 +254,31 @@ function rateFace(row){
 function renderTabs(){
   document.getElementById('tabs').innerHTML = currentTabs().map(([k,l])=>'<button class="'+(k===cur?'':'off')+'" onclick="go(\''+k+'\')">'+l+'</button>').join('');
 }
-function go(k){ cur=k; renderTabs(); currentTabs().forEach(([t])=>{ document.getElementById('section-'+t).style.display = t===k?'block':'none'; }); loadSection(k); }
+function go(k){
+  cur=k;
+  renderTabs();
+  ['home','stats','rate','donut','users','tpl','models','journal','packages','tickets','broadcast','settings'].forEach(t=>{
+    const node = document.getElementById('section-'+t);
+    if (node) node.style.display = t===k ? 'block' : 'none';
+  });
+  loadSection(k);
+}
 
 async function showPanel(){
   document.getElementById('login').style.display='none';
   try{ await api('/api/admin/me'); }catch(e){ return; }
-  if (place==='vk' || place==='tg') enterPlace(place);
+  if (place==='tg') enterPlace('tg');
+  else if (place==='vk' && vkHome==='shared') enterShared();
+  else if (place==='vk' && /^\d+$/.test(vkHome)) {
+    try { homes = (await api('/api/admin/vk/communities')).communities || []; } catch (e) { homes = []; }
+    enterCommunity(vkHome);
+  }
+  else if (place==='vk') enterPlace('vk');
   else showDoor();
 }
 
 async function loadSection(k){
+  if (k==='home') return loadHome();
   if (k==='stats') return loadStats();
   if (k==='rate') return loadRate();
   if (k==='donut') return loadDonut();
@@ -208,6 +290,33 @@ async function loadSection(k){
   if (k==='tickets') return loadTickets('open');
   if (k==='broadcast') return renderBroadcast();
   if (k==='settings') return loadSettings();
+}
+async function loadHome(){
+  const el = document.getElementById('section-home');
+  const home = homeNow();
+  if (!home) { el.innerHTML = '<div class="card">Сообщество не выбрано.</div>'; return; }
+  el.innerHTML = '<div class="card">Смотрю сообщество…</div>';
+  let report = {};
+  try {
+    const data = await api('/api/admin/vk/donut?group='+encodeURIComponent(home.id));
+    report = data.report || {};
+  } catch (e) {}
+  const tools = ['кабинет', 'модели', 'рейтинг'];
+  if (home.audit) tools.push('аудит');
+  if (home.club) tools.push('клуб', 'опрос доната');
+  const others = report.donorError ? '—' : Math.max(0, (report.members||0) - (report.donorTotal||0));
+  el.innerHTML = '<div class="card"><h3>'+esc(home.title)+'</h3>'+
+    '<p>'+esc(home.name)+' · '+esc(home.id)+' · '+(home.online?'<span class="ok">на связи</span>':'<span class="bad">нет связи</span>')+'</p>'+
+    (home.events?'<p class="note">События: '+esc(home.events)+'</p>':'')+
+    (home.hint?'<p class="note">'+esc(home.hint)+'</p>':'')+
+    '<p class="note">В чате: '+tools.join(', ')+'</p>'+
+    '<div class="grid">'+
+    '<div class="stat"><div class="n">'+(report.members||0)+'</div><div class="l">Участники</div></div>'+
+    '<div class="stat"><div class="n">'+(report.donorTotal||0)+'</div><div class="l">Доны</div></div>'+
+    '<div class="stat"><div class="n">'+others+'</div><div class="l">Не доны</div></div>'+
+    '<div class="stat"><div class="n">'+(report.weekPoints||0)+'</div><div class="l">Баллы недели</div></div>'+
+    '<div class="stat"><div class="n">'+(report.weekPeople||0)+'</div><div class="l">Людей в рейтинге</div></div>'+
+    '</div></div>';
 }
 
 function communityTitle(item){
@@ -248,10 +357,7 @@ async function loadDonut(){
   const el = document.getElementById('section-donut');
   el.innerHTML = '<div class="card">Смотрю донаты…</div>';
   try {
-    const pack = await api('/api/admin/vk/communities');
-    const list = pack.communities || [];
-    if (!list.some(item => item.id === donutGroup)) donutGroup = list[0] ? list[0].id : '';
-    const data = await api('/api/admin/vk/donut?group='+encodeURIComponent(donutGroup));
+    const data = await api('/api/admin/vk/donut?group='+encodeURIComponent(vkHome));
     if (data.error) throw new Error(data.error);
     const report = data.report || {};
     const events = data.events || [];
@@ -269,9 +375,8 @@ async function loadDonut(){
     const renews = events.filter(item => item.kind === 'prolong').length;
     const drops = events.filter(item => item.kind === 'cancel' || item.kind === 'expire').length;
     const others = report.donorError ? '—' : Math.max(0, (report.members || 0) - (report.donorTotal || 0));
-    const switcher = list.map(item => '<button type="button" class="'+(item.id===donutGroup?'':'ghost')+'" onclick="openDonut(\''+esc(item.id)+'\')">'+esc(communityTitle(item))+'</button>').join('');
     const person = item => rateFace(item)+esc(item.name || ('ВК '+item.id));
-    el.innerHTML = '<div class="card"><h3>Донат · '+esc(report.name || communityTitle({id:report.id}))+'</h3><div class="row">'+switcher+'</div>'+
+    el.innerHTML = '<div class="card"><h3>Донат · '+esc(placeName())+'</h3>'+
       '<div class="grid">'+
       '<div class="stat"><div class="n">'+(report.members||0)+'</div><div class="l">Участники</div></div>'+
       '<div class="stat"><div class="n">'+(report.donorTotal||0)+'</div><div class="l">Доны сейчас</div></div>'+
@@ -304,16 +409,10 @@ async function loadRate(){
   const el = document.getElementById('section-rate');
   el.innerHTML = '<div class="card">Считаю баллы…</div>';
   try {
-    const pack = await api('/api/admin/vk/communities');
-    const list = pack.communities || [];
-    if (!list.some(item => item.id === rateGroup)) rateGroup = list[0] ? list[0].id : '';
-    const current = list.find(item => item.id === rateGroup) || null;
-    const d = await api('/api/admin/vk/rating?group='+encodeURIComponent(rateGroup));
+    const d = await api('/api/admin/vk/rating?group='+encodeURIComponent(vkHome));
     const rows = d.rows || [];
-    const switcher = list.map(item=>'<button type="button" class="'+(item.id===rateGroup?'':'ghost')+'" onclick="openRate(\''+esc(item.id)+'\')">'+esc(communityTitle(item))+'</button>').join('');
-    el.innerHTML = renderCommunities(list)+
-      '<div class="card"><h3>Рейтинг · '+esc(communityTitle(current))+'</h3>'+
-      '<div class="row">'+switcher+'</div>'+
+    el.innerHTML =
+      '<div class="card"><h3>Рейтинг · '+esc(placeName())+'</h3>'+
       '<p class="note">'+esc(d.week||'')+'</p>'+
       '<p class="note">'+esc(d.rules||'')+' Лайк, комментарий и репост приводят новых людей. Запрос боту приносит только оплату, поэтому за него балл один. В понедельник список начинается заново. Кредиты сами не приходят: впишите сумму и начислите человеку.</p>'+
       '<table><tr><th></th><th>Подписчик</th><th>Баллы</th><th>Лайки</th><th>Коммент.</th><th>Репосты</th><th>Бот</th><th>Кредиты</th></tr>'+
@@ -339,14 +438,7 @@ async function loadStats(){
   const el = document.getElementById('section-stats');
   el.innerHTML = '<div class="card">Загрузка…</div>';
   try{
-    const {stats} = await api('/api/admin/stats?platform='+place);
-    let communities = '';
-    if (place==='vk') {
-      try {
-        const pack = await api('/api/admin/vk/communities');
-        communities = renderCommunities(pack.communities || []);
-      } catch (err) {}
-    }
+    const {stats} = await api('/api/admin/stats?platform='+place+groupQuery());
     const cells = [
       ['Клиенты '+placeName(), stats.users_total],['Активны за сутки', stats.active_day],
       ['Новые за сутки', stats.new_day],['В чёрном списке', stats.users_blocked],
@@ -354,7 +446,7 @@ async function loadStats(){
       ['Потрачено кредитов', stats.spent_total],['Начислено всего', stats.credited_total],
       ['Открытых обращений', stats.tickets_open]
     ];
-    el.innerHTML = communities+'<div class="card"><h3>Статистика · '+placeName()+'</h3><div class="grid">'+
+    el.innerHTML = '<div class="card"><h3>Статистика · '+placeName()+'</h3><div class="grid">'+
       cells.map(c=>'<div class="stat"><div class="n">'+(c[1]??0)+'</div><div class="l">'+c[0]+'</div></div>').join('')+'</div></div>';
   }catch(e){ el.innerHTML = '<div class="card bad">'+esc(e.message)+'</div>'; }
 }
@@ -362,11 +454,12 @@ async function loadStats(){
 /* ---- Клиенты ---- */
 async function loadUsers(q){
   const el = document.getElementById('section-users');
-  const d = await api('/api/admin/users?platform='+place+'&q='+encodeURIComponent(q||''));
+  const d = await api('/api/admin/users?platform='+place+'&q='+encodeURIComponent(q||'')+groupQuery());
   users = d.users||[];
   const hint = place==='vk' ? 'Номер ВК' : 'ID или @имя';
+  const scopeNote = inCommunity() ? '<p class="note">Только те, кто уже написал этому сообществу после разделения. Остальные лежат в «Общее ВК».</p>' : '';
   el.innerHTML =
-    '<div class="card"><h3>Клиенты · '+placeName()+'</h3><div class="row"><input id="q" placeholder="'+hint+'" value="'+esc(q||'')+'"><button onclick="loadUsers(document.getElementById(\'q\').value)">Найти</button></div>'+
+    '<div class="card"><h3>Клиенты · '+placeName()+'</h3>'+scopeNote+'<div class="row"><input id="q" placeholder="'+hint+'" value="'+esc(q||'')+'"><button onclick="loadUsers(document.getElementById(\'q\').value)">Найти</button></div>'+
     '<table><tr><th>Откуда</th><th>Номер</th><th>Имя</th><th>Баланс</th><th>Модель</th><th>Ген.</th><th>Статус</th><th></th></tr>'+
     users.map(u=>{
       const who = clientWho(u);
@@ -814,9 +907,10 @@ async function savePackages(){
 /* ---- Поддержка ---- */
 async function loadTickets(status){
   const el = document.getElementById('section-tickets');
-  const d = await api('/api/admin/tickets?platform='+place+'&status='+encodeURIComponent(status||'open'));
+  const d = await api('/api/admin/tickets?platform='+place+'&status='+encodeURIComponent(status||'open')+groupQuery());
   const list = d.tickets||[];
-  el.innerHTML = '<div class="card"><h3>Поддержка · '+placeName()+'</h3><div class="row">'+
+  const ticketNote = inCommunity() ? '<p class="note">Обращения тех, кто писал этому сообществу.</p>' : '';
+  el.innerHTML = '<div class="card"><h3>Поддержка · '+placeName()+'</h3>'+ticketNote+'<div class="row">'+
     ['open','answered','all'].map(s=>'<button class="'+(s===status?'':'ghost')+'" onclick="loadTickets(\''+s+'\')">'+({open:'Открытые',answered:'Отвеченные',all:'Все'}[s])+'</button>').join('')+'</div></div>'+
     (list.length?list.map(t=>'<div class="card"><div class="note">#'+t.id+' · '+esc(ticketWho(t))+' · '+(t.status==='open'?'<span class="bad">открыт</span>':'<span class="ok">отвечен</span>')+'</div>'+
       '<p>'+esc(t.message)+'</p>'+(t.answer?('<p class="note">Ответ: '+esc(t.answer)+'</p>'):('<textarea id="ans-'+t.id+'" placeholder="Ответ клиенту"></textarea><div class="row" style="margin-top:8px"><button onclick="answer('+t.id+')">Ответить</button></div>'))+

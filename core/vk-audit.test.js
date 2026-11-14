@@ -59,6 +59,8 @@ test('кнопка аудита есть только во втором сооб
     const shown = JSON.stringify(vk.communityStatus());
     assert.equal(shown.includes('secret'), false);
     assert.deepEqual(vk.communityStatus().map(item => item.id), ['230706467', '555']);
+    assert.deepEqual(vk.adminHomes().map(item => item.title), ['Точки и Линии', 'НейроЯга']);
+    assert.deepEqual(vk.adminHomes().map(item => item.id), ['230706467', '555']);
     for (const key of Object.keys(saved)) {
         if (saved[key] == null) delete process.env[key];
         else process.env[key] = saved[key];

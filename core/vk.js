@@ -1474,6 +1474,7 @@ async function handleDonutJoin(token, update, groupId) {
     if (existing) return;
     try {
         await db.ensureUser(account, `vk:${hit.userId}`);
+        await db.rememberCommunity(account, groupId);
         await db.saveDonutSurvey(account, groupId, 0, []);
         await sendText(token, hit.userId, donut.welcomeText(), surveyKeyboard());
         await sendText(token, hit.userId, donut.prompt(0), surveyKeyboard());
@@ -1572,6 +1573,7 @@ async function handleUpdate(token, update, groupId) {
     const account = accountId(incoming.fromId);
     if (!account) return;
     const { isNew } = await db.ensureUser(account, `vk:${incoming.fromId}`);
+    try { await db.rememberCommunity(account, groupId); } catch (error) {}
     const bonus = catalog.getGeneral().start_bonus;
     if (isNew && bonus > 0) await db.updateBalance(account, bonus, 'Приветственный бонус');
     await reply(token, incoming.peerId, account, incoming.text, incoming.payload, groupId);
@@ -1753,6 +1755,38 @@ async function communityFromToken(token, fallbackId) {
     return { id: String(fallbackId || '').replace(/\D/g, ''), name: '' };
 }
 
+function adminHomes() {
+    const configuredHome = String(process.env.VK_GROUP_ID || '').replace(/\D/g, '');
+    const configuredClub = String(process.env.VK_GROUP_ID_2 || '').replace(/\D/g, '');
+    const linesId = configuredHome && configuredHome !== '214554778' ? configuredHome : '230706467';
+    let clubId = configuredClub && configuredClub !== linesId ? configuredClub : '214554778';
+    if (clubId === linesId) clubId = '214554778';
+    const live = new Map(communityStatus().map(item => [item.id, item]));
+    const homes = [
+        { id: linesId, title: 'Точки и Линии' },
+        { id: clubId, title: 'НейроЯга' }
+    ];
+    const seen = new Set();
+    return homes.filter(home => {
+        if (!home.id || seen.has(home.id)) return false;
+        seen.add(home.id);
+        return true;
+    }).map(home => {
+        const state = live.get(home.id) || {};
+        const clubHome = home.title === 'НейроЯга';
+        return {
+            id: home.id,
+            title: home.title,
+            name: state.name || home.title,
+            online: !!state.online,
+            hint: state.hint || (state.online ? '' : 'Нет связи. Проверьте ключ этого сообщества.'),
+            events: state.events || '',
+            audit: clubHome,
+            club: clubHome
+        };
+    });
+}
+
 function communityId(value) {
     const id = String(value || '').replace(/\D/g, '');
     if (id) return id;
@@ -1781,5 +1815,5 @@ async function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, photoAttachment, communityList, communityId, communityStatus, communityDonut, communityCommentAttempts, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, USER_HELP
 };

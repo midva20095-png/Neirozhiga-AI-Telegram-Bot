@@ -689,7 +689,7 @@ function startWebApp() {
     }
 
     app.get('/api/admin/vk/communities', requireAdmin, (req, res) => {
-        res.json({ communities: vk.communityStatus() });
+        res.json({ communities: vk.adminHomes() });
     });
 
     app.get('/api/admin/vk/donut', requireAdmin, async (req, res) => {
@@ -727,7 +727,7 @@ function startWebApp() {
     });
 
     app.get('/api/admin/stats', requireAdmin, async (req, res) => {
-        try { res.json({ stats: await db.getStats(adminPlatform(req.query.platform) || undefined) }); }
+        try { res.json({ stats: await db.getStats(adminPlatform(req.query.platform) || undefined, req.query.group) }); }
         catch (e) { res.status(500).json({ error: e.message }); }
     });
 
@@ -735,13 +735,16 @@ function startWebApp() {
         try {
             const q = (req.query.q || '').toString();
             const platform = adminPlatform(req.query.platform);
+            const group = String(req.query.group || '').replace(/\D/g, '');
             const gate = platform === 'vk' ? 'AND user_id < 0' : platform === 'tg' ? 'AND user_id > 0' : '';
+            const groupSql = group ? ' AND vk_group = $2' : '';
+            const params = group ? [`%${q}%`, group] : [`%${q}%`];
             const result = await db.pool.query(
                 `SELECT user_id, username, balance, current_model, blocked, gens, spent, created_at, last_seen
                  FROM users
-                 WHERE (user_id::text ILIKE $1 OR COALESCE(username,'') ILIKE $1) ${gate}
+                 WHERE (user_id::text ILIKE $1 OR COALESCE(username,'') ILIKE $1) ${gate}${groupSql}
                  ORDER BY last_seen DESC NULLS LAST LIMIT 100`,
-                [`%${q}%`]
+                params
             );
             res.json({ users: result.rows });
         } catch (e) {
@@ -913,7 +916,7 @@ function startWebApp() {
 
     // ---- Админка: поддержка ----
     app.get('/api/admin/tickets', requireAdmin, async (req, res) => {
-        try { res.json({ tickets: await db.listTickets(req.query.status || 'open', adminPlatform(req.query.platform) || undefined) }); }
+        try { res.json({ tickets: await db.listTickets(req.query.status || 'open', adminPlatform(req.query.platform) || undefined, req.query.group) }); }
         catch (e) { res.status(500).json({ error: e.message }); }
     });
 
