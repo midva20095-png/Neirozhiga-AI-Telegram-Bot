@@ -311,7 +311,35 @@ function draw(){
 }
 function vkAdmin(){
   const role = new URLSearchParams(location.search).get('vk_viewer_group_role') || '';
-  return role === 'admin' || role === 'editor';
+  return !role || role === 'admin' || role === 'editor';
+}
+function pinWidget(){
+  const groupId = new URLSearchParams(location.search).get('vk_group_id') || '230706467';
+  const app = 'https://vk.com/app54895627_-' + groupId;
+  const code = 'return {"title":"НейроЯга","rows":[' +
+    '{"title":"Чат ИИ","descr":"Написать боту","button":"Открыть","button_url":"https://vk.me/tochki_linii","title_url":"https://vk.me/tochki_linii"},' +
+    '{"title":"Рейтинг","descr":"Баллы за неделю","button":"Смотреть","button_url":"' + app + '#rate","title_url":"' + app + '#rate"},' +
+    '{"title":"Сайт","descr":"Страница НейроЯга","button":"Открыть","button_url":"' + app + '#site","title_url":"' + app + '#site"},' +
+    '{"title":"Подписка","descr":"Рассылка в чат","button":"Подписаться","button_url":"' + app + '#sub","title_url":"' + app + '#sub"}' +
+  ']};';
+  const send = function(msg){
+    const seen = [];
+    const put = function(win){
+      try {
+        if (!win || win === window || seen.indexOf(win) >= 0) return;
+        seen.push(win);
+        win.postMessage(msg, '*');
+      } catch (e) {}
+    };
+    put(parent);
+    try { put(parent.parent); } catch (e) {}
+    try { put(window.top); } catch (e) {}
+  };
+  send({ type: 'ny-widget' });
+  send({ handler: 'VKWebAppAddToCommunity', params: {}, type: 'vk-connect', sendTime: Date.now() });
+  setTimeout(function(){
+    send({ handler: 'VKWebAppShowCommunityWidgetPreviewBox', params: { group_id: Number(groupId), type: 'compact_list', code: code }, type: 'vk-connect', sendTime: Date.now() });
+  }, 700);
 }
 function viewMenu(){
   const mail = !!(me && me.mail);
@@ -538,7 +566,7 @@ function toggleMail(){ subscribeMail(!(me && me.mail)); }
 function bind(){
   const pin = document.getElementById('door-pin');
   if (pin) pin.onclick = function(){
-    try { parent.postMessage({ type: 'ny-widget' }, '*'); } catch (e) {}
+    pinWidget();
     const msg = document.getElementById('submsg');
     if (msg) msg.textContent = 'Если окно ВК не открылось, закройте приложение и откройте его снова из сообщества.';
   };
