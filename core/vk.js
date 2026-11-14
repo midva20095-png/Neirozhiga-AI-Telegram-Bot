@@ -8,6 +8,7 @@ const catalog = require('./catalog');
 const gen = require('./generate');
 const auth = require('./auth');
 const activity = require('./activity');
+const audit = require('./vk-audit');
 
 const API = 'https://api.vk.com/method';
 const VERSION = '5.199';
@@ -93,6 +94,7 @@ function menuAction(text, payload) {
     if (value === 'справка/рейтинг' || value === 'справка / рейтинг') return 'more';
     if (value === 'справка' || value === 'помощь') return 'help';
     if (value === 'рейтинг') return 'rate';
+    if (value === 'аудит') return 'audit';
     if (value === 'бот ии') return 'models';
     if (value === 'назад') return 'pay_back';
     if (value === 'отмена') return 'opt_cancel';
@@ -142,18 +144,31 @@ function textOnlyMenu() {
     return JSON.stringify({ one_time: false, buttons: textRows() });
 }
 
-function mainMenu(peerId) {
+function secondGroupId() {
+    return String(process.env.VK_GROUP_ID_2 || '').replace(/\D/g, '');
+}
+
+function auditHere(groupId) {
+    const second = secondGroupId();
+    const current = String(groupId || currentGroup() || '').replace(/\D/g, '');
+    return !!(second && current && current === second);
+}
+
+function mainMenu(peerId, groupId) {
     const rows = [];
     const account = accountId(peerId);
-    const cabinet = linkButton('Кабинет', account ? cabinetLink(account) : siteLink());
+    const cabinet = linkButton('Кабинет', account ? cabinetLink(account, '', groupId) : siteLink());
     if (cabinet) rows.push([cabinet]);
     rows.push(...textRows());
+    if (auditHere(groupId)) rows.push([textButton('Аудит', { a: 'audit' }, 'secondary')]);
     return JSON.stringify({ one_time: false, buttons: rows });
 }
 
 const pendingPay = new Map();
 const pendingMove = new Map();
 const pendingJob = new Map();
+const pendingAudit = new Set();
+const runningAudit = new Set();
 let tellTelegram = async () => {};
 
 function setTelegramNotify(fn) {
@@ -821,15 +836,77 @@ async function goBack(token, peerId, account) {
         return sendText(token, peerId, 'Напишите номер или @имя в Telegram. «Назад» возвращает меню.', payLockKeyboard());
     }
     pendingMove.delete(key);
+    if (pendingAudit.has(key)) {
+        pendingAudit.delete(key);
+        return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId));
+    }
     return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId));
 }
 
+function messageParts(text) {
+    const size = 3500;
+    const src = String(text || '');
+    const out = [];
+    let rest = src;
+    while (rest.length > size) {
+        let cut = rest.lastIndexOf('\n', size);
+        if (cut < size * 0.4) cut = size;
+        out.push(rest.slice(0, cut));
+        rest = rest.slice(cut).replace(/^\n+/, '');
+    }
+    if (rest) out.push(rest);
+    return out.length ? out : [''];
+}
+
+async function sendParts(token, peerId, text, keyboard) {
+    const parts = messageParts(text);
+    for (let i = 0; i < parts.length; i++) {
+        await sendText(token, peerId, parts[i], i === parts.length - 1 ? keyboard : payLockKeyboard());
+    }
+}
+
+async function holdAudit(token, peerId, account, text, action, groupId) {
+    const key = String(account);
+    if (!pendingAudit.has(key)) return false;
+    if (action) {
+        pendingAudit.delete(key);
+        return false;
+    }
+    if (!auditHere(groupId)) {
+        pendingAudit.delete(key);
+        return false;
+    }
+    const raw = String(text || '').trim();
+    if (!raw) {
+        await sendText(token, peerId, 'Пришлите ссылку на сообщество: vk.com/название.', payLockKeyboard());
+        return true;
+    }
+    if (runningAudit.has(key)) {
+        await sendText(token, peerId, 'Отчёт уже готовится. Дождитесь его в этом чате.', payLockKeyboard());
+        return true;
+    }
+    runningAudit.add(key);
+    await sendText(token, peerId, 'Смотрю сообщество. Отчёт придёт в этот чат.', payLockKeyboard());
+    audit.run(raw).then(async report => {
+        await sendParts(token, peerId, report, payLockKeyboard());
+        await sendText(token, peerId, 'Можно прислать ещё одну ссылку. «Назад» возвращает меню.', payLockKeyboard());
+    }).catch(async error => {
+        const shown = error && error.audit
+            ? error.message
+            : 'Не получилось разобрать это сообщество. Проверьте, что оно открытое и ссылка верная.';
+        try { await sendText(token, peerId, shown, payLockKeyboard()); } catch (e) {}
+    }).finally(() => runningAudit.delete(key));
+    return true;
+}
+
 async function reply(token, peerId, account, text, payload, groupId) {
-    const action = menuAction(text, payload);
+    let action = menuAction(text, payload);
+    if (action === 'audit' && !auditHere(groupId) && !(payload && payload.a === 'audit')) action = '';
     if (action === 'opt_cancel') {
         pendingPay.delete(String(account));
         pendingMove.delete(String(account));
         pendingJob.delete(String(account));
+        pendingAudit.delete(String(account));
         return sendText(token, peerId, 'Запрос отменён.', mainMenu(peerId));
     }
     if (action === 'pay_back') return goBack(token, peerId, account);
@@ -843,6 +920,7 @@ async function reply(token, peerId, account, text, payload, groupId) {
     }
     if (action === 'pack') {
         pendingJob.delete(String(account));
+        pendingAudit.delete(String(account));
         const pkg = catalog.getPackage(payload && payload.p);
         if (!pkg) return sendText(token, peerId, 'Пакет недоступен.');
         pendingMove.delete(String(account));
@@ -857,6 +935,7 @@ async function reply(token, peerId, account, text, payload, groupId) {
     if (action === 'move') {
         pendingJob.delete(String(account));
         pendingPay.delete(String(account));
+        pendingAudit.delete(String(account));
         pendingMove.set(String(account), { stage: 'who' });
         const shown = String(account).replace(/^-/, '');
         return sendText(
@@ -868,6 +947,21 @@ async function reply(token, peerId, account, text, payload, groupId) {
     }
     if (await holdPayment(token, peerId, account, text, action)) return;
     if (await holdMove(token, peerId, account, text, action)) return;
+    if (action === 'audit') {
+        pendingJob.delete(String(account));
+        pendingPay.delete(String(account));
+        pendingMove.delete(String(account));
+        if (!auditHere(groupId)) return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId));
+        pendingAudit.add(String(account));
+        return sendText(
+            token,
+            peerId,
+            'Аудит сообщества.\n\nПришлите ссылку: vk.com/название или vk.ru/название. Разберу последние записи и пришлю отчёт. Кредиты не списываются.\n\n«Назад» возвращает меню.',
+            payLockKeyboard()
+        );
+    }
+    if (await holdAudit(token, peerId, account, text, action, groupId)) return;
+    if (action) pendingAudit.delete(String(account));
     if (action === 'group') {
         pendingJob.delete(String(account));
         if (!payload || !catalog.GROUPS[payload.g]) return sendText(token, peerId, 'Раздел недоступен.');
