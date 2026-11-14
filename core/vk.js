@@ -1122,6 +1122,21 @@ async function notify(accountIdValue, message) {
     return false;
 }
 
+async function tokenNote(token) {
+    const parts = [];
+    try {
+        const perm = await call(token, 'groups.getTokenPermissions', {});
+        const names = ((perm && perm.permissions) || []).filter(item => item.setting).map(item => item.name);
+        if (names.length) parts.push(names.join(', '));
+    } catch (e) {}
+    try {
+        const info = await call(token, 'groups.getById', {});
+        const group = info && (info.groups ? info.groups[0] : (Array.isArray(info) ? info[0] : null));
+        if (group && group.id) parts.push(`ключ от сообщества ${group.id}${group.name ? ` «${group.name}»` : ''}`);
+    } catch (e) {}
+    return parts.join('. ');
+}
+
 const linkState = new Map();
 
 function markCommunity(groupId, online, hint) {
@@ -1179,13 +1194,16 @@ async function poll(token, groupId) {
             }
         } catch (error) {
             online = false;
-            markCommunity(groupId, false, connectHint(error));
+            const code = Number(error && error.code);
+            const hint = connectHint(error);
+            markCommunity(groupId, false, hint);
             if (!failLogged) {
                 failLogged = true;
-                const code = Number(error && error.code);
-                const hint = connectHint(error);
-                console.error(`ВК ${groupId} не подключился${code ? ` (${code})` : ''}. ${hint} Telegram работает как прежде.`);
-                db.note('sys', `ВК ${groupId} не подключился. ${hint}`).catch(() => {});
+                const about = await tokenNote(token);
+                const full = about ? `${hint} На сервере сейчас: ${about}.` : hint;
+                markCommunity(groupId, false, full);
+                console.error(`ВК ${groupId} не подключился${code ? ` (${code})` : ''}. ${full} Telegram работает как прежде.`);
+                db.note('sys', `ВК ${groupId} не подключился. ${full}`).catch(() => {});
             }
             await new Promise(r => setTimeout(r, 15000));
         }
