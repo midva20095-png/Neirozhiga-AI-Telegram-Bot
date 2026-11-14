@@ -54,6 +54,20 @@ test('лайк, комментарий и репост считаются тол
     assert.equal(activity.parseCommunityActivity({ type: 'message_new', object: {} }, GROUP), null);
 });
 
+test('имя и аватар берутся из профиля ВК', () => {
+    const face = activity.faceOf({
+        id: 5,
+        first_name: 'Анна',
+        last_name: 'Смирнова',
+        photo_200: 'https://sun1.userapi.com/impg/abc.jpg'
+    });
+    assert.deepEqual(face, { userId: '-5', name: 'Анна Смирнова', photo: 'https://sun1.userapi.com/impg/abc.jpg' });
+    assert.equal(activity.faceOf({ id: 5, first_name: 'Анна', photo_100: 'https://vk.com/images/camera_100.png' }).photo, '');
+    const row = activity.present({ user_id: '-5', username: 'vk:5', points: 1, likes: 1, comments: 0, reposts: 0, bot: 0 }, face);
+    assert.equal(row.name, 'Анна Смирнова');
+    assert.equal(row.photo, face.photo);
+});
+
 test('рейтинг показывает место и правила без служебных адресов', () => {
     const rows = [
         activity.present({ user_id: '-5', username: 'Аня', points: 8, likes: 1, comments: 1, reposts: 0, bot: 1 }),

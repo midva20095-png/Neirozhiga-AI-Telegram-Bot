@@ -254,7 +254,7 @@ function startWebApp() {
         try {
             const range = activity.weekRange(new Date());
             if (Number(req.userId) >= 0) return res.json({ vk: false, week: range.label, rows: [], mine: null });
-            const rows = (await db.listWeekActivity(range.start)).map(activity.present);
+            const rows = await vk.attachFaces(await db.listWeekActivity(range.start));
             const place = rows.findIndex(row => String(row.userId) === String(req.userId));
             res.json({
                 vk: true,
@@ -647,7 +647,7 @@ function startWebApp() {
     app.get('/api/admin/vk/rating', requireAdmin, async (req, res) => {
         try {
             const range = activity.weekRange(new Date());
-            const rows = (await db.listWeekActivity(range.start)).map(activity.present);
+            const rows = await vk.attachFaces(await db.listWeekActivity(range.start));
             res.json({ week: range.label, rows });
         } catch (e) {
             res.status(500).json({ error: 'Не удалось открыть рейтинг.' });

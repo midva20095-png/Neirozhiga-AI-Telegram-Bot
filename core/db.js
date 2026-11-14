@@ -158,6 +158,14 @@ async function initDB() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS vk_activity_week_idx ON vk_activity (created_at DESC)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vk_profiles (
+      user_id BIGINT PRIMARY KEY,
+      name TEXT NOT NULL,
+      photo TEXT,
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
   console.log('✅ Таблица users готова (PostgreSQL)');
 }
 
@@ -259,6 +267,28 @@ async function removeActivity(userId, kind, objectKey) {
     'DELETE FROM vk_activity WHERE user_id = $1 AND kind = $2 AND object_key = $3',
     [String(userId), String(kind), String(objectKey || '').slice(0, 160)]
   );
+}
+
+async function listVkProfiles(userIds) {
+  const ids = [...new Set((userIds || []).map(id => String(id)).filter(Boolean))];
+  if (!ids.length) return [];
+  const res = await pool.query(
+    'SELECT user_id, name, photo, updated_at FROM vk_profiles WHERE user_id = ANY($1::bigint[])',
+    [ids]
+  );
+  return res.rows;
+}
+
+async function saveVkProfiles(rows) {
+  const list = (rows || []).filter(row => row && row.userId && row.name);
+  for (const row of list) {
+    await pool.query(
+      `INSERT INTO vk_profiles (user_id, name, photo, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (user_id) DO UPDATE SET name = EXCLUDED.name, photo = EXCLUDED.photo, updated_at = NOW()`,
+      [String(row.userId), String(row.name).slice(0, 80), String(row.photo || '').slice(0, 300)]
+    );
+  }
 }
 
 async function listWeekActivity(since) {
@@ -803,6 +833,8 @@ module.exports = {
   answerTicket,
   recordActivity,
   removeActivity,
+  listVkProfiles,
+  saveVkProfiles,
   listWeekActivity,
   listUserIds,
   getStats,

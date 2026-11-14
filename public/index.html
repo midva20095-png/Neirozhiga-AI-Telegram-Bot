@@ -47,7 +47,9 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .tabbar:has(#tabrate:not([style*="display:none"])) button{min-width:52px;font-size:10px}
 .rank{display:flex;gap:10px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--line)}
 .rank:last-child{border-bottom:0}
-.rank .medal{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;background:#1c1233;flex:0 0 auto}
+.rank .medal{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;background:#1c1233;flex:0 0 auto}
+.rank .ava{width:42px;height:42px;border-radius:50%;object-fit:cover;background:#24163d;flex:0 0 auto}
+.rank .ava.letter{display:flex;align-items:center;justify-content:center;font-weight:800}
 .rank.top1 .medal{background:#c9a227;color:#1a1204}
 .rank.top2 .medal{background:#c5c9d6;color:#1a1204}
 .rank.top3 .medal{background:#c47a4a;color:#1a1204}
@@ -789,13 +791,18 @@ async function sendSupport(){
     if (ta) ta.value=''; if (ok) ok.textContent='Отправлено! Ответ придёт в чат бота.';
   } catch(e){ if (ok) ok.textContent='Не удалось отправить: '+e.message; }
 }
+function faceHtml(row){
+  const photo = String(row.photo||'');
+  if (/^https:\/\/([a-z0-9-]+\.)?(userapi\.com|vk\.com|vkuser\.net)\//i.test(photo)) return '<img class="ava" src="'+esc(photo)+'" alt="">';
+  return '<div class="ava letter">'+esc((row.name||'?').trim().charAt(0))+'</div>';
+}
 function renderRating(d){
   const rows = d.rows || [];
   const mine = d.mine;
   const list = rows.map(function(row, i){
     const place = i + 1;
     const cls = 'rank'+(place<=3?' top'+place:'')+(mine && String(mine.userId)===String(row.userId)?' me':'');
-    return '<div class="'+cls+'"><div class="medal">'+place+'</div><div class="who"><b>'+esc(row.name)+'</b><span>лайки '+row.likes+' · комментарии '+row.comments+' · репосты '+row.reposts+' · бот '+row.bot+'</span></div><div class="pts">'+row.points+'</div></div>';
+    return '<div class="'+cls+'"><div class="medal">'+place+'</div>'+faceHtml(row)+'<div class="who"><b>'+esc(row.name)+'</b><span>лайки '+row.likes+' · комментарии '+row.comments+' · репосты '+row.reposts+' · бот '+row.bot+'</span></div><div class="pts">'+row.points+'</div></div>';
   }).join('');
   const own = mine
     ? '<div class="now">Ваше место: <b>'+mine.place+'</b> · '+mine.points+' б.</div>'

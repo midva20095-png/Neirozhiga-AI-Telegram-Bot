@@ -83,6 +83,7 @@ function menuAction(text, payload) {
     if (value === 'перенос') return 'move';
     if (value === 'справка' || value === 'помощь') return 'help';
     if (value === 'рейтинг') return 'rate';
+    if (value === 'бот ии') return 'models';
     return '';
 }
 
@@ -129,7 +130,9 @@ function mainMenu(peerId) {
                 { action: { type: 'text', label: 'Справка', payload: '{"a":"help"}' }, color: 'secondary' }
             ],
             [
-                { action: { type: 'text', label: 'Рейтинг', payload: '{"a":"rate"}' }, color: 'secondary' }
+                { action: { type: 'text', label: 'Бот ИИ', payload: '{"a":"models"}' }, color: 'primary' },
+                { action: { type: 'text', label: 'Рейтинг', payload: '{"a":"rate"}' }, color: 'secondary' },
+                { action: { type: 'open_link', label: 'На сайт', link: siteLink(), payload: '{}' } }
             ]
         ]
     });
@@ -721,11 +724,49 @@ async function noteActivity(update, groupId) {
     if (saved) await db.getUser(account);
 }
 
+async function attachFaces(rows) {
+    const list = Array.isArray(rows) ? rows : [];
+    const accounts = [...new Set(list.map(row => String(row.user_id)))];
+    const faces = new Map();
+    let cached = [];
+    try { cached = await db.listVkProfiles(accounts); } catch (error) { cached = []; }
+    const freshUntil = Date.now() - 12 * 60 * 60 * 1000;
+    const need = [];
+    for (const account of accounts) {
+        const hit = cached.find(item => String(item.user_id) === account);
+        if (hit && new Date(hit.updated_at).getTime() > freshUntil) {
+            faces.set(account, { name: hit.name, photo: hit.photo || '' });
+        } else {
+            const vkId = account.replace(/^-/, '');
+            if (/^\d+$/.test(vkId)) need.push(vkId);
+        }
+    }
+    const token = String(process.env.VK_GROUP_TOKEN || '').trim();
+    if (need.length && token) {
+        try {
+            const users = await call(token, 'users.get', {
+                user_ids: need.slice(0, 100).join(','),
+                fields: 'photo_100,photo_200',
+                lang: '0'
+            });
+            const save = [];
+            for (const user of (Array.isArray(users) ? users : [])) {
+                const face = activity.faceOf(user);
+                if (!face) continue;
+                faces.set(face.userId, face);
+                save.push(face);
+            }
+            if (save.length) await db.saveVkProfiles(save);
+        } catch (error) {}
+    }
+    return list.map(row => activity.present(row, faces.get(String(row.user_id))));
+}
+
 async function sendRating(token, peerId, account) {
     const range = activity.weekRange(new Date());
     let rows = [];
     try {
-        rows = (await db.listWeekActivity(range.start)).map(activity.present);
+        rows = await attachFaces(await db.listWeekActivity(range.start));
     } catch (error) {}
     await sendText(token, peerId, activity.formatRating(rows, account, range));
 }
@@ -841,5 +882,5 @@ function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, startVk, notify, sendToUser, askTopup, setTelegramNotify, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, USER_HELP
 };

@@ -67,14 +67,26 @@ function parseCommunityActivity(update, groupId) {
     return null;
 }
 
-function present(row) {
+function faceOf(user) {
+    const id = Number(user && user.id);
+    if (!Number.isInteger(id) || id <= 0) return null;
+    const name = [user.first_name, user.last_name].map(part => String(part || '').trim()).filter(Boolean).join(' ');
+    let photo = String(user.photo_200 || user.photo_100 || '').trim();
+    if (!/^https:\/\/([a-z0-9-]+\.)?(userapi\.com|vk\.com|vkuser\.net)\//i.test(photo) || /camera_|deactivated|\/images\//i.test(photo)) photo = '';
+    return { userId: String(-id), name: name || `ВК ${id}`, photo };
+}
+
+function present(row, face) {
     const id = String(row.user_id);
     const num = id.replace(/^-/, '');
     const raw = String(row.username || '').trim();
-    const name = raw && raw !== `vk:${num}` ? raw.replace(/^@/, '') : `ВК ${num}`;
+    const stored = raw && raw !== `vk:${num}` ? raw.replace(/^@/, '') : '';
+    const faceName = face && face.name && face.name !== `ВК ${num}` ? String(face.name).trim() : '';
+    const photo = face && face.photo ? String(face.photo) : '';
     return {
         userId: id,
-        name,
+        name: faceName || stored || `ВК ${num}`,
+        photo,
         points: Number(row.points) || 0,
         likes: Number(row.likes) || 0,
         comments: Number(row.comments) || 0,
@@ -106,4 +118,4 @@ function formatRating(rows, meId, range) {
     return lines.join('\n').slice(0, 3500);
 }
 
-module.exports = { POINTS, weekRange, parseCommunityActivity, present, formatRating };
+module.exports = { POINTS, weekRange, parseCommunityActivity, faceOf, present, formatRating };
