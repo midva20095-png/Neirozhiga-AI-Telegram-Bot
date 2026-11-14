@@ -152,6 +152,10 @@ function auditHere(groupId) {
     return communityList().some(item => item.id === current);
 }
 
+function keepsQuiet(groupId, peerId) {
+    return Number(peerId) >= 2000000000 && auditHere(groupId);
+}
+
 function mainMenu(peerId, groupId) {
     const rows = [];
     const account = accountId(peerId);
@@ -389,7 +393,7 @@ async function enableButtons(token, groupId) {
             messages: '1',
             bots_capabilities: '1',
             bots_start_button: '1',
-            bots_add_to_chat: '1'
+            bots_add_to_chat: auditHere(groupId) ? '0' : '1'
         });
         console.log(`ВК ${groupId}: сообщения и кнопка «Начать» включены.`);
     } catch (error) {
@@ -1067,9 +1071,12 @@ async function sendRating(token, peerId, account, groupId) {
 async function handleUpdate(token, update, groupId) {
     try { await noteActivity(update, groupId); } catch (error) {}
     const event = readEvent(update);
-    if (event) return handleEvent(token, event, groupId);
+    if (event) {
+        if (keepsQuiet(groupId, event.peerId)) return;
+        return handleEvent(token, event, groupId);
+    }
     const incoming = readIncoming(update);
-    if (!incoming) return;
+    if (!incoming || keepsQuiet(groupId, incoming.peerId)) return;
     const account = accountId(incoming.fromId);
     if (!account) return;
     const { isNew } = await db.ensureUser(account, `vk:${incoming.fromId}`);
@@ -1264,5 +1271,5 @@ async function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, photoAttachment, communityList, communityId, communityStatus, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, photoAttachment, communityList, communityId, communityStatus, USER_HELP
 };

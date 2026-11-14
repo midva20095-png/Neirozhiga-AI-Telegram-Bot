@@ -46,6 +46,9 @@ test('кнопка аудита есть только во втором сооб
     assert.equal(second.buttons.flat().some(button => button.action.label === 'Аудит'), true);
     assert.equal(first.buttons.flat().some(button => button.action.label === 'Аудит'), false);
     assert.equal(vk.menuAction('Аудит'), 'audit');
+    assert.equal(vk.keepsQuiet('555', 2000000001), true);
+    assert.equal(vk.keepsQuiet('555', 10), false);
+    assert.equal(vk.keepsQuiet('230706467', 2000000001), false);
     const shown = JSON.stringify(vk.communityStatus());
     assert.equal(shown.includes('secret'), false);
     assert.deepEqual(vk.communityStatus().map(item => item.id), ['230706467', '555']);
