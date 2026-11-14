@@ -81,6 +81,7 @@ function menuAction(text, payload) {
     if (value === 'модели' || value === 'модель') return 'models';
     if (value === 'пополнить') return 'pay';
     if (value === 'перенос') return 'move';
+    if (value === 'справка/рейтинг' || value === 'справка / рейтинг') return 'more';
     if (value === 'справка' || value === 'помощь') return 'help';
     if (value === 'рейтинг') return 'rate';
     if (value === 'бот ии') return 'models';
@@ -122,7 +123,7 @@ function textRows() {
     return [
         [textButton('Баланс', { a: 'balance' }, 'primary'), textButton('Модели', { a: 'models' }, 'primary')],
         [textButton('Пополнить', { a: 'pay' }, 'positive'), textButton('Перенос', { a: 'move' }, 'primary')],
-        [textButton('Справка', { a: 'help' }, 'secondary')]
+        [textButton('Справка/Рейтинг', { a: 'more' }, 'secondary')]
     ];
 }
 
@@ -150,6 +151,13 @@ function setTelegramNotify(fn) {
 
 function emailOk(value) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+}
+
+function moreKeyboard() {
+    return asBoard([
+        [textButton('Справка', { a: 'help' }, 'primary'), textButton('Рейтинг', { a: 'rate' }, 'secondary')],
+        [textButton('Назад', { a: 'pay_back' }, 'secondary')]
+    ]);
 }
 
 function payLockKeyboard() {
@@ -199,7 +207,6 @@ function sectionKeyboard() {
         if (groups[i + 1]) row.push(textButton(catalog.GROUPS[groups[i + 1]], { g: groups[i + 1] }));
         rows.push(row);
     }
-    rows.push([textButton('Рейтинг', { a: 'rate' }, 'secondary')]);
     rows.push([textButton('Назад', { a: 'pay_back' }, 'secondary')]);
     return asBoard(rows);
 }
@@ -457,6 +464,7 @@ async function sendHelp(token, peerId) {
 
 async function openMenu(token, peerId, account, action) {
     if (action === 'hello' || action === 'balance') return sendStatus(token, peerId, account);
+    if (action === 'more') return sendText(token, peerId, 'Справка или рейтинг.', moreKeyboard());
     if (action === 'help') return sendHelp(token, peerId);
     if (action === 'rate') return sendRating(token, peerId, account);
     if (action === 'models') {

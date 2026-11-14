@@ -16,7 +16,7 @@ p{margin:24px;text-align:center}
 </head>
 <body>
 <p id="wait">Открываю кабинет…</p>
-<button id="pin" type="button" style="display:none;position:fixed;z-index:5;top:10px;left:10px;right:10px;border:0;border-radius:14px;padding:14px;font-weight:800;color:#fff;background:#6d28d9">Поставить кнопки на страницу</button>
+<button id="pin" type="button" style="display:none;position:fixed;z-index:5;top:10px;left:10px;right:10px;border:0;border-radius:14px;padding:12px;font-weight:700;color:#fff;background:#6d28d9">Обновить кнопки на странице</button>
 <p id="pinnote" style="display:none;position:fixed;z-index:5;top:62px;left:10px;right:10px;margin:0;text-align:center"></p>
 <script>
 const API = ${JSON.stringify(api)};
@@ -51,10 +51,10 @@ function queryFrom(data){
 function widgetCode(groupId){
   const app = 'https://vk.com/app54895627_-' + groupId;
   return 'return {"title":"НейроЯга","rows":[' +
-    '{"title":"Чат ИИ","descr":"Написать боту","button":"Открыть","button_url":"https://vk.me/tochki_linii","title_url":"https://vk.me/tochki_linii"},' +
-    '{"title":"Рейтинг","descr":"Баллы за неделю","button":"Смотреть","button_url":"' + app + '#rate","title_url":"' + app + '#rate"},' +
-    '{"title":"Сайт","descr":"Страница НейроЯга","button":"Открыть","button_url":"' + app + '#site","title_url":"' + app + '#site"},' +
-    '{"title":"Подписка","descr":"Рассылка в чат","button":"Подписаться","button_url":"' + app + '#sub","title_url":"' + app + '#sub"}' +
+    '{"title":"Чат","button":"Написать","button_url":"https://vk.me/tochki_linii","title_url":"https://vk.me/tochki_linii"},' +
+    '{"title":"Рейтинг","button":"Открыть","button_url":"' + app + '#rate","title_url":"' + app + '#rate"},' +
+    '{"title":"Сайт","button":"Открыть","button_url":"' + app + '#site","title_url":"' + app + '#site"},' +
+    '{"title":"Подписка","button":"Включить","button_url":"' + app + '#sub","title_url":"' + app + '#sub"}' +
   ']};';
 }
 let armWidget = false;
