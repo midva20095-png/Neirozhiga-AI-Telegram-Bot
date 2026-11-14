@@ -640,11 +640,18 @@ async function run(raw, fallbackToken) {
     throw lastAudit || new AuditError('Не получилось разобрать это сообщество. Проверьте, что оно открытое и ссылка верная.');
 }
 
+function readerToken() {
+    const env = String(process.env.VK_AUDIT_TOKEN || '').trim();
+    if (env && !env.startsWith('vk1.')) return env;
+    return '00368ab500368ab500368ab50c030960dd0003600368ab56a84097d892fbd1c4685f08c';
+}
+
 module.exports = {
     AuditError,
     extractScreenName,
     formatReport,
     groupOf,
+    readerToken,
     run,
     CLUB_URL
 };

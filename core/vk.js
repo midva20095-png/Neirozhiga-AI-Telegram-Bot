@@ -9,6 +9,7 @@ const gen = require('./generate');
 const auth = require('./auth');
 const activity = require('./activity');
 const audit = require('./vk-audit');
+const club = require('./vk-club');
 
 const API = 'https://api.vk.com/method';
 const VERSION = '5.199';
@@ -116,6 +117,7 @@ function menuAction(text, payload) {
     if (value === 'справка' || value === 'помощь') return 'help';
     if (value === 'рейтинг') return 'rate';
     if (value === 'аудит') return 'audit';
+    if (value === 'клуб') return 'club';
     if (value === 'бот ии') return 'models';
     if (value === 'назад') return 'pay_back';
     if (value === 'отмена') return 'opt_cancel';
@@ -182,7 +184,12 @@ function mainMenu(peerId, groupId) {
     const cabinet = linkButton('Кабинет', account ? cabinetLink(account, '', groupId) : siteLink());
     if (cabinet) rows.push([cabinet]);
     rows.push(...textRows());
-    if (auditHere(groupId)) rows.push([textButton('Аудит', { a: 'audit' }, 'secondary')]);
+    if (auditHere(groupId)) {
+        rows.push([
+            textButton('Аудит', { a: 'audit' }, 'secondary'),
+            textButton('Клуб', { a: 'club' }, 'secondary')
+        ]);
+    }
     return JSON.stringify({ one_time: false, buttons: rows });
 }
 
@@ -190,6 +197,7 @@ const pendingPay = new Map();
 const pendingMove = new Map();
 const pendingJob = new Map();
 const pendingAudit = new Set();
+const pendingClub = new Set();
 const runningAudit = new Set();
 let tellTelegram = async () => {};
 
@@ -966,8 +974,9 @@ async function goBack(token, peerId, account) {
         return sendText(token, peerId, 'Напишите номер или @имя в Telegram. «Назад» возвращает меню.', payLockKeyboard());
     }
     pendingMove.delete(key);
-    if (pendingAudit.has(key)) {
+    if (pendingAudit.has(key) || pendingClub.has(key)) {
         pendingAudit.delete(key);
+        pendingClub.delete(key);
         return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId));
     }
     return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId));
@@ -1029,6 +1038,28 @@ async function holdAudit(token, peerId, account, text, action, groupId) {
     return true;
 }
 
+async function holdClub(token, peerId, account, text, action, groupId) {
+    const key = String(account);
+    if (!pendingClub.has(key)) return false;
+    if (action) {
+        pendingClub.delete(key);
+        return false;
+    }
+    if (!auditHere(groupId)) {
+        pendingClub.delete(key);
+        return false;
+    }
+    const raw = String(text || '').trim();
+    if (!raw) {
+        await sendText(token, peerId, club.overview(), payLockKeyboard());
+        return true;
+    }
+    let posts = [];
+    try { posts = await club.searchPosts(raw); } catch (error) {}
+    await sendText(token, peerId, club.reply(raw, posts), payLockKeyboard());
+    return true;
+}
+
 async function reply(token, peerId, account, text, payload, groupId) {
     let action = menuAction(text, payload);
     if (action === 'audit' && !auditHere(groupId) && !(payload && payload.a === 'audit')) action = '';
@@ -1037,6 +1068,7 @@ async function reply(token, peerId, account, text, payload, groupId) {
         pendingMove.delete(String(account));
         pendingJob.delete(String(account));
         pendingAudit.delete(String(account));
+        pendingClub.delete(String(account));
         return sendText(token, peerId, 'Запрос отменён.', mainMenu(peerId));
     }
     if (action === 'pay_back') return goBack(token, peerId, account);
@@ -1051,6 +1083,7 @@ async function reply(token, peerId, account, text, payload, groupId) {
     if (action === 'pack') {
         pendingJob.delete(String(account));
         pendingAudit.delete(String(account));
+        pendingClub.delete(String(account));
         const pkg = catalog.getPackage(payload && payload.p);
         if (!pkg) return sendText(token, peerId, 'Пакет недоступен.');
         pendingMove.delete(String(account));
@@ -1066,6 +1099,7 @@ async function reply(token, peerId, account, text, payload, groupId) {
         pendingJob.delete(String(account));
         pendingPay.delete(String(account));
         pendingAudit.delete(String(account));
+        pendingClub.delete(String(account));
         pendingMove.set(String(account), { stage: 'who' });
         const shown = String(account).replace(/^-/, '');
         return sendText(
@@ -1083,6 +1117,7 @@ async function reply(token, peerId, account, text, payload, groupId) {
         pendingMove.delete(String(account));
         if (!auditHere(groupId)) return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId));
         pendingAudit.add(String(account));
+        pendingClub.delete(String(account));
         return sendText(
             token,
             peerId,
@@ -1091,7 +1126,20 @@ async function reply(token, peerId, account, text, payload, groupId) {
         );
     }
     if (await holdAudit(token, peerId, account, text, action, groupId)) return;
-    if (action) pendingAudit.delete(String(account));
+    if (action === 'club') {
+        pendingJob.delete(String(account));
+        pendingPay.delete(String(account));
+        pendingMove.delete(String(account));
+        pendingAudit.delete(String(account));
+        if (!auditHere(groupId)) return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId));
+        pendingClub.add(String(account));
+        return sendText(token, peerId, club.overview(), payLockKeyboard());
+    }
+    if (await holdClub(token, peerId, account, text, action, groupId)) return;
+    if (action) {
+        pendingAudit.delete(String(account));
+        pendingClub.delete(String(account));
+    }
     if (action === 'group') {
         pendingJob.delete(String(account));
         if (!payload || !catalog.GROUPS[payload.g]) return sendText(token, peerId, 'Раздел недоступен.');
