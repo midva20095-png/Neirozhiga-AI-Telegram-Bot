@@ -30,14 +30,27 @@ test('отчёт аудита ведёт в клуб и не содержит к
 });
 
 test('кнопка аудита есть только во втором сообществе', () => {
-    const saved = process.env.VK_GROUP_ID_2;
+    const saved = {
+        VK_GROUP_ID: process.env.VK_GROUP_ID,
+        VK_GROUP_TOKEN: process.env.VK_GROUP_TOKEN,
+        VK_GROUP_ID_2: process.env.VK_GROUP_ID_2,
+        VK_GROUP_TOKEN_2: process.env.VK_GROUP_TOKEN_2
+    };
+    process.env.VK_GROUP_ID = '230706467';
+    process.env.VK_GROUP_TOKEN = 'secret-token-value';
     process.env.VK_GROUP_ID_2 = '555';
+    process.env.VK_GROUP_TOKEN_2 = 'secret-two';
     process.env.WEBAPP_URL = process.env.WEBAPP_URL || 'https://bot.example';
     const second = JSON.parse(vk.mainMenu(10, '555'));
     const first = JSON.parse(vk.mainMenu(10, '230706467'));
     assert.equal(second.buttons.flat().some(button => button.action.label === 'Аудит'), true);
     assert.equal(first.buttons.flat().some(button => button.action.label === 'Аудит'), false);
     assert.equal(vk.menuAction('Аудит'), 'audit');
-    if (saved == null) delete process.env.VK_GROUP_ID_2;
-    else process.env.VK_GROUP_ID_2 = saved;
+    const shown = JSON.stringify(vk.communityStatus());
+    assert.equal(shown.includes('secret'), false);
+    assert.deepEqual(vk.communityStatus().map(item => item.id), ['230706467', '555']);
+    for (const key of Object.keys(saved)) {
+        if (saved[key] == null) delete process.env[key];
+        else process.env[key] = saved[key];
+    }
 });

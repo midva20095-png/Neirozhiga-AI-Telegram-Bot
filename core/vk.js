@@ -390,11 +390,15 @@ async function enableButtons(token, groupId) {
             group_id: groupId,
             messages: '1',
             bots_capabilities: '1',
-            bots_start_button: '1'
+            bots_start_button: '1',
+            bots_add_to_chat: '1'
         });
-        console.log('ВК: возможности ботов включены, кнопки доступны.');
+        console.log(`ВК ${groupId}: сообщения и кнопка «Начать» включены.`);
     } catch (error) {
-        console.error('ВК не смог сам включить кнопки. Сообщения → Настройки для бота → Возможности ботов → Включены.');
+        try {
+            await call(token, 'groups.edit', { group_id: groupId, messages: '1' });
+        } catch (e) {}
+        console.error(`ВК ${groupId} не включил кнопку чата. Сообщения → Сообщения сообщества → Включены. Настройки для бота → Возможности ботов.`);
     }
 }
 
@@ -1117,6 +1121,19 @@ async function notify(accountIdValue, message) {
     return false;
 }
 
+const linkState = new Map();
+
+function markCommunity(groupId, online, hint) {
+    linkState.set(String(groupId), { online: !!online, hint: String(hint || '') });
+}
+
+function communityStatus() {
+    return communityList().map(item => {
+        const state = linkState.get(item.id) || { online: false, hint: 'Подключаюсь.' };
+        return { id: item.id, online: !!state.online, hint: state.hint || '' };
+    });
+}
+
 async function poll(token, groupId) {
     let online = false;
     let failLogged = false;
@@ -1125,7 +1142,9 @@ async function poll(token, groupId) {
             let server = await call(token, 'groups.getLongPollServer', { group_id: groupId });
             if (!online) {
                 online = true;
+                markCommunity(groupId, true, '');
                 console.log(`ВК ${groupId} подключён, жду сообщения сообщества.`);
+                db.note('sys', `ВК ${groupId} подключён`).catch(() => {});
                 await enableButtons(token, groupId);
                 await enableActivity(token, groupId);
             }
@@ -1159,10 +1178,13 @@ async function poll(token, groupId) {
             }
         } catch (error) {
             online = false;
+            markCommunity(groupId, false, connectHint(error));
             if (!failLogged) {
                 failLogged = true;
                 const code = Number(error && error.code);
-                console.error(`ВК не подключился${code ? ` (${code})` : ''}. ${connectHint(error)} Telegram работает как прежде.`);
+                const hint = connectHint(error);
+                console.error(`ВК ${groupId} не подключился${code ? ` (${code})` : ''}. ${hint} Telegram работает как прежде.`);
+                db.note('sys', `ВК ${groupId} не подключился. ${hint}`).catch(() => {});
             }
             await new Promise(r => setTimeout(r, 15000));
         }
@@ -1201,5 +1223,5 @@ function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, photoAttachment, communityList, communityId, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, photoAttachment, communityList, communityId, communityStatus, USER_HELP
 };

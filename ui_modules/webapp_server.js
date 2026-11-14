@@ -122,6 +122,10 @@ function startWebApp() {
         return auth.verifyVkLaunch(query) || auth.verifyVkLaunch(body.launch || {}) || null;
     }
 
+    app.get('/api/vk/bot', (req, res) => {
+        res.json({ communities: vk.communityStatus() });
+    });
+
     app.get('/api/vk/session', (req, res) => {
         const account = auth.verifyVkLaunch(req.query || {});
         if (!account) {
