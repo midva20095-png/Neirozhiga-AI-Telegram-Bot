@@ -1210,7 +1210,9 @@ async function poll(token, groupId) {
     }
 }
 
-function communityList() {
+let resolvedCommunities = null;
+
+function communitiesFromEnv() {
     const out = [];
     const seen = new Set();
     function add(idRaw, tokenRaw) {
@@ -1225,6 +1227,20 @@ function communityList() {
     return out;
 }
 
+function communityList() {
+    return resolvedCommunities || communitiesFromEnv();
+}
+
+async function communityFromToken(token, fallbackId) {
+    try {
+        const info = await call(token, 'groups.getById', {});
+        const group = info && (info.groups ? info.groups[0] : (Array.isArray(info) ? info[0] : null));
+        const id = group && String(group.id || '').replace(/\D/g, '');
+        if (id) return id;
+    } catch (e) {}
+    return String(fallbackId || '').replace(/\D/g, '');
+}
+
 function communityId(value) {
     const id = String(value || '').replace(/\D/g, '');
     if (id) return id;
@@ -1232,11 +1248,20 @@ function communityId(value) {
     return list[0] ? list[0].id : '';
 }
 
-function startVk() {
-    const list = communityList();
-    const names = list.map(item => item.id).join(', ');
+async function startVk() {
+    const raw = communitiesFromEnv();
+    const next = [];
+    const seen = new Set();
+    for (const item of raw) {
+        const id = await communityFromToken(item.token, item.id);
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        next.push({ id, token: item.token });
+    }
+    resolvedCommunities = next;
+    const names = next.map(item => item.id).join(', ');
     db.note('sys', names ? `ВК сообщества: ${names}` : 'ВК сообщества не заданы').catch(() => {});
-    for (const item of list) {
+    for (const item of next) {
         poll(item.token, item.id).catch(() => {});
     }
 }
