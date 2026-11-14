@@ -57,16 +57,21 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
 .filebtn input{display:none}
 .check{display:flex;align-items:flex-start;gap:8px;margin-top:10px;color:var(--text);font-size:14px}
 .check input{width:auto;margin-top:2px}
-.door{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.door button{min-height:108px;font-size:18px;border-radius:18px}
+.door,.homes{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.door button,.homes button{min-height:120px;font-size:18px;border-radius:18px;background:#1c1233;border:1px solid var(--line);color:var(--text);text-align:left;padding:16px 18px}
+.homes button strong,.door button strong{display:block;font-family:Unbounded,sans-serif;font-size:18px}
+.homes button .meta,.door button .meta{display:block;margin-top:8px;color:var(--mut);font-size:13px;font-weight:600}
+.homes button .ok,.homes button .bad{display:block;margin-top:4px;font-size:13px}
+.actions{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.actions button{width:100%;background:transparent;border:1px solid var(--line);color:var(--text)}
 .head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}
 .place{font-family:Unbounded,sans-serif;font-size:18px;margin:0}
-@media(max-width:640px){.mrow{grid-template-columns:1fr 1fr}.door{grid-template-columns:1fr}}
+@media(max-width:640px){.mrow{grid-template-columns:1fr 1fr}.door,.homes{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <h1>Админ <i>НейроЯга</i></h1>
-<p class="note">Сначала вход. Потом Telegram или ВКонтакте. Во ВК дальше выбирается одно сообщество.</p>
+<p class="note" id="intro">Сначала вход. Потом Telegram или ВКонтакте. Во ВК дальше выбирается одно сообщество.</p>
 
 <div class="card" id="login">
   <div class="row"><input id="pass" type="password" placeholder="Пароль администратора"><button onclick="login()">Войти</button></div>
@@ -75,20 +80,20 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
 
 <div class="card" id="door" style="display:none">
   <h3>Куда войти</h3>
-  <p class="note">Telegram и ВКонтакте не смешиваются.</p>
+  <p class="note">Telegram и ВКонтакте открываются отдельно.</p>
   <div class="door">
-    <button type="button" onclick="enterPlace('tg')">Telegram</button>
-    <button type="button" class="ghost" onclick="enterPlace('vk')">ВКонтакте</button>
+    <button type="button" onclick="enterPlace('tg')"><strong>Telegram</strong><span class="meta">Клиенты, модели и шаблоны</span></button>
+    <button type="button" onclick="enterPlace('vk')"><strong>ВКонтакте</strong><span class="meta">Два сообщества по отдельности</span></button>
   </div>
 </div>
 
 <div class="card" id="communities" style="display:none">
   <h3>Сообщество</h3>
-  <p class="note">Дальше откроется кабинет только выбранного сообщества.</p>
-  <div class="door" id="communityDoor"></div>
-  <div class="row">
-    <button type="button" onclick="enterShared()">Общее ВК: клиенты, модели, рассылка</button>
-    <button class="ghost" type="button" onclick="showDoor()">К выбору Telegram или ВК</button>
+  <p class="note">Откроется кабинет только этого сообщества.</p>
+  <div class="homes" id="communityDoor"></div>
+  <div class="actions">
+    <button type="button" onclick="enterShared()">Общее для обоих: клиенты, модели, рассылка</button>
+    <button type="button" onclick="showDoor()">Назад</button>
   </div>
 </div>
 
@@ -165,6 +170,7 @@ function logout(){
   sessionStorage.removeItem('ny_admin_place');
   sessionStorage.removeItem('ny_admin_home');
   document.getElementById('login').style.display='block';
+  document.getElementById('intro').style.display='block';
   document.getElementById('panel').style.display='none';
   document.getElementById('door').style.display='none';
   document.getElementById('communities').style.display='none';
@@ -180,12 +186,14 @@ function placeName(){
 }
 function showDoor(){
   document.getElementById('login').style.display='none';
+  document.getElementById('intro').style.display='none';
   document.getElementById('panel').style.display='none';
   document.getElementById('communities').style.display='none';
   document.getElementById('door').style.display='block';
 }
 function showCommunities(){
   document.getElementById('login').style.display='none';
+  document.getElementById('intro').style.display='none';
   document.getElementById('panel').style.display='none';
   document.getElementById('door').style.display='none';
   document.getElementById('communities').style.display='block';
@@ -193,8 +201,10 @@ function showCommunities(){
 }
 function renderCommunityDoor(){
   document.getElementById('communityDoor').innerHTML = homes.map(item =>
-    '<button type="button" class="'+(item.title==='НейроЯга'?'ghost':'')+'" onclick="enterCommunity(\''+esc(item.id)+'\')">'+
-    esc(item.title)+'<br><span class="note">'+esc(item.id)+' · '+(item.online?'на связи':'нет связи')+'</span></button>'
+    '<button type="button" onclick="enterCommunity(\''+esc(item.id)+'\')">'+
+    '<strong>'+esc(item.title)+'</strong>'+
+    '<span class="meta">'+esc(item.id)+'</span>'+
+    '<span class="'+(item.online?'ok':'bad')+'">'+(item.online?'На связи':'Нет связи')+'</span></button>'
   ).join('');
 }
 async function enterPlace(next){
@@ -228,6 +238,7 @@ function openCabinet(tab){
   document.getElementById('communities').style.display='none';
   document.getElementById('door').style.display='none';
   document.getElementById('login').style.display='none';
+  document.getElementById('intro').style.display='none';
   document.getElementById('panel').style.display='block';
   document.getElementById('placeTitle').textContent = placeName();
   const home = homeNow();
