@@ -30,7 +30,7 @@ test('из события ВК берётся только входящий те
 test('меню ВК открывает кабинет и не считает кнопки запросом', () => {
     const menu = JSON.parse(vk.mainMenu());
     const labels = menu.buttons.flat().map(button => button.action.label);
-    assert.deepEqual(labels, ['Баланс', 'Модели', 'Пополнить', 'Перенос', 'Справка', 'Бот ИИ', 'Рейтинг', 'Кабинет', 'На сайт']);
+    assert.deepEqual(labels, ['Кабинет', 'Баланс', 'Модели', 'Пополнить', 'Перенос', 'Справка']);
     for (const row of menu.buttons) {
         const links = row.filter(button => button.action.type === 'open_link');
         if (!links.length) continue;
@@ -38,8 +38,9 @@ test('меню ВК открывает кабинет и не считает к�
         assert.equal(links[0].color, undefined);
         assert.match(links[0].action.link, /^https:\/\//);
     }
-    assert.equal(menu.buttons.at(-1)[0].action.link, 'https://babayagaland.ru');
-    assert.equal(menu.buttons.at(-2)[0].action.link, 'https://babayagaland.ru');
+    assert.equal(menu.buttons[0].length, 1);
+    assert.equal(menu.buttons[0][0].action.type, 'open_link');
+    assert.equal(menu.buttons[0][0].action.link, 'https://babayagaland.ru');
     process.env.WEBAPP_URL = 'https://bot.example';
     const personal = JSON.parse(vk.mainMenu(10));
     const cabinet = personal.buttons.flat().find(button => button.action.label === 'Кабинет');
@@ -65,6 +66,7 @@ test('меню ВК открывает кабинет и не считает к�
     const sections = JSON.parse(vk.sectionKeyboard());
     assert.equal(sections.inline, false);
     assert.ok(sections.buttons.length <= 10);
+    assert.equal(sections.buttons.at(-2)[0].action.label, 'Рейтинг');
     assert.equal(sections.buttons.at(-1)[0].action.label, 'Назад');
     assert.equal(vk.menuAction('Назад'), 'pay_back');
     assert.equal(vk.menuAction('Отмена'), 'opt_cancel');

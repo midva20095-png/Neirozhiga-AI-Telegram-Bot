@@ -122,8 +122,7 @@ function textRows() {
     return [
         [textButton('Баланс', { a: 'balance' }, 'primary'), textButton('Модели', { a: 'models' }, 'primary')],
         [textButton('Пополнить', { a: 'pay' }, 'positive'), textButton('Перенос', { a: 'move' }, 'primary')],
-        [textButton('Справка', { a: 'help' }, 'secondary'), textButton('Бот ИИ', { a: 'models' }, 'primary')],
-        [textButton('Рейтинг', { a: 'rate' }, 'secondary')]
+        [textButton('Справка', { a: 'help' }, 'secondary')]
     ];
 }
 
@@ -132,12 +131,11 @@ function textOnlyMenu() {
 }
 
 function mainMenu(peerId) {
-    const rows = textRows();
+    const rows = [];
     const account = accountId(peerId);
     const cabinet = linkButton('Кабинет', account ? cabinetLink(account) : siteLink());
-    const site = linkButton('На сайт', siteLink());
     if (cabinet) rows.push([cabinet]);
-    if (site) rows.push([site]);
+    rows.push(...textRows());
     return JSON.stringify({ one_time: false, buttons: rows });
 }
 
@@ -201,6 +199,7 @@ function sectionKeyboard() {
         if (groups[i + 1]) row.push(textButton(catalog.GROUPS[groups[i + 1]], { g: groups[i + 1] }));
         rows.push(row);
     }
+    rows.push([textButton('Рейтинг', { a: 'rate' }, 'secondary')]);
     rows.push([textButton('Назад', { a: 'pay_back' }, 'secondary')]);
     return asBoard(rows);
 }
@@ -209,7 +208,7 @@ function modelKeyboard(group) {
     const rows = catalog.modelsByGroup(group, 'vk').slice(0, 9).map(model => [
         textButton(`${model.short} · ${catalog.priceLabel(model)}`, { m: model.key })
     ]);
-    rows.push([textButton('Назад', { a: 'models' }, 'secondary')]);
+    rows.push([textButton('К разделам', { a: 'models' }, 'secondary')]);
     return asBoard(rows);
 }
 
