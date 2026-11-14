@@ -290,7 +290,7 @@ function startWebApp() {
         try {
             const range = activity.weekRange(new Date());
             if (Number(req.userId) >= 0) return res.json({ vk: false, week: range.label, rows: [], mine: null });
-            const rows = await vk.attachFaces(await db.listWeekActivity(range.start));
+            const rows = await vk.attachFaces(await db.listWeekActivity(range.start, vk.communityId(req.query.group)));
             const place = rows.findIndex(row => String(row.userId) === String(req.userId));
             res.json({
                 vk: true,
@@ -523,7 +523,8 @@ function startWebApp() {
                 reason,
                 keepModel,
                 strict,
-                audience
+                audience,
+                groupId: vk.communityId(body.group)
             };
             const photoKb = file && file.buffer ? Math.max(1, Math.round(file.buffer.length / 1024)) : 0;
             if (templateTitle) {
@@ -685,7 +686,7 @@ function startWebApp() {
     app.get('/api/admin/vk/rating', requireAdmin, async (req, res) => {
         try {
             const range = activity.weekRange(new Date());
-            const rows = await vk.attachFaces(await db.listWeekActivity(range.start));
+            const rows = await vk.attachFaces(await db.listWeekActivity(range.start, vk.communityId(req.query.group)));
             res.json({ week: range.label, rules: activity.rulesText(), points: activity.POINTS, rows });
         } catch (e) {
             res.status(500).json({ error: 'Не удалось открыть рейтинг.' });

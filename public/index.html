@@ -860,7 +860,7 @@ async function generateTemplate(){
   last = { text: 'Создаю'+(pickedFormat?' · размер '+pickedFormat:'')+'…' };
   draw();
   try {
-    const r = await fetch('/api/generate',{method:'POST',headers:authHeaders(),body:JSON.stringify({templateId:t.id, image:photoData, format:pickedFormat})});
+    const r = await fetch('/api/generate',{method:'POST',headers:authHeaders(),body:JSON.stringify({templateId:t.id, image:photoData, format:pickedFormat, group: new URLSearchParams(location.search).get('vk_group_id') || ''})});
     const d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error||'Ошибка');
     last = d;
@@ -915,7 +915,8 @@ async function generate(){
   try {
     const r = await fetch('/api/generate',{method:'POST',headers:authHeaders(),body:JSON.stringify({
       prompt, model: me&&me.current_model, image: (m && m.image !== 'forbidden') ? genPhoto : null,
-      quality: pickedQuality, duration: pickedDuration, format: pickedAspect
+      quality: pickedQuality, duration: pickedDuration, format: pickedAspect,
+      group: new URLSearchParams(location.search).get('vk_group_id') || ''
     })});
     const d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error||'Ошибка');
@@ -1019,7 +1020,8 @@ async function loadRating(){
   const box = document.getElementById('ratebox');
   if (!box) return;
   try {
-    const r = await fetch('/api/rating', { headers: authHeaders() });
+    const gid = new URLSearchParams(location.search).get('vk_group_id') || '';
+    const r = await fetch('/api/rating' + (gid ? '?group=' + encodeURIComponent(gid) : ''), { headers: authHeaders() });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Не удалось открыть рейтинг');
     if (document.getElementById('ratebox')) document.getElementById('ratebox').innerHTML = renderRating(d);

@@ -133,3 +133,29 @@ test('кабинет ВК открывает рабочую страницу, а
     assert.match(action.link, /^https:\/\/bot\.example\/vk\.html\?tk=-10\./);
     delete process.env.VK_APP_ID;
 });
+
+test('второе сообщество считается отдельно и не подменяет первое', () => {
+    const saved = {
+        VK_GROUP_ID: process.env.VK_GROUP_ID,
+        VK_GROUP_TOKEN: process.env.VK_GROUP_TOKEN,
+        VK_GROUP_ID_2: process.env.VK_GROUP_ID_2,
+        VK_GROUP_TOKEN_2: process.env.VK_GROUP_TOKEN_2
+    };
+    process.env.VK_GROUP_ID = '230706467';
+    process.env.VK_GROUP_TOKEN = 'token-one';
+    process.env.VK_GROUP_ID_2 = '555';
+    process.env.VK_GROUP_TOKEN_2 = 'token-two';
+    assert.deepEqual(vk.communityList().map(item => item.id), ['230706467', '555']);
+    assert.equal(vk.communityId('555'), '555');
+    assert.equal(vk.communityId('999'), '230706467');
+    process.env.VK_GROUP_ID_2 = '';
+    process.env.VK_GROUP_TOKEN_2 = '';
+    assert.deepEqual(vk.communityList().map(item => item.id), ['230706467']);
+    process.env.VK_GROUP_ID_2 = '230706467';
+    process.env.VK_GROUP_TOKEN_2 = 'token-two';
+    assert.deepEqual(vk.communityList().map(item => item.id), ['230706467']);
+    for (const key of Object.keys(saved)) {
+        if (saved[key] == null) delete process.env[key];
+        else process.env[key] = saved[key];
+    }
+});

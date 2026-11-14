@@ -553,11 +553,11 @@ async function sendHelp(token, peerId) {
     await sendText(token, peerId, USER_HELP);
 }
 
-async function openMenu(token, peerId, account, action) {
+async function openMenu(token, peerId, account, action, groupId) {
     if (action === 'hello' || action === 'balance') return sendStatus(token, peerId, account);
     if (action === 'more') return sendText(token, peerId, 'Справка или рейтинг.', moreKeyboard());
     if (action === 'help') return sendHelp(token, peerId);
-    if (action === 'rate') return sendRating(token, peerId, account);
+    if (action === 'rate') return sendRating(token, peerId, account, groupId);
     if (action === 'models') {
         const board = JSON.parse(sectionKeyboard());
         if (board.buttons.length < 2) return sendText(token, peerId, 'Сейчас нет доступных моделей.');
@@ -629,7 +629,8 @@ async function runJob(token, peerId, account, job) {
             aspectRatio: job.aspect && job.aspect !== 'auto' ? job.aspect : null,
             duration: job.duration || null,
             quality: job.quality || null,
-            reason: `ВК · ${prepared.model.name}`
+            reason: `ВК · ${prepared.model.name}`,
+            groupId: job.groupId || ''
         });
         const done = `Готово. Списано ${result.cost} кр. Осталось ${result.balance}.`;
         try {
@@ -814,7 +815,7 @@ async function goBack(token, peerId, account) {
     return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId));
 }
 
-async function reply(token, peerId, account, text, payload) {
+async function reply(token, peerId, account, text, payload, groupId) {
     const action = menuAction(text, payload);
     if (action === 'opt_cancel') {
         pendingPay.delete(String(account));
@@ -869,17 +870,17 @@ async function reply(token, peerId, account, text, payload) {
     }
     if (action) {
         pendingJob.delete(String(account));
-        return openMenu(token, peerId, account, action);
+        return openMenu(token, peerId, account, action, groupId);
     }
     if (!text) {
         await sendText(token, peerId, 'Напишите запрос или нажмите кнопку внизу.');
         return;
     }
     const modelKey = (await db.getCurrentModel(account)) || catalog.defaultModelKey('vk');
-    return askOrRun(token, peerId, account, { prompt: text, modelKey, quality: '', duration: 0, aspect: '' });
+    return askOrRun(token, peerId, account, { prompt: text, modelKey, quality: '', duration: 0, aspect: '', groupId: groupId || '' });
 }
 
-async function handleEvent(token, event) {
+async function handleEvent(token, event, groupId) {
     const account = accountId(event.userId);
     if (!account) return;
     const payload = event.payload || {};
@@ -895,7 +896,7 @@ async function handleEvent(token, event) {
     }
     try { await answerEvent(token, event, snackbar); } catch (e) {}
     await db.ensureUser(account, `vk:${event.userId}`);
-    return reply(token, event.peerId, account, '', payload);
+    return reply(token, event.peerId, account, '', payload, groupId);
 }
 
 async function noteActivity(update, groupId) {
@@ -904,10 +905,10 @@ async function noteActivity(update, groupId) {
     const account = accountId(hit.vkId);
     if (!account) return;
     if (hit.remove) {
-        await db.removeActivity(account, hit.kind, hit.objectKey);
+        await db.removeActivity(account, hit.kind, hit.objectKey, groupId);
         return;
     }
-    const saved = await db.recordActivity(account, hit.kind, hit.objectKey, activity.POINTS[hit.kind] || 0);
+    const saved = await db.recordActivity(account, hit.kind, hit.objectKey, activity.POINTS[hit.kind] || 0, groupId);
     if (saved) await db.getUser(account);
 }
 
@@ -949,11 +950,11 @@ async function attachFaces(rows) {
     return list.map(row => activity.present(row, faces.get(String(row.user_id))));
 }
 
-async function sendRating(token, peerId, account) {
+async function sendRating(token, peerId, account, groupId) {
     const range = activity.weekRange(new Date());
     let rows = [];
     try {
-        rows = await attachFaces(await db.listWeekActivity(range.start));
+        rows = await attachFaces(await db.listWeekActivity(range.start, groupId));
     } catch (error) {}
     await sendText(token, peerId, activity.formatRating(rows, account, range));
 }
@@ -961,7 +962,7 @@ async function sendRating(token, peerId, account) {
 async function handleUpdate(token, update, groupId) {
     try { await noteActivity(update, groupId); } catch (error) {}
     const event = readEvent(update);
-    if (event) return handleEvent(token, event);
+    if (event) return handleEvent(token, event, groupId);
     const incoming = readIncoming(update);
     if (!incoming) return;
     const account = accountId(incoming.fromId);
@@ -969,44 +970,48 @@ async function handleUpdate(token, update, groupId) {
     const { isNew } = await db.ensureUser(account, `vk:${incoming.fromId}`);
     const bonus = catalog.getGeneral().start_bonus;
     if (isNew && bonus > 0) await db.updateBalance(account, bonus, 'Приветственный бонус');
-    await reply(token, incoming.peerId, account, incoming.text, incoming.payload);
+    await reply(token, incoming.peerId, account, incoming.text, incoming.payload, groupId);
 }
 
 async function sendToUser(accountIdValue, buffer, mime, caption) {
-    const token = String(process.env.VK_GROUP_TOKEN || '').trim();
     const id = Number(accountIdValue);
-    if (!token || !Number.isInteger(id) || id >= 0 || !buffer) return false;
+    if (!Number.isInteger(id) || id >= 0 || !buffer) return false;
     const peerId = -id;
-    try {
-        if (String(mime || '').startsWith('image/')) {
-            await sendImage(token, peerId, buffer, caption || 'Файл из кабинета.');
-        } else {
-            await sendText(token, peerId, caption || 'Файл готов в кабинете.');
-        }
-        return true;
-    } catch (e) {
-        return false;
+    for (const item of communityList()) {
+        try {
+            if (String(mime || '').startsWith('image/')) {
+                await sendImage(item.token, peerId, buffer, caption || 'Файл из кабинета.');
+            } else {
+                await sendText(item.token, peerId, caption || 'Файл готов в кабинете.');
+            }
+            return true;
+        } catch (e) {}
     }
+    return false;
 }
 
 async function askTopup(accountIdValue) {
-    const token = String(process.env.VK_GROUP_TOKEN || '').trim();
     const id = Number(accountIdValue);
-    if (!token || !Number.isInteger(id) || id >= 0) return null;
-    await sendText(token, -id, 'Выберите пакет внизу. Другие кнопки скрыты. «Назад» возвращает меню.', payKeyboard());
-    return chatReturnUrl();
+    if (!Number.isInteger(id) || id >= 0) return null;
+    for (const item of communityList()) {
+        try {
+            await sendText(item.token, -id, 'Выберите пакет внизу. Другие кнопки скрыты. «Назад» возвращает меню.', payKeyboard());
+            return chatReturnUrl();
+        } catch (e) {}
+    }
+    return null;
 }
 
 async function notify(accountIdValue, message) {
-    const token = String(process.env.VK_GROUP_TOKEN || '').trim();
     const id = Number(accountIdValue);
-    if (!token || !Number.isInteger(id) || id >= 0) return false;
-    try {
-        await sendText(token, -id, message);
-        return true;
-    } catch (e) {
-        return false;
+    if (!Number.isInteger(id) || id >= 0) return false;
+    for (const item of communityList()) {
+        try {
+            await sendText(item.token, -id, message);
+            return true;
+        } catch (e) {}
     }
+    return false;
 }
 
 async function poll(token, groupId) {
@@ -1017,7 +1022,7 @@ async function poll(token, groupId) {
             let server = await call(token, 'groups.getLongPollServer', { group_id: groupId });
             if (!online) {
                 online = true;
-                console.log('ВК подключён, жду сообщения сообщества.');
+                console.log(`ВК ${groupId} подключён, жду сообщения сообщества.`);
                 await enableButtons(token, groupId);
                 await enableActivity(token, groupId);
             }
@@ -1061,13 +1066,34 @@ async function poll(token, groupId) {
     }
 }
 
+function communityList() {
+    const out = [];
+    const seen = new Set();
+    function add(idRaw, tokenRaw) {
+        const id = String(idRaw || '').replace(/\D/g, '');
+        const token = String(tokenRaw || '').trim();
+        if (!id || !token || seen.has(id)) return;
+        seen.add(id);
+        out.push({ id, token });
+    }
+    add(process.env.VK_GROUP_ID, process.env.VK_GROUP_TOKEN);
+    add(process.env.VK_GROUP_ID_2, process.env.VK_GROUP_TOKEN_2);
+    return out;
+}
+
+function communityId(value) {
+    const id = String(value || '').replace(/\D/g, '');
+    const list = communityList();
+    if (id && list.some(item => item.id === id)) return id;
+    return list[0] ? list[0].id : '';
+}
+
 function startVk() {
-    const token = String(process.env.VK_GROUP_TOKEN || '').trim();
-    const groupId = String(process.env.VK_GROUP_ID || '').replace(/\D/g, '');
-    if (!token || !groupId) return;
-    poll(token, groupId).catch(() => {});
+    for (const item of communityList()) {
+        poll(item.token, item.id).catch(() => {});
+    }
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, photoAttachment, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, photoAttachment, communityList, communityId, USER_HELP
 };

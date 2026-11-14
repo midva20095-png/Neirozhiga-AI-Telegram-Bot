@@ -158,7 +158,25 @@ async function initDB() {
       UNIQUE (user_id, kind, object_key)
     )
   `);
+  await pool.query(`ALTER TABLE vk_activity ADD COLUMN IF NOT EXISTS group_id BIGINT NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE vk_activity DROP CONSTRAINT IF EXISTS vk_activity_user_id_kind_object_key_key`);
+  await pool.query(`
+    DO $$
+    DECLARE cname text;
+    BEGIN
+      FOR cname IN
+        SELECT conname FROM pg_constraint
+        WHERE conrelid = 'vk_activity'::regclass AND contype = 'u'
+          AND pg_get_constraintdef(oid) NOT LIKE '%group_id%'
+      LOOP
+        EXECUTE format('ALTER TABLE vk_activity DROP CONSTRAINT %I', cname);
+      END LOOP;
+    END $$;
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS vk_activity_event_idx ON vk_activity (user_id, kind, object_key, group_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS vk_activity_week_idx ON vk_activity (created_at DESC)`);
+  const homeGroup = String(process.env.VK_GROUP_ID || '').replace(/\D/g, '');
+  if (homeGroup) await pool.query('UPDATE vk_activity SET group_id = $1 WHERE group_id = 0', [homeGroup]);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS vk_profiles (
       user_id BIGINT PRIMARY KEY,
@@ -250,23 +268,27 @@ async function answerTicket(id, answer) {
   return res.rows[0];
 }
 
-async function recordActivity(userId, kind, objectKey, points) {
+function activityGroup(groupId) {
+  return String(groupId || process.env.VK_GROUP_ID || '').replace(/\D/g, '') || '0';
+}
+
+async function recordActivity(userId, kind, objectKey, points, groupId) {
   const key = String(objectKey || '').slice(0, 160);
   if (!key) return false;
   const res = await pool.query(
-    `INSERT INTO vk_activity (user_id, kind, object_key, points)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (user_id, kind, object_key) DO NOTHING
+    `INSERT INTO vk_activity (user_id, kind, object_key, points, group_id)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (user_id, kind, object_key, group_id) DO NOTHING
      RETURNING id`,
-    [String(userId), String(kind), key, Math.max(0, Math.round(Number(points) || 0))]
+    [String(userId), String(kind), key, Math.max(0, Math.round(Number(points) || 0)), activityGroup(groupId)]
   );
   return res.rows.length > 0;
 }
 
-async function removeActivity(userId, kind, objectKey) {
+async function removeActivity(userId, kind, objectKey, groupId) {
   await pool.query(
-    'DELETE FROM vk_activity WHERE user_id = $1 AND kind = $2 AND object_key = $3',
-    [String(userId), String(kind), String(objectKey || '').slice(0, 160)]
+    'DELETE FROM vk_activity WHERE user_id = $1 AND kind = $2 AND object_key = $3 AND group_id = $4',
+    [String(userId), String(kind), String(objectKey || '').slice(0, 160), activityGroup(groupId)]
   );
 }
 
@@ -292,7 +314,7 @@ async function saveVkProfiles(rows) {
   }
 }
 
-async function listWeekActivity(since) {
+async function listWeekActivity(since, groupId) {
   const weights = require('./activity').POINTS;
   const like = Math.max(0, Math.round(Number(weights.like) || 0));
   const comment = Math.max(0, Math.round(Number(weights.comment) || 0));
@@ -311,11 +333,11 @@ async function listWeekActivity(since) {
             COUNT(*) FILTER (WHERE a.kind = 'bot')::int AS bot
      FROM vk_activity a
      LEFT JOIN users u ON u.user_id = a.user_id
-     WHERE a.created_at >= $1
+     WHERE a.created_at >= $1 AND a.group_id = $6
      GROUP BY a.user_id, u.username
      ORDER BY points DESC, a.user_id
      LIMIT 50`,
-    [since, like, comment, repost, bot]
+    [since, like, comment, repost, bot, activityGroup(groupId)]
   );
   return res.rows;
 }

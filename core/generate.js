@@ -72,7 +72,7 @@ async function prepare({ userId, modelKey, hasImage, hasText, charge, strict, du
 }
 
 // Выполняет генерацию: держит замок, списывает кредиты и фиксирует статистику.
-async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mimeType, aspectRatio, duration, quality, audioBuffer, audioMime, audioSeconds, charge, reason, keepModel, workLabel, templateId }) {
+async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mimeType, aspectRatio, duration, quality, audioBuffer, audioMime, audioSeconds, charge, reason, keepModel, workLabel, templateId, groupId }) {
     const id = String(userId);
     if (busy.has(id)) throw new GenError('Дождитесь завершения предыдущей генерации', 'busy');
     busy.add(id);
@@ -106,7 +106,7 @@ async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mim
         if (Number(id) < 0) {
             try {
                 const activity = require('./activity');
-                await db.recordActivity(id, 'bot', `bot:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`, activity.POINTS.bot);
+                await db.recordActivity(id, 'bot', `bot:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`, activity.POINTS.bot, groupId);
             } catch (err) {}
         }
         if (!keepModel) await db.setCurrentModel(id, model.key);
@@ -144,7 +144,7 @@ async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mim
 }
 
 // Удобная обёртка для веба: data: URL вместо бинарника.
-async function generateForWeb({ userId, prompt, modelKey, fileBuffer, mimeType, aspectRatio, duration, quality, charge, reason, keepModel, strict, workLabel, templateId, audience }) {
+async function generateForWeb({ userId, prompt, modelKey, fileBuffer, mimeType, aspectRatio, duration, quality, charge, reason, keepModel, strict, workLabel, templateId, audience, groupId }) {
     const { model, plugin } = await prepare({
         userId,
         modelKey,
@@ -156,7 +156,7 @@ async function generateForWeb({ userId, prompt, modelKey, fileBuffer, mimeType, 
         quality,
         audience
     });
-    const out = await run({ userId, prompt, model, plugin, fileBuffer, mimeType, aspectRatio, duration, quality, charge, reason, keepModel, workLabel, templateId });
+    const out = await run({ userId, prompt, model, plugin, fileBuffer, mimeType, aspectRatio, duration, quality, charge, reason, keepModel, workLabel, templateId, groupId });
     if (workLabel && out.type === 'image') out.text = 'Изображение готово';
     else if (workLabel && out.type === 'video') out.text = 'Видео готово';
     else if (workLabel && out.type === 'audio') out.text = 'Аудио готово';
