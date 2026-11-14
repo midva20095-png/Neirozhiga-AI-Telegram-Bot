@@ -444,7 +444,8 @@ async function enableActivity(token, groupId) {
         wall_reply_new: '1',
         wall_reply_delete: '1',
         wall_reply_restore: '1',
-        wall_repost: '1'
+        wall_repost: '1',
+        wall_post_new: '1'
     };
     try {
         await call(token, 'groups.setLongPollSettings', params);
@@ -456,13 +457,14 @@ async function enableActivity(token, groupId) {
             delete slim.like_add;
             delete slim.like_remove;
             delete slim.message_event;
+            delete slim.wall_post_new;
             await call(token, 'groups.setLongPollSettings', slim);
         } catch (e) {}
     }
     try {
         const settings = await call(token, 'groups.getLongPollSettings', { group_id: groupId });
         const events = (settings && settings.events) || {};
-        const on = ['like_add', 'wall_reply_new', 'wall_repost'].filter(name => Number(events[name]) === 1);
+        const on = ['like_add', 'wall_reply_new', 'wall_repost', 'wall_post_new'].filter(name => Number(events[name]) === 1);
         const shown = on.join(', ') || 'по стене';
         markCommunity(groupId, true, '', { events: shown });
         console.log(`ВК ${groupId}: события рейтинга ${shown}.`);
@@ -1242,8 +1244,121 @@ async function sendRating(token, peerId, account, groupId) {
     await sendText(token, peerId, activity.formatRating(rows, account, range));
 }
 
+const wallDone = new Set();
+const wallPending = new Set();
+const ratingWarned = new Set();
+let ratingTimer = null;
+
+async function wallMarked(key) {
+    if (wallDone.has(key)) return true;
+    try {
+        const saved = await db.getSettings([key]);
+        if (saved && saved[key]) {
+            wallDone.add(key);
+            return true;
+        }
+    } catch (error) {}
+    return false;
+}
+
+async function wallFinish(key) {
+    wallDone.add(key);
+    try { await db.setSetting(key, { at: new Date().toISOString() }); } catch (error) {}
+}
+
+async function handleCommunityWall(token, update, groupId) {
+    if (!auditHere(groupId)) return;
+    const post = activity.readWallPost(update, groupId);
+    if (post && club.looksLikeLesson(post.text)) {
+        const key = `vk_lesson_${groupId}_${post.postId}`;
+        if (wallPending.has(key) || await wallMarked(key)) return;
+        wallPending.add(key);
+        try {
+            await call(token, 'wall.createComment', {
+                owner_id: String(-Number(groupId)),
+                post_id: String(post.postId),
+                from_group: String(groupId),
+                message: club.lessonNote(),
+                guid: `lesson-${groupId}-${post.postId}`.slice(0, 32)
+            });
+            await wallFinish(key);
+        } catch (error) {
+            const code = Number(error && error.code);
+            console.error(`ВК ${groupId}: комментарий к уроку не отправился${code ? ` (${code})` : ''}.`);
+        } finally {
+            wallPending.delete(key);
+        }
+        return;
+    }
+    const comment = activity.readWallComment(update, groupId);
+    if (!comment || comment.text.startsWith('Навигация по урокам')) return;
+    const answer = club.commentAnswer(comment.text);
+    if (!answer) return;
+    const key = `vk_creply_${groupId}_${comment.commentId}`;
+    if (wallPending.has(key) || await wallMarked(key)) return;
+    wallPending.add(key);
+    try {
+        await call(token, 'wall.createComment', {
+            owner_id: String(-Number(groupId)),
+            post_id: String(comment.postId),
+            from_group: String(groupId),
+            reply_to_comment: String(comment.commentId),
+            message: answer.text,
+            guid: `reply-${groupId}-${comment.commentId}`.slice(0, 32)
+        });
+        await wallFinish(key);
+    } catch (error) {
+        const code = Number(error && error.code);
+        console.error(`ВК ${groupId}: ответ на комментарий не отправился${code ? ` (${code})` : ''}.`);
+    } finally {
+        wallPending.delete(key);
+    }
+}
+
+async function publishWeeklyRatings(now) {
+    const moment = now instanceof Date ? now : new Date();
+    if (!activity.shouldPublishWeek(moment)) return;
+    const prev = activity.previousWeek(moment);
+    const day = prev.start.toISOString().slice(0, 10);
+    for (const item of communityList()) {
+        const key = `vk_week_${item.id}_${day}`;
+        if (wallDone.has(key)) continue;
+        try {
+            const saved = await db.getSettings([key]);
+            if (saved && saved[key]) {
+                wallDone.add(key);
+                continue;
+            }
+            const rows = await attachFaces(await db.listWeekActivity(prev.start, item.id, prev.end));
+            await call(item.token, 'wall.post', {
+                owner_id: String(-Number(item.id)),
+                from_group: '1',
+                message: activity.wallSummary(rows, prev)
+            });
+            await wallFinish(key);
+            db.note('sys', `ВК ${item.id}: итог недели на стене`).catch(() => {});
+        } catch (error) {
+            if (ratingWarned.has(key)) continue;
+            ratingWarned.add(key);
+            const code = Number(error && error.code);
+            console.error(`ВК ${item.id}: итог недели не опубликован${code ? ` (${code})` : ''}.`);
+        }
+    }
+}
+
+function watchWeeklyRating() {
+    if (ratingTimer) return;
+    const tick = () => {
+        publishWeeklyRatings(new Date()).catch(() => {});
+    };
+    ratingTimer = setInterval(tick, 30 * 60 * 1000);
+    if (ratingTimer.unref) ratingTimer.unref();
+    tick();
+}
+
 async function handleUpdate(token, update, groupId) {
     try { await noteActivity(update, groupId); } catch (error) {}
+    try { await handleCommunityWall(token, update, groupId); } catch (error) {}
     const event = readEvent(update);
     if (event) {
         if (keepsQuiet(groupId, event.peerId)) return;
@@ -1456,6 +1571,7 @@ async function startVk() {
     resolvedCommunities = next;
     const names = next.map(item => item.id).join(', ');
     db.note('sys', names ? `ВК сообщества: ${names}` : 'ВК сообщества не заданы').catch(() => {});
+    watchWeeklyRating();
     for (const item of next) {
         poll(item.token, item.id).catch(() => {});
     }

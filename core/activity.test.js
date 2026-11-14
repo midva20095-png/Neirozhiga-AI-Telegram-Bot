@@ -95,3 +95,39 @@ test('рейтинг показывает место и правила без с
     assert.match(empty, /пока тихо/);
     assert.match(empty, /Вас пока нет/);
 });
+
+test('итог недели публикуется в понедельник утром и не включает чужие комментарии', () => {
+    const monday = new Date('2026-11-16T06:00:00.000Z');
+    assert.equal(activity.shouldPublishWeek(monday), true);
+    assert.equal(activity.shouldPublishWeek(new Date('2026-11-16T05:00:00.000Z')), false);
+    assert.equal(activity.shouldPublishWeek(new Date('2026-11-14T12:00:00.000Z')), false);
+    const prev = activity.previousWeek(monday);
+    assert.equal(prev.start.toISOString(), '2026-11-08T21:00:00.000Z');
+    assert.equal(prev.end.toISOString(), '2026-11-15T21:00:00.000Z');
+    const text = activity.wallSummary([
+        { name: 'Анна', points: 8, likes: 1, comments: 1, reposts: 0, bot: 1 }
+    ], prev);
+    assert.match(text, /Анна — 8 б\./);
+    assert.match(text, /Новая неделя уже началась/);
+    assert.doesNotMatch(text, /Ваши баллы|access_token|vk1\.a\./);
+    assert.match(activity.wallSummary([], prev), /На прошлой неделе баллов не было/);
+    const own = activity.readWallComment({
+        type: 'wall_reply_new',
+        object: { from_id: -230706467, id: 3, post_id: 9, text: 'как сделать обложку?', owner_id: -230706467 }
+    }, GROUP);
+    assert.equal(own, null);
+    const human = activity.readWallComment({
+        type: 'wall_reply_new',
+        object: { comment: { from_id: 7, id: 4, post_id: 9, text: 'сколько стоит?', owner_id: -230706467 } }
+    }, GROUP);
+    assert.equal(human.text, 'сколько стоит?');
+    assert.equal(activity.readWallPost({
+        type: 'wall_post_new',
+        object: { id: 11, owner_id: -230706467, from_id: 7, text: 'Новый урок' }
+    }, GROUP), null);
+    const lesson = activity.readWallPost({
+        type: 'wall_post_new',
+        object: { id: 12, owner_id: -230706467, from_id: -230706467, text: 'Новый урок по обложке' }
+    }, GROUP);
+    assert.equal(lesson.postId, 12);
+});

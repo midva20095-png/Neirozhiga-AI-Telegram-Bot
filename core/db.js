@@ -314,12 +314,18 @@ async function saveVkProfiles(rows) {
   }
 }
 
-async function listWeekActivity(since, groupId) {
+async function listWeekActivity(since, groupId, until) {
   const weights = require('./activity').POINTS;
   const like = Math.max(0, Math.round(Number(weights.like) || 0));
   const comment = Math.max(0, Math.round(Number(weights.comment) || 0));
   const repost = Math.max(0, Math.round(Number(weights.repost) || 0));
   const bot = Math.max(0, Math.round(Number(weights.bot) || 0));
+  const params = [since, like, comment, repost, bot, activityGroup(groupId)];
+  let untilSql = '';
+  if (until) {
+    params.push(until);
+    untilSql = ' AND a.created_at < $7';
+  }
   const res = await pool.query(
     `SELECT a.user_id,
             COALESCE(u.username, '') AS username,
@@ -333,11 +339,11 @@ async function listWeekActivity(since, groupId) {
             COUNT(*) FILTER (WHERE a.kind = 'bot')::int AS bot
      FROM vk_activity a
      LEFT JOIN users u ON u.user_id = a.user_id
-     WHERE a.created_at >= $1 AND a.group_id = $6
+     WHERE a.created_at >= $1 AND a.group_id = $6${untilSql}
      GROUP BY a.user_id, u.username
      ORDER BY points DESC, a.user_id
      LIMIT 50`,
-    [since, like, comment, repost, bot, activityGroup(groupId)]
+    params
   );
   return res.rows;
 }

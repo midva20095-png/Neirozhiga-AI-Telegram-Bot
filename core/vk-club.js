@@ -121,6 +121,61 @@ function reply(query, posts) {
     return parts.join('\n\n').slice(0, 3500);
 }
 
+const PRIVATE_ASK = `Не разобрала вопрос. Напишите его боту в личные сообщения: ${ASK_URL}
+Там подскажу урок или подписку. Кредиты не списываются.`;
+
+function isThanks(text) {
+    if (String(text || '').includes('?')) return false;
+    const clean = String(text || '').toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!clean) return true;
+    const praise = new Set(['спасибо', 'благодарю', 'благодарность', 'спс', 'класс', 'классно', 'супер', 'огонь', 'круто', 'крутой', 'отлично', 'красота', 'нравится', 'лайк', 'молодец', 'хорошо', 'ок', 'окей', 'классный', 'суперский', 'прекрасный', 'урок', 'большое', 'огромное', 'тебе', 'вам', 'за']);
+    const parts = clean.split(' ').filter(Boolean);
+    return parts.length > 0 && parts.every(word => praise.has(word));
+}
+
+function isQuestion(text) {
+    const value = String(text || '').toLowerCase().replace(/ё/g, 'е');
+    if (value.includes('?')) return true;
+    return /(?:^|[^a-zа-я0-9])(?:как|где|сколько|какая|какой|какие|какое|можно|подскаж\w*|расскаж\w*|есть ли|что за|что такое)(?:[^a-zа-я0-9]|$)/i.test(value);
+}
+
+function onTopic(text) {
+    return /урок|подписк|донат|донаг|цен[аеуы]|клуб|обложк|навигац|промпт|виджет|клип|фудфото|таргетолог/i.test(text);
+}
+
+function commentAnswer(text) {
+    const raw = String(text || '').trim();
+    if (!raw || isThanks(raw) || !isQuestion(raw)) return null;
+    const useful = (raw.toLowerCase().replace(/ё/g, 'е').match(/[a-zа-я0-9]{3,}/g) || []).length;
+    if (!useful) return null;
+    const lessons = rankLessons(raw);
+    const levels = wantsLevels(raw);
+    const site = wantsSite(raw);
+    if (!onTopic(raw) && !lessons.length && !levels && !site) {
+        return { kind: 'ask', text: PRIVATE_ASK };
+    }
+    const answer = reply(raw, []);
+    if (/ничего не нашла/.test(answer)) return { kind: 'ask', text: PRIVATE_ASK };
+    return { kind: 'answer', text: String(answer).slice(0, 1500) };
+}
+
+function looksLikeLesson(text) {
+    const raw = String(text || '');
+    if (/урок|навигац|практикум|чек-лист|чек лист|гайд/i.test(raw)) return true;
+    return /vk\.(com|ru)\/@neuroyaga-/i.test(raw);
+}
+
+function lessonNote() {
+    return [
+        'Навигация по урокам клуба:',
+        'https://vk.com/@neuroyaga-navigaciya-po-urokam-kluba-na-urovne-bazovaya-podderzhka-po',
+        'Навигация «Бабка-таргетолог»:',
+        'https://vk.com/@neuroyaga-navigator-po-klubu-babki-targetologa',
+        `Вопросы пишите боту в личные сообщения: ${ASK_URL}`,
+        'Кредиты за вопрос про клуб не списываются.'
+    ].join('\n');
+}
+
 async function searchPosts(query) {
     const token = audit.readerToken();
     const q = (String(query || '').toLowerCase().replace(/ё/g, 'е').match(/[a-zа-я0-9]{4,}/g) || []).slice(0, 5).join(' ');
@@ -150,4 +205,4 @@ async function searchPosts(query) {
     });
 }
 
-module.exports = { overview, reply, searchPosts, JOIN_URL, SITE_URL };
+module.exports = { overview, reply, searchPosts, commentAnswer, looksLikeLesson, lessonNote, JOIN_URL, SITE_URL, ASK_URL };

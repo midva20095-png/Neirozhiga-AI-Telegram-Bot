@@ -21,6 +21,17 @@ function weekRange(now) {
     return { start, end, label: `${fmt.format(start)} — ${fmt.format(last)}` };
 }
 
+function previousWeek(now) {
+    const current = weekRange(now);
+    return weekRange(new Date(current.start.getTime() - 60 * 60 * 1000));
+}
+
+function shouldPublishWeek(now) {
+    const date = now instanceof Date ? now : new Date();
+    const moscow = new Date(date.getTime() + MOSCOW);
+    return moscow.getUTCDay() === 1 && moscow.getUTCHours() >= 9;
+}
+
 function communityId(groupId) {
     const n = Math.abs(Number(String(groupId || '').replace(/\D/g, '')));
     return n ? -n : 0;
@@ -71,6 +82,40 @@ function parseCommunityActivity(update, groupId) {
         return { vkId, kind: 'repost', objectKey: `repost:${postId}:${vkId}`, remove: false };
     }
     return null;
+}
+
+function readWallComment(update, groupId) {
+    if (!update || update.type !== 'wall_reply_new') return null;
+    const obj = update.object || {};
+    const comment = obj.comment && typeof obj.comment === 'object' ? obj.comment : obj;
+    const fromId = Number(comment.from_id || obj.from_id);
+    if (!Number.isInteger(fromId) || fromId <= 0) return null;
+    const group = communityId(groupId);
+    const owner = Number(comment.post_owner_id || comment.owner_id || obj.post_owner_id || obj.owner_id || 0);
+    if (owner && group && owner !== group) return null;
+    const postId = Number(comment.post_id || obj.post_id);
+    const commentId = Number(comment.id || obj.id);
+    if (!postId || !commentId) return null;
+    return {
+        fromId,
+        postId,
+        commentId,
+        text: String(comment.text || obj.text || '').trim()
+    };
+}
+
+function readWallPost(update, groupId) {
+    if (!update || update.type !== 'wall_post_new') return null;
+    const obj = update.object || {};
+    const post = obj.post && typeof obj.post === 'object' ? obj.post : obj;
+    const group = communityId(groupId);
+    const owner = Number(post.owner_id || obj.owner_id || 0);
+    const fromId = Number(post.from_id || obj.from_id || 0);
+    if (group && owner && owner !== group) return null;
+    if (fromId && group && fromId !== group) return null;
+    const postId = Number(post.id || obj.id || post.post_id);
+    if (!postId) return null;
+    return { postId, text: String(post.text || '').trim() };
 }
 
 function faceOf(user) {
@@ -125,6 +170,25 @@ function formatRating(rows, meId, range) {
     return lines.join('\n').slice(0, 3500);
 }
 
+function wallSummary(rows, range) {
+    const lines = [
+        `Итог недели · ${range.label}`,
+        rulesText(),
+        'Кредиты по этому списку начисляет администратор.',
+        'Новая неделя уже началась, баллы считаются заново.',
+        ''
+    ];
+    const list = Array.isArray(rows) ? rows : [];
+    if (!list.length) {
+        lines.push('На прошлой неделе баллов не было.');
+    } else {
+        list.slice(0, 10).forEach((row, index) => {
+            lines.push(`${index + 1}. ${row.name} — ${row.points} б. (лайки ${row.likes}, комментарии ${row.comments}, репосты ${row.reposts}, бот ${row.bot})`);
+        });
+    }
+    return lines.join('\n').slice(0, 3500);
+}
+
 function freshIds(seen, ids) {
     const next = seen || new Set();
     const first = !seen;
@@ -138,4 +202,8 @@ function freshIds(seen, ids) {
     return { seen: next, fresh };
 }
 
-module.exports = { POINTS, rulesText, weekRange, parseCommunityActivity, faceOf, present, formatRating, freshIds };
+module.exports = {
+    POINTS, rulesText, weekRange, previousWeek, shouldPublishWeek,
+    parseCommunityActivity, readWallComment, readWallPost,
+    faceOf, present, formatRating, wallSummary, freshIds
+};
