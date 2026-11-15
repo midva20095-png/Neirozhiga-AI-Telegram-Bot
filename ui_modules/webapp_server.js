@@ -5,6 +5,7 @@ const catalog = require('../core/catalog');
 const gen = require('../core/generate');
 const auth = require('../core/auth');
 const templatesSrc = require('../core/templates');
+const templateFields = require('../core/template_fields');
 const transfer = require('../core/transfer');
 const channel = require('../core/channel');
 const share = require('../core/share');
@@ -491,36 +492,55 @@ function startWebApp() {
             let strict = false;
             let templateTitle = '';
             let tpl = null;
+            let exactPrompt = false;
+            let photos = [];
             const audience = String(req.userId).startsWith('-') ? 'vk' : 'tg';
             if (body.templateId) {
                 tpl = await templatesSrc.getFull(body.templateId, audience);
                 if (!tpl) return res.status(404).json({ error: 'Шаблон не найден' });
-                prompt = tpl.prompt || prompt;
-                if (!prompt) prompt = 'Сделай изображение по прикреплённому фото';
                 modelKey = tpl.model;
                 charge = tpl.cost;
                 reason = `Шаблон · ${tpl.title}`;
                 templateTitle = tpl.title || '';
                 keepModel = true;
                 strict = true;
+                exactPrompt = true;
                 const allowed = tpl.formats || [];
                 aspect = allowed.includes(String(aspect || '')) ? String(aspect) : (allowed[0] || null);
                 quality = tpl.quality || null;
                 duration = tpl.duration || null;
-                if (tpl.photo && !body.image) return res.status(400).json({ error: 'Прикрепите фото' });
+                const answers = body.answers && typeof body.answers === 'object' ? body.answers : {};
+                const listed = Array.isArray(body.photos) ? body.photos.filter(Boolean) : [];
+                if (tpl.fields && tpl.fields.length) {
+                    photos = (listed.length ? listed : (body.image ? [body.image] : [])).slice(0, templateFields.MAX_PHOTOS);
+                    const gap = templateFields.missing(tpl.fields, answers, photos.length);
+                    if (gap) return res.status(400).json({ error: gap });
+                    prompt = templateFields.buildPrompt(tpl.prompt, tpl.fields, answers);
+                } else {
+                    prompt = tpl.prompt || prompt;
+                    if (tpl.photo && !body.image) return res.status(400).json({ error: 'Прикрепите фото' });
+                    if (body.image) photos = [body.image];
+                }
+                if (!prompt) prompt = 'Сделай изображение по прикреплённому фото';
+                prompt = templateFields.withAspect(prompt, aspect);
             }
-            if (!prompt && !body.image) return res.status(400).json({ error: 'Введите промпт' });
+            if (!prompt && !body.image && !photos.length) return res.status(400).json({ error: 'Введите промпт' });
             const liveModel = catalog.getModel(modelKey, { audience });
             if (!liveModel) return res.status(400).json({ error: 'Эта модель сейчас выключена.' });
             const pickedModel = catalog.getModel(modelKey, { includeDisabled: true, audience });
             const allowPhoto = !pickedModel || (pickedModel.image !== 'forbidden' && pickedModel.image !== 'no');
-            const file = body.image && allowPhoto ? decodeImage(body.image) : null;
+            const incoming = photos.length ? photos : (body.image ? [body.image] : []);
+            const files = allowPhoto ? incoming.slice(0, templateFields.MAX_PHOTOS).filter(Boolean).map(decodeImage) : [];
+            const file = files[0] || null;
             const fields = {
                 userId: req.userId,
                 prompt,
                 modelKey,
                 fileBuffer: file && file.buffer,
+                fileBuffers: files.length > 1 ? files.map(item => item.buffer) : undefined,
                 mimeType: file && file.mime,
+                mimeTypes: files.map(item => item.mime),
+                exactPrompt,
                 aspectRatio: aspect,
                 duration,
                 quality,

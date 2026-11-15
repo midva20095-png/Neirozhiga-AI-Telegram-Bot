@@ -231,10 +231,15 @@ async function runSite(context) {
     const buffers = [];
     if (context.fileBuffer) buffers.push(context.fileBuffer);
     if (Array.isArray(context.fileBuffers)) buffers.push(...context.fileBuffers);
-    let imageUrl = null;
+    const imageUrls = [];
     if (spec.image !== 'forbidden' && buffers.length) {
-        imageUrl = await uploadBuffer(apiKey, buffers[0], context.mimeType || 'image/jpeg', 'input_1.jpg');
+        const cap = context.exactPrompt ? Math.min(buffers.length, 6) : 1;
+        for (let i = 0; i < cap; i++) {
+            const mime = (context.mimeTypes && context.mimeTypes[i]) || context.mimeType || 'image/jpeg';
+            imageUrls.push(await uploadBuffer(apiKey, buffers[i], mime, 'photo_' + (i + 1) + '.jpg'));
+        }
     }
+    const imageUrl = imageUrls[0] || null;
     let audioUrl = null;
     if (context.audioBuffer) {
         audioUrl = await uploadBuffer(apiKey, context.audioBuffer, context.audioMime || 'audio/ogg', 'voice.ogg');
@@ -247,6 +252,8 @@ async function runSite(context) {
             const built = buildSiteInput(spec, {
                 prompt: context.prompt,
                 imageUrl,
+                imageUrls,
+                exact: !!context.exactPrompt,
                 audioUrl,
                 aspect: context.aspectRatio,
                 duration: context.duration,
@@ -310,7 +317,7 @@ async function processRequest(context) {
     }
 
     // Передаем соотношение сторон во все возможные параметры + дублируем в промпт
-    if (aspectRatio && aspectRatio !== 'auto') {
+    if (!context.exactPrompt && aspectRatio && aspectRatio !== 'auto') {
         inputData.aspect_ratio = aspectRatio;
         inputData.ratio = aspectRatio;
         inputData.ar = aspectRatio;

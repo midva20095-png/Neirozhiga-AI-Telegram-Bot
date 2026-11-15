@@ -41,6 +41,18 @@ test('pro остаётся Чат Pro, а не картинкой', () => {
     assert.equal(item.photo, false);
 });
 
+test('поля таблицы видны в кабинете, текст запроса остаётся скрыт', () => {
+    const item = templates.fromDb(row('nano-banana', { fields: 'фото | Лицо\nтекст | имя | Имя' }));
+    assert.equal(item.fields.length, 2);
+    assert.equal(item.fields[1].key, 'имя');
+    assert.equal(item.photo, true);
+    const pub = templates.toPublic(item);
+    assert.equal(pub.fields[0].label, 'Лицо');
+    assert.equal(Object.prototype.hasOwnProperty.call(pub, 'prompt'), false);
+    const textOnly = templates.fromDb(row('nano-banana', { fields: 'текст | тема | Тема' }));
+    assert.equal(textOnly.photo, false);
+});
+
 test('текст запроса не уходит в кабинет', () => {
     const item = templates.fromDb(row('kie-banana-lite', { hide_prompt: false }));
     const pub = templates.toPublic(item);

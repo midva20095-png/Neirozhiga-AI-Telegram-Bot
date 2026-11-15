@@ -63,6 +63,7 @@ async function initDB() {
   await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS quality TEXT`);
   await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS duration INTEGER`);
   await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS audience TEXT DEFAULT 'all'`);
+  await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS fields TEXT`);
   const count = await pool.query('SELECT COUNT(*)::int AS n FROM templates');
   if (count.rows[0].n === 0) {
     for (const row of SEED_TEMPLATES) {
@@ -937,22 +938,23 @@ async function saveTemplate(data) {
     Number.isFinite(Number(data.sort)) ? Math.round(Number(data.sort)) : 0,
     String(data.quality || '').trim().slice(0, 40) || null,
     Number(data.duration) > 0 ? Math.round(Number(data.duration)) : null,
-    ['tg', 'vk', 'all'].includes(data.audience) ? data.audience : 'all'
+    ['tg', 'vk', 'all'].includes(data.audience) ? data.audience : 'all',
+    String(data.fields || '').trim().slice(0, 8000) || null
   ];
   if (data.id) {
     const res = await pool.query(
       `UPDATE templates
        SET title=$1, category=$2, prompt=$3, model=$4, cost=$5, active=$6,
            image=$7, description=$8, hide_prompt=$9, formats=$10, sort=$11,
-           quality=$12, duration=$13, audience=$14
-       WHERE id=$15 RETURNING *`,
+           quality=$12, duration=$13, audience=$14, fields=$15
+       WHERE id=$16 RETURNING *`,
       [...values, data.id]
     );
     return res.rows[0];
   }
   const res = await pool.query(
-    `INSERT INTO templates (title, category, prompt, model, cost, active, image, description, hide_prompt, formats, sort, quality, duration, audience)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+    `INSERT INTO templates (title, category, prompt, model, cost, active, image, description, hide_prompt, formats, sort, quality, duration, audience, fields)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
     values
   );
   return res.rows[0];

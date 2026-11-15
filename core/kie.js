@@ -24,7 +24,8 @@ function aspectOf(spec, aspect) {
 
 function buildImageTask(spec, opts) {
     const o = opts || {};
-    const images = (Array.isArray(o.imageUrls) ? o.imageUrls : []).filter(u => typeof u === 'string' && u.startsWith('https://')).slice(0, 1);
+    const cap = Math.min(6, Math.max(1, Number(o.maxImages) || 1));
+    const images = (Array.isArray(o.imageUrls) ? o.imageUrls : []).filter(u => typeof u === 'string' && u.startsWith('https://')).slice(0, cap);
     if (images.length && !spec.kieEdit) {
         const err = new Error('Эта модель рисует только по тексту, без фото.');
         err.code = 'user';
@@ -47,7 +48,7 @@ function buildImageTask(spec, opts) {
     const size = allowedSize(spec, o.quality);
     if (size && spec.kieSize) input[spec.kieSize] = size;
 
-    if (images.length && spec.kieImage) input[spec.kieImage] = [images[0]];
+    if (images.length && spec.kieImage) input[spec.kieImage] = images;
     if (spec.kieExtra) Object.assign(input, spec.kieExtra);
 
     return { model, input };

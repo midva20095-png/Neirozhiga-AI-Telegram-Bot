@@ -108,7 +108,8 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .sub{width:100%;margin-top:10px;min-height:52px;border:0;border-radius:16px;background:#1c1233;color:#fff;font-weight:800}
 .sub.on{background:linear-gradient(135deg,#b366ff,#ff2d95)}
 .setup{margin-top:14px}
-input{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1233;padding:12px;outline:none;margin-top:8px}
+input,select{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1233;padding:12px;outline:none;margin-top:8px}
+.flabel{display:block;margin-top:12px;font-weight:800;font-size:13px}
 </style>
 </head>
 <body>
@@ -140,7 +141,7 @@ input{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1
 </div>
 <script>
 const KIND = {text:'Текст', image:'Картинка', video:'Видео', audio:'Музыка'};
-let tab='gen', me=null, cfg=null, templates=[], works=null, worksLoading=false, userId=null, token=null, busy=false, last=null, wantMenu=false;
+let tab='gen', me=null, cfg=null, templates=[], works=null, worksLoading=false, userId=null, token=null, busy=false, last=null, wantMenu=false, tplAnswers={}, tplPhotos={};
 let openTpl=null, photoData=null, pickedFormat=null, genPhoto=null, draft='', pendingTpl='', pendingPkg='';
 let tplCat='', tplQuery='';
 const TCAT = {image:'Картинки', fix:'Улучшение', chat:'Текст', video:'Видео', audio:'Голос'};
@@ -527,7 +528,7 @@ function viewTplRun(){
   const src = safeSrc(t.image);
   const formats = t.formats||[];
   const sizeChips = formats.length ? '<div class="hint">Размер картинки</div><div class="chips">'+formats.map(f=>'<button type="button" data-fmt="'+esc(f)+'" class="'+(pickedFormat===f?'on':'')+'">'+esc(f)+'</button>').join('')+'</div>' : '';
-  const photo = t.photo ? '<label class="filebtn">'+(photoData?'Фото прикреплено — заменить':'Прикрепить своё фото')+'<input id="file" type="file" accept="image/*"></label>'+(photoData?'<img class="preview" style="margin-top:10px" src="'+photoData+'" alt="">':'') : '';
+  const photo = (t.fields && t.fields.length) ? fieldForm(t) : (t.photo ? '<label class="filebtn">'+(photoData?'Фото прикреплено — заменить':'Прикрепить своё фото')+'<input id="file" type="file" accept="image/*"></label>'+(photoData?'<img class="preview" style="margin-top:10px" src="'+photoData+'" alt="">':'') : '');
   const res = last ? renderResult(last) : '';
   const lead = t.desc || (t.photo ? 'Готовая картинка появится здесь, её можно сразу сохранить' : 'Результат появится здесь');
   const lack = shortOf(t.cost||0);
@@ -712,12 +713,14 @@ function bind(){
   document.querySelectorAll('[data-tcat]').forEach(b=>b.onclick=()=>{ tplCat=b.dataset.tcat||''; draw(); });
   const tq = document.getElementById('tq');
   if (tq) tq.oninput = function(){ tplQuery = tq.value; const pos = tq.selectionStart; draw(); const again = document.getElementById('tq'); if (again){ again.focus(); try{ again.setSelectionRange(pos, pos); }catch(e){} } };
-  document.querySelectorAll('[data-fmt]').forEach(b=>b.onclick=()=>{ pickedFormat=b.dataset.fmt; draw(); });
+  document.querySelectorAll('[data-fmt]').forEach(b=>b.onclick=()=>{ rememberTplAnswers(); pickedFormat=b.dataset.fmt; draw(); });
   document.querySelectorAll('[data-pkg]').forEach(b=>b.onclick=()=>buy(b.dataset.pkg));
   const paymail = document.getElementById('paymail');
   if (paymail && pendingPkg) paymail.focus();
-  const back=document.getElementById('back'); if (back) back.onclick=()=>{ openTpl=null; photoData=null; last=null; draw(); };
+  const back=document.getElementById('back'); if (back) back.onclick=()=>{ openTpl=null; photoData=null; tplAnswers={}; tplPhotos={}; last=null; draw(); };
   const file=document.getElementById('file'); if (file) file.onchange=()=>onPhoto(file);
+  document.querySelectorAll('[data-answer]').forEach(function(el){ el.oninput = function(){ tplAnswers[el.dataset.answer] = el.value; }; });
+  document.querySelectorAll('[data-field]').forEach(function(el){ el.onchange = function(){ onTplFieldPhoto(el); }; });
   const goTpl=document.getElementById('goTpl'); if (goTpl) goTpl.onclick=generateTemplate;
   const goTop=document.getElementById('goTop'); if (goTop) goTop.onclick=function(){ tab='top'; last=null; draw(); };
   const shareTpl=document.getElementById('shareTpl'); if (shareTpl) shareTpl.onclick=function(){ shareTemplate(openTpl); };
@@ -828,10 +831,37 @@ async function setModel(model){
   draw();
   try { await fetch('/api/set-model',{method:'POST',headers:authHeaders(),body:JSON.stringify({model})}); } catch(e){}
 }
+function fieldForm(t){
+  return (t.fields || []).map(function(f){
+    const star = f.optional ? '' : ' *';
+    if (f.type === 'фото') {
+      const bag = tplPhotos[f.key];
+      const count = Array.isArray(bag) ? bag.length : (bag ? 1 : 0);
+      const thumbs = (Array.isArray(bag) ? bag : (bag ? [bag] : [])).map(function(src){
+        return '<img class="preview" style="margin-top:8px" src="'+src+'" alt="">';
+      }).join('');
+      return '<span class="flabel">'+esc(f.label)+star+'</span><label class="filebtn">'+(count ? ('Фото: '+count+' — заменить') : 'Прикрепить фото')+
+        '<input type="file" accept="image/*" data-field="'+esc(f.key)+'" data-multi="'+(f.multi>1?'1':'')+'"'+(f.multi>1?' multiple':'')+'></label>'+thumbs;
+    }
+    if (f.type === 'выбор') {
+      const opts = (f.options || []).map(function(o){
+        return '<option'+(tplAnswers[f.key]===o?' selected':'')+'>'+esc(o)+'</option>';
+      }).join('');
+      return '<span class="flabel">'+esc(f.label)+star+'</span><select data-answer="'+esc(f.key)+'"><option value="">Выберите</option>'+opts+'</select>';
+    }
+    const kind = f.type === 'дата' ? 'date' : f.type === 'число' ? 'number' : 'text';
+    return '<span class="flabel">'+esc(f.label)+star+'</span><input type="'+kind+'" data-answer="'+esc(f.key)+'" value="'+esc(tplAnswers[f.key]||'')+'">';
+  }).join('');
+}
+function rememberTplAnswers(){
+  document.querySelectorAll('[data-answer]').forEach(function(el){ tplAnswers[el.dataset.answer] = el.value; });
+}
 function useTpl(id){
   const t = templates.find(x=>String(x.id)===String(id)); if (!t) return;
   openTpl = t.id;
   photoData = null;
+  tplAnswers = {};
+  tplPhotos = {};
   last = null;
   pickedFormat = (t.formats && t.formats[0]) || null;
   draw();
@@ -869,18 +899,43 @@ async function onPhoto(input){
   catch (e) { photoData = null; alert(e.message); }
   draw();
 }
+async function onTplFieldPhoto(input){
+  const key = input.dataset.field;
+  const files = Array.from(input.files || []).slice(0, input.dataset.multi === '1' ? 6 : 1);
+  if (!key || !files.length) return;
+  try {
+    const ready = [];
+    for (const file of files) ready.push(await fileToJpeg(file));
+    tplPhotos[key] = input.dataset.multi === '1' ? ready : ready[0];
+  } catch (e) {
+    alert(e.message);
+  }
+  rememberTplAnswers();
+  draw();
+}
 async function generateTemplate(){
   if (busy) return;
   const t = templates.find(x=>String(x.id)===String(openTpl));
   if (!t) return;
+  rememberTplAnswers();
   const lack = shortOf(t.cost||0);
   if (lack) { last = {error:lack}; draw(); return; }
-  if (t.photo && !photoData) { last = {error:'Прикрепите фото'}; draw(); return; }
+  const photos = [];
+  if (t.fields && t.fields.length) {
+    t.fields.forEach(function(f){
+      if (f.type !== 'фото') return;
+      const bag = tplPhotos[f.key];
+      (Array.isArray(bag) ? bag : (bag ? [bag] : [])).forEach(function(src){ photos.push(src); });
+    });
+    const gap = (t.fields.find(function(f){ return f.type !== 'фото' && !f.optional && !String(tplAnswers[f.key]||'').trim(); }) || {}).label;
+    if (gap) { last = {error:'Заполните: '+gap}; draw(); return; }
+    if (t.photo && !photos.length) { last = {error:'Добавьте фото'}; draw(); return; }
+  } else if (t.photo && !photoData) { last = {error:'Прикрепите фото'}; draw(); return; }
   busy = true;
   last = { text: 'Создаю'+(pickedFormat?' · размер '+pickedFormat:'')+'…' };
   draw();
   try {
-    const r = await fetch('/api/generate',{method:'POST',headers:authHeaders(),body:JSON.stringify({templateId:t.id, image:photoData, format:pickedFormat, group: vkGroupId()})});
+    const r = await fetch('/api/generate',{method:'POST',headers:authHeaders(),body:JSON.stringify({templateId:t.id, image:photoData, photos:photos, answers:tplAnswers, format:pickedFormat, group: vkGroupId()})});
     const d = await r.json();
     if (!r.ok || d.error) throw new Error(d.error||'Ошибка');
     last = d;

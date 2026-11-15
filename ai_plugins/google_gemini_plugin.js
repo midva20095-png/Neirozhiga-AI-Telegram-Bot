@@ -10,11 +10,11 @@ const MODEL_MAPPING = {
     'nanobanana_pro': 'gemini-3-pro-image'
 };
 
-async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeTypes, modelKey = 'flash', imageConfig, aspectRatio }) {
+async function processRequest({ prompt, fileBuffer, fileBuffers, mimeType, mimeTypes, modelKey = 'flash', imageConfig, aspectRatio, exactPrompt }) {
     try {
         const resolvedModel = MODEL_MAPPING[modelKey] || MODEL_MAPPING['flash'];
         let safePrompt = prompt ? prompt.trim() : "";
-        if (aspectRatio && aspectRatio !== 'auto' && !safePrompt.includes(String(aspectRatio))) {
+        if (!exactPrompt && aspectRatio && aspectRatio !== 'auto' && !safePrompt.includes(String(aspectRatio))) {
             safePrompt = safePrompt ? `${safePrompt}, aspect ratio ${aspectRatio}` : `aspect ratio ${aspectRatio}`;
         }
         if (!imageConfig && aspectRatio && aspectRatio !== 'auto') {

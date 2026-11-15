@@ -1,5 +1,6 @@
 const db = require('./db');
 const catalog = require('./catalog');
+const templateFields = require('./template_fields');
 
 // Шаблоны живут только в админке и Postgres.
 // Google-таблица больше не источник: там другая цена, и кабинет расходился с ботом.
@@ -54,6 +55,10 @@ function fromDb(row) {
     const model = mapModel(row.model);
     const mode = savedMode(model, row);
     const spec = catalog.getModel(model, { includeDisabled: true });
+    const fields = templateFields.parseFields(row.fields);
+    const photo = fields.length
+        ? fields.some(field => field.type === 'фото' && !field.optional)
+        : wantsPhoto(spec);
     return {
         id: 'local:' + row.id,
         title: row.title,
@@ -66,10 +71,11 @@ function fromDb(row) {
         duration: mode.duration,
         category: row.category || 'image',
         formats: catalog.templateFormats(spec, row.formats),
+        fields,
         hidePrompt: true,
         active: row.active !== false,
         audience: ['tg', 'vk', 'all'].includes(row.audience) ? row.audience : 'all',
-        photo: wantsPhoto(spec),
+        photo,
         sort: Number(row.sort) || 0
     };
 }
@@ -84,6 +90,7 @@ function toPublic(item) {
         model: item.model,
         category: item.category,
         formats: item.formats || [],
+        fields: item.fields || [],
         photo: !!item.photo,
         hidePrompt: true
     };

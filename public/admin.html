@@ -672,7 +672,9 @@ async function loadTpl(){
     '<input id="tfile" type="file" accept="image/*"></label>'+
     (preview?'<button class="ghost" type="button" onclick="clearTplPhoto()" style="margin-top:8px">Убрать фото</button>':'')+
     '<label>2. Название</label><input id="tt" placeholder="Например: Портрет в неоне" value="'+esc(editing?editing.title:'')+'">'+
-    '<label>3. Что должна сделать нейросеть. Человек это не видит</label><textarea id="tp" placeholder="Опишите стиль, свет и что оставить от фото человека">'+esc(editing?editing.prompt:'')+'</textarea>'+
+    '<label>3. Что должна сделать нейросеть. Человек это не видит</label><textarea id="tp" placeholder="Опишите стиль, свет и что оставить от фото человека. Ответы полей пишите как {имя}">'+esc(editing?editing.prompt:'')+'</textarea>'+
+    '<label>Поля, как в таблице Google. Пусто — как раньше, одно своё фото</label><textarea id="tfields" placeholder="фото | Ваше фото | до 3&#10;текст | имя | Как вас зовут?&#10;выбор | стиль | Стиль | Неон; Плёнка&#10;дата | дата | Дата рождения | необязательно&#10;число | возраст | Сколько лет?">'+esc(editing&&editing.fields?editing.fields:'')+'</textarea>'+
+    '<p class="note">Каждая строка — одно поле: фото, текст, выбор, дата или число. В тексте запроса {имя} заменится ответом человека. Несколько фото уходят в модель вместе, текст запроса не переписывается.</p>'+
     '<label>4. Модель и цена для человека</label>'+
     '<div class="row"><select id="tm">'+modelOptions(currentModel)+'</select>'+
       '<input id="tcost" type="number" min="0" placeholder="Цена, кр" value="'+startCost+'"'+(editing?' data-lock="1"':'')+'></div>'+
@@ -800,6 +802,7 @@ async function saveTpl(){
     description: document.getElementById('tdesc').value.trim(),
     formats: document.getElementById('tfmt').value.trim(),
     prompt: document.getElementById('tp').value.trim(),
+    fields: (document.getElementById('tfields')||{}).value || '',
     quality: (document.getElementById('tqmode')||{}).value || '',
     duration: (document.getElementById('tdur')||{}).value || '',
     hide_prompt: true,
@@ -816,7 +819,7 @@ async function toggleTpl(id){
   if (!t) return;
   const d = await api('/api/admin/templates',{method:'POST',body:JSON.stringify({
     id: t.id, title: t.title, category: t.category, model: t.model, cost: t.cost, sort: t.sort||0,
-    image: t.image, description: t.description, formats: t.formats, prompt: t.prompt,
+    image: t.image, description: t.description, formats: t.formats, prompt: t.prompt, fields: t.fields || '',
     quality: t.quality || '', duration: t.duration || '',
     hide_prompt: true, active: !t.active, audience: t.audience || 'all'
   })});

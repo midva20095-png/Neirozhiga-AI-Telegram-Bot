@@ -72,7 +72,7 @@ async function prepare({ userId, modelKey, hasImage, hasText, charge, strict, du
 }
 
 // Выполняет генерацию: держит замок, списывает кредиты и фиксирует статистику.
-async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mimeType, aspectRatio, duration, quality, audioBuffer, audioMime, audioSeconds, charge, reason, keepModel, workLabel, templateId, groupId }) {
+async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mimeType, mimeTypes, aspectRatio, duration, quality, audioBuffer, audioMime, audioSeconds, charge, reason, keepModel, workLabel, templateId, groupId, exactPrompt }) {
     const id = String(userId);
     if (busy.has(id)) throw new GenError('Дождитесь завершения предыдущей генерации', 'busy');
     busy.add(id);
@@ -89,7 +89,9 @@ async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mim
             fileBuffer: fileBuffer || null,
             fileBuffers: fileBuffers && fileBuffers.length > 1 ? fileBuffers : undefined,
             mimeType: mimeType || 'image/jpeg',
+            mimeTypes,
             modelKey: model.key,
+            exactPrompt: !!exactPrompt,
             aspectRatio,
             duration,
             quality,
@@ -144,11 +146,12 @@ async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mim
 }
 
 // Удобная обёртка для веба: data: URL вместо бинарника.
-async function generateForWeb({ userId, prompt, modelKey, fileBuffer, mimeType, aspectRatio, duration, quality, charge, reason, keepModel, strict, workLabel, templateId, audience, groupId }) {
+async function generateForWeb({ userId, prompt, modelKey, fileBuffer, fileBuffers, mimeType, mimeTypes, aspectRatio, duration, quality, charge, reason, keepModel, strict, workLabel, templateId, audience, groupId, exactPrompt }) {
+    const many = Array.isArray(fileBuffers) && fileBuffers.length > 1;
     const { model, plugin } = await prepare({
         userId,
         modelKey,
-        hasImage: !!(fileBuffer && fileBuffer.length),
+        hasImage: !!((fileBuffer && fileBuffer.length) || (fileBuffers && fileBuffers.length)),
         hasText: !!(prompt && String(prompt).trim()),
         charge,
         strict,
@@ -156,7 +159,12 @@ async function generateForWeb({ userId, prompt, modelKey, fileBuffer, mimeType, 
         quality,
         audience
     });
-    const out = await run({ userId, prompt, model, plugin, fileBuffer, mimeType, aspectRatio, duration, quality, charge, reason, keepModel, workLabel, templateId, groupId });
+    const out = await run({
+        userId, prompt, model, plugin,
+        fileBuffer: many ? null : fileBuffer,
+        fileBuffers: many ? fileBuffers : undefined,
+        mimeType, mimeTypes, aspectRatio, duration, quality, charge, reason, keepModel, workLabel, templateId, groupId, exactPrompt
+    });
     if (workLabel && out.type === 'image') out.text = 'Изображение готово';
     else if (workLabel && out.type === 'video') out.text = 'Видео готово';
     else if (workLabel && out.type === 'audio') out.text = 'Аудио готово';

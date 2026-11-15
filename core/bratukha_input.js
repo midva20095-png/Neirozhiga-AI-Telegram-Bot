@@ -90,16 +90,17 @@ function buildSiteInput(spec, opts) {
     }
 
     if (kind === 'image') {
-        const text = imagePrompt(o.prompt, imageUrl);
+        const urls = Array.isArray(o.imageUrls) && o.imageUrls.length ? o.imageUrls : (imageUrl ? [imageUrl] : []);
+        const text = o.exact ? String(o.prompt || '').trim() : imagePrompt(o.prompt, urls[0]);
         let input;
         if (tool === 'nano-banana') input = { mode: quality || 'normal', prompt: text.slice(0, 20000), image_size: aspect || 'auto' };
         else if (tool === 'seedream-4-5') input = { prompt: text.slice(0, 3000), size: aspect || 'auto', resolution: quality || '2K', n: 1 };
         else if (tool === 'wan-2-7-image') {
             input = { prompt: text.slice(0, 5000), tier: quality || 'standard', aspect_ratio: aspect || 'auto' };
-            if (imageUrl) input.input_urls = [imageUrl];
+            if (urls.length) input.input_urls = urls;
         } else if (tool === 'grok-image') {
             input = { prompt: text.slice(0, 5000) };
-            if (!imageUrl && aspect) input.aspect_ratio = aspect;
+            if (!urls.length && aspect) input.aspect_ratio = aspect;
         } else {
             input = {
                 prompt: text.slice(0, 20000),
@@ -109,7 +110,7 @@ function buildSiteInput(spec, opts) {
                 mode: o.mode || 'normal'
             };
         }
-        if (imageUrl && tool !== 'wan-2-7-image') input.image_urls = [imageUrl];
+        if (urls.length && tool !== 'wan-2-7-image') input.image_urls = urls;
         return { tool, input };
     }
 

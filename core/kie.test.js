@@ -68,6 +68,9 @@ test('запрос картинки Kie берёт только разрешён
     assert.equal(idea.input.image_size, 'portrait_16_9');
     assert.throws(() => kie.buildImageTask(model('kie-ideogram'), { prompt: 'кот', imageUrls: ['https://cdn.example/a.jpg'] }));
 
+    const pair = kie.buildImageTask(model('kie-gpt'), { prompt: 'кот', quality: '2K', maxImages: 2, imageUrls: ['https://cdn.example/a.jpg', 'https://cdn.example/b.jpg'] });
+    assert.deepEqual(pair.input.input_urls, ['https://cdn.example/a.jpg', 'https://cdn.example/b.jpg']);
+
     const edited = kie.buildImageTask(model('kie-gpt'), { prompt: 'кот', quality: '2K', imageUrls: ['https://cdn.example/a.jpg', 'http://evil'] });
     assert.equal(edited.model, 'gpt-image-2-image-to-image');
     assert.equal(edited.input.resolution, '2K');
