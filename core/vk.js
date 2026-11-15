@@ -1348,14 +1348,43 @@ async function saveWallPhoto(token, groupId, file) {
     return attachment;
 }
 
+async function loadWall(token, groupId) {
+    const owner = String(-Number(groupId));
+    const attempts = [
+        { owner_id: owner, count: '20' },
+        { owner_id: owner, count: '20', filter: 'all' },
+        { owner_id: owner, count: '20', filter: 'owner' }
+    ];
+    let last = null;
+    for (const params of attempts) {
+        try {
+            return await call(token, 'wall.get', params);
+        } catch (error) {
+            last = error;
+        }
+    }
+    throw last || new Error('wall');
+}
+
 async function findPinnedPost(token, groupId) {
-    const res = await call(token, 'wall.get', {
-        owner_id: String(-Number(groupId)),
-        count: '15',
-        filter: 'owner'
-    });
-    const items = res && Array.isArray(res.items) ? res.items : [];
-    return items.find(item => Number(item && item.is_pinned) === 1) || null;
+    const tokens = [token];
+    const reader = audit.readerToken();
+    if (reader && reader !== token) tokens.push(reader);
+    let last = null;
+    let sawWall = false;
+    for (const item of tokens) {
+        try {
+            const res = await loadWall(item, groupId);
+            const items = res && Array.isArray(res.items) ? res.items : [];
+            const pinned = lesson.pinnedItem(items);
+            if (pinned) return pinned;
+            sawWall = true;
+        } catch (error) {
+            last = error;
+        }
+    }
+    if (sawWall) return null;
+    throw last || new Error('wall');
 }
 
 async function lessonPin(groupId) {
@@ -1399,7 +1428,8 @@ async function ensureLessonPin(token, groupId) {
     try {
         oldPost = await findPinnedPost(token, groupId);
     } catch (error) {
-        console.error(`ВК ${groupId}: не увидел текущий закреп, новую запись не публикую.`);
+        const code = Number(error && error.code);
+        console.error(`ВК ${groupId}: стену не прочитал${code ? ` (${code})` : ''}, новую запись не публикую.`);
         return;
     }
     const oldId = oldPost && oldPost.id ? Number(oldPost.id) : 0;

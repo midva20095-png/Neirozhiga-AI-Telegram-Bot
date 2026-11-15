@@ -33,6 +33,11 @@ function isOwnPost(text) {
     return String(text || '').trim().startsWith(OPENING);
 }
 
+function pinnedItem(items) {
+    const list = Array.isArray(items) ? items : [];
+    return list.find(item => Number(item && item.is_pinned) === 1) || null;
+}
+
 function lessonRoute(text) {
     const raw = String(text || '').trim();
     if (!raw || club.isThanks(raw) || isOwnPost(raw) || raw.startsWith('Навигация по урокам')) return { kind: 'skip' };
@@ -110,5 +115,5 @@ async function paintCover() {
 }
 
 module.exports = {
-    CLUB_ID, OPENING, isClub, pinKey, postUrl, postText, isOwnPost, lessonRoute, lessonPrompt, plain, fallbackText, paintCover
+    CLUB_ID, OPENING, isClub, pinKey, postUrl, postText, isOwnPost, pinnedItem, lessonRoute, lessonPrompt, plain, fallbackText, paintCover
 };

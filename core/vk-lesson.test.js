@@ -43,6 +43,15 @@ test('текст новой записи хранит ссылку на преж
     assert.equal(lesson.isOwnPost(text), true);
 });
 
+test('из стены берётся только закреплённая запись', () => {
+    const pinned = lesson.pinnedItem([
+        { id: 4, is_pinned: 0, text: 'свежая' },
+        { id: 9, is_pinned: 1, text: 'старая' }
+    ]);
+    assert.equal(pinned.id, 9);
+    assert.equal(lesson.pinnedItem([{ id: 4 }]), null);
+});
+
 test('обложка уроков собирается в картинку', async () => {
     const cover = await lesson.paintCover();
     assert.ok(cover.length > 1000);
