@@ -688,6 +688,7 @@ async function loadTpl(){
     '<details'+(editing?' open':'')+'><summary>Дополнительно: описание, раздел, ссылка, размеры</summary>'+
     '<label>Короткое описание под заголовком</label><input id="tdesc" placeholder="Что получится" value="'+esc(editing&&editing.description?editing.description:'')+'">'+
     '<label>Раздел в кабинете</label><select id="tc">'+TCATS.map(c=>'<option value="'+c[0]+'"'+((editing?editing.category:'image')===c[0]?' selected':'')+'>'+c[1]+'</option>').join('')+'</select>'+
+    '<p class="note">Раздел «Видео» встаёт в карусель шаблонов. Для него выберите видеомодель, иначе шаблон сделает картинку.</p>'+
     '<label>Ссылка на картинку, если фото не загружаете файлом</label><input id="timg" placeholder="https://..." value="'+esc(link)+'">'+
     '<label>Размеры через запятую. Пусто — все размеры выбранной модели</label><input id="tfmt" placeholder="9:16, 1:1" value="'+esc(editing&&editing.formats?editing.formats:'')+'">'+
     '<label>Порядок. Меньше число — выше в списке</label><input id="tsort" type="number" placeholder="0" value="'+(editing&&editing.sort?editing.sort:0)+'">'+

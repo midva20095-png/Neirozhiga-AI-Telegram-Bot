@@ -525,7 +525,8 @@ function startWebApp() {
                     if (body.image) photos = [body.image];
                 }
                 if (!prompt) prompt = 'Сделай изображение по прикреплённому фото';
-                prompt = templateFields.withAspect(prompt, aspect);
+                const templateKind = (catalog.getModel(modelKey, { includeDisabled: true, audience }) || {}).kind;
+                if (templateKind !== 'video' && templateKind !== 'audio') prompt = templateFields.withAspect(prompt, aspect);
             }
             if (!prompt && !body.image && !photos.length) return res.status(400).json({ error: 'Введите промпт' });
             const liveModel = catalog.getModel(modelKey, { audience });
