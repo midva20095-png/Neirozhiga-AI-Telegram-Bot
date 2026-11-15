@@ -196,7 +196,7 @@ async function processRequest(context) {
         throw userError('Эта модель рисует только по тексту, без фото.');
     }
 
-    const cap = context.exactPrompt ? Math.min(6, buffers.length) : Math.min(1, buffers.length);
+    const cap = (spec.kind === 'image' || context.exactPrompt) ? Math.min(6, buffers.length) : Math.min(1, buffers.length);
     const imageUrls = [];
     for (let i = 0; i < cap; i++) {
         const mime = (context.mimeTypes && context.mimeTypes[i]) || context.mimeType;
@@ -207,7 +207,7 @@ async function processRequest(context) {
         aspect: context.aspectRatio,
         quality: context.quality,
         imageUrls,
-        maxImages: context.exactPrompt ? cap : 1
+        maxImages: cap
     });
     const created = await postJson(axios, key, '/api/v1/jobs/createTask', task);
     if (created.status === 401 || created.status === 403) throw userError('Эта модель пока не подключена.');

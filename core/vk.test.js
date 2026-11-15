@@ -79,7 +79,7 @@ test('из события ВК берётся только входящий те
         type: 'message_new',
         object: { message: { from_id: 10, peer_id: 10, text: '  нарисуй кота ', out: 0 } }
     };
-    assert.deepEqual(vk.readIncoming(update), { fromId: 10, peerId: 10, text: 'нарисуй кота', payload: null, photos: [] });
+    assert.deepEqual(vk.readIncoming(update), { fromId: 10, peerId: 10, text: 'нарисуй кота', payload: null, photos: [], messageId: 0 });
     assert.equal(vk.readIncoming({ type: 'message_new', object: { message: { from_id: 10, text: 'я', out: 1 } } }), null);
     assert.equal(vk.readIncoming({ type: 'message_reply' }), null);
     const shared = vk.readIncoming({
@@ -111,6 +111,26 @@ test('из события ВК берётся только входящий те
         }
     });
     assert.deepEqual(face.photos, ['https://cdn.example/face.jpg']);
+    const pair = vk.readIncoming({
+        type: 'message_new',
+        object: {
+            message: {
+                id: 77,
+                from_id: 10,
+                peer_id: 10,
+                text: 'оба',
+                out: 0,
+                attachments: [{ type: 'photo', photo: { orig_photo: { url: 'https://cdn.example/b.jpg' } } }],
+                reply_message: { attachments: [{ type: 'photo', photo: { orig_photo: { url: 'https://cdn.example/a.jpg' } } }] }
+            }
+        }
+    });
+    assert.deepEqual(pair.photos, ['https://cdn.example/a.jpg', 'https://cdn.example/b.jpg']);
+    assert.equal(pair.messageId, 77);
+    assert.deepEqual(vk.keepPhotos(['a'], ['b'], 1000), ['a', 'b']);
+    assert.deepEqual(vk.keepPhotos(['a'], ['b'], 3 * 60 * 1000), ['b']);
+    assert.deepEqual(vk.keepPhotos(['a'], [], 1000), ['a']);
+    assert.deepEqual(vk.keepPhotos(['a'], [], 20 * 60 * 1000), []);
     assert.equal(vk.isGreeting('Начать'), true);
     assert.equal(vk.isGreeting('нарисуй кота'), false);
 });

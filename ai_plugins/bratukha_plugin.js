@@ -233,7 +233,7 @@ async function runSite(context) {
     if (Array.isArray(context.fileBuffers)) buffers.push(...context.fileBuffers);
     const imageUrls = [];
     if (spec.image !== 'forbidden' && buffers.length) {
-        const cap = context.exactPrompt ? Math.min(buffers.length, 6) : 1;
+        const cap = (spec.kind === 'image' || context.exactPrompt) ? Math.min(buffers.length, 6) : 1;
         for (let i = 0; i < cap; i++) {
             const mime = (context.mimeTypes && context.mimeTypes[i]) || context.mimeType || 'image/jpeg';
             imageUrls.push(await uploadBuffer(apiKey, buffers[i], mime, 'photo_' + (i + 1) + '.jpg'));

@@ -68,13 +68,13 @@ function readIncoming(update) {
         peerId,
         text: linkedText(message),
         payload: parsePayload(message.payload),
-        photos: messagePhotoUrls(message)
+        photos: messagePhotoUrls(message),
+        messageId: Number(message.id) || 0
     };
 }
 
-function messagePhotoUrls(message) {
+function urlsFromAttachments(list) {
     const urls = [];
-    const list = message && message.attachments;
     if (!Array.isArray(list)) return urls;
     list.forEach(item => {
         if (!item || item.type !== 'photo' || !item.photo) return;
@@ -88,7 +88,25 @@ function messagePhotoUrls(message) {
         const url = (item.photo.orig_photo && item.photo.orig_photo.url) || (best && best.url) || '';
         if (url && urls.indexOf(url) < 0) urls.push(url);
     });
-    return urls.slice(0, 6);
+    return urls;
+}
+
+function messagePhotoUrls(message) {
+    const own = urlsFromAttachments(message && message.attachments);
+    const replied = urlsFromAttachments(message && message.reply_message && message.reply_message.attachments);
+    const urls = own.length && replied.length ? replied.concat(own) : own;
+    return urls.filter((url, index) => url && urls.indexOf(url) === index).slice(0, 6);
+}
+
+const PHOTO_HOLD_MS = 15 * 60 * 1000;
+const PHOTO_JOIN_MS = 2 * 60 * 1000;
+
+function keepPhotos(previous, fresh, ageMs) {
+    const held = Array.isArray(previous) && ageMs < PHOTO_HOLD_MS ? previous.filter(Boolean) : [];
+    const incoming = Array.isArray(fresh) ? fresh.filter(Boolean) : [];
+    if (!incoming.length) return held.slice(-6);
+    const recent = ageMs < PHOTO_JOIN_MS ? held : [];
+    return recent.concat(incoming).slice(-6);
 }
 
 function readEvent(update) {
@@ -1012,14 +1030,32 @@ async function loadPhotoBuffers(urls) {
 
 function takeReferencePhotos(account, fresh) {
     const key = String(account);
-    if (fresh && fresh.length) {
-        heldPhotos.delete(key);
-        return fresh;
-    }
     const held = heldPhotos.get(key);
     heldPhotos.delete(key);
-    if (!held || Date.now() - held.at > 15 * 60 * 1000) return [];
-    return held.buffers;
+    const age = held ? Date.now() - held.at : PHOTO_HOLD_MS;
+    return keepPhotos(held && held.buffers, fresh, age);
+}
+
+function stashPhotos(account, fresh) {
+    const key = String(account);
+    const held = heldPhotos.get(key);
+    const age = held ? Date.now() - held.at : PHOTO_HOLD_MS;
+    const older = held && age < PHOTO_HOLD_MS ? held.buffers : [];
+    const buffers = older.concat(fresh || []).filter(Boolean).slice(-6);
+    heldPhotos.set(key, { buffers, at: Date.now() });
+    return buffers;
+}
+
+async function completePhotos(token, incoming) {
+    const urls = Array.isArray(incoming.photos) ? incoming.photos : [];
+    if (urls.length !== 1 || !incoming.messageId) return urls.slice(0, 6);
+    try {
+        const res = await call(token, 'messages.getById', { message_ids: String(incoming.messageId) });
+        const message = res && Array.isArray(res.items) ? res.items[0] : null;
+        const full = messagePhotoUrls(message);
+        if (full.length > urls.length) return full.slice(0, 6);
+    } catch (error) {}
+    return urls.slice(0, 6);
 }
 
 async function runJob(token, peerId, account, job) {
@@ -1433,8 +1469,11 @@ async function reply(token, peerId, account, text, payload, groupId, photoUrls) 
     const fresh = await loadPhotoBuffers(photoUrls);
     if (!text) {
         if (fresh.length) {
-            heldPhotos.set(String(account), { buffers: fresh, at: Date.now() });
-            await sendText(token, peerId, 'Фото получил. Напишите, что сделать с этим человеком или кадром.');
+            const saved = stashPhotos(account, fresh);
+            const line = saved.length > 1
+                ? `Фото получил: ${saved.length}. Напишите, что сделать с этими кадрами.`
+                : 'Фото получил. Напишите, что сделать с этим человеком или кадром.';
+            await sendText(token, peerId, line);
             return;
         }
         await sendText(token, peerId, 'Напишите запрос или нажмите кнопку внизу.');
@@ -2186,7 +2225,8 @@ async function handleUpdate(token, update, groupId) {
     try { await db.rememberCommunity(account, groupId); } catch (error) {}
     const bonus = catalog.getGeneral().start_bonus;
     if (isNew && bonus > 0) await db.updateBalance(account, bonus, 'Приветственный бонус');
-    await reply(token, incoming.peerId, account, incoming.text, incoming.payload, groupId, incoming.photos);
+    const photos = await completePhotos(token, incoming);
+    await reply(token, incoming.peerId, account, incoming.text, incoming.payload, groupId, photos);
 }
 
 async function sendToUser(accountIdValue, buffer, mime, caption) {
@@ -2439,5 +2479,5 @@ async function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, keepPhotos, USER_HELP
 };

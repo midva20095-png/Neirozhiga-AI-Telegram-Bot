@@ -68,8 +68,11 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .tcard{display:flex;gap:10px;width:100%;text-align:left;background:#1c1233;border:1px solid transparent;border-radius:14px;padding:10px;margin-bottom:8px;align-items:center}
 .tcard img,.thumb{width:64px;height:64px;object-fit:cover;border-radius:10px;background:#0b0614;flex:0 0 auto}
 .preview{width:100%;max-height:320px;object-fit:cover;border-radius:14px;background:#0b0614}
-.filebtn{display:block;text-align:center;border:1px dashed rgba(255,255,255,.25);border-radius:14px;padding:14px;margin-top:10px;font-weight:800;cursor:pointer}
-.filebtn input{display:none}
+.filebtn{position:relative;display:block;overflow:hidden;text-align:center;border:1px dashed rgba(255,255,255,.25);border-radius:14px;padding:14px;margin-top:10px;font-weight:800;cursor:pointer}
+.filebtn input{position:absolute;left:0;top:0;width:100%;height:100%;opacity:0;font-size:32px;cursor:pointer}
+.phrow{display:flex;align-items:center;gap:8px;margin-top:8px}
+.phrow .preview{width:72px;height:72px;max-height:72px;margin:0;flex:0 0 72px}
+.phrow button{border:0;border-radius:10px;padding:8px 10px;background:rgba(255,255,255,.08);color:inherit;font-weight:800}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .chips button{border:1px solid var(--line);background:#1c1233;border-radius:999px;padding:6px 10px;font-weight:700}
 .chips button.on{border-color:#b366ff;color:#fff}
@@ -803,6 +806,17 @@ function bind(){
   const file=document.getElementById('file'); if (file) file.onchange=()=>onPhoto(file);
   document.querySelectorAll('[data-answer]').forEach(function(el){ el.oninput = function(){ tplAnswers[el.dataset.answer] = el.value; }; });
   document.querySelectorAll('[data-field]').forEach(function(el){ el.onchange = function(){ onTplFieldPhoto(el); }; });
+  document.querySelectorAll('[data-unphoto]').forEach(function(button){
+    button.onclick = function(){
+      const key = button.dataset.unphoto;
+      const bag = tplPhotos[key];
+      const list = Array.isArray(bag) ? bag.slice() : (bag ? [bag] : []);
+      list.splice(Number(button.dataset.idx), 1);
+      tplPhotos[key] = Array.isArray(bag) ? list : (list[0] || null);
+      rememberTplAnswers();
+      draw();
+    };
+  });
   const goTpl=document.getElementById('goTpl'); if (goTpl) goTpl.onclick=generateTemplate;
   const goTop=document.getElementById('goTop'); if (goTop) goTop.onclick=function(){ tab='top'; last=null; draw(); };
   const shareTpl=document.getElementById('shareTpl'); if (shareTpl) shareTpl.onclick=function(){ shareTemplate(openTpl); };
@@ -919,11 +933,16 @@ function fieldForm(t){
     if (f.type === 'фото') {
       const bag = tplPhotos[f.key];
       const count = Array.isArray(bag) ? bag.length : (bag ? 1 : 0);
-      const thumbs = (Array.isArray(bag) ? bag : (bag ? [bag] : [])).map(function(src){
-        return '<img class="preview" style="margin-top:8px" src="'+src+'" alt="">';
+      const limit = f.multi > 1 ? f.multi : 1;
+      const list = Array.isArray(bag) ? bag : (bag ? [bag] : []);
+      const thumbs = list.map(function(src, i){
+        return '<span class="phrow"><img class="preview" src="'+src+'" alt=""><button type="button" data-unphoto="'+esc(f.key)+'" data-idx="'+i+'">Убрать</button></span>';
       }).join('');
-      return '<span class="flabel">'+esc(f.label)+star+'</span><label class="filebtn">'+(count ? ('Фото: '+count+' — заменить') : 'Прикрепить фото')+
-        '<input type="file" accept="image/*" data-field="'+esc(f.key)+'" data-multi="'+(f.multi>1?'1':'')+'"'+(f.multi>1?' multiple':'')+'></label>'+thumbs;
+      const verb = !count ? 'Прикрепить фото' : (count < limit ? 'Добавить ещё фото' : 'Заменить последнее фото');
+      const mark = limit > 1 ? ' · '+count+' из '+limit : '';
+      return '<span class="flabel">'+esc(f.label)+star+mark+'</span>'+thumbs+
+        '<label class="filebtn">'+verb+
+        '<input type="file" accept="image/*" data-field="'+esc(f.key)+'" data-limit="'+limit+'"'+(limit>1?' multiple':'')+'></label>';
     }
     if (f.type === 'выбор') {
       const opts = (f.options || []).map(function(o){
@@ -983,12 +1002,15 @@ async function onPhoto(input){
 }
 async function onTplFieldPhoto(input){
   const key = input.dataset.field;
-  const files = Array.from(input.files || []).slice(0, input.dataset.multi === '1' ? 6 : 1);
+  const limit = Math.max(1, Math.min(6, Number(input.dataset.limit) || 1));
+  const files = Array.from(input.files || []).slice(0, limit);
   if (!key || !files.length) return;
   try {
     const ready = [];
     for (const file of files) ready.push(await fileToJpeg(file));
-    tplPhotos[key] = input.dataset.multi === '1' ? ready : ready[0];
+    const prev = Array.isArray(tplPhotos[key]) ? tplPhotos[key].slice() : (tplPhotos[key] ? [tplPhotos[key]] : []);
+    const next = files.length > 1 || limit === 1 ? ready.slice(0, limit) : prev.concat(ready).slice(-limit);
+    tplPhotos[key] = limit > 1 ? next : next[0];
   } catch (e) {
     alert(e.message);
   }
