@@ -1497,7 +1497,7 @@ async function writeLessonComment(token, groupId, comment, key) {
             }
         }
         if (!text) text = lesson.fallbackText();
-        await sendLessonComment(token, groupId, comment, text);
+        await sendLessonComment(token, groupId, comment, lesson.withLessons(text));
         try {
             await db.rememberLesson(groupId, comment.postId, comment.fromId, 'user', question);
             await db.rememberLesson(groupId, comment.postId, comment.fromId, 'bot', text);
@@ -1522,20 +1522,8 @@ async function answerLessonPost(token, groupId, comment) {
         await wallFinish(key);
         return;
     }
-    console.log(`ВК ${groupId}: комментарий ${comment.commentId} — ${route.kind === 'link' ? 'ссылка на урок' : 'свой разбор'}.`);
+    console.log(`ВК ${groupId}: комментарий ${comment.commentId} — ответ нейросети.`);
     wallPending.add(key);
-    if (route.kind === 'link') {
-        try {
-            await sendLessonComment(token, groupId, comment, route.text);
-            await wallFinish(key);
-        } catch (error) {
-            const code = Number(error && error.code);
-            console.error(`ВК ${groupId}: ссылка на урок не отправилась${code ? ` (${code})` : ''}.${wallAccessLine(groupId, code)}`);
-        } finally {
-            wallPending.delete(key);
-        }
-        return;
-    }
     queueLesson(() => writeLessonComment(token, groupId, comment, key));
 }
 

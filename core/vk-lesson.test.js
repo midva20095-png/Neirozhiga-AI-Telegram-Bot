@@ -3,20 +3,21 @@ const assert = require('node:assert/strict');
 const club = require('./vk-club');
 const lesson = require('./vk-lesson');
 
-test('свой урок пишется только если в клубе нет подходящей ссылки', () => {
-    const known = lesson.lessonRoute('как сделать обложку сообщества');
-    assert.equal(known.kind, 'link');
-    assert.match(known.text, /https:\/\/vk\.com\/@neuroyaga-/);
-    const fresh = lesson.lessonRoute('как сварить борщ в казане');
-    assert.equal(fresh.kind, 'write');
+test('в закрепе любой вопрос идёт в нейросеть, в конце ссылка на уроки', () => {
+    assert.equal(lesson.lessonRoute('как сделать обложку сообщества').kind, 'write');
+    assert.equal(lesson.lessonRoute('как сварить борщ в казане').kind, 'write');
     assert.equal(lesson.lessonRoute('спасибо большое').kind, 'skip');
     assert.equal(lesson.lessonRoute('ок').kind, 'skip');
     assert.equal(lesson.lessonRoute('привет').kind, 'write');
-    assert.equal(lesson.lessonRoute('обложка').kind, 'link');
+    assert.equal(lesson.lessonRoute('обложка').kind, 'write');
     assert.equal(lesson.questionText('# как сделать обложку'), 'как сделать обложку');
     assert.equal(lesson.questionText('как сделать обложку'), 'как сделать обложку');
     assert.equal(lesson.questionText('дай совет по обложке'), 'дай совет по обложке');
-    assert.equal(lesson.lessonRoute(lesson.questionText('#борщ в казане')).kind, 'write');
+    const ready = lesson.withLessons('Сначала определите, кому продаёте.');
+    assert.match(ready, /Сначала определите/);
+    assert.match(ready, /https:\/\/vk\.com\/@neuroyaga-navigaciya-po-urokam-kluba-na-urovne-bazovaya-podderzhka-po/);
+    assert.match(ready, /https:\/\/vk\.com\/@neuroyaga-navigator-po-klubu-babki-targetologa/);
+    assert.doesNotMatch(ready, /Создание сообщества/);
 });
 
 test('запрос своего урока не содержит текстов и ссылок клуба', () => {

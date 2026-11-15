@@ -21,8 +21,8 @@ function postText(oldUrl) {
     const lines = [
         OPENING,
         '',
-        'Если такой урок уже есть в клубе, бот пришлёт ссылку.',
-        'Если урока ещё нет, бот коротко разберёт тему в ответе.',
+        'Бот коротко отвечает на вопрос.',
+        'В конце ответа есть ссылка на уроки клуба.',
         '',
         'Кредиты за это не списываются.'
     ];
@@ -52,21 +52,25 @@ function questionText(text) {
     return (mark ? mark[1] : raw).trim();
 }
 
+const LESSON_LINKS = [
+    'Уроки клуба:',
+    'https://vk.com/@neuroyaga-navigaciya-po-urokam-kluba-na-urovne-bazovaya-podderzhka-po',
+    'https://vk.com/@neuroyaga-navigator-po-klubu-babki-targetologa'
+].join('\n');
+
 function lessonRoute(text) {
     const raw = String(text || '').trim();
     if (!raw || club.isThanks(raw) || isOwnPost(raw) || raw.startsWith('Навигация по урокам')) return { kind: 'skip' };
-    if (raw.startsWith('Сейчас не получилось разобрать')) return { kind: 'skip' };
-    const lessons = club.rankLessons(raw);
-    if (lessons.length) {
-        const ready = club.commentAnswer(raw);
-        const body = ready && ready.kind === 'answer'
-            ? ready.text
-            : lessons.slice(0, 4).map(item => `${item.title}\n${item.url}`).join('\n\n');
-        return { kind: 'link', text: String(body).slice(0, 1500) };
-    }
+    if (raw.startsWith('Сейчас не получилось разобрать') || raw.startsWith('Уроки клуба:')) return { kind: 'skip' };
     const letters = (raw.match(/[a-zа-я0-9]/gi) || []).length;
     if (letters < 2) return { kind: 'skip' };
     return { kind: 'write' };
+}
+
+function withLessons(text) {
+    const body = String(text || '').trim();
+    const room = 1500 - LESSON_LINKS.length - 2;
+    return `${body.slice(0, Math.max(room, 0))}\n\n${LESSON_LINKS}`.trim();
 }
 
 function lessonPrompt(question, memory) {
@@ -78,7 +82,8 @@ function lessonPrompt(question, memory) {
         'Пиши по-русски, коротко и простыми фразами, как ответ в комментарии сообщества.',
         'Без звёздочек, решёток, списков, скобок и значков.',
         'Не вставляй ссылки. Не упоминай чужие статьи и чужие уроки.',
-        'Дай свой короткий разбор по вопросу: от четырёх до семи предложений.',
+        'Отвечай именно на заданный вопрос и не подменяй его другой темой.',
+        'Дай свой короткий разбор: от четырёх до семи предложений.',
         past ? `Прошлая переписка:\n${past}` : '',
         `Вопрос: ${String(question || '').trim()}`
     ].filter(Boolean).join('\n\n');
@@ -130,5 +135,5 @@ async function paintCover() {
 }
 
 module.exports = {
-    CLUB_ID, PIN_POST_ID, OPENING, isClub, pinKey, postUrl, postText, isOwnPost, pinnedItem, lessonPostId, questionText, lessonRoute, lessonPrompt, plain, fallbackText, paintCover
+    CLUB_ID, PIN_POST_ID, OPENING, isClub, pinKey, postUrl, postText, isOwnPost, pinnedItem, lessonPostId, questionText, lessonRoute, withLessons, lessonPrompt, plain, fallbackText, paintCover
 };
