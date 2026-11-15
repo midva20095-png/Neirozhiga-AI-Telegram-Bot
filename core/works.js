@@ -4,7 +4,7 @@
 const KEEP = 30;
 const LIMITS = {
     image: 8 * 1024 * 1024,
-    video: 16 * 1024 * 1024,
+    video: 48 * 1024 * 1024,
     audio: 8 * 1024 * 1024
 };
 

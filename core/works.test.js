@@ -13,6 +13,14 @@ test('в память попадает картинка, слишком боль
     assert.equal(works.prepareWork({ kind: 'image', buffer: Buffer.alloc(0) }), null);
 });
 
+test('ролик крупнее 16 МБ остаётся в истории', () => {
+    const mp4 = Buffer.alloc(17 * 1024 * 1024);
+    mp4.write('ftyp', 4, 'ascii');
+    const saved = works.prepareWork({ kind: 'video', buffer: mp4 });
+    assert.equal(saved.mime, 'video/mp4');
+    assert.ok(works.LIMITS.video >= 48 * 1024 * 1024);
+});
+
 test('jpeg и mp4 узнаются по началу файла', () => {
     const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0]);
     assert.equal(works.prepareWork({ kind: 'image', buffer: jpeg }).mime, 'image/jpeg');

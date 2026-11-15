@@ -181,17 +181,20 @@ async function waitOperation(apiKey, operationId, attempts) {
     throw new Error('Слишком долгое ожидание ответа от нейросети');
 }
 
-function resultUrls(opData) {
-    return collectResultUrls(opData);
+function resultUrls(opData, kind) {
+    return collectResultUrls(opData, kind);
 }
 
-function isMedia(body) {
+function isMedia(body, contentType) {
     if (!body || body.length < 32) return false;
+    const type = String(contentType || '').toLowerCase();
+    if (type.startsWith('video/') || type.startsWith('audio/')) return true;
     if (body[0] === 0x89 && body[1] === 0x50) return true;
     if (body[0] === 0xff && body[1] === 0xd8) return true;
     if (body[0] === 0x47 && body[1] === 0x49) return true;
-    const head = body.slice(0, 12).toString('ascii');
-    return head.startsWith('RIFF') || head.slice(4, 8) === 'ftyp' || head.startsWith('ID3') || head.startsWith('OggS');
+    if (body[0] === 0x1a && body[1] === 0x45 && body[2] === 0xdf && body[3] === 0xa3) return true;
+    const head = body.slice(0, 64).toString('latin1');
+    return head.startsWith('RIFF') || head.includes('ftyp') || head.startsWith('ID3') || head.startsWith('OggS');
 }
 
 async function downloadUrl(url) {
@@ -200,13 +203,20 @@ async function downloadUrl(url) {
         try {
             const mediaRes = await axios.get(url, {
                 responseType: 'arraybuffer',
-                timeout: 120_000,
+                timeout: 180_000,
                 maxRedirects: 5,
-                headers: { Accept: 'image/*,*/*', 'User-Agent': 'Mozilla/5.0' }
+                maxContentLength: Infinity,
+                maxBodyLength: Infinity,
+                headers: { Accept: 'video/*,audio/*,image/*,*/*', 'User-Agent': 'Mozilla/5.0' }
             });
             const body = Buffer.from(mediaRes.data);
-            if (isMedia(body)) return body;
-            lastErr = new Error('По ссылке пришла не картинка');
+            const contentType = mediaRes.headers && (mediaRes.headers['content-type'] || '');
+            if (isMedia(body, contentType)) {
+                console.log(`Братуха: файл скачан, ${body.length} байт`);
+                return body;
+            }
+            console.error(`Братуха: по ссылке не файл (${contentType || 'тип не указан'}, ${body.length} байт)`);
+            lastErr = new Error('По ссылке пришёл не файл');
         } catch (err) {
             lastErr = err;
         }
@@ -247,7 +257,7 @@ async function runSite(context) {
             console.log(`🚀 [Bratukha] ${built.tool}${modelName}${mode ? ' (' + mode + ')' : ''}`);
             const operationId = await postOperation(apiKey, built.tool, built.input);
             const opData = await waitOperation(apiKey, operationId, attempts);
-            const urls = resultUrls(opData);
+            const urls = resultUrls(opData, spec.kind);
             if (!urls.length) throw new Error('Результат готов, но ссылки на него нет');
             const limit = spec.kind === 'video' ? 1 : Math.min(2, urls.length);
             const files = [];
@@ -437,4 +447,5 @@ module.exports = BratukhaPlugin;
 module.exports.BratukhaPlugin = BratukhaPlugin;
 module.exports.processRequest = processRequest;
 module.exports.operationOutcome = operationOutcome;
+module.exports.isMedia = isMedia;
 module.exports.BRATUKHA_MODELS = BRATUKHA_MODELS;

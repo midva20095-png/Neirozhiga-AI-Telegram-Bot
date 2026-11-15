@@ -656,12 +656,12 @@ function readUpload(data) {
     return body;
 }
 
-async function postFile(url, field, file) {
+async function postFile(url, field, file, timeoutMs) {
     const form = new FormData();
     form.append(field, file.buffer, { filename: file.filename, contentType: file.type });
     const res = await axios.post(url, form, {
         headers: form.getHeaders({ 'User-Agent': 'Mozilla/5.0' }),
-        timeout: 60000,
+        timeout: timeoutMs || 60000,
         maxBodyLength: Infinity,
         maxContentLength: Infinity
     });
@@ -834,9 +834,21 @@ function mediaFile(kind, buffer) {
     return null;
 }
 
+async function uploadMessageVideo(token, file) {
+    const group = (typeof communityList === 'function' ? communityList() : []).find(item => item && item.token === token);
+    const params = { name: 'НейроЯга', is_private: 1, wallpost: 0 };
+    if (group && group.id) params.group_id = String(group.id);
+    const saved = await call(token, 'video.save', params);
+    if (!saved || !saved.upload_url || saved.video_id == null || saved.owner_id == null) throw new Error('vk video');
+    await postFile(saved.upload_url, 'video_file', file, 180000);
+    const key = saved.access_key ? `_${saved.access_key}` : '';
+    return `video${saved.owner_id}_${saved.video_id}${key}`;
+}
+
 async function sendDoc(token, peerId, file, caption, title) {
     const server = await call(token, 'docs.getMessagesUploadServer', { peer_id: String(peerId), type: 'doc' });
-    const uploaded = await postFile(server.upload_url, 'file', file);
+    const wait = String(file && file.type || '').startsWith('video/') ? 180000 : 60000;
+    const uploaded = await postFile(server.upload_url, 'file', file, wait);
     const saved = await call(token, 'docs.save', { file: uploaded.file, title: title || file.title || 'Картинка' });
     const doc = saved && (saved.doc || saved);
     if (!doc || doc.id == null || doc.owner_id == null) throw new Error('vk doc');
@@ -846,6 +858,16 @@ async function sendDoc(token, peerId, file, caption, title) {
 async function sendMedia(token, peerId, buffer, kind, caption) {
     const file = mediaFile(kind, buffer);
     if (!file) throw new Error('vk file');
+    if (kind === 'video') {
+        try {
+            const attachment = await uploadMessageVideo(token, file);
+            await deliverFile(token, peerId, caption, attachment);
+            console.log('ВК: в чат ушло видео этой генерации.');
+            return;
+        } catch (error) {
+            console.error(`ВК не вставил видео (${error.message || ''}). Отправляю файлом.`);
+        }
+    }
     await sendDoc(token, peerId, file, caption, file.title);
     console.log(kind === 'video' ? 'ВК: в чат ушло видео этой генерации.' : 'ВК: в чат ушло аудио этой генерации.');
 }

@@ -142,6 +142,13 @@ test('запрос в Братуху собирается как на сайте
             urls: ['https://storage.example/result.png']
         }
     }), ['https://storage.example/result.png']);
+    assert.deepEqual(input.collectResultUrls({
+        result: {
+            type: 'video',
+            urls: ['https://storage.example/preview.jpg', 'https://storage.example/result.mp4'],
+            video_url: 'https://storage.example/result.mp4'
+        }
+    }, 'video'), ['https://storage.example/result.mp4']);
 });
 
 test('цена из админки списывается, в том числе у GigaChat', async () => {

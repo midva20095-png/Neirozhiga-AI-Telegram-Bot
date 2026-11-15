@@ -262,15 +262,23 @@ function walkResult(node, found, depth) {
     }
 }
 
-function collectResultUrls(opData) {
+function collectResultUrls(opData, kind) {
     const found = [];
     const root = opData && Object.prototype.hasOwnProperty.call(opData, 'result') ? opData.result : opData;
     if (root && typeof root === 'object' && !Array.isArray(root)) {
-        ['urls', 'images', 'files'].forEach(key => {
+        ['urls', 'videos', 'files', 'images'].forEach(key => {
             if (root[key] != null) listedUrls(root[key]).forEach(url => pushUrl(found, url));
+        });
+        ['video_url', 'url', 'audio_url', 'image_url'].forEach(key => {
+            if (typeof root[key] === 'string') pushUrl(found, root[key]);
         });
     }
     if (!found.length) walkResult(root, found, 0);
+    if (kind === 'video' || kind === 'audio') {
+        const media = found.filter(url => /\.(mp4|webm|mov|m4v|mp3|wav|ogg|m4a)(\?|#|$)/i.test(url));
+        if (media.length) return media;
+        return found.filter(url => !/\.(png|jpe?g|webp|gif)(\?|#|$)/i.test(url));
+    }
     const images = found.filter(url => /\.(png|jpe?g|webp|gif)(\?|#|$)/i.test(url));
     return images.length ? images : found;
 }
