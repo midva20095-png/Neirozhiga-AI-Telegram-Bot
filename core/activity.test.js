@@ -127,6 +127,15 @@ test('итог недели публикуется в понедельник у�
     }, GROUP);
     assert.equal(shifted.postId, 16047);
     assert.equal(shifted.text, 'обложка');
+    const positiveOwner = activity.readWallComment({
+        type: 'wall_reply_new',
+        object: { from_id: 7, id: 8, post_id: 16047, text: '#обложка', post_owner_id: 230706467 }
+    }, GROUP);
+    assert.equal(positiveOwner.text, '#обложка');
+    assert.equal(activity.wallCommentIssue({
+        type: 'wall_reply_new',
+        object: { from_id: -230706467, id: 9, post_id: 16047, text: '#урок' }
+    }, GROUP), 'от имени сообщества');
     assert.equal(activity.readWallPost({
         type: 'wall_post_new',
         object: { id: 11, owner_id: -230706467, from_id: 7, text: 'Новый урок' }

@@ -1433,6 +1433,7 @@ async function sendLessonComment(token, groupId, comment, message) {
 }
 
 async function writeLessonComment(token, groupId, comment, key) {
+    const question = lesson.addressed(comment.text) || String(comment.text || '').trim();
     try {
         let memory = [];
         try { memory = await db.listLessonMemory(groupId, comment.postId, comment.fromId); } catch (error) { memory = []; }
@@ -1440,7 +1441,7 @@ async function writeLessonComment(token, groupId, comment, key) {
         if (gigaPlugin) {
             try {
                 const result = await gigaPlugin.processRequest({
-                    prompt: lesson.lessonPrompt(comment.text, memory),
+                    prompt: lesson.lessonPrompt(question, memory),
                     modelKey: 'giga-pro'
                 });
                 text = lesson.plain(result && result.text);
@@ -1451,7 +1452,7 @@ async function writeLessonComment(token, groupId, comment, key) {
         if (!text) text = lesson.fallbackText();
         await sendLessonComment(token, groupId, comment, text);
         try {
-            await db.rememberLesson(groupId, comment.postId, comment.fromId, 'user', comment.text);
+            await db.rememberLesson(groupId, comment.postId, comment.fromId, 'user', question);
             await db.rememberLesson(groupId, comment.postId, comment.fromId, 'bot', text);
         } catch (error) {}
         await wallFinish(key);
@@ -1464,7 +1465,9 @@ async function writeLessonComment(token, groupId, comment, key) {
 }
 
 async function answerLessonPost(token, groupId, comment) {
-    const route = lesson.lessonRoute(comment.text);
+    const question = lesson.addressed(comment.text);
+    if (!question) return;
+    const route = lesson.lessonRoute(question);
     if (route.kind === 'skip') {
         console.log(`ВК ${groupId}: комментарий ${comment.commentId} пропущен.`);
         return;
@@ -1513,7 +1516,8 @@ async function handleCommunityWall(token, update, groupId) {
     }
     const comment = activity.readWallComment(update, groupId);
     if (update && update.type === 'wall_reply_new' && !comment) {
-        console.log(`ВК ${groupId}: комментарий пришёл, но разобрать его не удалось.`);
+        const reason = activity.wallCommentIssue(update, groupId) || 'неизвестный вид';
+        console.log(`ВК ${groupId}: комментарий пришёл, но разобрать его не удалось (${reason}).`);
     }
     if (!comment || comment.text.startsWith('Навигация по урокам')) return;
     if (lesson.isClub(groupId)) {

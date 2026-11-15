@@ -46,6 +46,13 @@ function lessonPostId(saved) {
     return known || PIN_POST_ID;
 }
 
+function addressed(text) {
+    const raw = String(text || '').trim();
+    const mark = raw.match(/^#+\s*([\s\S]*)$/);
+    if (!mark) return '';
+    return mark[1].trim();
+}
+
 function lessonRoute(text) {
     const raw = String(text || '').trim();
     if (!raw || club.isThanks(raw) || isOwnPost(raw) || raw.startsWith('Навигация по урокам')) return { kind: 'skip' };
@@ -124,5 +131,5 @@ async function paintCover() {
 }
 
 module.exports = {
-    CLUB_ID, PIN_POST_ID, OPENING, isClub, pinKey, postUrl, postText, isOwnPost, pinnedItem, lessonPostId, lessonRoute, lessonPrompt, plain, fallbackText, paintCover
+    CLUB_ID, PIN_POST_ID, OPENING, isClub, pinKey, postUrl, postText, isOwnPost, pinnedItem, lessonPostId, addressed, lessonRoute, lessonPrompt, plain, fallbackText, paintCover
 };

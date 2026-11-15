@@ -84,20 +84,39 @@ function parseCommunityActivity(update, groupId) {
     return null;
 }
 
+function eventObject(update) {
+    const raw = update && update.object;
+    if (raw && typeof raw === 'object') return raw;
+    if (typeof raw === 'string') {
+        try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') return parsed;
+        } catch (error) {}
+    }
+    return {};
+}
+
+function sameWall(owner, group) {
+    const left = Math.abs(Number(owner) || 0);
+    const right = Math.abs(Number(group) || 0);
+    if (!left || !right) return true;
+    return left === right;
+}
+
 function readWallComment(update, groupId) {
     if (!update || update.type !== 'wall_reply_new') return null;
-    const obj = update.object || {};
+    const obj = eventObject(update);
     const comment = obj.comment && typeof obj.comment === 'object' ? obj.comment : obj;
-    const fromId = Number(comment.from_id || obj.from_id);
+    const fromId = Number(comment.from_id || obj.from_id || comment.user_id || obj.user_id);
     if (!Number.isInteger(fromId) || fromId <= 0) return null;
     const group = communityId(groupId);
     const postOwner = Number(comment.post_owner_id || obj.post_owner_id || 0);
     const wallOwner = Number(comment.owner_id || obj.owner_id || 0);
     const owner = postOwner || (wallOwner < 0 ? wallOwner : 0);
-    if (owner && group && owner !== group) return null;
+    if (owner && !sameWall(owner, group)) return null;
     const nestedPost = comment.post && comment.post.id ? comment.post.id : (obj.post && obj.post.id);
     const postId = Number(comment.post_id || obj.post_id || nestedPost);
-    const commentId = Number(comment.id || obj.id);
+    const commentId = Number(comment.id || obj.id || comment.comment_id || obj.comment_id || comment.cid || obj.cid);
     if (!postId || !commentId) return null;
     return {
         fromId,
@@ -105,6 +124,20 @@ function readWallComment(update, groupId) {
         commentId,
         text: String(comment.text || obj.text || '').trim()
     };
+}
+
+function wallCommentIssue(update, groupId) {
+    if (!update || update.type !== 'wall_reply_new' || readWallComment(update, groupId)) return '';
+    const obj = eventObject(update);
+    const comment = obj.comment && typeof obj.comment === 'object' ? obj.comment : obj;
+    const fromId = Number(comment.from_id || obj.from_id || comment.user_id || obj.user_id);
+    if (!Number.isInteger(fromId) || fromId === 0) return 'нет автора';
+    if (fromId < 0) return 'от имени сообщества';
+    const postId = Number(comment.post_id || obj.post_id || (comment.post && comment.post.id) || (obj.post && obj.post.id));
+    if (!postId) return 'нет номера записи';
+    const commentId = Number(comment.id || obj.id || comment.comment_id || obj.comment_id);
+    if (!commentId) return 'нет номера комментария';
+    return 'чужая стена';
 }
 
 function readWallPost(update, groupId) {
@@ -207,6 +240,6 @@ function freshIds(seen, ids) {
 
 module.exports = {
     POINTS, rulesText, weekRange, previousWeek, shouldPublishWeek,
-    parseCommunityActivity, readWallComment, readWallPost,
+    parseCommunityActivity, readWallComment, wallCommentIssue, readWallPost,
     faceOf, present, formatRating, wallSummary, freshIds
 };
