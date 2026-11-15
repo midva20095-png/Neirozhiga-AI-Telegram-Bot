@@ -118,11 +118,13 @@ function readWallComment(update, groupId) {
     const nestedPost = comment.post && comment.post.id ? comment.post.id : (obj.post && obj.post.id);
     const postId = Number(comment.post_id || obj.post_id || nestedPost);
     const commentId = Number(comment.id || obj.id || comment.comment_id || obj.comment_id || comment.cid || obj.cid);
+    const replyTo = Number(comment.reply_to_comment || obj.reply_to_comment || 0);
     if (!postId || !commentId) return null;
     return {
         fromId,
         postId,
         commentId,
+        replyTo: Number.isInteger(replyTo) && replyTo > 0 ? replyTo : 0,
         text: String(comment.text || obj.text || '').trim()
     };
 }

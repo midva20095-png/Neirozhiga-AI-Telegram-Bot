@@ -1373,11 +1373,7 @@ async function ensureLessonPin(token, groupId) {
     }
     db.note('sys', `ВК ${groupId}: уроки отвечают в текущем закрепе ${url}`).catch(() => {});
     console.log(`ВК ${groupId}: уроки отвечают в текущем закрепе ${url}`);
-    try { await answerFreshLessonComments(token, groupId, postId); }
-    catch (error) {
-        const code = Number(error && error.code);
-        console.error(`ВК ${groupId}: свежие комментарии закрепа не прочитались${code ? ` (${code})` : ''}.`);
-    }
+    watchLessonPin(token, groupId);
 }
 
 async function readPostComments(token, groupId, postId) {
@@ -1411,22 +1407,70 @@ async function answerFreshLessonComments(token, groupId, postId) {
     const fresh = flat.filter(comment => {
         const fromId = Number(comment && comment.from_id);
         const text = String(comment && comment.text || '').trim();
-        const human = Number.isInteger(fromId) && fromId > 0;
-        const ownAsk = Number.isInteger(fromId) && fromId < 0 && text.startsWith('#');
-        return (human || ownAsk) && comment.id && Number(comment.date || 0) >= since;
+        const replyTo = Number(comment && comment.reply_to_comment || 0);
+        if (!comment.id || !text || Number(comment.date || 0) < since) return false;
+        if (fromId > 0) return true;
+        return fromId < 0 && !(replyTo > 0);
     }).sort((a, b) => Number(a.date) - Number(b.date)).slice(-8);
     for (const comment of fresh) {
+        const replyTo = Number(comment.reply_to_comment || 0);
         await answerLessonPost(token, groupId, {
             fromId: Number(comment.from_id),
             postId: Number(comment.post_id) || Number(postId),
             commentId: Number(comment.id),
+            replyTo: replyTo > 0 ? replyTo : 0,
             text: String(comment.text || '').trim()
         });
     }
-    if (fresh.length) console.log(`ВК ${groupId}: в закрепе проверяю комментарии, свежих ${fresh.length}.`);
+}
+
+const lessonWatch = new Set();
+let lessonReadFail = 0;
+
+function watchLessonPin(token, groupId) {
+    const id = String(groupId);
+    if (!lesson.isClub(id) || lessonWatch.has(id)) return;
+    lessonWatch.add(id);
+    const tick = async () => {
+        try {
+            const pin = await lessonPin(id);
+            if (pin && pin.postId) await answerFreshLessonComments(token, id, pin.postId);
+        } catch (error) {
+            const now = Date.now();
+            if (now - lessonReadFail > 5 * 60 * 1000) {
+                lessonReadFail = now;
+                const code = Number(error && error.code);
+                console.error(`ВК ${id}: закреп не прочитался${code ? ` (${code})` : ''}.`);
+            }
+        }
+        setTimeout(tick, 20000);
+    };
+    setTimeout(tick, 8000);
+}
+
+const lessonSent = [];
+
+function rememberLessonSent(groupId, text) {
+    lessonSent.push(`${groupId}\n${String(text || '').trim()}`);
+    if (lessonSent.length > 40) lessonSent.shift();
+}
+
+function wasLessonSent(groupId, text) {
+    return lessonSent.includes(`${groupId}\n${String(text || '').trim()}`);
+}
+
+function ownLessonReply(groupId, comment) {
+    if (Number(comment && comment.fromId) >= 0) return false;
+    const text = String(comment && comment.text || '');
+    if (Number(comment && comment.replyTo) > 0) return true;
+    if (wasLessonSent(groupId, text)) return true;
+    if (/https?:\/\/vk\.(?:com|ru)\/@neuroyaga-/i.test(text)) return true;
+    if (text.startsWith('Навигация по урокам') || text.startsWith('Сейчас не получилось разобрать')) return true;
+    return lesson.isOwnPost(text);
 }
 
 async function sendLessonComment(token, groupId, comment, message) {
+    rememberLessonSent(groupId, message);
     await commentAsCommunity(token, groupId, {
         postId: comment.postId,
         replyTo: comment.commentId,
@@ -1436,7 +1480,7 @@ async function sendLessonComment(token, groupId, comment, message) {
 }
 
 async function writeLessonComment(token, groupId, comment, key) {
-    const question = lesson.addressed(comment.text) || String(comment.text || '').trim();
+    const question = lesson.questionText(comment.text);
     try {
         let memory = [];
         try { memory = await db.listLessonMemory(groupId, comment.postId, comment.fromId); } catch (error) { memory = []; }
@@ -1468,16 +1512,17 @@ async function writeLessonComment(token, groupId, comment, key) {
 }
 
 async function answerLessonPost(token, groupId, comment) {
-    const question = lesson.addressed(comment.text);
-    if (!question) return;
-    const route = lesson.lessonRoute(question);
-    if (route.kind === 'skip') {
+    const key = `vk_creply_${groupId}_${comment.commentId}`;
+    if (wallPending.has(key) || await wallMarked(key)) return;
+    if (ownLessonReply(groupId, comment)) return;
+    const question = lesson.questionText(comment.text);
+    const route = question ? lesson.lessonRoute(question) : { kind: 'skip' };
+    if (!question || route.kind === 'skip') {
         console.log(`ВК ${groupId}: комментарий ${comment.commentId} пропущен.`);
+        await wallFinish(key);
         return;
     }
     console.log(`ВК ${groupId}: комментарий ${comment.commentId} — ${route.kind === 'link' ? 'ссылка на урок' : 'свой разбор'}.`);
-    const key = `vk_creply_${groupId}_${comment.commentId}`;
-    if (wallPending.has(key) || await wallMarked(key)) return;
     wallPending.add(key);
     if (route.kind === 'link') {
         try {
@@ -1526,6 +1571,7 @@ async function handleCommunityWall(token, update, groupId) {
     if (lesson.isClub(groupId)) {
         const pin = await lessonPin(groupId);
         if (pin && String(comment.postId) === String(pin.postId)) {
+            console.log(`ВК ${groupId}: комментарий ${comment.commentId} пришёл в закреп.`);
             await answerLessonPost(token, groupId, comment);
             return;
         }

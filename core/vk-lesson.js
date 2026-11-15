@@ -46,11 +46,10 @@ function lessonPostId(saved) {
     return known || PIN_POST_ID;
 }
 
-function addressed(text) {
+function questionText(text) {
     const raw = String(text || '').trim();
-    const mark = raw.match(/^#+\s*([\s\S]*)$/);
-    if (!mark) return '';
-    return mark[1].trim();
+    const mark = raw.match(/^[＃#]+\s*([\s\S]*)$/);
+    return (mark ? mark[1] : raw).trim();
 }
 
 function lessonRoute(text) {
@@ -131,5 +130,5 @@ async function paintCover() {
 }
 
 module.exports = {
-    CLUB_ID, PIN_POST_ID, OPENING, isClub, pinKey, postUrl, postText, isOwnPost, pinnedItem, lessonPostId, addressed, lessonRoute, lessonPrompt, plain, fallbackText, paintCover
+    CLUB_ID, PIN_POST_ID, OPENING, isClub, pinKey, postUrl, postText, isOwnPost, pinnedItem, lessonPostId, questionText, lessonRoute, lessonPrompt, plain, fallbackText, paintCover
 };
