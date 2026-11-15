@@ -113,9 +113,13 @@ test('итог недели публикуется в понедельник у�
     assert.match(activity.wallSummary([], prev), /На прошлой неделе баллов не было/);
     const own = activity.readWallComment({
         type: 'wall_reply_new',
-        object: { from_id: -230706467, id: 3, post_id: 9, text: 'как сделать обложку?', owner_id: -230706467 }
+        object: { from_id: -230706467, id: 3, post_id: 9, text: '#как сделать обложку?', owner_id: -230706467 }
     }, GROUP);
-    assert.equal(own, null);
+    assert.equal(own.text, '#как сделать обложку?');
+    assert.equal(activity.parseCommunityActivity({
+        type: 'wall_reply_new',
+        object: { from_id: -230706467, id: 3, post_id: 9, owner_id: -230706467 }
+    }, GROUP), null);
     const human = activity.readWallComment({
         type: 'wall_reply_new',
         object: { comment: { from_id: 7, id: 4, post_id: 9, text: 'сколько стоит?', owner_id: -230706467 } }
@@ -132,9 +136,13 @@ test('итог недели публикуется в понедельник у�
         object: { from_id: 7, id: 8, post_id: 16047, text: '#обложка', post_owner_id: 230706467 }
     }, GROUP);
     assert.equal(positiveOwner.text, '#обложка');
+    assert.equal(activity.readWallComment({
+        type: 'wall_reply_new',
+        object: { from_id: -230706467, id: 9, post_id: 16047, text: '#урок', owner_id: -230706467 }
+    }, GROUP).text, '#урок');
     assert.equal(activity.wallCommentIssue({
         type: 'wall_reply_new',
-        object: { from_id: -230706467, id: 9, post_id: 16047, text: '#урок' }
+        object: { from_id: -1, id: 9, post_id: 16047, text: '#урок', owner_id: -230706467 }
     }, GROUP), 'от имени сообщества');
     assert.equal(activity.readWallPost({
         type: 'wall_post_new',

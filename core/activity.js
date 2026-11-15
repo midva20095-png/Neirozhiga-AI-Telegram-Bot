@@ -108,8 +108,9 @@ function readWallComment(update, groupId) {
     const obj = eventObject(update);
     const comment = obj.comment && typeof obj.comment === 'object' ? obj.comment : obj;
     const fromId = Number(comment.from_id || obj.from_id || comment.user_id || obj.user_id);
-    if (!Number.isInteger(fromId) || fromId <= 0) return null;
+    if (!Number.isInteger(fromId) || fromId === 0) return null;
     const group = communityId(groupId);
+    if (fromId < 0 && !sameWall(fromId, group)) return null;
     const postOwner = Number(comment.post_owner_id || obj.post_owner_id || 0);
     const wallOwner = Number(comment.owner_id || obj.owner_id || 0);
     const owner = postOwner || (wallOwner < 0 ? wallOwner : 0);

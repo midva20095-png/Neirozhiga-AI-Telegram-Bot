@@ -1410,7 +1410,10 @@ async function answerFreshLessonComments(token, groupId, postId) {
     const since = Math.floor(Date.now() / 1000) - 3 * 60 * 60;
     const fresh = flat.filter(comment => {
         const fromId = Number(comment && comment.from_id);
-        return Number.isInteger(fromId) && fromId > 0 && comment.id && Number(comment.date || 0) >= since;
+        const text = String(comment && comment.text || '').trim();
+        const human = Number.isInteger(fromId) && fromId > 0;
+        const ownAsk = Number.isInteger(fromId) && fromId < 0 && text.startsWith('#');
+        return (human || ownAsk) && comment.id && Number(comment.date || 0) >= since;
     }).sort((a, b) => Number(a.date) - Number(b.date)).slice(-8);
     for (const comment of fresh) {
         await answerLessonPost(token, groupId, {
@@ -1527,6 +1530,7 @@ async function handleCommunityWall(token, update, groupId) {
             return;
         }
     }
+    if (comment.fromId < 0) return;
     const answer = club.commentAnswer(comment.text);
     if (!answer) return;
     const key = `vk_creply_${groupId}_${comment.commentId}`;
