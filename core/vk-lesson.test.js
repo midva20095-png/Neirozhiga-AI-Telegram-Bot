@@ -11,6 +11,8 @@ test('свой урок пишется только если в клубе не�
     assert.equal(fresh.kind, 'write');
     assert.equal(lesson.lessonRoute('спасибо большое').kind, 'skip');
     assert.equal(lesson.lessonRoute('ок').kind, 'skip');
+    assert.equal(lesson.lessonRoute('привет').kind, 'write');
+    assert.equal(lesson.lessonRoute('обложка').kind, 'link');
 });
 
 test('запрос своего урока не содержит текстов и ссылок клуба', () => {

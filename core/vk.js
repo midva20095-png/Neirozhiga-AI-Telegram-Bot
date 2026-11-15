@@ -1321,7 +1321,6 @@ async function commentAsCommunity(token, groupId, fields) {
             return await call(token, 'wall.createComment', params);
         } catch (error) {
             last = error;
-            if (Number(error && error.code) !== 15) break;
         }
     }
     throw last;
@@ -1374,6 +1373,54 @@ async function ensureLessonPin(token, groupId) {
     }
     db.note('sys', `ВК ${groupId}: уроки отвечают в текущем закрепе ${url}`).catch(() => {});
     console.log(`ВК ${groupId}: уроки отвечают в текущем закрепе ${url}`);
+    try { await answerFreshLessonComments(token, groupId, postId); }
+    catch (error) {
+        const code = Number(error && error.code);
+        console.error(`ВК ${groupId}: свежие комментарии закрепа не прочитались${code ? ` (${code})` : ''}.`);
+    }
+}
+
+async function readPostComments(token, groupId, postId) {
+    const params = {
+        owner_id: String(-Number(groupId)),
+        post_id: String(postId),
+        count: '30',
+        sort: 'desc',
+        thread_items_count: '10'
+    };
+    const tokens = [token];
+    const reader = audit.readerToken();
+    if (reader && reader !== token) tokens.push(reader);
+    let last = null;
+    for (const item of tokens) {
+        try { return await call(item, 'wall.getComments', params); }
+        catch (error) { last = error; }
+    }
+    throw last || new Error('comments');
+}
+
+async function answerFreshLessonComments(token, groupId, postId) {
+    const pack = await readPostComments(token, groupId, postId);
+    const items = (pack && pack.items) || [];
+    const flat = [];
+    items.forEach(comment => {
+        flat.push(comment);
+        ((comment.thread && comment.thread.items) || []).forEach(reply => flat.push(reply));
+    });
+    const since = Math.floor(Date.now() / 1000) - 3 * 60 * 60;
+    const fresh = flat.filter(comment => {
+        const fromId = Number(comment && comment.from_id);
+        return Number.isInteger(fromId) && fromId > 0 && comment.id && Number(comment.date || 0) >= since;
+    }).sort((a, b) => Number(a.date) - Number(b.date)).slice(-8);
+    for (const comment of fresh) {
+        await answerLessonPost(token, groupId, {
+            fromId: Number(comment.from_id),
+            postId: Number(comment.post_id) || Number(postId),
+            commentId: Number(comment.id),
+            text: String(comment.text || '').trim()
+        });
+    }
+    if (fresh.length) console.log(`ВК ${groupId}: в закрепе проверяю комментарии, свежих ${fresh.length}.`);
 }
 
 async function sendLessonComment(token, groupId, comment, message) {
@@ -1418,7 +1465,11 @@ async function writeLessonComment(token, groupId, comment, key) {
 
 async function answerLessonPost(token, groupId, comment) {
     const route = lesson.lessonRoute(comment.text);
-    if (route.kind === 'skip') return;
+    if (route.kind === 'skip') {
+        console.log(`ВК ${groupId}: комментарий ${comment.commentId} пропущен.`);
+        return;
+    }
+    console.log(`ВК ${groupId}: комментарий ${comment.commentId} — ${route.kind === 'link' ? 'ссылка на урок' : 'свой разбор'}.`);
     const key = `vk_creply_${groupId}_${comment.commentId}`;
     if (wallPending.has(key) || await wallMarked(key)) return;
     wallPending.add(key);
@@ -1461,6 +1512,9 @@ async function handleCommunityWall(token, update, groupId) {
         return;
     }
     const comment = activity.readWallComment(update, groupId);
+    if (update && update.type === 'wall_reply_new' && !comment) {
+        console.log(`ВК ${groupId}: комментарий пришёл, но разобрать его не удалось.`);
+    }
     if (!comment || comment.text.startsWith('Навигация по урокам')) return;
     if (lesson.isClub(groupId)) {
         const pin = await lessonPin(groupId);

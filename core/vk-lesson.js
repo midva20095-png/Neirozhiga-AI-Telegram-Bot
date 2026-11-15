@@ -49,6 +49,7 @@ function lessonPostId(saved) {
 function lessonRoute(text) {
     const raw = String(text || '').trim();
     if (!raw || club.isThanks(raw) || isOwnPost(raw) || raw.startsWith('Навигация по урокам')) return { kind: 'skip' };
+    if (raw.startsWith('Сейчас не получилось разобрать')) return { kind: 'skip' };
     const lessons = club.rankLessons(raw);
     if (lessons.length) {
         const ready = club.commentAnswer(raw);
@@ -57,8 +58,8 @@ function lessonRoute(text) {
             : lessons.slice(0, 4).map(item => `${item.title}\n${item.url}`).join('\n\n');
         return { kind: 'link', text: String(body).slice(0, 1500) };
     }
-    const useful = (raw.toLowerCase().replace(/ё/g, 'е').match(/[a-zа-я0-9]{3,}/g) || []).length;
-    if (useful < 2) return { kind: 'skip' };
+    const letters = (raw.match(/[a-zа-я0-9]/gi) || []).length;
+    if (letters < 2) return { kind: 'skip' };
     return { kind: 'write' };
 }
 

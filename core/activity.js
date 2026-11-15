@@ -91,9 +91,12 @@ function readWallComment(update, groupId) {
     const fromId = Number(comment.from_id || obj.from_id);
     if (!Number.isInteger(fromId) || fromId <= 0) return null;
     const group = communityId(groupId);
-    const owner = Number(comment.post_owner_id || comment.owner_id || obj.post_owner_id || obj.owner_id || 0);
+    const postOwner = Number(comment.post_owner_id || obj.post_owner_id || 0);
+    const wallOwner = Number(comment.owner_id || obj.owner_id || 0);
+    const owner = postOwner || (wallOwner < 0 ? wallOwner : 0);
     if (owner && group && owner !== group) return null;
-    const postId = Number(comment.post_id || obj.post_id);
+    const nestedPost = comment.post && comment.post.id ? comment.post.id : (obj.post && obj.post.id);
+    const postId = Number(comment.post_id || obj.post_id || nestedPost);
     const commentId = Number(comment.id || obj.id);
     if (!postId || !commentId) return null;
     return {

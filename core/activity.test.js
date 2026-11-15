@@ -121,6 +121,12 @@ test('итог недели публикуется в понедельник у�
         object: { comment: { from_id: 7, id: 4, post_id: 9, text: 'сколько стоит?', owner_id: -230706467 } }
     }, GROUP);
     assert.equal(human.text, 'сколько стоит?');
+    const shifted = activity.readWallComment({
+        type: 'wall_reply_new',
+        object: { from_id: 7, id: 6, text: 'обложка', owner_id: 7, post_owner_id: -230706467, post: { id: 16047 } }
+    }, GROUP);
+    assert.equal(shifted.postId, 16047);
+    assert.equal(shifted.text, 'обложка');
     assert.equal(activity.readWallPost({
         type: 'wall_post_new',
         object: { id: 11, owner_id: -230706467, from_id: 7, text: 'Новый урок' }
