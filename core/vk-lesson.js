@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const sharp = require('sharp');
 const club = require('./vk-club');
 
@@ -125,13 +127,17 @@ function coverSvg() {
   <circle cx="180" cy="140" r="90" fill="#ffffff" fill-opacity="0.06"/>
   <circle cx="1080" cy="560" r="140" fill="#ffffff" fill-opacity="0.07"/>
   <text x="80" y="300" font-family="DejaVu Sans, sans-serif" font-size="78" font-weight="700" fill="#ffffff">Уроки клуба</text>
-  <text x="80" y="390" font-family="DejaVu Sans, sans-serif" font-size="36" fill="#f6e9ff">Спросите в комментариях</text>
+  <text x="80" y="390" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="36" fill="#f6e9ff">Напишите вопрос в комментариях</text>
   <text x="80" y="620" font-family="DejaVu Sans, sans-serif" font-size="28" fill="#ffffff" fill-opacity="0.85">НейроЯга</text>
 </svg>`;
 }
 
 async function paintCover() {
-    return sharp(Buffer.from(coverSvg())).jpeg({ quality: 88 }).toBuffer();
+    try {
+        return await fs.promises.readFile(path.join(__dirname, '../public/lesson-cover.jpg'));
+    } catch (error) {
+        return sharp(Buffer.from(coverSvg())).jpeg({ quality: 88 }).toBuffer();
+    }
 }
 
 module.exports = {
