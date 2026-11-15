@@ -668,7 +668,9 @@ async function messagePhoto(file, width) {
             const meta = await sharp(buf, { failOn: 'none' }).metadata();
             const w = meta.width || 0;
             const h = meta.height || 0;
-            if (w && h && w <= 4096 && h <= 4096 && !meta.isProgressive) return file;
+            if (w && h && w <= 4096 && h <= 4096 && !meta.isProgressive) {
+                return { buffer: file.buffer, filename: file.filename, type: file.type, width: w, height: h };
+            }
         } catch (error) {}
     }
     const jpeg = await sharp(buf, { failOn: 'none', limitInputPixels: false }).rotate().resize({
@@ -677,25 +679,79 @@ async function messagePhoto(file, width) {
         fit: 'inside',
         withoutEnlargement: true
     }).flatten({ background: '#ffffff' }).jpeg({ quality: limit >= 2048 ? 85 : 75, progressive: false }).toBuffer();
-    return { buffer: jpeg, filename: 'neuroyaga.jpg', type: 'image/jpeg' };
+    const meta = await sharp(jpeg, { failOn: 'none' }).metadata();
+    return { buffer: jpeg, filename: 'neuroyaga.jpg', type: 'image/jpeg', width: meta.width || 0, height: meta.height || 0 };
+}
+
+function uploadPhotoField(photo) {
+    if (typeof photo === 'string') {
+        const value = photo.trim();
+        if (!value || value === '[]' || value === '{}') return '';
+        return value;
+    }
+    if (!photo || typeof photo !== 'object') return '';
+    const value = JSON.stringify(photo);
+    if (!value || value === '[]' || value === '{}' || value === 'null') return '';
+    return value;
+}
+
+function savedPhoto(list) {
+    const items = (Array.isArray(list) ? list : [list]).filter(item => item && item.id != null && item.owner_id != null);
+    if (!items.length) return null;
+    return items.reduce((best, item) => (Number(item.date) || 0) >= (Number(best.date) || 0) ? item : best);
+}
+
+function photoIsFresh(photo, startedAt) {
+    const date = Number(photo && photo.date);
+    if (!date) return true;
+    return date >= Math.floor(Number(startedAt) / 1000) - 120;
+}
+
+function photoFrame(photo) {
+    const width = Number(photo && photo.width) || 0;
+    const height = Number(photo && photo.height) || 0;
+    if (width && height) return { width, height };
+    const sizes = photo && Array.isArray(photo.sizes) ? photo.sizes : [];
+    let best = null;
+    sizes.forEach(item => {
+        const w = Number(item && item.width) || 0;
+        const h = Number(item && item.height) || 0;
+        if (!w || !h) return;
+        if (!best || w * h > best.width * best.height) best = { width: w, height: h };
+    });
+    return best;
+}
+
+function sameFrame(photo, file) {
+    const got = photoFrame(photo);
+    const width = Number(file && file.width) || 0;
+    const height = Number(file && file.height) || 0;
+    if (!got || !width || !height) return true;
+    const left = got.width / got.height;
+    const right = width / height;
+    return Math.abs(left - right) / right < 0.08;
 }
 
 function uploadRejected(error) {
     const status = Number(error && error.response && error.response.status);
-    return status === 500 || error && error.code === 'ERR_BAD_RESPONSE';
+    const message = String(error && error.message || '');
+    return status === 500 || (error && error.code === 'ERR_BAD_RESPONSE') || message === 'vk stale photo' || message === 'vk photo upload';
 }
 
 async function uploadMessagePhoto(token, peerId, file, caption) {
+    const started = Date.now();
     const server = await call(token, 'photos.getMessagesUploadServer', { peer_id: String(peerId) });
     const uploaded = await postFile(server.upload_url, 'photo', file);
+    const field = uploadPhotoField(uploaded && uploaded.photo);
+    if (!uploaded || !field || !uploaded.hash) throw new Error('vk photo upload');
     const saved = await call(token, 'photos.saveMessagesPhoto', {
-        photo: uploaded.photo,
+        photo: field,
         server: String(uploaded.server),
         hash: uploaded.hash
     });
-    const list = Array.isArray(saved) ? saved : [saved];
-    const attachment = photoAttachment(list[0]);
-    if (!attachment) throw new Error('vk photo');
+    const photo = savedPhoto(saved);
+    const attachment = photoAttachment(photo);
+    if (!attachment || !photoIsFresh(photo, started) || !sameFrame(photo, file)) throw new Error('vk stale photo');
     await deliverFile(token, peerId, caption, attachment);
 }
 
@@ -722,8 +778,12 @@ async function sendImage(token, peerId, buffer, caption) {
     const file = await fileForVk(buffer);
     try {
         await sendPhoto(token, peerId, file, caption);
+        console.log('ВК: в чат ушло фото этой генерации.');
     } catch (error) {
-        console.error(`ВК не вставил фото (${error.code || ''} ${error.message || ''}). Отправляю файлом.`);
+        const stale = String(error && error.message || '') === 'vk stale photo';
+        console.error(stale
+            ? 'ВК подставил другую картинку. Отправляю файл с изображением этой генерации.'
+            : `ВК не вставил фото (${error.code || ''} ${error.message || ''}). Отправляю файлом.`);
         await sendDoc(token, peerId, file, caption);
     }
 }
@@ -2224,5 +2284,5 @@ async function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, messagePhoto, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, messagePhoto, uploadPhotoField, savedPhoto, photoIsFresh, sameFrame, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, USER_HELP
 };

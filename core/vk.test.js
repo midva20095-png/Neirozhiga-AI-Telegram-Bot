@@ -27,6 +27,23 @@ test('PNG для чата ВК остаётся PNG, JPEG не перекоди�
     assert.equal(posted.type, 'image/jpeg');
     assert.equal(posted.buffer[0], 0xff);
     assert.equal(posted.buffer[1], 0xd8);
+    assert.equal(posted.width, 8);
+    assert.equal(posted.height, 8);
+});
+
+test('в чат не уходит старое фото сообщества', () => {
+    assert.equal(vk.uploadPhotoField('[]'), '');
+    assert.equal(vk.uploadPhotoField(''), '');
+    assert.match(vk.uploadPhotoField([{ photo: 'abc' }]), /abc/);
+    const picked = vk.savedPhoto([
+        { id: 1, owner_id: -5, date: 100 },
+        { id: 2, owner_id: -5, date: 500 }
+    ]);
+    assert.equal(picked.id, 2);
+    assert.equal(vk.photoIsFresh({ date: 10 }, Date.now()), false);
+    assert.equal(vk.photoIsFresh({ date: Math.floor(Date.now() / 1000) }, Date.now()), true);
+    assert.equal(vk.sameFrame({ width: 100, height: 100 }, { width: 1024, height: 1024 }), true);
+    assert.equal(vk.sameFrame({ width: 100, height: 400 }, { width: 1024, height: 1024 }), false);
 });
 
 test('аккаунт ВК не совпадает с числом Telegram', () => {

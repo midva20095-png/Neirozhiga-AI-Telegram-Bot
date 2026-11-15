@@ -229,6 +229,21 @@ function pushUrl(found, value) {
     found.push(url);
 }
 
+const SKIP_RESULT_KEYS = new Set([
+    'prompt', 'error', 'error_message', 'input',
+    'preview', 'thumbnail', 'thumb', 'sample', 'cover', 'avatar', 'icon', 'poster'
+]);
+
+function listedUrls(value) {
+    const found = [];
+    const items = Array.isArray(value) ? value : [value];
+    items.forEach(item => {
+        if (typeof item === 'string') pushUrl(found, item);
+        else if (item && typeof item === 'object') pushUrl(found, item.url || item.src || item.href);
+    });
+    return found;
+}
+
 function walkResult(node, found, depth) {
     if (!node || depth > 6) return;
     if (typeof node === 'string') {
@@ -241,7 +256,7 @@ function walkResult(node, found, depth) {
     }
     if (typeof node !== 'object') return;
     for (const [key, value] of Object.entries(node)) {
-        if (key === 'prompt' || key === 'error' || key === 'error_message' || key === 'input') continue;
+        if (SKIP_RESULT_KEYS.has(key)) continue;
         if (typeof value === 'string') pushUrl(found, value);
         else walkResult(value, found, depth + 1);
     }
@@ -250,8 +265,14 @@ function walkResult(node, found, depth) {
 function collectResultUrls(opData) {
     const found = [];
     const root = opData && Object.prototype.hasOwnProperty.call(opData, 'result') ? opData.result : opData;
-    walkResult(root, found, 0);
-    return found;
+    if (root && typeof root === 'object' && !Array.isArray(root)) {
+        ['urls', 'images', 'files'].forEach(key => {
+            if (root[key] != null) listedUrls(root[key]).forEach(url => pushUrl(found, url));
+        });
+    }
+    if (!found.length) walkResult(root, found, 0);
+    const images = found.filter(url => /\.(png|jpe?g|webp|gif)(\?|#|$)/i.test(url));
+    return images.length ? images : found;
 }
 
 module.exports = { buildSiteInput, siteModes, videoPrompt, imagePrompt, collectResultUrls };
