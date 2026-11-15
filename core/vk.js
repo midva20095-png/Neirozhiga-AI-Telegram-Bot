@@ -159,18 +159,21 @@ function siteLink() {
     return catalog.getGeneral().site_url || 'https://babayagaland.ru';
 }
 
-function appBase() {
-    return String(process.env.WEBAPP_URL || '').replace(/\/$/, '');
+function appCabinetUrl(account, options) {
+    const opts = options || {};
+    const group = String(opts.groupId || '').replace(/\D/g, '');
+    const app = String(process.env.VK_APP_ID || '54895627').replace(/\D/g, '') || '54895627';
+    const hash = new URLSearchParams();
+    if (account != null) hash.set('tk', auth.signUserId(account));
+    if (opts.pkgId) hash.set('pkg', String(opts.pkgId));
+    if (opts.paid) hash.set('paid', '1');
+    const fragment = hash.toString();
+    return `https://vk.ru/app${app}${group ? '_-' + group : ''}${fragment ? '#' + fragment : ''}`;
 }
 
 function cabinetLink(account, pkgId, groupId) {
-    const base = appBase();
-    if (!base || account == null) return siteLink();
-    const tk = auth.signUserId(account);
-    const pkg = pkgId ? `&pkg=${encodeURIComponent(pkgId)}` : '';
-    const group = String(groupId || currentGroup() || '').replace(/\D/g, '');
-    const groupQuery = group ? `&vk_group_id=${encodeURIComponent(group)}` : '';
-    return `${base}/vk.html?tk=${encodeURIComponent(tk)}${pkg}${groupQuery}`;
+    if (account == null) return siteLink();
+    return appCabinetUrl(account, { pkgId, groupId: groupId || currentGroup() });
 }
 
 function linkButton(label, link) {
@@ -2436,5 +2439,5 @@ async function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, USER_HELP
 };

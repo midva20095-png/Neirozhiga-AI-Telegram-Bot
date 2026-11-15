@@ -9,14 +9,14 @@
 <p>Открываю кабинет…</p>
 <script>
 const q = new URLSearchParams(location.search);
-const dest = new URLSearchParams();
-dest.set('v', '22');
-q.forEach(function(value, key){
-  if (key === 'sign' || key.indexOf('vk_') === 0 || key === 'tk' || key === 'pkg' || key === 'paid') dest.set(key, value);
-});
+const group = String(q.get('vk_group_id') || '').replace(/\D/g, '');
+const hash = new URLSearchParams();
+['tk', 'pkg', 'paid'].forEach(function(key){ if (q.get(key)) hash.set(key, q.get(key)); });
 const goal = (location.hash || '').replace(/^#/, '').split('&')[0].split('?')[0];
-const hash = (goal === 'rate' || goal === 'site' || goal === 'sub') ? '#' + goal : '';
-location.replace('/?' + dest.toString() + hash);
+const parts = [];
+if (goal === 'rate' || goal === 'site' || goal === 'sub') parts.push(goal);
+if (hash.toString()) parts.push(hash.toString());
+location.replace('https://vk.ru/app54895627' + (group ? '_-' + group : '') + (parts.length ? '#' + parts.join('&') : ''));
 </script>
 </body>
 </html>

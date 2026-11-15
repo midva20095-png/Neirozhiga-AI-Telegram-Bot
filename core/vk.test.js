@@ -132,7 +132,8 @@ test('меню ВК открывает кабинет и не считает к�
     process.env.WEBAPP_URL = 'https://bot.example';
     const personal = JSON.parse(vk.mainMenu(10));
     const cabinet = personal.buttons.flat().find(button => button.action.label === 'Кабинет');
-    assert.match(cabinet.action.link, /^https:\/\/bot\.example\/vk\.html\?tk=-10\./);
+    assert.match(cabinet.action.link, /^https:\/\/vk\.ru\/app54895627#tk=-10\./);
+    assert.doesNotMatch(cabinet.action.link, /railway|vk\.html/);
     assert.doesNotMatch(vk.cabinetLink(-10, 'pack_100'), /yookassa|yoomoney/);
     const pay = JSON.parse(vk.payKeyboard());
     assert.equal(pay.buttons.at(-1)[0].action.label, 'Назад');
@@ -188,14 +189,14 @@ test('меню ВК открывает кабинет и не считает к�
     assert.equal(event.payload.m, 'flash');
 });
 
-test('кабинет ВК открывает рабочую страницу, а не пустое окно приложения', () => {
+test('кабинет ВК открывает приложение сообщества', () => {
     process.env.VK_APP_ID = '54895627';
     process.env.WEBAPP_URL = 'https://bot.example';
-    const personal = JSON.parse(vk.mainMenu(10));
+    const personal = JSON.parse(vk.mainMenu(10, '236645486'));
     const action = personal.buttons.flat().find(button => button.action.label === 'Кабинет').action;
     assert.equal(action.type, 'open_link');
-    assert.equal(action.app_id, undefined);
-    assert.match(action.link, /^https:\/\/bot\.example\/vk\.html\?tk=-10\./);
+    assert.match(action.link, /^https:\/\/vk\.ru\/app54895627_-236645486#tk=-10\./);
+    assert.doesNotMatch(action.link, /bot\.example|railway|vk\.html/);
     delete process.env.VK_APP_ID;
 });
 
@@ -218,7 +219,7 @@ test('второе сообщество считается отдельно и �
     assert.equal(vk.communityId('999'), '999');
     assert.equal(vk.communityId(''), '230706467');
     process.env.WEBAPP_URL = 'https://bot.example';
-    assert.match(vk.cabinetLink(-10, '', '555'), /vk_group_id=555/);
+    assert.match(vk.cabinetLink(-10, '', '555'), /https:\/\/vk\.ru\/app54895627_-555#tk=-10\./);
     process.env.VK_GROUP_ID_2 = '';
     process.env.VK_GROUP_TOKEN_2 = '';
     assert.deepEqual(vk.communityList().map(item => item.id), ['230706467']);

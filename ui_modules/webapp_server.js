@@ -189,9 +189,10 @@ function startWebApp() {
                 return res.status(400).json({ error: 'Выберите пакет и укажите почту для чека.' });
             }
             await db.ensureUser(account, `vk:${String(account).replace(/^-/, '')}`);
-            const tk = auth.signUserId(account);
-            const base = String(process.env.WEBAPP_URL || '').replace(/\/$/, '');
-            const back = `${base}/vk.html?tk=${encodeURIComponent(tk)}&paid=1`;
+            const back = vk.appCabinetUrl(account, {
+                groupId: String((req.body && req.body.group) || ''),
+                paid: true
+            });
             const url = await vk.createPayment(
                 pkg.price,
                 `Покупка ${pkg.title}`,
