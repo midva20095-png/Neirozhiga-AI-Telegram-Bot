@@ -23,6 +23,10 @@ test('PNG для чата ВК остаётся PNG, JPEG не перекоди�
     const same = await vk.fileForVk(jpeg);
     assert.equal(same.buffer, jpeg);
     assert.equal(same.type, 'image/jpeg');
+    const posted = await vk.messagePhoto(file, 2048);
+    assert.equal(posted.type, 'image/jpeg');
+    assert.equal(posted.buffer[0], 0xff);
+    assert.equal(posted.buffer[1], 0xd8);
 });
 
 test('аккаунт ВК не совпадает с числом Telegram', () => {

@@ -659,7 +659,33 @@ async function deliverFile(token, peerId, caption, attachment) {
     await sendMessage(token, params);
 }
 
-async function sendPhoto(token, peerId, file, caption) {
+async function messagePhoto(file, width) {
+    const buf = file && file.buffer;
+    const limit = width || 2048;
+    const isJpeg = buf && buf[0] === 0xff && buf[1] === 0xd8;
+    if (isJpeg && buf.length <= 4 * 1024 * 1024 && limit >= 2048) {
+        try {
+            const meta = await sharp(buf, { failOn: 'none' }).metadata();
+            const w = meta.width || 0;
+            const h = meta.height || 0;
+            if (w && h && w <= 4096 && h <= 4096 && !meta.isProgressive) return file;
+        } catch (error) {}
+    }
+    const jpeg = await sharp(buf, { failOn: 'none', limitInputPixels: false }).rotate().resize({
+        width: limit,
+        height: limit,
+        fit: 'inside',
+        withoutEnlargement: true
+    }).flatten({ background: '#ffffff' }).jpeg({ quality: limit >= 2048 ? 85 : 75, progressive: false }).toBuffer();
+    return { buffer: jpeg, filename: 'neuroyaga.jpg', type: 'image/jpeg' };
+}
+
+function uploadRejected(error) {
+    const status = Number(error && error.response && error.response.status);
+    return status === 500 || error && error.code === 'ERR_BAD_RESPONSE';
+}
+
+async function uploadMessagePhoto(token, peerId, file, caption) {
     const server = await call(token, 'photos.getMessagesUploadServer', { peer_id: String(peerId) });
     const uploaded = await postFile(server.upload_url, 'photo', file);
     const saved = await call(token, 'photos.saveMessagesPhoto', {
@@ -671,6 +697,16 @@ async function sendPhoto(token, peerId, file, caption) {
     const attachment = photoAttachment(list[0]);
     if (!attachment) throw new Error('vk photo');
     await deliverFile(token, peerId, caption, attachment);
+}
+
+async function sendPhoto(token, peerId, file, caption) {
+    const photo = await messagePhoto(file, 2048);
+    try {
+        await uploadMessagePhoto(token, peerId, photo, caption);
+    } catch (error) {
+        if (!uploadRejected(error)) throw error;
+        await uploadMessagePhoto(token, peerId, await messagePhoto(photo, 1280), caption);
+    }
 }
 
 async function sendDoc(token, peerId, file, caption) {
@@ -2188,5 +2224,5 @@ async function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, messagePhoto, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, USER_HELP
 };
