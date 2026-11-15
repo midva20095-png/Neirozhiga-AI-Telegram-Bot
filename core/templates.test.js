@@ -53,6 +53,14 @@ test('поля таблицы видны в кабинете, текст зап�
     assert.equal(textOnly.photo, false);
 });
 
+test('категории шаблона приходят в кабинет списком', () => {
+    const item = templates.fromDb(row('nano-banana', { topics: 'Портреты, портреты; Семья' }));
+    assert.deepEqual(item.cats, ['Портреты', 'Семья']);
+    assert.deepEqual(templates.toPublic(item).cats, ['Портреты', 'Семья']);
+    assert.equal(Object.prototype.hasOwnProperty.call(templates.toPublic(item), 'prompt'), false);
+    assert.deepEqual(templates.fromDb(row('nano-banana')).cats, []);
+});
+
 test('текст запроса не уходит в кабинет', () => {
     const item = templates.fromDb(row('kie-banana-lite', { hide_prompt: false }));
     const pub = templates.toPublic(item);

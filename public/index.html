@@ -78,13 +78,20 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .chips button.on{border-color:#b366ff;color:#fff}
 .back{position:relative;z-index:2;border:0;background:transparent;color:var(--mut);font-weight:800;padding:0 0 8px;min-height:36px}
 .gallery{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tkinds{display:flex;gap:8px;margin:0 0 10px}
+.tkinds button{flex:1;padding:8px 0;border-radius:20px;border:1px solid #3a2a66;background:#120a24;color:var(--mut);font-weight:800;font-size:13px}
+.tkinds button.on{color:#fff;border-color:#22e1ff;background:linear-gradient(135deg,#1b0d3d,#2a0f5e);box-shadow:0 0 14px #22e1ff66}
 .tcats{display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;scrollbar-width:none}
-.tcats button{flex:0 0 auto;border:1px solid rgba(255,255,255,.16);background:transparent;color:var(--mut);border-radius:999px;padding:7px 12px;font-weight:700;font-size:13px}
-.tcats button.on{color:#fff;border-color:#9d4dff;background:#24163d;box-shadow:0 0 14px rgba(157,77,255,.35)}
-.tsearch{border-radius:999px;margin:0 0 10px;padding:12px 16px}
-.tgallery,.carousel{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;padding:2px 2px 10px;scrollbar-width:none}
-.titem{position:relative;display:flex;flex:0 0 78%;flex-direction:column;scroll-snap-align:center;padding:0;border:1px solid var(--line);background:#140c24;border-radius:18px;overflow:hidden;text-align:left}
-.tbadge{position:absolute;left:10px;top:10px;z-index:2;background:rgba(8,4,20,.72);border-radius:999px;padding:4px 8px;font-size:12px;font-weight:800}
+.tcats button{flex:0 0 auto;border:1px solid #3a2a66;background:#120a24;color:var(--mut);border-radius:20px;padding:8px 14px;font-weight:700;font-size:13px;white-space:nowrap}
+.tcats button.on{color:#fff;border-color:#ff3fd0;background:linear-gradient(135deg,#2a0f5e,#4a0f6e);box-shadow:0 0 12px #ff3fd066}
+.tsearch{border-radius:14px;margin:0 0 10px;padding:12px 14px;border:1px solid #3a2a66;background:#160b2c}
+.tgallery{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.carousel{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;padding:2px 2px 10px;scrollbar-width:none}
+.titem{position:relative;display:flex;min-width:0;flex-direction:column;padding:0;border:1px solid #31205a;background:#130a26;border-radius:16px;overflow:hidden;text-align:left}
+.titem:active{transform:scale(.98)}
+.tbadge{position:absolute;top:8px;right:8px;z-index:2;background:#000b;border:1px solid #22e1ff;color:#22e1ff;border-radius:9px;padding:3px 8px;font-size:11px;font-weight:800}
+.cutlink{width:100%;margin:0 0 12px;padding:12px;border-radius:14px;border:1px dashed #22e1ff;background:#22e1ff0d;color:#22e1ff;font-weight:800}
+.ttitle{margin:2px 2px 10px;font-weight:800;font-size:15px;color:#ffe9a8}
 .cslide{flex:0 0 86%;scroll-snap-align:center;background:#0b0614;border-radius:16px;overflow:hidden}
 .cslide img{display:block;width:100%;max-height:420px;object-fit:contain;background:#0b0614}
 .tph{position:relative;aspect-ratio:3/4;overflow:hidden;display:grid;place-items:center;font-size:40px;background:linear-gradient(150deg,#22164a,#0d2b3a)}
@@ -92,8 +99,8 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .tph.txt{display:flex;flex-direction:column;gap:4px;background:radial-gradient(circle at 50% 35%,rgba(0,212,255,.22),transparent 60%),linear-gradient(160deg,#1c1240,#0f0a24)}
 .tph small{position:static;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#bfefff}
 .tcap{padding:10px 12px 12px}
-.tcap b{display:block;font-size:14px;line-height:1.3;font-weight:600}
-.tcap em{display:inline-block;margin-top:6px;font-style:normal;font-size:13px;font-weight:700;color:#00d4ff}
+.tcap b{display:block;font-size:14px;line-height:1.2;font-weight:800}
+.tcap em{display:inline-block;margin-top:5px;font-style:normal;font-size:13px;font-weight:800;color:#22e1ff}
 .thero{position:relative;z-index:1;margin:8px -14px 14px;height:min(52vh,420px);background:#07041a;overflow:hidden;border-radius:16px}
 .thero img{display:block;width:100%;height:100%;object-fit:cover;object-position:center top}
 .thero:after{content:'';position:absolute;left:0;right:0;bottom:0;height:80px;background:linear-gradient(transparent,#140c24)}
@@ -149,7 +156,7 @@ input,select{width:100%;border-radius:14px;border:1px solid var(--line);backgrou
 const KIND = {text:'Текст', image:'Картинка', video:'Видео', audio:'Музыка'};
 let tab='gen', me=null, cfg=null, templates=[], works=null, worksLoading=false, userId=null, token=null, busy=false, last=null, wantMenu=false, tplAnswers={}, tplPhotos={};
 let openTpl=null, photoData=null, pickedFormat=null, genPhoto=null, draft='', pendingTpl='', pendingPkg='';
-let tplCat='', tplQuery='', cutterOn=false, cutCount=3, cutSource='', cutSlides=[];
+let tplKind='', tplTopic='', tplQuery='', cutterOn=false, cutCount=3, cutSource='', cutSlides=[];
 const TCAT = {image:'Картинки', fix:'Улучшение', chat:'Текст', video:'Видео', audio:'Голос'};
 const TMARK = {image:'🪄', fix:'✨', chat:'✍️', video:'🎬', audio:'🎙'};
 let pickedQuality=null, pickedDuration=null, pickedAspect=null;
@@ -507,33 +514,52 @@ function viewModels(){
   }
   return html || '<div class="card"><div class="empty">Модели недоступны</div></div>';
 }
+function tplTopics(t){
+  return Array.isArray(t && t.cats) ? t.cats : [];
+}
 function viewTpl(){
   if (cutterOn) return viewCutter();
   if (openTpl) return viewTplRun();
+  const q = tplQuery.trim().toLowerCase();
   const have = {};
   templates.forEach(t=>{ have[t.category||'image'] = 1; });
-  const cats = Object.keys(TCAT).filter(c=>have[c]).concat(Object.keys(have).filter(c=>!TCAT[c]));
-  const q = tplQuery.trim().toLowerCase();
+  const kinds = [['','Все'],['image','Картинки'],['video','Видео']];
+  if (have.chat) kinds.push(['chat','Текст']);
+  if (have.audio) kinds.push(['audio','Голос']);
+  if (have.fix) kinds.push(['fix','Улучшение']);
+  const topicHave = {};
+  templates.forEach(t=>tplTopics(t).forEach(c=>{ topicHave[c] = 1; }));
+  const topics = Object.keys(topicHave);
   const list = templates.filter(t=>{
-    if (tplCat && (t.category||'image')!==tplCat) return false;
+    const cat = t.category || 'image';
+    if (tplKind === 'image' && cat !== 'image' && cat !== 'fix') return false;
+    if (tplKind && tplKind !== 'image' && cat !== tplKind) return false;
+    if (tplTopic && tplTopics(t).indexOf(tplTopic) < 0) return false;
     if (!q) return true;
-    return (t.title+' '+(t.desc||'')).toLowerCase().indexOf(q)>=0;
+    return (t.title+' '+(t.desc||'')+' '+tplTopics(t).join(' ')).toLowerCase().indexOf(q) >= 0;
   });
-  const chips = '<div class="tcats"><button type="button" data-tcat="" class="'+(tplCat?'':'on')+'">Все</button>'+
-    cats.map(c=>'<button type="button" data-tcat="'+esc(c)+'" class="'+(tplCat===c?'on':'')+'">'+esc(TCAT[c]||c)+'</button>').join('')+'</div>';
+  const kindRow = '<div class="tkinds">'+kinds.map(function(pair){
+    return '<button type="button" data-tkind="'+pair[0]+'" class="'+(tplKind===pair[0]?'on':'')+'">'+pair[1]+'</button>';
+  }).join('')+'</div>';
+  const topicRow = topics.length ? '<div class="tcats"><button type="button" data-ttopic="" class="'+(tplTopic?'':'on')+'">Все темы</button>'+
+    topics.map(c=>'<button type="button" data-ttopic="'+esc(c)+'" class="'+(tplTopic===c?'on':'')+'">'+esc(c)+'</button>').join('')+'</div>' : '';
+  const kindName = tplKind === 'video' ? 'видео' : tplKind === 'image' ? 'картинки' : tplKind === 'chat' ? 'текст' : tplKind === 'audio' ? 'голос' : tplKind === 'fix' ? 'улучшение' : 'все';
   const cards = list.length ? list.map(t=>{
     const src = safeSrc(t.image);
     const cat = t.category||'image';
     const mark = TMARK[cat]||'🪄';
-    const badge = cat==='video' ? '<span class="tbadge">Видео</span>' : (cat==='audio' ? '<span class="tbadge">Голос</span>' : '');
+    const badge = cat==='video' ? '<span class="tbadge">ВИДЕО</span>' : (cat==='audio' ? '<span class="tbadge">ГОЛОС</span>' : '');
     const face = src
       ? '<div class="tph">'+badge+'<img src="'+esc(src)+'" alt=""></div>'
-      : '<div class="tph'+(cat==='chat'?' txt':'')+'">'+badge+'<span>'+mark+'</span>'+(cat==='chat'||cat==='video'?'<small>'+(TCAT[cat]||'')+'</small>':'')+'</div>';
+      : '<div class="tph'+(cat==='chat'?' txt':'')+'">'+badge+'<span>'+mark+'</span></div>';
     return '<button class="titem" data-tpl="'+esc(t.id)+'">'+face+
       '<div class="tcap"><b>'+esc(t.title)+'</b><em>'+(t.cost||0)+' кр.</em></div></button>';
-  }).join('') : '<div class="empty">Ничего не нашлось</div>';
-  const tool = '<button class="titem" type="button" id="openCut"><div class="tph txt"><span>✂️</span><small>Резак</small></div><div class="tcap"><b>Резак карусели</b><em>без кредитов</em></div></button>';
-  return '<input class="tsearch" id="tq" placeholder="Найти шаблон" value="'+esc(tplQuery)+'">'+chips+'<div class="tgallery">'+tool+cards+'</div>';
+  }).join('') : '<div class="empty">Пока здесь пусто</div>';
+  return '<input class="tsearch" id="tq" placeholder="Найти шаблон" value="'+esc(tplQuery)+'">'+
+    kindRow+topicRow+
+    '<button class="cutlink" type="button" id="openCut">Резак карусели · без кредитов</button>'+
+    '<div class="ttitle">Шаблоны · '+kindName+(tplTopic?' · '+esc(tplTopic):'')+' ('+list.length+')</div>'+
+    '<div class="tgallery">'+cards+'</div>';
 }
 function viewCutter(){
   const counts = [2,3,4,5,6,8,10].map(function(n){
@@ -590,6 +616,7 @@ function viewTplRun(){
   const photo = (t.fields && t.fields.length) ? fieldForm(t) : (t.photo ? '<label class="filebtn">'+(photoData?'Фото прикреплено — заменить':'Прикрепить своё фото')+'<input id="file" type="file" accept="image/*"></label>'+(photoData?'<img class="preview" style="margin-top:10px" src="'+photoData+'" alt="">':'') : '');
   const res = last ? renderResult(last) : '';
   const video = t.category === 'video';
+  const themes = tplTopics(t).length ? '<div class="rules">'+tplTopics(t).map(c=>'<span>'+esc(c)+'</span>').join('')+'</div>' : '';
   const lead = t.desc || (video ? 'Ролик появится здесь. Обычно это несколько минут' : (t.photo ? 'Готовая картинка появится здесь, её можно сразу сохранить' : 'Результат появится здесь'));
   const lack = shortOf(t.cost||0);
   const create = lack
@@ -598,6 +625,7 @@ function viewTplRun(){
   return '<div class="card"><button class="back" id="back" type="button">← Шаблоны</button>'+
     (src?'<div class="thero"><img src="'+esc(src)+'" alt=""></div>':'')+
     '<div class="name">'+esc(t.title)+'</div>'+
+    themes+
     '<div class="meta" style="margin:6px 0 12px">'+esc(lead)+'</div>'+
     sizeChips+photo+
     create+
@@ -795,7 +823,8 @@ function bind(){
   const genfile=document.getElementById('genfile'); if (genfile) genfile.onchange=function(){ onGenPhoto(genfile); };
   document.querySelectorAll('[data-model]').forEach(b=>b.onclick=()=>setModel(b.dataset.model));
   document.querySelectorAll('[data-tpl]').forEach(b=>b.onclick=()=>useTpl(b.dataset.tpl));
-  document.querySelectorAll('[data-tcat]').forEach(b=>b.onclick=()=>{ tplCat=b.dataset.tcat||''; draw(); });
+  document.querySelectorAll('[data-tkind]').forEach(b=>b.onclick=()=>{ tplKind=b.dataset.tkind||''; draw(); });
+  document.querySelectorAll('[data-ttopic]').forEach(b=>b.onclick=()=>{ tplTopic=b.dataset.ttopic||''; draw(); });
   const tq = document.getElementById('tq');
   if (tq) tq.oninput = function(){ tplQuery = tq.value; const pos = tq.selectionStart; draw(); const again = document.getElementById('tq'); if (again){ again.focus(); try{ again.setSelectionRange(pos, pos); }catch(e){} } };
   document.querySelectorAll('[data-fmt]').forEach(b=>b.onclick=()=>{ rememberTplAnswers(); pickedFormat=b.dataset.fmt; draw(); });

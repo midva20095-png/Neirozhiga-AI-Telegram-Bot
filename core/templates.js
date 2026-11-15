@@ -21,6 +21,19 @@ function splitList(value) {
     return [String(value)];
 }
 
+function topicList(value) {
+    const seen = new Set();
+    const out = [];
+    splitList(value).forEach(name => {
+        const clean = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+        const key = clean.toLowerCase();
+        if (!clean || seen.has(key) || out.length >= 12) return;
+        seen.add(key);
+        out.push(clean);
+    });
+    return out;
+}
+
 function safeImage(url) {
     const s = String(url || '').trim();
     if (/^https?:\/\//i.test(s)) return s.slice(0, 2000);
@@ -70,6 +83,7 @@ function fromDb(row) {
         quality: mode.quality,
         duration: mode.duration,
         category: row.category || 'image',
+        cats: topicList(row.topics),
         formats: catalog.templateFormats(spec, row.formats),
         fields,
         hidePrompt: true,
@@ -89,6 +103,7 @@ function toPublic(item) {
         cost: item.cost,
         model: item.model,
         category: item.category,
+        cats: item.cats || [],
         formats: item.formats || [],
         fields: item.fields || [],
         photo: !!item.photo,
@@ -121,4 +136,4 @@ async function getFull(id, audience) {
     return item;
 }
 
-module.exports = { listPublic, getFull, fromDb, toPublic, mapModel, wantsPhoto, savedMode, visibleFor };
+module.exports = { listPublic, getFull, fromDb, toPublic, mapModel, wantsPhoto, savedMode, visibleFor, topicList };

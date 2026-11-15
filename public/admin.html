@@ -565,6 +565,25 @@ async function sendPm(id){
 
 /* ---- Шаблоны ---- */
 const TCATS = [['image','Картинки'],['fix','Улучшение фото'],['chat','Текст'],['video','Видео'],['audio','Голос']];
+function knownTopics(){
+  const seen = {};
+  const out = [];
+  templates.forEach(t => String(t.topics||'').split(/[,;]/).forEach(part => {
+    const name = part.trim();
+    const key = name.toLowerCase();
+    if (!name || seen[key]) return;
+    seen[key] = 1;
+    out.push(name);
+  }));
+  return out;
+}
+function toggleTopic(name){
+  const input = document.getElementById('ttopics');
+  if (!input || !name) return;
+  const list = input.value.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+  const has = list.some(s => s.toLowerCase() === name.toLowerCase());
+  input.value = (has ? list.filter(s => s.toLowerCase() !== name.toLowerCase()) : list.concat([name])).join(', ');
+}
 function fileToJpeg(file, max, quality){
   return new Promise((resolve,reject)=>{
     const img = new Image();
@@ -672,6 +691,11 @@ async function loadTpl(){
     '<input id="tfile" type="file" accept="image/*"></label>'+
     (preview?'<button class="ghost" type="button" onclick="clearTplPhoto()" style="margin-top:8px">Убрать фото</button>':'')+
     '<label>2. Название</label><input id="tt" placeholder="Например: Портрет в неоне" value="'+esc(editing?editing.title:'')+'">'+
+    '<label>Тип результата</label><select id="tc">'+TCATS.map(c=>'<option value="'+c[0]+'"'+((editing?editing.category:'image')===c[0]?' selected':'')+'>'+c[1]+'</option>').join('')+'</select>'+
+    '<p class="note">«Видео» и «Голос» говорят приложению, чем закончится шаблон. Для видео выберите видеомодель.</p>'+
+    '<label>Категории. Через запятую, как темы в приложении</label><input id="ttopics" placeholder="Портреты, День рождения, Знаки зодиака" value="'+esc(editing&&editing.topics?editing.topics:'')+'">'+
+    (knownTopics().length ? '<div class="row" style="flex-wrap:wrap;margin-top:8px">'+knownTopics().map(name=>'<button type="button" class="ghost" data-addtopic="'+esc(name)+'">'+esc(name)+'</button>').join('')+'</div>' : '')+
+    '<p class="note">Нажатие на готовую тему добавляет её или убирает. Один шаблон может быть в нескольких категориях. Пустое поле не прячет шаблон: он остаётся во «Все темы».</p>'+
     '<label>3. Что должна сделать нейросеть. Человек это не видит</label><textarea id="tp" placeholder="Опишите стиль, свет и что оставить от фото человека. Ответы полей пишите как {имя}">'+esc(editing?editing.prompt:'')+'</textarea>'+
     '<label>Поля, как в таблице Google. Пусто — как раньше, одно своё фото</label><textarea id="tfields" placeholder="фото | Ваше фото | до 3&#10;текст | имя | Как вас зовут?&#10;выбор | стиль | Стиль | Неон; Плёнка&#10;дата | дата | Дата рождения | необязательно&#10;число | возраст | Сколько лет?">'+esc(editing&&editing.fields?editing.fields:'')+'</textarea>'+
     '<p class="note">Каждая строка — одно поле: фото, текст, выбор, дата или число. В тексте запроса {имя} заменится ответом человека. Несколько фото уходят в модель вместе, текст запроса не переписывается.</p>'+
@@ -687,8 +711,6 @@ async function loadTpl(){
     '<label class="check"><input id="tactive" type="checkbox" '+(!editing||editing.active!==false?'checked':'')+'> Показывать в кабинете</label>'+
     '<details'+(editing?' open':'')+'><summary>Дополнительно: описание, раздел, ссылка, размеры</summary>'+
     '<label>Короткое описание под заголовком</label><input id="tdesc" placeholder="Что получится" value="'+esc(editing&&editing.description?editing.description:'')+'">'+
-    '<label>Раздел в кабинете</label><select id="tc">'+TCATS.map(c=>'<option value="'+c[0]+'"'+((editing?editing.category:'image')===c[0]?' selected':'')+'>'+c[1]+'</option>').join('')+'</select>'+
-    '<p class="note">Раздел «Видео» встаёт в карусель шаблонов. Для него выберите видеомодель, иначе шаблон сделает картинку.</p>'+
     '<label>Ссылка на картинку, если фото не загружаете файлом</label><input id="timg" placeholder="https://..." value="'+esc(link)+'">'+
     '<label>Размеры через запятую. Пусто — все размеры выбранной модели</label><input id="tfmt" placeholder="9:16, 1:1" value="'+esc(editing&&editing.formats?editing.formats:'')+'">'+
     '<label>Порядок. Меньше число — выше в списке</label><input id="tsort" type="number" placeholder="0" value="'+(editing&&editing.sort?editing.sort:0)+'">'+
@@ -705,8 +727,9 @@ async function loadTpl(){
       const mode = picked ? ' · '+picked.name : (t.duration ? ' · '+t.duration+' сек' : '');
       const where = t.audience==='vk' ? 'Только ВК' : t.audience==='tg' ? 'Только Telegram' : 'Оба чата';
       const share = place==='vk' ? '' : '<button class="ghost" onclick="tplLink('+t.id+')">Ссылка</button><button class="ghost" onclick="tplChannel('+t.id+')">В канал</button>';
+      const themes = String(t.topics||'').trim();
       return '<div class="acard'+(t.active?'':' off')+'">'+(src?'<img src="'+esc(src)+'" alt="">':'<div class="ph"></div>')+
-        '<div class="abody"><b>'+esc(t.title)+'</b><div><em>'+t.cost+' кр.</em></div><div class="note">'+esc(where)+' · '+esc(from)+' · '+esc((saved&&saved.name)||t.model||'')+esc(mode)+(t.active?'':' · скрыт')+'</div>'+
+        '<div class="abody"><b>'+esc(t.title)+'</b><div><em>'+t.cost+' кр.</em></div><div class="note">'+esc(themes||'без категории')+' · '+esc(where)+' · '+esc(from)+' · '+esc((saved&&saved.name)||t.model||'')+esc(mode)+(t.active?'':' · скрыт')+'</div>'+
         '<div class="row" style="margin:8px 0 0"><button class="ghost" onclick="editTpl('+t.id+')">Править</button>'+
         '<button class="ghost" onclick="toggleTpl('+t.id+')">'+(t.active?'Скрыть':'Показать')+'</button>'+
         share+
@@ -715,6 +738,7 @@ async function loadTpl(){
     '</div>';
   const file = document.getElementById('tfile');
   if (file) file.onchange = () => onTplPhoto(file);
+  document.querySelectorAll('[data-addtopic]').forEach(btn => { btn.onclick = () => toggleTopic(btn.dataset.addtopic); });
   const tm = document.getElementById('tm');
   const tcost = document.getElementById('tcost');
   function applyModePrice(force){
@@ -808,7 +832,8 @@ async function saveTpl(){
     duration: (document.getElementById('tdur')||{}).value || '',
     hide_prompt: true,
     active: document.getElementById('tactive').checked,
-    audience: (document.getElementById('taud')||{}).value || 'all'
+    audience: (document.getElementById('taud')||{}).value || 'all',
+    topics: (document.getElementById('ttopics')||{}).value || ''
   };
   if (!body.title || !body.prompt) return alert('Нужны название и промпт');
   const d = await api('/api/admin/templates',{method:'POST',body:JSON.stringify(body)});
@@ -820,7 +845,7 @@ async function toggleTpl(id){
   if (!t) return;
   const d = await api('/api/admin/templates',{method:'POST',body:JSON.stringify({
     id: t.id, title: t.title, category: t.category, model: t.model, cost: t.cost, sort: t.sort||0,
-    image: t.image, description: t.description, formats: t.formats, prompt: t.prompt, fields: t.fields || '',
+    image: t.image, description: t.description, formats: t.formats, prompt: t.prompt, fields: t.fields || '', topics: t.topics || '',
     quality: t.quality || '', duration: t.duration || '',
     hide_prompt: true, active: !t.active, audience: t.audience || 'all'
   })});
