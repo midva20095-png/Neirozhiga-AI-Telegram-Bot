@@ -469,6 +469,14 @@ async function startBot(app) {
         console.log('✅ База данных PostgreSQL инициализирована');
         db.note('sys', 'Бот запущен').catch(() => {});
         try {
+            const moved = await require('./yaga-import').importYagaBalances();
+            if (moved && !moved.done) {
+                console.log(`ЯгаГенератор: перенос балансов, новых ${moved.created}, уже были ${moved.existed}.`);
+            }
+        } catch (err) {
+            console.error('ЯгаГенератор: балансы не перенесены.', err.message);
+        }
+        try {
             const pending = await transferApi.resumePending();
             if (pending && pending.credited) console.log('✅ Доначислены кредиты с незавершённого переноса с сайта');
         } catch (err) {
