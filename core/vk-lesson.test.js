@@ -43,6 +43,13 @@ test('текст новой записи хранит ссылку на преж
     assert.equal(lesson.isOwnPost(text), true);
 });
 
+test('ответы идут в уже закреплённую запись', () => {
+    assert.equal(lesson.lessonPostId({}), 16047);
+    assert.equal(lesson.lessonPostId({ oldPostId: 16047 }), 16047);
+    assert.equal(lesson.lessonPostId({ postId: 20, oldPostId: 16047 }), 20);
+    assert.equal(lesson.postUrl('214554778', 16047), 'https://vk.com/wall-214554778_16047');
+});
+
 test('из стены берётся только закреплённая запись', () => {
     const pinned = lesson.pinnedItem([
         { id: 4, is_pinned: 0, text: 'свежая' },

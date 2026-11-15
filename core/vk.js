@@ -1333,60 +1333,6 @@ function wallAccessLine(groupId, code) {
     return ' В ключе сообщества нужно право «Стена», а в настройках сообщества — комментарии от имени сообщества.';
 }
 
-async function saveWallPhoto(token, groupId, file) {
-    const server = await call(token, 'photos.getWallUploadServer', { group_id: String(groupId) });
-    const uploaded = await postFile(server.upload_url, 'photo', file);
-    const saved = await call(token, 'photos.saveWallPhoto', {
-        group_id: String(groupId),
-        photo: uploaded.photo,
-        server: String(uploaded.server),
-        hash: uploaded.hash
-    });
-    const list = Array.isArray(saved) ? saved : [saved];
-    const attachment = photoAttachment(list[0]);
-    if (!attachment) throw new Error('vk wall photo');
-    return attachment;
-}
-
-async function loadWall(token, groupId) {
-    const owner = String(-Number(groupId));
-    const attempts = [
-        { owner_id: owner, count: '20' },
-        { owner_id: owner, count: '20', filter: 'all' },
-        { owner_id: owner, count: '20', filter: 'owner' }
-    ];
-    let last = null;
-    for (const params of attempts) {
-        try {
-            return await call(token, 'wall.get', params);
-        } catch (error) {
-            last = error;
-        }
-    }
-    throw last || new Error('wall');
-}
-
-async function findPinnedPost(token, groupId) {
-    const tokens = [token];
-    const reader = audit.readerToken();
-    if (reader && reader !== token) tokens.push(reader);
-    let last = null;
-    let sawWall = false;
-    for (const item of tokens) {
-        try {
-            const res = await loadWall(item, groupId);
-            const items = res && Array.isArray(res.items) ? res.items : [];
-            const pinned = lesson.pinnedItem(items);
-            if (pinned) return pinned;
-            sawWall = true;
-        } catch (error) {
-            last = error;
-        }
-    }
-    if (sawWall) return null;
-    throw last || new Error('wall');
-}
-
 async function lessonPin(groupId) {
     if (!lesson.isClub(groupId)) return null;
     try {
@@ -1404,92 +1350,30 @@ function queueLesson(job) {
 }
 
 async function ensureLessonPin(token, groupId) {
-    if (!lesson.isClub(groupId)) return;
+    if (!lesson.isClub(groupId) || !token) return;
     const key = lesson.pinKey(groupId);
     let saved = {};
     try {
         const pack = await db.getSettings([key]);
         saved = pack[key] && typeof pack[key] === 'object' ? pack[key] : {};
     } catch (error) {
-        return;
+        saved = {};
     }
-    if (saved.postId) {
-        try {
-            await call(token, 'wall.pin', { owner_id: String(-Number(groupId)), post_id: String(saved.postId) });
-            console.log(`ВК ${groupId}: закреп уроков на месте, запись ${saved.url || lesson.postUrl(groupId, saved.postId)}`);
-        } catch (error) {
-            console.error(`ВК ${groupId}: закреп уроков не подтвердился.`);
-        }
-        return;
-    }
-    const started = Date.parse(saved.startedAt || '');
-    if (started && Date.now() - started < 10 * 60 * 1000) return;
-    let oldPost = null;
-    try {
-        oldPost = await findPinnedPost(token, groupId);
-    } catch (error) {
-        const code = Number(error && error.code);
-        console.error(`ВК ${groupId}: стену не прочитал${code ? ` (${code})` : ''}, новую запись не публикую.`);
-        return;
-    }
-    const oldId = oldPost && oldPost.id ? Number(oldPost.id) : 0;
-    const snapshot = {
-        startedAt: new Date().toISOString(),
-        oldPostId: oldId || 0,
-        oldUrl: oldId ? lesson.postUrl(groupId, oldId) : '',
-        oldText: String(oldPost && oldPost.text || '').slice(0, 2000)
-    };
-    try {
-        await db.setSetting(key, snapshot);
-    } catch (error) {
-        console.error(`ВК ${groupId}: не сохранил прежний закреп, новую запись не публикую.`);
-        return;
-    }
-    if (snapshot.oldUrl) {
-        db.note('sys', `ВК ${groupId}: прежний закреп сохранён ${snapshot.oldUrl}`).catch(() => {});
-        console.log(`ВК ${groupId}: прежний закреп сохранён ${snapshot.oldUrl}`);
-    } else {
-        console.log(`ВК ${groupId}: закреплённой записи не нашёл, публикую новую без ссылки на прежнюю.`);
-    }
-    let attachment = '';
-    try {
-        const jpeg = await lesson.paintCover();
-        attachment = await saveWallPhoto(token, groupId, { buffer: jpeg, filename: 'lesson.jpg', type: 'image/jpeg' });
-    } catch (error) {
-        console.error(`ВК ${groupId}: обложка уроков не загрузилась, закреп не меняю.`);
-        try { await db.setSetting(key, { oldPostId: snapshot.oldPostId, oldUrl: snapshot.oldUrl, oldText: snapshot.oldText }); } catch (e) {}
-        return;
-    }
-    let posted = null;
-    try {
-        posted = await call(token, 'wall.post', {
-            owner_id: String(-Number(groupId)),
-            from_group: '1',
-            message: lesson.postText(snapshot.oldUrl),
-            attachments: attachment
-        });
-    } catch (error) {
-        const code = Number(error && error.code);
-        console.error(`ВК ${groupId}: запись уроков не опубликована${code ? ` (${code})` : ''}.`);
-        try { await db.setSetting(key, { oldPostId: snapshot.oldPostId, oldUrl: snapshot.oldUrl, oldText: snapshot.oldText }); } catch (e) {}
-        return;
-    }
-    const postId = posted && (posted.post_id || posted.postId);
-    if (!postId) {
-        console.error(`ВК ${groupId}: запись уроков не вернула номер.`);
-        return;
-    }
+    const postId = lesson.lessonPostId(saved);
     const url = lesson.postUrl(groupId, postId);
-    const ready = Object.assign({}, snapshot, { postId: Number(postId), url });
-    try { await db.setSetting(key, ready); } catch (error) {}
-    try {
-        await call(token, 'wall.pin', { owner_id: String(-Number(groupId)), post_id: String(postId) });
-    } catch (error) {
-        console.error(`ВК ${groupId}: запись опубликована, но не закрепилась: ${url}`);
-        return;
+    if (Number(saved.postId) !== postId) {
+        try {
+            await db.setSetting(key, {
+                postId,
+                url,
+                oldPostId: Number(saved.oldPostId) || postId,
+                oldUrl: saved.oldUrl || url,
+                oldText: saved.oldText || ''
+            });
+        } catch (error) {}
     }
-    db.note('sys', `ВК ${groupId}: закреп уроков ${url}. Прежняя запись ${snapshot.oldUrl || 'не была закреплена'}.`).catch(() => {});
-    console.log(`ВК ${groupId}: закреп уроков ${url}`);
+    db.note('sys', `ВК ${groupId}: уроки отвечают в текущем закрепе ${url}`).catch(() => {});
+    console.log(`ВК ${groupId}: уроки отвечают в текущем закрепе ${url}`);
 }
 
 async function sendLessonComment(token, groupId, comment, message) {

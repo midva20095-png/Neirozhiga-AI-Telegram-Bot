@@ -2,6 +2,7 @@ const sharp = require('sharp');
 const club = require('./vk-club');
 
 const CLUB_ID = '214554778';
+const PIN_POST_ID = 16047;
 const OPENING = 'Спросите про урок в комментариях.';
 
 function isClub(groupId) {
@@ -36,6 +37,13 @@ function isOwnPost(text) {
 function pinnedItem(items) {
     const list = Array.isArray(items) ? items : [];
     return list.find(item => Number(item && item.is_pinned) === 1) || null;
+}
+
+function lessonPostId(saved) {
+    const current = Number(saved && saved.postId) || 0;
+    if (current) return current;
+    const known = Number(saved && saved.oldPostId) || 0;
+    return known || PIN_POST_ID;
 }
 
 function lessonRoute(text) {
@@ -115,5 +123,5 @@ async function paintCover() {
 }
 
 module.exports = {
-    CLUB_ID, OPENING, isClub, pinKey, postUrl, postText, isOwnPost, pinnedItem, lessonRoute, lessonPrompt, plain, fallbackText, paintCover
+    CLUB_ID, PIN_POST_ID, OPENING, isClub, pinKey, postUrl, postText, isOwnPost, pinnedItem, lessonPostId, lessonRoute, lessonPrompt, plain, fallbackText, paintCover
 };
