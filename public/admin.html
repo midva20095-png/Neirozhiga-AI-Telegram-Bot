@@ -83,7 +83,7 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
   <p class="note">Telegram и ВКонтакте открываются отдельно.</p>
   <div class="door">
     <button type="button" onclick="enterPlace('tg')"><strong>Telegram</strong><span class="meta">Клиенты, модели и шаблоны</span></button>
-    <button type="button" onclick="enterPlace('vk')"><strong>ВКонтакте</strong><span class="meta">Два сообщества по отдельности</span></button>
+    <button type="button" onclick="enterPlace('vk')"><strong>ВКонтакте</strong><span class="meta">Каждое сообщество отдельно</span></button>
   </div>
 </div>
 
@@ -92,7 +92,7 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
   <p class="note">Откроется кабинет только этого сообщества.</p>
   <div class="homes" id="communityDoor"></div>
   <div class="actions">
-    <button type="button" onclick="enterShared()">Общее для обоих: клиенты, модели, рассылка</button>
+    <button type="button" onclick="enterShared()">Общее для сообществ: клиенты, модели, рассылка</button>
     <button type="button" onclick="showDoor()">Назад</button>
   </div>
 </div>
@@ -245,7 +245,7 @@ function openCabinet(tab){
   document.getElementById('placeNote').textContent = place!=='vk'
     ? 'Клиенты, баланс, модели и шаблоны только Telegram.'
     : (vkHome==='shared'
-      ? 'Модели, пакеты, шаблоны и рассылка общие для обоих сообществ. Рейтинг и донат — внутри сообщества.'
+      ? 'Модели, пакеты, шаблоны и рассылка общие для всех сообществ. Рейтинг и донат — внутри сообщества.'
       : (home && home.online ? 'Кабинет только этого сообщества.' : 'Кабинет этого сообщества. Сейчас нет связи с ключом.'));
   const back = document.getElementById('backPlace');
   if (back) back.textContent = place==='vk' ? 'К сообществам' : 'Другой вход';
@@ -946,7 +946,7 @@ function renderBroadcast(){
   const vk = place==='vk';
   document.getElementById('section-broadcast').innerHTML =
     '<div class="card"><h3>Рассылка · '+placeName()+'</h3><p class="note">'+(vk
-      ? 'Рассылка общая для обоих сообществ. «Подписавшимся» — только тем, кто нажал «Подписаться». «Всем клиентам» — всем, кто уже открывал бота, кроме чёрного списка. Рейтинг при этом остаётся у каждого сообщества свой.'
+      ? 'Рассылка общая для всех сообществ. «Подписавшимся» — только тем, кто нажал «Подписаться». «Всем клиентам» — всем, кто уже открывал бота, кроме чёрного списка. Рейтинг при этом остаётся у каждого сообщества свой.'
       : 'Сообщение получат клиенты Telegram, кроме чёрного списка. Поддерживается Markdown.')+'</p>'+
     '<textarea id="bcast" placeholder="Текст рассылки"></textarea>'+
     '<div class="row" style="margin-top:8px">'+(vk

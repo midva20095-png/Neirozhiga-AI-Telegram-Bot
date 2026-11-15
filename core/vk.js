@@ -171,10 +171,16 @@ function textOnlyMenu() {
     return JSON.stringify({ one_time: false, buttons: textRows() });
 }
 
+function clubGroupId() {
+    const primary = String(process.env.VK_GROUP_ID || '').replace(/\D/g, '');
+    const configured = String(process.env.VK_GROUP_ID_2 || '').replace(/\D/g, '');
+    if (configured && configured !== primary) return configured;
+    return '214554778';
+}
+
 function auditHere(groupId) {
     const current = String(groupId || currentGroup() || '').replace(/\D/g, '');
-    const primary = String(process.env.VK_GROUP_ID || '').replace(/\D/g, '');
-    if (!current || current === primary) return false;
+    if (!current || current !== clubGroupId()) return false;
     return communityList().some(item => item.id === current);
 }
 
@@ -2096,6 +2102,7 @@ function communitiesFromEnv() {
     }
     add(process.env.VK_GROUP_ID, process.env.VK_GROUP_TOKEN);
     add(process.env.VK_GROUP_ID_2, process.env.VK_GROUP_TOKEN_2);
+    add(process.env.VK_GROUP_ID_3, process.env.VK_GROUP_TOKEN_3);
     return out;
 }
 
@@ -2124,6 +2131,11 @@ function adminHomes() {
         { id: linesId, title: 'Точки и Линии' },
         { id: clubId, title: 'НейроЯга' }
     ];
+    const thirdId = String(process.env.VK_GROUP_ID_3 || '').replace(/\D/g, '');
+    const thirdToken = String(process.env.VK_GROUP_TOKEN_3 || '').trim();
+    if (thirdId && thirdToken && thirdId !== linesId && thirdId !== clubId) {
+        homes.push({ id: thirdId, title: 'ЯгаГенераторБот' });
+    }
     const seen = new Set();
     return homes.filter(home => {
         if (!home.id || seen.has(home.id)) return false;
