@@ -1348,23 +1348,75 @@ function queueLesson(job) {
     lessonChain = lessonChain.then(job, job);
 }
 
-async function uploadWallPhoto(token, groupId, buffer) {
-    const server = await call(token, 'photos.getWallUploadServer', { group_id: String(groupId) });
-    const uploaded = await postFile(server.upload_url, 'photo', {
-        buffer,
-        filename: 'lesson-cover.jpg',
-        type: 'image/jpeg'
-    });
-    const saved = await call(token, 'photos.saveWallPhoto', {
-        group_id: String(groupId),
-        photo: uploaded.photo,
-        server: String(uploaded.server),
-        hash: uploaded.hash
-    });
-    const list = Array.isArray(saved) ? saved : [saved];
-    const attachment = photoAttachment(list[0]);
-    if (!attachment) throw new Error('vk wall photo');
-    return attachment;
+function lessonWriters(groupToken) {
+    const list = [];
+    const add = value => {
+        const token = String(value || '').trim();
+        if (token && !list.includes(token)) list.push(token);
+    };
+    add(groupToken);
+    const user = String(process.env.VK_AUDIT_TOKEN || '').trim();
+    if (user && !user.startsWith('vk1.')) add(user);
+    return list;
+}
+
+async function callLesson(tokens, method, params) {
+    let last = null;
+    for (const token of tokens) {
+        try { return await call(token, method, params); }
+        catch (error) {
+            last = error;
+            const code = Number(error && error.code);
+            if (code !== 27 && code !== 15 && code !== 1051) throw error;
+        }
+    }
+    throw last || new Error(method);
+}
+
+async function uploadWallPhoto(tokens, groupId, buffer) {
+    let last = null;
+    for (const token of tokens) {
+        try {
+            const server = await call(token, 'photos.getWallUploadServer', { group_id: String(groupId) });
+            const uploaded = await postFile(server.upload_url, 'photo', {
+                buffer,
+                filename: 'lesson-cover.jpg',
+                type: 'image/jpeg'
+            });
+            const saved = await call(token, 'photos.saveWallPhoto', {
+                group_id: String(groupId),
+                photo: uploaded.photo,
+                server: String(uploaded.server),
+                hash: uploaded.hash
+            });
+            const list = Array.isArray(saved) ? saved : [saved];
+            const attachment = photoAttachment(list[0]);
+            if (!attachment) throw new Error('vk wall photo');
+            return attachment;
+        } catch (error) {
+            last = error;
+            const code = Number(error && error.code);
+            if (code !== 27 && code !== 15 && code !== 1051) throw error;
+        }
+    }
+    throw last || new Error('vk wall photo');
+}
+
+async function readLessonPost(groupId, postId) {
+    const posts = `-${String(groupId).replace(/\D/g, '')}_${postId}`;
+    const tokens = lessonWriters('').concat([audit.readerToken()]).filter(Boolean);
+    for (const token of tokens) {
+        try {
+            const pack = await call(token, 'wall.getById', { posts });
+            const list = Array.isArray(pack) ? pack : ((pack && pack.items) || []);
+            if (list[0]) return list[0];
+        } catch (error) {}
+    }
+    return null;
+}
+
+function postHasPicture(post) {
+    return ((post && post.attachments) || []).some(item => item && (item.type === 'photo' || item.type === 'doc'));
 }
 
 async function findLessonPost(token, groupId) {
@@ -1390,8 +1442,8 @@ async function ensureLessonPin(token, groupId) {
         saved = {};
     }
     const oldUrl = saved.oldUrl || lesson.postUrl(groupId, lesson.PIN_POST_ID);
+    const writers = lessonWriters(token);
     let postId = saved.published ? Number(saved.postId) : 0;
-    let created = false;
     if (!postId) {
         try {
             const existing = await findLessonPost(token, groupId);
@@ -1402,7 +1454,7 @@ async function ensureLessonPin(token, groupId) {
         try {
             let attachment = '';
             try {
-                attachment = await uploadWallPhoto(token, groupId, await lesson.paintCover());
+                attachment = await uploadWallPhoto(writers, groupId, await lesson.paintCover());
             } catch (error) {
                 const code = Number(error && error.code);
                 console.error(`ВК ${groupId}: обложка не загрузилась${code ? ` (${code})` : ''}. Запись выйдет без картинки.`);
@@ -1416,7 +1468,6 @@ async function ensureLessonPin(token, groupId) {
             if (attachment) params.attachments = attachment;
             const posted = await call(token, 'wall.post', params);
             postId = Number(posted && (posted.post_id || posted.postId));
-            created = true;
         } catch (error) {
             const code = Number(error && error.code);
             console.error(`ВК ${groupId}: новый закреп не опубликован${code ? ` (${code})` : ''}.${wallAccessLine(groupId, code)}`);
@@ -1427,13 +1478,33 @@ async function ensureLessonPin(token, groupId) {
         console.error(`ВК ${groupId}: новый закреп не опубликован.`);
         return;
     }
-    try {
-        await call(token, 'wall.pin', { owner_id: String(-Number(groupId)), post_id: String(postId) });
-    } catch (error) {
-        const code = Number(error && error.code);
-        console.error(`ВК ${groupId}: запись ${postId} не закрепилась${code ? ` (${code})` : ''}.${wallAccessLine(groupId, code)}`);
-    }
     const url = lesson.postUrl(groupId, postId);
+    const view = await readLessonPost(groupId, postId);
+    if (!view || !postHasPicture(view)) {
+        try {
+            const attachment = await uploadWallPhoto(writers, groupId, await lesson.paintCover());
+            await callLesson(writers, 'wall.edit', {
+                owner_id: String(-Number(groupId)),
+                post_id: String(postId),
+                message: String((view && view.text) || lesson.postText(oldUrl)),
+                attachments: attachment
+            });
+            console.log(`ВК ${groupId}: обложка добавлена к записи ${url}`);
+        } catch (error) {
+            const code = Number(error && error.code);
+            console.error(`ВК ${groupId}: обложку ключ сообщества поставить не может${code ? ` (${code})` : ''}. Откройте ${url} и добавьте картинку через «Редактировать».`);
+        }
+    }
+    let pinned = Number(view && view.is_pinned) === 1;
+    if (!pinned) {
+        try {
+            await callLesson(writers, 'wall.pin', { owner_id: String(-Number(groupId)), post_id: String(postId) });
+            pinned = true;
+        } catch (error) {
+            const code = Number(error && error.code);
+            console.error(`ВК ${groupId}: запись не закрепилась${code ? ` (${code})` : ''}. Откройте ${url} и нажмите «Закрепить».`);
+        }
+    }
     try {
         await db.setSetting(key, {
             postId,
@@ -1444,9 +1515,9 @@ async function ensureLessonPin(token, groupId) {
             oldText: saved.oldText || ''
         });
     } catch (error) {}
-    const line = created
-        ? `ВК ${groupId}: опубликован и закреплён пост уроков ${url}`
-        : `ВК ${groupId}: уроки отвечают в закрепе ${url}`;
+    const line = pinned
+        ? `ВК ${groupId}: пост уроков закреплён ${url}`
+        : `ВК ${groupId}: пост уроков опубликован ${url}. Закрепите его вручную.`;
     db.note('sys', line).catch(() => {});
     console.log(line);
     watchLessonPin(token, groupId);
