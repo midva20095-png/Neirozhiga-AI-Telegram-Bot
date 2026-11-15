@@ -134,6 +134,8 @@ let vkHome = sessionStorage.getItem('ny_admin_home') || '';
 let homes = [];
 let cur = 'stats';
 let users=[], templates=[], modelsData=[], groupsData={}, providersData={}, packagesData=[], generalData={};
+let usersQuery = '';
+let openUserId = '';
 const KINDNAME = {sys:'система', pay:'оплата', kie:'Kie', gen:'сбой', tpl:'шаблон'};
 let tplEdit = null, tplImage = '', tplImageTouched = false, modelsMsg = '';
 let rateGroup = sessionStorage.getItem('ny_admin_group') || '';
@@ -463,21 +465,43 @@ async function loadStats(){
 }
 
 /* ---- Клиенты ---- */
+function whenAt(value){
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('ru-RU', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
 async function loadUsers(q){
   const el = document.getElementById('section-users');
-  const d = await api('/api/admin/users?platform='+place+'&q='+encodeURIComponent(q||'')+groupQuery());
+  usersQuery = q || '';
+  const d = await api('/api/admin/users?platform='+place+'&q='+encodeURIComponent(usersQuery)+groupQuery());
+  if (d.error && !d.users) {
+    el.innerHTML = '<div class="card bad">'+esc(d.error)+'</div>';
+    return;
+  }
   users = d.users||[];
   const hint = place==='vk' ? 'Номер ВК' : 'ID или @имя';
-  const scopeNote = inCommunity() ? '<p class="note">Только те, кто уже написал этому сообществу после разделения. Остальные лежат в «Общее ВК».</p>' : '';
+  const scopeNote = usersQuery
+    ? '<p class="note">Поиск идёт по всем клиентам этой стороны, не только по открытому сообществу.</p>'
+    : (inCommunity() ? '<p class="note">Список этого сообщества. Чтобы открыть человека из другого сообщества, введите его номер.</p>' : '');
   el.innerHTML =
-    '<div class="card"><h3>Клиенты · '+placeName()+'</h3>'+scopeNote+'<div class="row"><input id="q" placeholder="'+hint+'" value="'+esc(q||'')+'"><button onclick="loadUsers(document.getElementById(\'q\').value)">Найти</button></div>'+
+    '<div class="card" id="uedit" style="display:none"></div>'+
+    '<div class="card"><h3>Клиенты · '+placeName()+'</h3>'+scopeNote+'<div class="row"><input id="q" placeholder="'+hint+'" value="'+esc(usersQuery)+'"><button type="button" id="userSearch">Найти</button></div>'+
     '<table><tr><th>Откуда</th><th>Номер</th><th>Имя</th><th>Баланс</th><th>Модель</th><th>Ген.</th><th>Статус</th><th></th></tr>'+
     users.map(u=>{
       const who = clientWho(u);
-      return '<tr><td>'+who.where+'</td><td>'+esc(who.num)+'</td><td>'+esc(who.name)+'</td><td class="ok">'+u.balance+'</td><td>'+esc(u.current_model||'')+'</td><td>'+(u.gens||0)+'</td><td>'+(u.blocked?'<span class="bad">ЧС</span>':'—')+'</td><td><button class="ghost" onclick="editUser('+"'"+u.user_id+"'"+')">Открыть</button></td></tr>';
+      return '<tr><td>'+who.where+'</td><td>'+esc(who.num)+'</td><td>'+esc(who.name)+'</td><td class="ok">'+u.balance+'</td><td>'+esc(u.current_model||'')+'</td><td>'+(u.gens||0)+'</td><td>'+(u.blocked?'<span class="bad">ЧС</span>':'—')+'</td><td><button type="button" class="ghost" data-open="'+esc(u.user_id)+'">Открыть</button></td></tr>';
     }).join('')+
     (users.length?'':'<tr><td colspan="8" class="note">Таких клиентов нет.</td></tr>')+
-    '</table></div><div class="card" id="uedit" style="display:none"></div>';
+    '</table></div>';
+  const search = document.getElementById('userSearch');
+  const field = document.getElementById('q');
+  if (search) search.onclick = () => loadUsers(field.value);
+  if (field) field.onkeydown = event => { if (event.key === 'Enter') loadUsers(field.value); };
+  el.querySelectorAll('[data-open]').forEach(button => {
+    button.onclick = () => editUser(button.getAttribute('data-open'));
+  });
+  if (openUserId) editUser(openUserId, true);
 }
 function clientWho(u){
   const id = String(u.user_id);
@@ -487,36 +511,56 @@ function clientWho(u){
   const name = vk ? (raw.replace(/^vk:/, '') === num ? '' : raw) : (raw ? (raw.charAt(0)==='@' ? raw : '@'+raw) : '');
   return { where: vk ? 'ВКонтакте' : 'Telegram', num, name };
 }
-function editUser(id){
-  const u = users.find(x=>String(x.user_id)===String(id));
-  const who = clientWho(u || { user_id: id, username: '' });
+async function editUser(id, quiet){
+  openUserId = String(id||'');
   const box = document.getElementById('uedit');
-  box.style.display='block';
+  if (!box || !openUserId) return;
+  box.style.display = 'block';
+  if (!quiet) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const d = await api('/api/admin/user?userId='+encodeURIComponent(openUserId));
+  if (!d.ok || !d.user) {
+    box.innerHTML = '<p class="bad">'+(esc(d.error)||'Клиент не найден')+'</p>';
+    return;
+  }
+  const u = d.user;
+  const who = clientWho(u);
+  const history = (d.history||[]).map(row =>
+    '<tr><td>'+whenAt(row.created_at)+'</td><td>'+esc(row.reason||'')+'</td><td class="'+(Number(row.delta)>=0?'ok':'bad')+'">'+(Number(row.delta)>0?'+':'')+row.delta+'</td><td>'+row.balance+'</td></tr>'
+  ).join('');
   box.innerHTML = '<h3>'+who.where+' · '+esc(who.num)+(who.name?(' · '+esc(who.name)):'')+'</h3>'+
-    '<div class="row"><input id="delta" type="number" placeholder="+100 или -50"><input id="reason" placeholder="Причина (видна в истории)"></div>'+
-    '<div class="row"><button onclick="applyBal('+"'"+id+"'"+')">Начислить / списать</button>'+
-    '<button class="danger" onclick="toggleBan('+"'"+id+"'"+','+(u&&u.blocked?'false':'true')+')">'+(u&&u.blocked?'Убрать из ЧС':'В чёрный список')+'</button></div>'+
+    '<p class="note">Баланс <b class="ok">'+u.balance+'</b> кр. · генераций '+(u.gens||0)+' · потрачено '+(u.spent||0)+'</p>'+
+    '<div class="row"><input id="delta" type="number" placeholder="+100 или -50"><input id="reason" placeholder="Причина, видна в истории"></div>'+
+    '<div class="row"><button type="button" id="balGo">Начислить / списать</button>'+
+    '<button type="button" class="danger" id="banGo">'+(u.blocked?'Убрать из ЧС':'В чёрный список')+'</button></div>'+
     '<label>Личное сообщение клиенту</label><textarea id="pm" placeholder="Текст сообщения"></textarea>'+
-    '<div class="row" style="margin-top:8px"><button onclick="sendPm('+"'"+id+"'"+')">Отправить сообщение</button></div><p id="umsg"></p>';
+    '<div class="row" style="margin-top:8px"><button type="button" id="pmGo">Отправить сообщение</button></div><p id="umsg"></p>'+
+    '<h3 style="margin-top:14px">История</h3><table><tr><th>Когда</th><th>Операция</th><th>Сумма</th><th>Остаток</th></tr>'+
+    (history||'<tr><td colspan="4" class="note">Операций ещё нет.</td></tr>')+'</table>';
+  document.getElementById('balGo').onclick = () => applyBal(openUserId);
+  document.getElementById('banGo').onclick = () => toggleBan(openUserId, !u.blocked);
+  document.getElementById('pmGo').onclick = () => sendPm(openUserId);
 }
 async function applyBal(id){
   const delta = parseInt(document.getElementById('delta').value,10);
   const reason = document.getElementById('reason').value.trim()||'Админ';
-  if (!delta) return alert('Укажите сумму');
+  const msg = document.getElementById('umsg');
+  if (!delta) { if (msg) msg.textContent = 'Укажите сумму: 100 или -50'; return; }
   const d = await api('/api/admin/balance',{method:'POST',body:JSON.stringify({userId:id,delta,reason})});
-  document.getElementById('umsg').textContent = d.ok?('Новый баланс: '+d.balance):(d.error||'Ошибка');
-  if (d.ok) loadUsers(document.getElementById('q').value);
+  if (msg) msg.textContent = d.ok?('Новый баланс: '+d.balance):(d.error||'Ошибка');
+  if (d.ok) loadUsers(usersQuery);
 }
 async function toggleBan(id, blocked){
   const d = await api('/api/admin/block',{method:'POST',body:JSON.stringify({userId:id,blocked})});
-  document.getElementById('umsg').textContent = d.ok?(d.blocked?'В чёрном списке':'Убран из списка'):'Ошибка';
-  if (d.ok) loadUsers(document.getElementById('q').value);
+  const msg = document.getElementById('umsg');
+  if (msg) msg.textContent = d.ok?(d.blocked?'В чёрном списке':'Убран из списка'):'Ошибка';
+  if (d.ok) loadUsers(usersQuery);
 }
 async function sendPm(id){
   const text = document.getElementById('pm').value.trim();
-  if (!text) return alert('Введите текст');
+  const msg = document.getElementById('umsg');
+  if (!text) { if (msg) msg.textContent = 'Введите текст'; return; }
   const d = await api('/api/admin/message',{method:'POST',body:JSON.stringify({userId:id,text})});
-  document.getElementById('umsg').textContent = d.ok?'Сообщение отправлено':(d.error||'Ошибка');
+  if (msg) msg.textContent = d.ok?'Сообщение отправлено':(d.error||'Ошибка');
 }
 
 /* ---- Шаблоны ---- */

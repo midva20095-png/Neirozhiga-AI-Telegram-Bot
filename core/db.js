@@ -876,6 +876,20 @@ async function listHistory(userId, limit = 40) {
   return res.rows;
 }
 
+async function adminClient(userId) {
+  const id = String(userId || '').trim();
+  if (!/^-?\d+$/.test(id)) return null;
+  const res = await pool.query(
+    `SELECT user_id::text AS user_id, COALESCE(username, '') AS username, balance, current_model,
+            blocked, COALESCE(gens, 0) AS gens, COALESCE(spent, 0) AS spent,
+            created_at, last_seen, vk_group::text AS vk_group
+     FROM users WHERE user_id = $1`,
+    [id]
+  );
+  if (!res.rows[0]) return null;
+  return { user: res.rows[0], history: await listHistory(id, 40) };
+}
+
 function audienceSql(audience, params) {
   if (audience === 'vk') return `(audience = 'vk' OR audience = 'all' OR audience IS NULL)`;
   if (audience === 'tg') return `(audience = 'tg' OR audience = 'all' OR audience IS NULL)`;
@@ -1017,6 +1031,7 @@ module.exports = {
   listUserIds,
   getStats,
   findUser,
+  adminClient,
   getUserBalance,
   updateBalance,
   debitBalance,

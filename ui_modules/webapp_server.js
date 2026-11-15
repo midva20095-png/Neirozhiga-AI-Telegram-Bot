@@ -733,22 +733,42 @@ function startWebApp() {
 
     app.get('/api/admin/users', requireAdmin, async (req, res) => {
         try {
-            const q = (req.query.q || '').toString();
+            const q = (req.query.q || '').toString().trim();
             const platform = adminPlatform(req.query.platform);
             const group = String(req.query.group || '').replace(/\D/g, '');
+            const digits = q.replace(/\D/g, '');
             const gate = platform === 'vk' ? 'AND user_id < 0' : platform === 'tg' ? 'AND user_id > 0' : '';
-            const groupSql = group ? ' AND vk_group = $2' : '';
-            const params = group ? [`%${q}%`, group] : [`%${q}%`];
+            const params = [`%${q}%`];
+            let search = `(user_id::text ILIKE $1 OR COALESCE(username,'') ILIKE $1)`;
+            if (digits) {
+                params.push(`%${digits}`);
+                search = `(${search} OR user_id::text LIKE $${params.length})`;
+            }
+            let groupSql = '';
+            if (group && !q) {
+                params.push(group);
+                groupSql = ` AND vk_group = $${params.length}`;
+            }
             const result = await db.pool.query(
-                `SELECT user_id, username, balance, current_model, blocked, gens, spent, created_at, last_seen
+                `SELECT user_id::text AS user_id, username, balance, current_model, blocked, gens, spent, created_at, last_seen, vk_group::text AS vk_group
                  FROM users
-                 WHERE (user_id::text ILIKE $1 OR COALESCE(username,'') ILIKE $1) ${gate}${groupSql}
+                 WHERE ${search} ${gate}${groupSql}
                  ORDER BY last_seen DESC NULLS LAST LIMIT 100`,
                 params
             );
             res.json({ users: result.rows });
         } catch (e) {
             res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.get('/api/admin/user', requireAdmin, async (req, res) => {
+        try {
+            const found = await db.adminClient(req.query.userId);
+            if (!found) return res.status(404).json({ ok: false, error: 'Клиент не найден' });
+            res.json({ ok: true, user: found.user, history: found.history });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
         }
     });
 
@@ -761,7 +781,7 @@ function startWebApp() {
                 const sign = Number(delta) > 0 ? `Начислено ${delta}` : `Списано ${Math.abs(delta)}`;
                 try { await tellClient(userId, `${sign} кредитов.\nБаланс: ${newBalance} кр.`); } catch (e) {}
             }
-            res.json({ ok: newBalance !== null, balance: newBalance });
+            res.json({ ok: newBalance !== null, balance: newBalance, error: newBalance === null ? 'Не получилось изменить баланс' : '' });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
