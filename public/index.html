@@ -151,14 +151,19 @@ const widgetPics = { chat: '', rate: '', site: '' };
 let showSetup = false;
 
 function tg(){ return window.Telegram && window.Telegram.WebApp; }
+function nyPost(msg){
+  if (typeof window.__nyHost === 'function') { window.__nyHost(msg); return; }
+  try { parent.postMessage(msg, '*'); } catch (e) {}
+}
+function fileOrigin(){
+  return String(window.__nyApi || location.origin).replace(/\/$/, '');
+}
 function openOut(url){
   const w = tg();
   if (w && w.openLink) { w.openLink(url); return; }
   let framed = false;
   try { framed = parent && parent !== window; } catch (e) { framed = true; }
-  if (framed) {
-    try { parent.postMessage({ type: 'ny-open', url: url }, '*'); } catch (e) {}
-  }
+  if (framed || window.__nyHost) nyPost({ type: 'ny-open', url: url });
   window.open(url, '_blank', 'noopener');
 }
 function parseUser(raw){
@@ -297,8 +302,8 @@ async function load(){
   draw();
   if (window.__vkGoal === 'site') openOut((cfg && cfg.site_url) || 'https://babayagaland.ru');
   if (window.__vkGoal === 'sub' && me && me.user_id && !me.mail) subscribeMail(true);
-  try { parent.postMessage({ type: 'ny-goal-ask' }, '*'); } catch (e) {}
-  try { parent.postMessage({ type: 'ny-group-ask' }, '*'); } catch (e) {}
+  nyPost({ type: 'ny-goal-ask' });
+  nyPost({ type: 'ny-group-ask' });
 }
 function applyGoal(goal){
   if (goal !== 'rate' && goal !== 'site' && goal !== 'sub') return;
@@ -353,7 +358,7 @@ function askCommunityToken(){
       }
     }
     window.addEventListener('message', onMsg);
-    parent.postMessage({ type: 'ny-community-token' }, '*');
+    nyPost({ type: 'ny-community-token' });
   });
 }
 function launchParam(name){
@@ -404,7 +409,7 @@ async function placeCovers(){
       if (pin) pin.disabled = false;
       return;
     }
-    parent.postMessage({ type: 'ny-widget-show', group_id: Number(groupId), code: coverCode(groupId, ids) }, '*');
+    nyPost({ type: 'ny-widget-show', group_id: Number(groupId), code: coverCode(groupId, ids) });
     if (msg) msg.textContent = 'Подтвердите кнопки в окне ВК.';
   } catch (e) {
     if (msg) msg.textContent = e.message || 'Не удалось поставить кнопки.';
@@ -782,7 +787,7 @@ async function sendWorkToChat(id){
 }
 async function downloadWork(id, kind){
   const name = workFileName(id, kind);
-  const url = location.origin + '/api/works/' + id + '?tk=' + encodeURIComponent(token||'') + '&dl=1';
+  const url = fileOrigin() + '/api/works/' + id + '?tk=' + encodeURIComponent(token||'') + '&dl=1';
   const tg = window.Telegram && window.Telegram.WebApp;
   if (tg && typeof tg.downloadFile === 'function') {
     tg.downloadFile({ url: url, file_name: name }, function(ok){
@@ -954,7 +959,7 @@ function payHost(url){
 function openPay(url){
   if (!payHost(url)) { alert('Оплата не открылась'); return; }
   const popup = window.open(url, '_blank', 'noopener');
-  try { if (parent && parent !== window) parent.postMessage({ type: 'ny-pay', url: url }, '*'); } catch (e) {}
+  if ((parent && parent !== window) || window.__nyHost) nyPost({ type: 'ny-pay', url: url });
   if (popup) return;
   if (window.top === window) location.href = url;
   else alert('Разрешите всплывающие окна и нажмите оплату ещё раз.');
