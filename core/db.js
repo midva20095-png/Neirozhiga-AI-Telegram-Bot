@@ -207,6 +207,18 @@ async function initDB() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS vk_donut_log_group_idx ON vk_donut_log (group_id, id DESC)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vk_lesson_memory (
+      id SERIAL PRIMARY KEY,
+      group_id BIGINT NOT NULL,
+      post_id BIGINT NOT NULL,
+      user_id BIGINT NOT NULL,
+      role TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS vk_lesson_memory_idx ON vk_lesson_memory (group_id, post_id, user_id, id DESC)`);
   console.log('✅ Таблица users готова (PostgreSQL)');
 }
 
@@ -310,6 +322,23 @@ async function setSetting(key, value) {
      ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
     [key, JSON.stringify(value)]
   );
+}
+
+async function rememberLesson(groupId, postId, userId, role, body) {
+  await pool.query(
+    `INSERT INTO vk_lesson_memory (group_id, post_id, user_id, role, body) VALUES ($1,$2,$3,$4,$5)`,
+    [String(groupId), String(postId), String(userId), String(role), String(body || '').slice(0, 1500)]
+  );
+}
+
+async function listLessonMemory(groupId, postId, userId) {
+  const res = await pool.query(
+    `SELECT role, body FROM vk_lesson_memory
+     WHERE group_id = $1 AND post_id = $2 AND user_id = $3
+     ORDER BY id DESC LIMIT 8`,
+    [String(groupId), String(postId), String(userId)]
+  );
+  return res.rows.reverse();
 }
 
 async function touchUser(userId, username) {
@@ -969,6 +998,8 @@ module.exports = {
   ensureUser,
   getSettings,
   setSetting,
+  rememberLesson,
+  listLessonMemory,
   note,
   listJournal,
   touchUser,

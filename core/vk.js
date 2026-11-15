@@ -11,6 +11,9 @@ const activity = require('./activity');
 const audit = require('./vk-audit');
 const club = require('./vk-club');
 const donut = require('./vk-donut');
+const lesson = require('./vk-lesson');
+let gigaPlugin = null;
+try { gigaPlugin = require('../ai_plugins/gigachat_plugin'); } catch (e) {}
 
 const API = 'https://api.vk.com/method';
 const VERSION = '5.199';
@@ -1330,9 +1333,200 @@ function wallAccessLine(groupId, code) {
     return ' В ключе сообщества нужно право «Стена», а в настройках сообщества — комментарии от имени сообщества.';
 }
 
+async function saveWallPhoto(token, groupId, file) {
+    const server = await call(token, 'photos.getWallUploadServer', { group_id: String(groupId) });
+    const uploaded = await postFile(server.upload_url, 'photo', file);
+    const saved = await call(token, 'photos.saveWallPhoto', {
+        group_id: String(groupId),
+        photo: uploaded.photo,
+        server: String(uploaded.server),
+        hash: uploaded.hash
+    });
+    const list = Array.isArray(saved) ? saved : [saved];
+    const attachment = photoAttachment(list[0]);
+    if (!attachment) throw new Error('vk wall photo');
+    return attachment;
+}
+
+async function findPinnedPost(token, groupId) {
+    const res = await call(token, 'wall.get', {
+        owner_id: String(-Number(groupId)),
+        count: '15',
+        filter: 'owner'
+    });
+    const items = res && Array.isArray(res.items) ? res.items : [];
+    return items.find(item => Number(item && item.is_pinned) === 1) || null;
+}
+
+async function lessonPin(groupId) {
+    if (!lesson.isClub(groupId)) return null;
+    try {
+        const pack = await db.getSettings([lesson.pinKey(groupId)]);
+        const saved = pack[lesson.pinKey(groupId)];
+        if (saved && saved.postId) return saved;
+    } catch (error) {}
+    return null;
+}
+
+let lessonChain = Promise.resolve();
+
+function queueLesson(job) {
+    lessonChain = lessonChain.then(job, job);
+}
+
+async function ensureLessonPin(token, groupId) {
+    if (!lesson.isClub(groupId)) return;
+    const key = lesson.pinKey(groupId);
+    let saved = {};
+    try {
+        const pack = await db.getSettings([key]);
+        saved = pack[key] && typeof pack[key] === 'object' ? pack[key] : {};
+    } catch (error) {
+        return;
+    }
+    if (saved.postId) {
+        try {
+            await call(token, 'wall.pin', { owner_id: String(-Number(groupId)), post_id: String(saved.postId) });
+            console.log(`ВК ${groupId}: закреп уроков на месте, запись ${saved.url || lesson.postUrl(groupId, saved.postId)}`);
+        } catch (error) {
+            console.error(`ВК ${groupId}: закреп уроков не подтвердился.`);
+        }
+        return;
+    }
+    const started = Date.parse(saved.startedAt || '');
+    if (started && Date.now() - started < 10 * 60 * 1000) return;
+    let oldPost = null;
+    try {
+        oldPost = await findPinnedPost(token, groupId);
+    } catch (error) {
+        console.error(`ВК ${groupId}: не увидел текущий закреп, новую запись не публикую.`);
+        return;
+    }
+    const oldId = oldPost && oldPost.id ? Number(oldPost.id) : 0;
+    const snapshot = {
+        startedAt: new Date().toISOString(),
+        oldPostId: oldId || 0,
+        oldUrl: oldId ? lesson.postUrl(groupId, oldId) : '',
+        oldText: String(oldPost && oldPost.text || '').slice(0, 2000)
+    };
+    try {
+        await db.setSetting(key, snapshot);
+    } catch (error) {
+        console.error(`ВК ${groupId}: не сохранил прежний закреп, новую запись не публикую.`);
+        return;
+    }
+    if (snapshot.oldUrl) {
+        db.note('sys', `ВК ${groupId}: прежний закреп сохранён ${snapshot.oldUrl}`).catch(() => {});
+        console.log(`ВК ${groupId}: прежний закреп сохранён ${snapshot.oldUrl}`);
+    } else {
+        console.log(`ВК ${groupId}: закреплённой записи не нашёл, публикую новую без ссылки на прежнюю.`);
+    }
+    let attachment = '';
+    try {
+        const jpeg = await lesson.paintCover();
+        attachment = await saveWallPhoto(token, groupId, { buffer: jpeg, filename: 'lesson.jpg', type: 'image/jpeg' });
+    } catch (error) {
+        console.error(`ВК ${groupId}: обложка уроков не загрузилась, закреп не меняю.`);
+        try { await db.setSetting(key, { oldPostId: snapshot.oldPostId, oldUrl: snapshot.oldUrl, oldText: snapshot.oldText }); } catch (e) {}
+        return;
+    }
+    let posted = null;
+    try {
+        posted = await call(token, 'wall.post', {
+            owner_id: String(-Number(groupId)),
+            from_group: '1',
+            message: lesson.postText(snapshot.oldUrl),
+            attachments: attachment
+        });
+    } catch (error) {
+        const code = Number(error && error.code);
+        console.error(`ВК ${groupId}: запись уроков не опубликована${code ? ` (${code})` : ''}.`);
+        try { await db.setSetting(key, { oldPostId: snapshot.oldPostId, oldUrl: snapshot.oldUrl, oldText: snapshot.oldText }); } catch (e) {}
+        return;
+    }
+    const postId = posted && (posted.post_id || posted.postId);
+    if (!postId) {
+        console.error(`ВК ${groupId}: запись уроков не вернула номер.`);
+        return;
+    }
+    const url = lesson.postUrl(groupId, postId);
+    const ready = Object.assign({}, snapshot, { postId: Number(postId), url });
+    try { await db.setSetting(key, ready); } catch (error) {}
+    try {
+        await call(token, 'wall.pin', { owner_id: String(-Number(groupId)), post_id: String(postId) });
+    } catch (error) {
+        console.error(`ВК ${groupId}: запись опубликована, но не закрепилась: ${url}`);
+        return;
+    }
+    db.note('sys', `ВК ${groupId}: закреп уроков ${url}. Прежняя запись ${snapshot.oldUrl || 'не была закреплена'}.`).catch(() => {});
+    console.log(`ВК ${groupId}: закреп уроков ${url}`);
+}
+
+async function sendLessonComment(token, groupId, comment, message) {
+    await commentAsCommunity(token, groupId, {
+        postId: comment.postId,
+        replyTo: comment.commentId,
+        message,
+        guid: `lreply-${groupId}-${comment.commentId}`
+    });
+}
+
+async function writeLessonComment(token, groupId, comment, key) {
+    try {
+        let memory = [];
+        try { memory = await db.listLessonMemory(groupId, comment.postId, comment.fromId); } catch (error) { memory = []; }
+        let text = '';
+        if (gigaPlugin) {
+            try {
+                const result = await gigaPlugin.processRequest({
+                    prompt: lesson.lessonPrompt(comment.text, memory),
+                    modelKey: 'giga-pro'
+                });
+                text = lesson.plain(result && result.text);
+            } catch (error) {
+                console.error(`ВК ${groupId}: свой урок в комментарии не собрался.`);
+            }
+        }
+        if (!text) text = lesson.fallbackText();
+        await sendLessonComment(token, groupId, comment, text);
+        try {
+            await db.rememberLesson(groupId, comment.postId, comment.fromId, 'user', comment.text);
+            await db.rememberLesson(groupId, comment.postId, comment.fromId, 'bot', text);
+        } catch (error) {}
+        await wallFinish(key);
+    } catch (error) {
+        const code = Number(error && error.code);
+        console.error(`ВК ${groupId}: ответ на закреп уроков не отправился${code ? ` (${code})` : ''}.${wallAccessLine(groupId, code)}`);
+    } finally {
+        wallPending.delete(key);
+    }
+}
+
+async function answerLessonPost(token, groupId, comment) {
+    const route = lesson.lessonRoute(comment.text);
+    if (route.kind === 'skip') return;
+    const key = `vk_creply_${groupId}_${comment.commentId}`;
+    if (wallPending.has(key) || await wallMarked(key)) return;
+    wallPending.add(key);
+    if (route.kind === 'link') {
+        try {
+            await sendLessonComment(token, groupId, comment, route.text);
+            await wallFinish(key);
+        } catch (error) {
+            const code = Number(error && error.code);
+            console.error(`ВК ${groupId}: ссылка на урок не отправилась${code ? ` (${code})` : ''}.${wallAccessLine(groupId, code)}`);
+        } finally {
+            wallPending.delete(key);
+        }
+        return;
+    }
+    queueLesson(() => writeLessonComment(token, groupId, comment, key));
+}
+
 async function handleCommunityWall(token, update, groupId) {
     if (!auditHere(groupId)) return;
     const post = activity.readWallPost(update, groupId);
+    if (post && lesson.isOwnPost(post.text)) return;
     if (post && club.looksLikeLesson(post.text)) {
         const key = `vk_lesson_${groupId}_${post.postId}`;
         if (wallPending.has(key) || await wallMarked(key)) return;
@@ -1354,6 +1548,13 @@ async function handleCommunityWall(token, update, groupId) {
     }
     const comment = activity.readWallComment(update, groupId);
     if (!comment || comment.text.startsWith('Навигация по урокам')) return;
+    if (lesson.isClub(groupId)) {
+        const pin = await lessonPin(groupId);
+        if (pin && String(comment.postId) === String(pin.postId)) {
+            await answerLessonPost(token, groupId, comment);
+            return;
+        }
+    }
     const answer = club.commentAnswer(comment.text);
     if (!answer) return;
     const key = `vk_creply_${groupId}_${comment.commentId}`;
@@ -1811,6 +2012,9 @@ async function startVk() {
     watchWeeklyRating();
     for (const item of next) {
         poll(item.token, item.id).catch(() => {});
+        ensureLessonPin(item.token, item.id).catch(() => {
+            console.error(`ВК ${item.id}: закреп уроков не подготовлен.`);
+        });
     }
 }
 
