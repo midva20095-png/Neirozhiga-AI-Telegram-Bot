@@ -92,6 +92,8 @@ function vkPageOrigin(origin) {
     return /^https:\/\/([a-z0-9-]+\.)*(vk\.com|vk\.ru|vk-apps\.com|vk-apps\.ru|vkuser\.net|userapi\.com)$/i.test(String(origin || ''));
 }
 
+const vkCorsHeaders = 'Content-Type, Authorization, X-User-Token, X-Telegram-Init-Data';
+
 function startWebApp() {
     const app = express();
     app.use((req, res, next) => {
@@ -99,7 +101,7 @@ function startWebApp() {
         if (vkPageOrigin(origin)) {
             res.setHeader('Access-Control-Allow-Origin', origin);
             res.setHeader('Vary', 'Origin');
-            res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+            res.setHeader('Access-Control-Allow-Headers', vkCorsHeaders);
             res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
         }
         if (req.method === 'OPTIONS') return res.sendStatus(204);
@@ -984,4 +986,4 @@ function startWebApp() {
     return app;
 }
 
-module.exports = { startWebApp, vkPageOrigin };
+module.exports = { startWebApp, vkPageOrigin, vkCorsHeaders };

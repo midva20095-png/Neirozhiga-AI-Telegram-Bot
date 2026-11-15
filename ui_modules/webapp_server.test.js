@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { vkPageOrigin } = require('./webapp_server');
+const { vkPageOrigin, vkCorsHeaders } = require('./webapp_server');
 
 test('кабинет на хостинге ВК может обращаться к серверу', () => {
     assert.equal(vkPageOrigin('https://vk.com'), true);
@@ -13,4 +13,6 @@ test('кабинет на хостинге ВК может обращаться 
     assert.equal(vkPageOrigin('https://vk.com.evil.com'), false);
     assert.equal(vkPageOrigin('http://vk.com'), false);
     assert.equal(vkPageOrigin(''), false);
+    assert.match(vkCorsHeaders, /X-User-Token/);
+    assert.match(vkCorsHeaders, /X-Telegram-Init-Data/);
 });
