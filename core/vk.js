@@ -822,13 +822,32 @@ async function sendPhoto(token, peerId, file, caption) {
     throw lastError || new Error('vk photo');
 }
 
-async function sendDoc(token, peerId, file, caption) {
+function mediaFile(kind, buffer) {
+    if (!buffer) return null;
+    if (kind === 'video') return { buffer, filename: 'neuroyaga.mp4', type: 'video/mp4', title: 'Видео.mp4' };
+    if (kind === 'audio') {
+        const head = buffer.slice(0, 12).toString('ascii');
+        if (head.startsWith('OggS')) return { buffer, filename: 'neuroyaga.ogg', type: 'audio/ogg', title: 'Аудио.ogg' };
+        if (head.startsWith('RIFF')) return { buffer, filename: 'neuroyaga.wav', type: 'audio/wav', title: 'Аудио.wav' };
+        return { buffer, filename: 'neuroyaga.mp3', type: 'audio/mpeg', title: 'Аудио.mp3' };
+    }
+    return null;
+}
+
+async function sendDoc(token, peerId, file, caption, title) {
     const server = await call(token, 'docs.getMessagesUploadServer', { peer_id: String(peerId), type: 'doc' });
     const uploaded = await postFile(server.upload_url, 'file', file);
-    const saved = await call(token, 'docs.save', { file: uploaded.file, title: 'Картинка' });
+    const saved = await call(token, 'docs.save', { file: uploaded.file, title: title || file.title || 'Картинка' });
     const doc = saved && (saved.doc || saved);
     if (!doc || doc.id == null || doc.owner_id == null) throw new Error('vk doc');
     await deliverFile(token, peerId, caption, `doc${doc.owner_id}_${doc.id}`);
+}
+
+async function sendMedia(token, peerId, buffer, kind, caption) {
+    const file = mediaFile(kind, buffer);
+    if (!file) throw new Error('vk file');
+    await sendDoc(token, peerId, file, caption, file.title);
+    console.log(kind === 'video' ? 'ВК: в чат ушло видео этой генерации.' : 'ВК: в чат ушло аудио этой генерации.');
 }
 
 async function sendImage(token, peerId, buffer, caption) {
@@ -997,7 +1016,12 @@ async function runJob(token, peerId, account, job) {
             quality: job.quality || null,
             duration: job.duration || null
         });
-        await sendText(token, peerId, 'Делаю ответ…', payLockKeyboard());
+        const waiting = prepared.model.kind === 'video'
+            ? 'Собираю видео. Обычно это несколько минут, готовый ролик придёт в этот чат.'
+            : prepared.model.kind === 'audio'
+                ? 'Собираю аудио. Готовый файл придёт в этот чат.'
+                : 'Делаю ответ…';
+        await sendText(token, peerId, waiting, payLockKeyboard());
         const result = await gen.run({
             userId: account,
             prompt: job.prompt,
@@ -1026,12 +1050,18 @@ async function runJob(token, peerId, account, job) {
                     }
                 }
                 if (!sent) throw lastError || new Error('vk photo');
+            } else if (result.buffer && (result.type === 'video' || result.type === 'audio')) {
+                const files = [result.buffer].concat(result.extra || []).filter(Boolean);
+                for (let i = 0; i < files.length; i++) {
+                    await sendMedia(token, peerId, files[i], result.type, i === 0 ? done : '');
+                }
             } else {
                 const answer = String(result.text || 'Готово').slice(0, 3200);
                 await sendText(token, peerId, `${answer}\n\n${done}`);
             }
         } catch (sendError) {
-            await sendText(token, peerId, `${done} В чат картинка не вставилась, она лежит в кабинете на вкладке «История».`);
+            const kept = result.type === 'video' ? 'Видео' : result.type === 'audio' ? 'Аудио' : 'Картинка';
+            await sendText(token, peerId, `${done} ${kept} в чат не вставилось, оно лежит в кабинете на вкладке «История».`);
         }
         return;
     } catch (error) {
@@ -2140,8 +2170,13 @@ async function sendToUser(accountIdValue, buffer, mime, caption) {
     const peerId = -id;
     for (const item of communityList()) {
         try {
-            if (String(mime || '').startsWith('image/')) {
+            const kind = String(mime || '');
+            if (kind.startsWith('image/')) {
                 await sendImage(item.token, peerId, buffer, caption || 'Файл из кабинета.');
+            } else if (kind.startsWith('video/')) {
+                await sendMedia(item.token, peerId, buffer, 'video', caption || 'Видео из кабинета.');
+            } else if (kind.startsWith('audio/')) {
+                await sendMedia(item.token, peerId, buffer, 'audio', caption || 'Аудио из кабинета.');
             } else {
                 await sendText(item.token, peerId, caption || 'Файл готов в кабинете.');
             }
@@ -2379,5 +2414,5 @@ async function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, USER_HELP
 };

@@ -131,8 +131,17 @@ async function postOperation(apiKey, tool, input) {
     }
 }
 
+function operationOutcome(status) {
+    const value = String(status || '').toLowerCase();
+    if (value === 'completed' || value === 'success' || value === 'succeeded' || value === 'done') return 'ready';
+    if (value === 'failed' || value === 'error' || value === 'cancelled' || value === 'canceled') return 'failed';
+    return 'wait';
+}
+
 async function waitOperation(apiKey, operationId, attempts) {
     let emptyReady = 0;
+    let lastStatus = '';
+    console.log(`Братуха: операция ${operationId}, жду результат.`);
     for (let attempt = 0; attempt < attempts; attempt++) {
         await new Promise(resolve => setTimeout(resolve, 3000));
         let statusRes;
@@ -152,15 +161,23 @@ async function waitOperation(apiKey, operationId, attempts) {
         }
         const opData = statusRes.data || {};
         const status = String(opData.status || '');
-        if (status === 'completed' || status === 'success' || status === 'succeeded' || status === 'done') {
+        const outcome = operationOutcome(status);
+        if (status !== lastStatus || attempt % 20 === 0) {
+            console.log(`Братуха ${operationId}: ${status || 'без статуса'}`);
+            lastStatus = status;
+        }
+        if (outcome === 'ready') {
             if (collectResultUrls(opData).length || emptyReady >= 4) return opData;
             emptyReady += 1;
             continue;
         }
-        if (status === 'failed' || status === 'error' || status === 'cancelled' || status === 'canceled') {
-            throw new Error(opData.error_message || opData.error?.message || 'Нейросеть не смогла выполнить задачу');
+        if (outcome === 'failed') {
+            const message = opData.error_message || opData.error?.message || 'Нейросеть не смогла выполнить задачу';
+            console.error(`Братуха ${operationId}: ${message}`);
+            throw new Error(message);
         }
     }
+    console.error(`Братуха ${operationId}: статус «${lastStatus || 'без статуса'}» не сменился`);
     throw new Error('Слишком долгое ожидание ответа от нейросети');
 }
 
@@ -226,7 +243,8 @@ async function runSite(context) {
                 quality: context.quality,
                 mode
             });
-            console.log(`🚀 [Bratukha] ${built.tool}${mode ? ' (' + mode + ')' : ''}`);
+            const modelName = built.input && built.input.model ? ' ' + built.input.model : '';
+            console.log(`🚀 [Bratukha] ${built.tool}${modelName}${mode ? ' (' + mode + ')' : ''}`);
             const operationId = await postOperation(apiKey, built.tool, built.input);
             const opData = await waitOperation(apiKey, operationId, attempts);
             const urls = resultUrls(opData);
@@ -418,4 +436,5 @@ class BratukhaPlugin {
 module.exports = BratukhaPlugin;
 module.exports.BratukhaPlugin = BratukhaPlugin;
 module.exports.processRequest = processRequest;
+module.exports.operationOutcome = operationOutcome;
 module.exports.BRATUKHA_MODELS = BRATUKHA_MODELS;

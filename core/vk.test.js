@@ -3,6 +3,19 @@ const assert = require('node:assert/strict');
 const sharp = require('sharp');
 const vk = require('./vk');
 
+test('видео и аудио для чата ВК уходят файлом с верным именем', () => {
+    const mp4 = Buffer.from([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70]);
+    const video = vk.mediaFile('video', mp4);
+    assert.equal(video.filename, 'neuroyaga.mp4');
+    assert.equal(video.type, 'video/mp4');
+    assert.equal(video.title, 'Видео.mp4');
+    const ogg = Buffer.from('OggS');
+    const audio = vk.mediaFile('audio', ogg);
+    assert.equal(audio.filename, 'neuroyaga.ogg');
+    assert.equal(vk.mediaFile('audio', Buffer.from('ID3')).filename, 'neuroyaga.mp3');
+    assert.equal(vk.mediaFile('image', mp4), null);
+});
+
 test('фото для чата ВК содержит ключ доступа', () => {
     assert.equal(vk.photoAttachment({ owner_id: -5, id: 9, access_key: 'abc' }), 'photo-5_9_abc');
     assert.equal(vk.photoAttachment({ owner_id: -5, id: 9 }), 'photo-5_9');
