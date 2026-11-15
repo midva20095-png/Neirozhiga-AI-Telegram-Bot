@@ -31,6 +31,14 @@ test('PNG для чата ВК остаётся PNG, JPEG не перекоди�
     assert.equal(posted.height, 8);
 });
 
+test('чужое фото ВК не совпадает с отправленным кадром', async () => {
+    const red = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: 220, g: 10, b: 10 } } }).jpeg().toBuffer();
+    const blue = await sharp({ create: { width: 32, height: 32, channels: 3, background: { r: 10, g: 10, b: 220 } } }).jpeg().toBuffer();
+    const again = await sharp(red).jpeg({ quality: 70 }).toBuffer();
+    assert.equal(await vk.samePicture(red, again), true);
+    assert.equal(await vk.samePicture(red, blue), false);
+});
+
 test('пустой ответ загрузки ВК не считается фото', () => {
     assert.equal(vk.uploadPhotoField('[]'), '');
     assert.equal(vk.uploadPhotoField(''), '');
@@ -58,7 +66,7 @@ test('из события ВК берётся только входящий те
         type: 'message_new',
         object: { message: { from_id: 10, peer_id: 10, text: '  нарисуй кота ', out: 0 } }
     };
-    assert.deepEqual(vk.readIncoming(update), { fromId: 10, peerId: 10, text: 'нарисуй кота', payload: null });
+    assert.deepEqual(vk.readIncoming(update), { fromId: 10, peerId: 10, text: 'нарисуй кота', payload: null, photos: [] });
     assert.equal(vk.readIncoming({ type: 'message_new', object: { message: { from_id: 10, text: 'я', out: 1 } } }), null);
     assert.equal(vk.readIncoming({ type: 'message_reply' }), null);
     const shared = vk.readIncoming({
@@ -71,6 +79,25 @@ test('из события ВК берётся только входящий те
         object: { message: { from_id: 10, peer_id: 10, text: 'пост', out: 0, attachments: [{ type: 'wall', wall: { owner_id: -42, id: 3 } }] } }
     });
     assert.equal(wall.text, 'пост\nhttps://vk.com/club42');
+    const face = vk.readIncoming({
+        type: 'message_new',
+        object: {
+            message: {
+                from_id: 10,
+                peer_id: 10,
+                text: 'это он',
+                out: 0,
+                attachments: [{
+                    type: 'photo',
+                    photo: {
+                        orig_photo: { url: 'https://cdn.example/face.jpg', width: 800, height: 800 },
+                        sizes: [{ url: 'https://cdn.example/small.jpg', width: 10, height: 10 }]
+                    }
+                }]
+            }
+        }
+    });
+    assert.deepEqual(face.photos, ['https://cdn.example/face.jpg']);
     assert.equal(vk.isGreeting('Начать'), true);
     assert.equal(vk.isGreeting('нарисуй кота'), false);
 });

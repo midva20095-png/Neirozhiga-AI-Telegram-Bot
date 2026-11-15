@@ -67,8 +67,28 @@ function readIncoming(update) {
         fromId,
         peerId,
         text: linkedText(message),
-        payload: parsePayload(message.payload)
+        payload: parsePayload(message.payload),
+        photos: messagePhotoUrls(message)
     };
+}
+
+function messagePhotoUrls(message) {
+    const urls = [];
+    const list = message && message.attachments;
+    if (!Array.isArray(list)) return urls;
+    list.forEach(item => {
+        if (!item || item.type !== 'photo' || !item.photo) return;
+        const sizes = Array.isArray(item.photo.sizes) ? item.photo.sizes : [];
+        let best = null;
+        sizes.forEach(size => {
+            if (!size || !size.url) return;
+            const area = (Number(size.width) || 0) * (Number(size.height) || 0);
+            if (!best || area > best.area) best = { url: size.url, area };
+        });
+        const url = (item.photo.orig_photo && item.photo.orig_photo.url) || (best && best.url) || '';
+        if (url && urls.indexOf(url) < 0) urls.push(url);
+    });
+    return urls.slice(0, 6);
 }
 
 function readEvent(update) {
@@ -738,7 +758,42 @@ async function uploadMessagePhoto(token, peerId, file) {
     const list = Array.isArray(saved) ? saved : [saved];
     const attachment = photoAttachment(list[0]);
     if (!attachment) throw new Error('vk photo');
+    const remote = largestPhotoUrl(list[0]);
+    if (remote) {
+        try {
+            const got = await axios.get(remote, { responseType: 'arraybuffer', timeout: 30000, maxRedirects: 3 });
+            if (!(await samePicture(file.buffer, Buffer.from(got.data)))) throw new Error('photo mismatch');
+        } catch (error) {
+            if (String(error && error.message || '') === 'photo mismatch') throw error;
+        }
+    }
     return attachment;
+}
+
+function largestPhotoUrl(photo) {
+    const sizes = photo && Array.isArray(photo.sizes) ? photo.sizes : [];
+    let best = '';
+    let area = -1;
+    sizes.forEach(item => {
+        if (!item || !item.url) return;
+        const next = (Number(item.width) || 0) * (Number(item.height) || 0);
+        if (next >= area) {
+            area = next;
+            best = item.url;
+        }
+    });
+    const orig = photo && photo.orig_photo && photo.orig_photo.url;
+    return orig || best;
+}
+
+async function samePicture(left, right) {
+    const sample = buf => sharp(buf, { failOn: 'none' }).resize(16, 16, { fit: 'fill' }).removeAlpha().raw().toBuffer();
+    const a = await sample(left);
+    const b = await sample(right);
+    if (!a.length || a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) diff += Math.abs(a[i] - b[i]);
+    return diff / a.length < 35;
 }
 
 async function sendPhoto(token, peerId, file, caption) {
@@ -757,7 +812,7 @@ async function sendPhoto(token, peerId, file, caption) {
         } catch (error) {
             lastError = error;
             const message = String(error && error.message || '');
-            if (!shrunk && (blob.buffer.length > 800 * 1024 || /photo empty|upload HTTP [45]/.test(message))) {
+            if (!shrunk && (blob.buffer.length > 800 * 1024 || /photo empty|photo mismatch|upload HTTP [45]/.test(message))) {
                 blob = await messagePhoto(blob, 1280);
                 shrunk = true;
             }
@@ -782,7 +837,10 @@ async function sendImage(token, peerId, buffer, caption) {
         await sendPhoto(token, peerId, file, caption);
         console.log('ВК: в чат ушло фото этой генерации.');
     } catch (error) {
-        console.error(`ВК не вставил фото (${error.message || ''}). Отправляю файлом.`);
+        const mismatch = /photo mismatch/.test(String(error && error.message || ''));
+        console.error(mismatch
+            ? 'ВК сохранил другую картинку. Отправляю файл с изображением этой генерации.'
+            : `ВК не вставил фото (${error.message || ''}). Отправляю файлом.`);
         await sendDoc(token, peerId, file, caption);
     }
 }
@@ -893,6 +951,32 @@ async function askOrRun(token, peerId, account, job) {
 }
 
 const runningJob = new Set();
+const heldPhotos = new Map();
+
+async function loadPhotoBuffers(urls) {
+    const buffers = [];
+    for (const url of (urls || []).slice(0, 6)) {
+        if (!/^https:\/\//i.test(String(url || ''))) continue;
+        try {
+            const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 30000, maxRedirects: 3 });
+            const buf = Buffer.from(res.data);
+            if (buf.length > 32) buffers.push(buf);
+        } catch (error) {}
+    }
+    return buffers;
+}
+
+function takeReferencePhotos(account, fresh) {
+    const key = String(account);
+    if (fresh && fresh.length) {
+        heldPhotos.delete(key);
+        return fresh;
+    }
+    const held = heldPhotos.get(key);
+    heldPhotos.delete(key);
+    if (!held || Date.now() - held.at > 15 * 60 * 1000) return [];
+    return held.buffers;
+}
 
 async function runJob(token, peerId, account, job) {
     const key = String(account);
@@ -902,10 +986,12 @@ async function runJob(token, peerId, account, job) {
     }
     runningJob.add(key);
     try {
+        const picked = catalog.getModel(job.modelKey, { audience: 'vk' });
+        const photos = picked && picked.image === 'forbidden' ? [] : (Array.isArray(job.photos) ? job.photos.filter(Boolean) : []);
         const prepared = await gen.prepare({
             userId: account,
             modelKey: job.modelKey,
-            hasImage: false,
+            hasImage: photos.length > 0,
             hasText: !!(job.prompt && String(job.prompt).trim()),
             audience: 'vk',
             quality: job.quality || null,
@@ -917,6 +1003,8 @@ async function runJob(token, peerId, account, job) {
             prompt: job.prompt,
             model: prepared.model,
             plugin: prepared.plugin,
+            fileBuffer: photos.length === 1 ? photos[0] : null,
+            fileBuffers: photos.length > 1 ? photos : undefined,
             aspectRatio: job.aspect && job.aspect !== 'auto' ? job.aspect : null,
             duration: job.duration || null,
             quality: job.quality || null,
@@ -1189,7 +1277,7 @@ async function holdClub(token, peerId, account, text, action, groupId) {
     return true;
 }
 
-async function reply(token, peerId, account, text, payload, groupId) {
+async function reply(token, peerId, account, text, payload, groupId, photoUrls) {
     let action = menuAction(text, payload);
     if (action === 'audit' && !auditHere(groupId) && !(payload && payload.a === 'audit')) action = '';
     if (action === 'opt_cancel') {
@@ -1287,12 +1375,20 @@ async function reply(token, peerId, account, text, payload, groupId) {
         pendingJob.delete(String(account));
         return openMenu(token, peerId, account, action, groupId);
     }
+    const fresh = await loadPhotoBuffers(photoUrls);
     if (!text) {
+        if (fresh.length) {
+            heldPhotos.set(String(account), { buffers: fresh, at: Date.now() });
+            await sendText(token, peerId, 'Фото получил. Напишите, что сделать с этим человеком или кадром.');
+            return;
+        }
         await sendText(token, peerId, 'Напишите запрос или нажмите кнопку внизу.');
         return;
     }
+    const photos = takeReferencePhotos(account, fresh);
+    if (photos.length) console.log(`ВК: в запрос взято фото, ${photos.length} шт.`);
     const modelKey = (await db.getCurrentModel(account)) || catalog.defaultModelKey('vk');
-    return askOrRun(token, peerId, account, { prompt: text, modelKey, quality: '', duration: 0, aspect: '', groupId: groupId || '' });
+    return askOrRun(token, peerId, account, { prompt: text, modelKey, quality: '', duration: 0, aspect: '', groupId: groupId || '', photos });
 }
 
 async function handleEvent(token, event, groupId) {
@@ -2035,7 +2131,7 @@ async function handleUpdate(token, update, groupId) {
     try { await db.rememberCommunity(account, groupId); } catch (error) {}
     const bonus = catalog.getGeneral().start_bonus;
     if (isNew && bonus > 0) await db.updateBalance(account, bonus, 'Приветственный бонус');
-    await reply(token, incoming.peerId, account, incoming.text, incoming.payload, groupId);
+    await reply(token, incoming.peerId, account, incoming.text, incoming.payload, groupId, incoming.photos);
 }
 
 async function sendToUser(accountIdValue, buffer, mime, caption) {
@@ -2283,5 +2379,5 @@ async function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, messagePhoto, uploadPhotoField, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, USER_HELP
 };
