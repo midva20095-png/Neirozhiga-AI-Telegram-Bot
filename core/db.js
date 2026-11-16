@@ -78,6 +78,8 @@ async function initDB() {
   try {
     const added = await importMissingTemplates(importedTemplates);
     if (added) console.log('Добавлены шаблоны из готовых промптов: ' + added);
+    const priced = await alignImportedTemplates(importedTemplates);
+    if (priced) console.log('Цены вставленных шаблонов приведены к каталогу: ' + priced);
   } catch (err) {
     console.error('Импорт шаблонов пропущен:', err.message);
   }
@@ -944,6 +946,32 @@ function cleanTemplateImage(value) {
   return s.slice(0, 2000);
 }
 
+async function alignImportedTemplates(items) {
+  const list = Array.isArray(items) ? items : [];
+  let changed = 0;
+  for (const item of list) {
+    const title = String(item && item.title || '').trim();
+    if (!title) continue;
+    const quality = String(item.quality || '').trim() || null;
+    const formats = String(item.formats || '').trim() || null;
+    const duration = Number(item.duration) > 0 ? Math.round(Number(item.duration)) : null;
+    const cost = Math.max(0, Math.round(Number(item.cost) || 0));
+    const res = await pool.query(
+      `UPDATE templates
+       SET cost = $2, model = $3, quality = $4, formats = $5, duration = $6, category = $7
+       WHERE lower(btrim(title)) = lower(btrim($1))
+         AND (
+           cost IS DISTINCT FROM $2 OR model IS DISTINCT FROM $3 OR quality IS DISTINCT FROM $4
+           OR formats IS DISTINCT FROM $5 OR duration IS DISTINCT FROM $6 OR category IS DISTINCT FROM $7
+         )
+       RETURNING id`,
+      [title, cost, item.model, quality, formats, duration, item.category || 'image']
+    );
+    changed += res.rowCount;
+  }
+  return changed;
+}
+
 async function importMissingTemplates(items) {
   const list = Array.isArray(items) ? items : [];
   if (!list.length) return 0;
@@ -1099,6 +1127,7 @@ module.exports = {
   listTemplates,
   saveTemplate,
   importMissingTemplates,
+  alignImportedTemplates,
   deleteTemplate,
   peekGiga,
   consumeGiga,

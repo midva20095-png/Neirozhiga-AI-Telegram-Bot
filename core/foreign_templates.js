@@ -92,14 +92,80 @@ function nearest(list, want) {
     return list.slice().sort((a, b) => Math.abs(a - target) - Math.abs(b - target) || a - b)[0];
 }
 
-function imageSpec(mode) {
+const NAMED_PRICE = { standard: 5, super: 9, nano2: 9, nanopro: 18, seedream: 11 };
+const GPT_COST = {
+    low: { '1k': 2, '2k': 2, '4k': 4 },
+    medium: { '1k': 4, '2k': 4, '4k': 8 },
+    high: { '1k': 16, '2k': 12, '4k': 31 },
+    xhigh: { '1k': 29, '2k': 22, '4k': 54 },
+    max: { '1k': 64, '2k': 48, '4k': 121 }
+};
+const IMAGE_CHOICES = {
+    gpt: [
+        { model: 'gpt-image-2', quality: 'low' },
+        { model: 'gpt-image-2', quality: 'medium' },
+        { model: 'gpt-image-2', quality: 'high' },
+        { model: 'kie-gpt', quality: '1K' },
+        { model: 'kie-gpt', quality: '2K' },
+        { model: 'kie-gpt', quality: '4K' }
+    ],
+    banana: [
+        { model: 'kie-banana-21', quality: '1K' },
+        { model: 'kie-banana-21', quality: '2K' },
+        { model: 'kie-banana-21', quality: '4K' }
+    ],
+    nanopro: [
+        { model: 'kie-banana-pro', quality: '1K' },
+        { model: 'kie-banana-pro', quality: '2K' }
+    ],
+    seedream: [
+        { model: 'kie-seedream', quality: '' },
+        { model: 'seedream-4-5', quality: '2K' }
+    ]
+};
+
+// Цена для клиента в чужом боте: именованный режим или себестоимость GPT × 2,25.
+function customerPrice(mode) {
+    const value = String(mode || '').trim().toLowerCase();
+    if (NAMED_PRICE[value]) return NAMED_PRICE[value];
+    const gpt = value.match(/^gpt:(?:flare|sunburst):(low|medium|high|xhigh|max):(1k|2k|4k):([nc])$/);
+    if (!gpt) return NAMED_PRICE.super;
+    const quality = gpt[1];
+    const cost = gpt[3] === 'c' && quality !== 'low' ? 4 : GPT_COST[quality][gpt[2]];
+    return Math.ceil(cost * 2.25);
+}
+
+function choiceFamily(mode) {
     const value = String(mode || '').toLowerCase();
-    if (value === 'nano2' || value.startsWith('nano2')) return { model: 'kie-banana-21', quality: '1K', category: 'image' };
-    if (value === 'nanopro') return { model: 'kie-banana-pro', quality: '1K', category: 'image' };
-    if (value === 'seedream') return { model: 'seedream-4-5', quality: '2K', category: 'image' };
-    if (value === 'standard' || value.includes(':low')) return { model: 'gpt-image-2', quality: 'low', category: 'image' };
-    if (value.includes(':high') || value.includes('xhigh') || value.includes(':max')) return { model: 'gpt-image-2', quality: 'high', category: 'image' };
-    return { model: 'gpt-image-2', quality: 'medium', category: 'image' };
+    if (value === 'nanopro') return 'nanopro';
+    if (value === 'nano2' || value.startsWith('nano2')) return 'banana';
+    if (value === 'seedream') return 'seedream';
+    return 'gpt';
+}
+
+function fitsAspect(modelKey, size) {
+    const model = catalog.getModel(modelKey, { includeDisabled: true });
+    const aspect = String(size || '').trim();
+    if (!aspect || !model || !model.aspects || !model.aspects.length) return true;
+    return model.aspects.includes(aspect);
+}
+
+function imageSpec(mode, size) {
+    const target = customerPrice(mode);
+    const priced = (IMAGE_CHOICES[choiceFamily(mode)] || IMAGE_CHOICES.gpt).map(choice => {
+        const model = catalog.getModel(choice.model, { includeDisabled: true });
+        return {
+            model: choice.model,
+            quality: choice.quality,
+            category: 'image',
+            cost: catalog.quote(model, { quality: choice.quality }),
+            fits: fitsAspect(choice.model, size)
+        };
+    }).filter(choice => choice.cost > 0);
+    const fitting = priced.filter(choice => choice.fits);
+    const pool = fitting.length ? fitting : priced;
+    pool.sort((a, b) => Math.abs(a.cost - target) - Math.abs(b.cost - target) || a.cost - b.cost);
+    return pool[0];
 }
 
 function videoSpec(quality, seconds) {
@@ -178,7 +244,7 @@ function buildRecords(rows) {
             out.push(record(row, takeTitle(title, used), videoPrompt, videoSpec(row.vres, row.seconds), sort));
             return;
         }
-        if (imagePrompt) out.push(record(row, takeTitle(title, used), imagePrompt, imageSpec(imageMode(row)), sort));
+        if (imagePrompt) out.push(record(row, takeTitle(title, used), imagePrompt, imageSpec(imageMode(row), row.size), sort));
         if (SPLIT.has(mode) && videoPrompt) {
             out.push(record(row, takeTitle(title + ' · видео', used), videoPrompt, videoSpec(row.vres, row.seconds), sort + 1));
         }
@@ -213,4 +279,4 @@ function list() {
     }
 }
 
-module.exports = { buildRecords, recordsFromCsv, fieldsToLines, list };
+module.exports = { buildRecords, recordsFromCsv, fieldsToLines, list, customerPrice, imageSpec };

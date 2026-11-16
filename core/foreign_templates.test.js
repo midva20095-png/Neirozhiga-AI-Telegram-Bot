@@ -16,9 +16,9 @@ test('из таблицы берутся промпты, скрытые и пу�
     const rows = imported.recordsFromCsv(SHEET);
     assert.deepEqual(rows.map(row => row.title), ['Зодиак', 'Новый год', 'Новый год · видео']);
     const card = rows[0];
-    assert.equal(card.model, 'gpt-image-2');
-    assert.equal(card.quality, 'medium');
-    assert.equal(card.cost, 30);
+    assert.equal(card.model, 'kie-gpt');
+    assert.equal(card.quality, '1K');
+    assert.equal(card.cost, 9);
     assert.equal(card.formats, '3:4');
     assert.equal(card.topics, 'Развлечение, Знаки зодиака');
     assert.equal(card.image, 'https://drive.google.com/thumbnail?id=abc123&sz=w800');
@@ -33,6 +33,30 @@ test('из таблицы берутся промпты, скрытые и пу�
     assert.equal(rows[2].model, 'grok-video-480');
     assert.equal(rows[2].duration, 6);
     assert.equal(rows[2].cost, 36);
+});
+
+test('цена шаблона берётся из нашего каталога рядом с ценой чужого бота', () => {
+    assert.equal(imported.customerPrice('standard'), 5);
+    assert.equal(imported.customerPrice('super'), 9);
+    assert.equal(imported.customerPrice('gpt:sunburst:medium:2k:n'), 9);
+    assert.equal(imported.customerPrice('gpt:sunburst:high:2k:n'), 27);
+    assert.equal(imported.customerPrice('nanopro'), 18);
+    const low = imported.imageSpec('standard', '9:16');
+    assert.equal(low.model, 'gpt-image-2');
+    assert.equal(low.quality, 'low');
+    assert.equal(catalog.quote(catalog.getModel(low.model, { includeDisabled: true }), { quality: low.quality }), 6);
+    const wide = imported.imageSpec('super', '9:16');
+    assert.equal(wide.model, 'gpt-image-2');
+    assert.equal(wide.quality, 'low');
+    const banana = imported.imageSpec('nano2', '3:4');
+    assert.equal(banana.model, 'kie-banana-21');
+    assert.equal(banana.quality, '2K');
+    const pro = imported.imageSpec('nanopro', '1:1');
+    assert.equal(pro.model, 'kie-banana-pro');
+    assert.equal(pro.quality, '1K');
+    const art = imported.imageSpec('seedream', '3:4');
+    assert.equal(art.model, 'seedream-4-5');
+    assert.equal(art.quality, '2K');
 });
 
 test('повторный запуск не делает вторую карточку с тем же названием', () => {
