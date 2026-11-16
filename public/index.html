@@ -280,7 +280,7 @@ function detectAuth(){
   if (hp.get('tpl') || sp.get('tpl')) pendingTpl = hp.get('tpl') || sp.get('tpl');
   if (hp.get('pkg') || sp.get('pkg')) pendingPkg = hp.get('pkg') || sp.get('pkg');
   window.__vkPaid = hp.get('paid') === '1' || sp.get('paid') === '1';
-  const goal = hash.split('&')[0].split('?')[0];
+  const goal = sp.get('goal') || hash.split('&')[0].split('?')[0];
   window.__vkGoal = (goal === 'rate' || goal === 'site' || goal === 'sub') ? goal : '';
   if (sp.get('vk_user_id') && window.__vkGoal !== 'rate' && window.__vkGoal !== 'site') wantMenu = true;
   if (window.__vkGoal === 'rate') { wantMenu = false; tab = 'rate'; }
@@ -591,11 +591,13 @@ function paintVkBot(){
 function coverCode(groupId, ids){
   const group = String(groupId).replace(/\D/g, '');
   const chat = 'https://vk.com/write-' + group;
-  const app = 'https://vk.com/app54895627_-' + group;
+  const home = String(window.__nyApi || location.origin).replace(/\/$/, '');
+  const rate = home + '/?goal=rate&vk_group_id=' + group;
+  const site = (cfg && /^https:\/\//.test(String(cfg.site_url || ''))) ? cfg.site_url : 'https://babayagaland.ru';
   const rows = [
     { title: 'Чат ИИ', button: 'Написать', cover_id: ids.chat, url: chat, button_url: chat, title_url: chat },
-    { title: 'Рейтинг', button: 'Открыть', cover_id: ids.rate, url: app, button_url: app, title_url: app },
-    { title: 'Сайт', button: 'Открыть', cover_id: ids.site, url: app, button_url: app, title_url: app }
+    { title: 'Рейтинг', button: 'Открыть', cover_id: ids.rate, url: rate, button_url: rate, title_url: rate },
+    { title: 'Сайт', button: 'Открыть', cover_id: ids.site, url: site, button_url: site, title_url: site }
   ];
   return 'return ' + JSON.stringify({ title: 'НейроЯга', rows }) + ';';
 }
@@ -688,7 +690,7 @@ function viewMenu(){
     ? '<button type="button" class="sub" id="door-setup">'+(showSetup?'Скрыть настройки':'Настройки')+'</button>'
     : '';
   const setup = vkAdmin() && showSetup
-    ? '<div class="setup"><p class="hint">Ключ сообщений не меняет эти кнопки. Нажмите «Поставить на страницу» и разрешите их. На телефоне ссылка с #rate теряет сообщество и не открывает приложение, поэтому «Рейтинг» и «Сайт» ведут в приложение этого сообщества, а «Чат ИИ» — в переписку.</p>'+
+    ? '<div class="setup"><p class="hint">Ключ сообщений не меняет эти кнопки. Нажмите «Поставить на страницу» и разрешите их. «Рейтинг» открывает вкладку рейтинга на сервисе, «Сайт» — ваш сайт, «Чат ИИ» — переписку.</p>'+
       '<label class="filebtn">Своя картинка для чата<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="chat"></label>'+
       '<label class="filebtn">Своя картинка для рейтинга<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="rate"></label>'+
       '<label class="filebtn">Своя картинка для сайта<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="site"></label>'+

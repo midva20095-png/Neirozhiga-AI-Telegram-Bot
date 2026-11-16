@@ -5,14 +5,15 @@ const widget = require('./vk-widget');
 
 test('код обложек содержит картинки и не содержит служебных подписей', () => {
     process.env.WEBAPP_URL = 'https://bot.example';
-    const code = widget.coverWidgetCode('230706467', { chat: '1_2', rate: '3_4', site: '5_6' });
+    const code = widget.coverWidgetCode('230706467', { chat: '1_2', rate: '3_4', site: '5_6' }, { site: 'https://babayagaland.ru' });
     assert.match(code, /^return \{.*\};$/);
     assert.match(code, /"cover_id":"1_2"/);
     assert.match(code, /Чат ИИ/);
     assert.match(code, /Написать/);
     assert.match(code, /vk\.com\/write-230706467/);
-    assert.match(code, /https:\/\/vk\.com\/app54895627_-230706467/);
-    assert.doesNotMatch(code, /#rate|#site|away\.php|vk\.html/);
+    assert.match(code, /https:\/\/bot\.example\/\?goal=rate&vk_group_id=230706467/);
+    assert.match(code, /https:\/\/babayagaland\.ru/);
+    assert.doesNotMatch(code, /app54895627|#rate|#site|away\.php|vk\.html/);
     assert.match(code, /title_url/);
     assert.doesNotMatch(code, /descr/);
     assert.throws(() => widget.coverWidgetCode('1', { chat: 'bad' }));
