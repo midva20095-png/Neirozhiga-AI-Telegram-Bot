@@ -142,7 +142,7 @@ const BASE_GENERAL = {
         '«Во ВК» переносит кредиты на номер из кабинета ВКонтакте. Обратно их переносят на вкладке «Баланс» в кабинете ВК: туда вписывают номер Telegram из меню «Перенос». Пока кредиты не перенесли, балансы ВК и Telegram разные.\n' +
         '«Канал» открывает канал НейроЯга. Готовую работу из «Моих работ» можно отправить туда кнопкой «В канал». Если работа сделана по шаблону, в посте будет ссылка на этот шаблон. Текст задания в канал не попадает.\n' +
         '«Ещё боты» открывает ботов НейроЯги в других мессенджерах. Это боты, которым можно писать, а не сообщества.\n' +
-        'Бот во ВКонтакте: https://vk.ru/write-236645486\n' +
+        'Бот во ВКонтакте: https://vk.ru/write-230706467\n' +
         'Бот в Макс: https://max.ru/se14387925_bot\n' +
         '«Сайт» открывает https://babayagaland.ru\n\n' +
         'Если ответ не устроил\n' +
@@ -297,8 +297,14 @@ function getGeneral() {
     const previousBotsHelp = help.includes('«Канал» открывает канал') && !help.includes('https://max.ru/se14387925_bot');
     const previousBotLabels = help.includes('«ВК» открывает бота во ВКонтакте') && !help.includes('«Ещё боты»');
     const missingVkMove = help.includes('Один кредит равен одному рублю.') && !help.includes('Во ВК');
-    if (!help || help.startsWith(LEGACY_HELP) || previousTransferHelp || previousChannelHelp || previousBotsHelp || previousBotLabels || missingVkMove) general.help_text = BASE_GENERAL.help_text;
+    const generatorHelp = help.includes('write-236645486');
+    if (!help || help.startsWith(LEGACY_HELP) || previousTransferHelp || previousChannelHelp || previousBotsHelp || previousBotLabels || missingVkMove || generatorHelp) general.help_text = BASE_GENERAL.help_text;
     return general;
+}
+
+function vkBotUrl() {
+    const id = String(process.env.VK_GROUP_ID || '230706467').replace(/\D/g, '') || '230706467';
+    return `https://vk.ru/write-${id}`;
 }
 
 function defaultModelKey(audience) {
@@ -451,6 +457,7 @@ module.exports = {
     listPackages,
     getPackage,
     getGeneral,
+    vkBotUrl,
     defaultModelKey,
     load,
     saveModels,

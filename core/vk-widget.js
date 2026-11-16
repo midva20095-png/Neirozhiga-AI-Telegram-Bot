@@ -17,7 +17,14 @@ function chatLink(groupId) {
 }
 
 function groupLink(groupId, hash) {
-    return `https://vk.ru/app54895627_-${groupNumber(groupId)}${hash || ''}`;
+    const group = groupNumber(groupId);
+    const base = String(process.env.WEBAPP_URL || '').replace(/\/$/, '');
+    const goal = String(hash || '').replace(/^#/, '');
+    if (!base) return `https://vk.ru/write-${group}`;
+    const params = new URLSearchParams();
+    params.set('vk_group_id', group);
+    if (goal === 'rate' || goal === 'site' || goal === 'sub') params.set('goal', goal);
+    return `${base}/vk.html?${params.toString()}`;
 }
 
 function coverWidgetCode(groupId, ids) {

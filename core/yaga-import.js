@@ -2,6 +2,15 @@ const db = require('./db');
 const sheet = require('./yaga-balances');
 
 const KEY = 'vk_yaga_balance_import_236645486';
+const CLEAR_KEY = 'vk_yaga_balance_cleared_236645486';
+const IMPORT_REASON = 'Перенос баланса ЯгаГенератор';
+const CLEAR_REASON = 'Обнуление переноса ЯгаГенератор';
+
+function balanceAfterImport(current, reasons) {
+    const list = Array.isArray(reasons) ? reasons : [];
+    if (!list.includes(IMPORT_REASON)) return Number(current) || 0;
+    return 0;
+}
 
 async function importYagaBalances() {
     const saved = await db.getSettings([KEY]);
@@ -39,4 +48,32 @@ async function importYagaBalances() {
     return { done: false, created, existed, total: rows.length };
 }
 
-module.exports = { importYagaBalances, KEY };
+async function clearImportedBalances() {
+    const saved = await db.getSettings([CLEAR_KEY]);
+    if (saved && saved[CLEAR_KEY]) return { done: true };
+    const updated = await db.pool.query(
+        `WITH targets AS (
+            SELECT u.user_id, u.balance
+            FROM users u
+            WHERE EXISTS (
+                SELECT 1 FROM history h
+                WHERE h.user_id = u.user_id AND h.reason = $1
+            )
+        ), updated AS (
+            UPDATE users u
+            SET balance = 0
+            FROM targets t
+            WHERE u.user_id = t.user_id AND u.balance <> 0
+            RETURNING u.user_id, t.balance AS old_balance
+        )
+        INSERT INTO history (user_id, delta, balance, reason)
+        SELECT user_id, -old_balance, 0, $2 FROM updated
+        RETURNING user_id`,
+        [IMPORT_REASON, CLEAR_REASON]
+    );
+    const cleared = updated.rows.length;
+    await db.setSetting(CLEAR_KEY, { cleared, at: new Date().toISOString() });
+    return { done: false, cleared };
+}
+
+module.exports = { importYagaBalances, clearImportedBalances, balanceAfterImport, KEY, CLEAR_KEY, IMPORT_REASON };

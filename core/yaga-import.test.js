@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const sheet = require('./yaga-balances');
+const yaga = require('./yaga-import');
 
 test('перенос ЯгаГенератора не трогает чужие номера и берёт больший повтор', () => {
     const rows = sheet.balanceRows();
@@ -16,4 +17,7 @@ test('перенос ЯгаГенератора не трогает чужие �
         assert.ok(row.balance >= 0);
     });
     assert.equal(sheet.GROUP_ID, '236645486');
+    assert.equal(yaga.balanceAfterImport(140, ['Перенос баланса ЯгаГенератор']), 0);
+    assert.equal(yaga.balanceAfterImport(500, ['ЮKassa']), 500);
+    assert.equal(yaga.balanceAfterImport(80, []), 80);
 });

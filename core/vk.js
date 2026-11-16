@@ -177,16 +177,21 @@ function siteLink() {
     return catalog.getGeneral().site_url || 'https://babayagaland.ru';
 }
 
+function appBase() {
+    return String(process.env.WEBAPP_URL || '').replace(/\/$/, '');
+}
+
 function appCabinetUrl(account, options) {
     const opts = options || {};
+    const base = appBase();
+    if (!base || account == null) return siteLink();
+    const params = new URLSearchParams();
+    params.set('tk', auth.signUserId(account));
+    if (opts.pkgId) params.set('pkg', String(opts.pkgId));
+    if (opts.paid) params.set('paid', '1');
     const group = String(opts.groupId || '').replace(/\D/g, '');
-    const app = String(process.env.VK_APP_ID || '54895627').replace(/\D/g, '') || '54895627';
-    const hash = new URLSearchParams();
-    if (account != null) hash.set('tk', auth.signUserId(account));
-    if (opts.pkgId) hash.set('pkg', String(opts.pkgId));
-    if (opts.paid) hash.set('paid', '1');
-    const fragment = hash.toString();
-    return `https://vk.ru/app${app}${group ? '_-' + group : ''}${fragment ? '#' + fragment : ''}`;
+    if (group) params.set('vk_group_id', group);
+    return `${base}/vk.html?${params.toString()}`;
 }
 
 function cabinetLink(account, pkgId, groupId) {
@@ -2393,7 +2398,6 @@ function communitiesFromEnv() {
     }
     add(process.env.VK_GROUP_ID, process.env.VK_GROUP_TOKEN);
     add(process.env.VK_GROUP_ID_2, process.env.VK_GROUP_TOKEN_2);
-    add(process.env.VK_GROUP_ID_3, process.env.VK_GROUP_TOKEN_3);
     return out;
 }
 
@@ -2422,11 +2426,6 @@ function adminHomes() {
         { id: linesId, title: 'Точки и Линии' },
         { id: clubId, title: 'НейроЯга' }
     ];
-    const thirdId = String(process.env.VK_GROUP_ID_3 || '').replace(/\D/g, '');
-    const thirdToken = String(process.env.VK_GROUP_TOKEN_3 || '').trim();
-    if (thirdId && thirdToken && thirdId !== linesId && thirdId !== clubId) {
-        homes.push({ id: thirdId, title: 'ЯгаГенераторБот' });
-    }
     const seen = new Set();
     return homes.filter(home => {
         if (!home.id || seen.has(home.id)) return false;

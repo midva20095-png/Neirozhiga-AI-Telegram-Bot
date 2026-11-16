@@ -75,7 +75,7 @@ function siteUrl() {
 
 function otherBotsKeyboard() {
     return Markup.inlineKeyboard([
-        [Markup.button.url('Бот во ВКонтакте', 'https://vk.ru/write-236645486')],
+        [Markup.button.url('Бот во ВКонтакте', catalog.vkBotUrl())],
         [Markup.button.url('Бот в Макс', 'https://max.ru/se14387925_bot')]
     ]);
 }
@@ -469,12 +469,12 @@ async function startBot(app) {
         console.log('✅ База данных PostgreSQL инициализирована');
         db.note('sys', 'Бот запущен').catch(() => {});
         try {
-            const moved = await require('./yaga-import').importYagaBalances();
-            if (moved && !moved.done) {
-                console.log(`ЯгаГенератор: перенос балансов, новых ${moved.created}, уже были ${moved.existed}.`);
+            const cleared = await require('./yaga-import').clearImportedBalances();
+            if (cleared && !cleared.done) {
+                console.log(`ЯгаГенератор отключён: обнулены перенесённые балансы, счетов ${cleared.cleared}.`);
             }
         } catch (err) {
-            console.error('ЯгаГенератор: балансы не перенесены.', err.message);
+            console.error('ЯгаГенератор: балансы не обнулены.', err.message);
         }
         try {
             const pending = await transferApi.resumePending();
@@ -615,7 +615,7 @@ async function startBot(app) {
                 ...Markup.inlineKeyboard([
                     [Markup.button.webApp('📱 Открыть кабинет', webappUrlFor(ctx.from.id))],
                     [Markup.button.url('📢 Канал', channel.CHANNEL_URL)],
-                    [Markup.button.url('Бот во ВКонтакте', 'https://vk.ru/write-236645486')],
+                    [Markup.button.url('Бот во ВКонтакте', catalog.vkBotUrl())],
                     [Markup.button.url('Бот в Макс', 'https://max.ru/se14387925_bot')],
                     [Markup.button.url('Сайт', siteUrl())]
                 ])

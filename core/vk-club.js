@@ -105,7 +105,7 @@ function reply(query, posts) {
     const parts = [];
     if (wantsLevels(text)) parts.push(overview());
     if (wantsSite(text)) {
-        parts.push(`Сайт НейроЯги: ${SITE_URL}\nГенерации для уровня «Базовая поддержка по ИИ» лежат в сообществе https://vk.com/club236645486`);
+        parts.push(`Сайт НейроЯги: ${SITE_URL}\nКартинки и видео для уровня «Базовая поддержка по ИИ» приходят в чат бота.`);
     }
     const lessons = rankLessons(text);
     if (lessons.length) {

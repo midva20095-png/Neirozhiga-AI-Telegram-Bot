@@ -136,7 +136,7 @@ input,select{width:100%;border-radius:14px;border:1px solid var(--line);backgrou
   <div class="bots">
     <div class="lbl">Ещё боты</div>
     <div class="row">
-      <a href="https://vk.ru/write-236645486" data-out="https://vk.ru/write-236645486">Бот ВК</a>
+      <a href="https://vk.ru/write-230706467" data-out="https://vk.ru/write-230706467">Бот ВК</a>
       <a href="https://max.ru/se14387925_bot" data-out="https://max.ru/se14387925_bot">Бот Макс</a>
       <a href="https://babayagaland.ru" data-out="https://babayagaland.ru">Сайт</a>
     </div>
@@ -389,12 +389,14 @@ function chatLink(){
   return id ? 'https://vk.ru/write-' + id : '';
 }
 function coverCode(groupId, ids){
-  const app = 'https://vk.ru/app54895627_-' + groupId;
-  const chat = 'https://vk.ru/write-' + String(groupId).replace(/\D/g, '');
+  const group = String(groupId).replace(/\D/g, '');
+  const root = String(window.__nyApi || location.origin || '').replace(/\/$/, '');
+  const app = root + '/vk.html?vk_group_id=' + group;
+  const chat = 'https://vk.ru/write-' + group;
   const rows = [
     { title: 'Чат', button: 'Написать', cover_id: ids.chat, url: chat, button_url: chat, title_url: chat },
-    { title: 'Рейтинг', button: 'Открыть', cover_id: ids.rate, url: app + '#rate', button_url: app + '#rate', title_url: app + '#rate' },
-    { title: 'Сайт', button: 'Открыть', cover_id: ids.site, url: app + '#site', button_url: app + '#site', title_url: app + '#site' }
+    { title: 'Рейтинг', button: 'Открыть', cover_id: ids.rate, url: app + '&goal=rate', button_url: app + '&goal=rate', title_url: app + '&goal=rate' },
+    { title: 'Сайт', button: 'Открыть', cover_id: ids.site, url: app + '&goal=site', button_url: app + '&goal=site', title_url: app + '&goal=site' }
   ];
   return 'return ' + JSON.stringify({ title: 'НейроЯга', rows }) + ';';
 }
@@ -772,7 +774,7 @@ function viewHelp(){
   }
   if (cfg && cfg.support_enabled===false) return '<div class="card"><div class="empty">Поддержка временно недоступна.</div></div>';
   return '<div class="card"><div class="now">Ещё боты. Им можно писать, это не сообщества.</div>'+
-    '<a class="btn ghost" href="https://vk.ru/write-236645486" data-out="https://vk.ru/write-236645486">Бот во ВКонтакте</a>'+
+    '<a class="btn ghost" href="https://vk.ru/write-230706467" data-out="https://vk.ru/write-230706467">Бот во ВКонтакте</a>'+
     '<a class="btn ghost" href="https://max.ru/se14387925_bot" data-out="https://max.ru/se14387925_bot">Бот в Макс</a>'+
     '<a class="btn ghost" href="https://babayagaland.ru" data-out="https://babayagaland.ru">Сайт babayagaland.ru</a></div>'+
     '<div class="card"><div class="now">Напишите нам — ответ придёт в чат бота.</div>'+
