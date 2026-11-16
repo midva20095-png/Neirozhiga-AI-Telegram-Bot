@@ -129,13 +129,22 @@ function startWebApp() {
         res.json({ communities: vk.communityStatus() });
     });
 
+    function launchGroup(source) {
+        const direct = source && source.vk_group_id;
+        if (direct) return String(direct).replace(/\D/g, '');
+        const raw = source && typeof source.launch === 'string' ? source.launch : '';
+        const match = /(?:^|&)vk_group_id=([^&]*)/.exec(raw);
+        if (!match) return '';
+        try { return decodeURIComponent(match[1]).replace(/\D/g, ''); }
+        catch (e) { return String(match[1]).replace(/\D/g, ''); }
+    }
+
     function sendVkSession(res, source) {
         const account = auth.verifyVkLaunch(source || {});
         if (!account) {
             return res.status(401).json({ error: 'Откройте кабинет из бота или из сообщества.' });
         }
-        const group = String((source && source.vk_group_id) || '').replace(/\D/g, '');
-        res.json({ tk: auth.signUserId(account), group });
+        res.json({ tk: auth.signUserId(account), group: launchGroup(source) });
     }
 
     app.get('/api/vk/session', (req, res) => sendVkSession(res, req.query));

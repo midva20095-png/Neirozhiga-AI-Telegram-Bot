@@ -16,30 +16,17 @@ function chatLink(groupId) {
     return `https://vk.com/write-${groupNumber(groupId)}`;
 }
 
-function appBase() {
-    return String(process.env.WEBAPP_URL || 'https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app').replace(/\/$/, '');
+function appLink(groupId, goal) {
+    if (goal === 'site') return 'https://vk.ru/app54895627#site';
+    return `https://vk.ru/app54895627#rate${groupNumber(groupId)}`;
 }
 
-function siteLink(explicit) {
-    const given = String(explicit || '').trim();
-    if (/^https:\/\/\S+$/i.test(given) && given.length <= 200) return given;
-    let stored = '';
-    try { stored = String(require('./catalog').getGeneral().site_url || '').trim(); } catch (e) { stored = ''; }
-    if (/^https:\/\/\S+$/i.test(stored) && stored.length <= 200) return stored;
-    return 'https://babayagaland.ru';
-}
-
-function rateLink(groupId) {
-    return `${appBase()}/?goal=rate&vk_group_id=${groupNumber(groupId)}`;
-}
-
-function coverWidgetCode(groupId, ids, options) {
-    const site = siteLink(options && options.site);
+function coverWidgetCode(groupId, ids) {
     const rows = Object.keys(COVERS).map(key => {
         const item = COVERS[key];
         const cover = String((ids && ids[key]) || '');
         if (!/^-?\d+_\d+$/.test(cover)) throw new Error('Нет картинки для кнопки.');
-        const url = item.chat ? chatLink(groupId) : item.hash === 'site' ? site : rateLink(groupId);
+        const url = item.chat ? chatLink(groupId) : appLink(groupId, item.hash);
         return {
             title: item.title,
             title_url: url,
@@ -157,4 +144,4 @@ async function publishCover(token, code) {
     return true;
 }
 
-module.exports = { COVERS, coverWidgetCode, chatLink, rateLink, siteLink, uploadFields, fitCover, paintCover, coverSvg, defaultCover, uploadCover, publishCover };
+module.exports = { COVERS, coverWidgetCode, chatLink, appLink, uploadFields, fitCover, paintCover, coverSvg, defaultCover, uploadCover, publishCover };

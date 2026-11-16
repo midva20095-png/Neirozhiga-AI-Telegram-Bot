@@ -18,6 +18,9 @@ test('подпись запуска ВК включает пустые и нул
     const pairs = Object.keys(fields).sort().map(key => `${key}=${fields[key]}`).join('&');
     const sign = crypto.createHmac('sha256', 'protected-key').update(pairs).digest('base64url');
     assert.equal(auth.verifyVkLaunch(Object.assign({ sign }, fields)), '-82156740');
+    const raw = Object.keys(fields).sort().map(key => `${key}=${encodeURIComponent(fields[key])}`).join('&') + `&sign=${sign}`;
+    assert.equal(auth.verifyVkLaunch(raw), '-82156740');
+    assert.equal(auth.verifyVkLaunch({ launch: raw }), '-82156740');
     const dropped = Object.assign({ sign }, fields);
     delete dropped.vk_access_token_settings;
     assert.equal(auth.verifyVkLaunch(dropped), null);
