@@ -2,6 +2,7 @@ require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 const db = require('./db');
+const leader = require('./leader');
 const catalog = require('./catalog');
 const gen = require('./generate');
 const auth = require('./auth');
@@ -478,13 +479,6 @@ async function startBot(app) {
         console.error('❌ Критическая ошибка инициализации БД:', e.message);
     }
     await catalog.load(db);
-
-    try {
-        await bot.telegram.deleteWebhook({ drop_pending_updates: true });
-        console.log('🧹 Старый вебхук сброшен, запущен Long Polling.');
-    } catch (e) {
-        console.log('ℹ️ Вебхук:', e.message);
-    }
 
     if (app) {
         app.get('/health', (req, res) => res.status(200).send('OK'));
@@ -1230,27 +1224,39 @@ async function startBot(app) {
     // 409 значит, что старый контейнер ещё опрашивает Telegram. Ждём, пока он отпустит бота,
     // и не роняем веб-сервер: кабинет продолжает работать.
     async function launchBot() {
-        for (let attempt = 1; attempt <= 8; attempt++) {
+        await leader.hold(() => db.tryHoldBotLock());
+        try {
+            await bot.telegram.deleteWebhook();
+            console.log('🧹 Вебхук сброшен, подключаю опрос Telegram.');
+        } catch (e) {
+            console.log('ℹ️ Вебхук:', e.message);
+        }
+        for (let attempt = 1; ; attempt++) {
             try {
                 console.log('🤖 Подключаюсь к Telegram...');
                 await bot.launch();
                 console.log('🤖 Бот остановлен');
                 return;
             } catch (err) {
-                const conflict = String((err && err.message) || '').includes('409');
-                console.error(conflict
-                    ? `⚠️ Telegram занят другим экземпляром (${attempt}/8). Повтор через 15 секунд.`
-                    : '❌ Ошибка запуска бота:', err);
                 try { bot.stop('retry'); } catch (e) {}
-                if (!conflict || attempt === 8) return;
+                if (!leader.telegramConflict(err)) {
+                    console.error('❌ Ошибка запуска бота:', err);
+                    return;
+                }
+                console.error(`⚠️ Telegram занят другим экземпляром (${attempt}). Повтор через 15 секунд.`);
                 await new Promise(r => setTimeout(r, 15000));
             }
         }
     }
     launchBot();
 
-    process.once('SIGINT', () => bot.stop('SIGINT'));
-    process.once('SIGTERM', () => bot.stop('SIGTERM'));
+    function stopPolling(signal) {
+        try { bot.stop(signal); } catch (e) {}
+        try { vk.stopVk(); } catch (e) {}
+        db.releaseBotLock().catch(() => {});
+    }
+    process.once('SIGINT', () => stopPolling('SIGINT'));
+    process.once('SIGTERM', () => stopPolling('SIGTERM'));
 }
 
 module.exports = { startBot };
