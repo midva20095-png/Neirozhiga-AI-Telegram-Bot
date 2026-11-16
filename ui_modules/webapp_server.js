@@ -13,6 +13,7 @@ const vk = require('../core/vk');
 const widget = require('../core/vk-widget');
 const bridge = require('../core/bridge');
 const activity = require('../core/activity');
+const saveWork = require('../public/save-work');
 // Определяет пользователя из initData Telegram или из подписанной ссылки.
 function resolveUserId(req) {
     const initData = req.headers['x-telegram-init-data'] || (req.body && req.body.initData);
@@ -381,7 +382,7 @@ function startWebApp() {
             res.set('Content-Type', mime);
             res.set('Cache-Control', 'private, max-age=86400');
             res.set('X-Content-Type-Options', 'nosniff');
-            if (req.query.dl) res.set('Content-Disposition', `attachment; filename="neuroyaga.${ext}"`);
+            if (req.query.dl) res.set('Content-Disposition', `attachment; filename="${saveWork.attachmentName(req.query.name, ext)}"`);
             res.send(row.bytes);
         } catch (e) {
             console.error('API /api/works/:id:', e.message);

@@ -217,6 +217,7 @@ input,select{width:100%;border-radius:14px;border:1px solid var(--line);backgrou
   <button data-t="help"><span class="ic">💬</span>Помощь</button>
   <button data-t="rate" id="tabrate" style="display:none"><span class="ic">🏆</span>Рейтинг</button>
 </div>
+<script src="/save-work.js"></script>
 <script>
 const KIND = {text:'Текст', image:'Картинка', video:'Видео', audio:'Музыка'};
 let tab='gen', me=null, cfg=null, templates=[], works=null, worksLoading=false, userId=null, token=null, busy=false, last=null, wantMenu=false, tplAnswers={}, tplPhotos={};
@@ -999,21 +1000,88 @@ async function sendWorkToChat(id){
   const d = await r.json().catch(function(){ return {}; });
   if (!r.ok || !d.ok) throw new Error(d.error || 'Не удалось отправить файл');
 }
+function workUrl(id, name){
+  return fileOrigin() + '/api/works/' + id + '?tk=' + encodeURIComponent(token||'') + '&dl=1&name=' + encodeURIComponent(name);
+}
+function insideFrame(){
+  try { return window.parent && window.parent !== window; } catch (e) { return true; }
+}
+function askVkDownload(url, name){
+  return new Promise(function(resolve){
+    let done = false;
+    function finish(ok){
+      if (done) return;
+      done = true;
+      window.removeEventListener('message', onMsg);
+      clearTimeout(timer);
+      resolve(!!ok);
+    }
+    function onMsg(event){
+      const hit = window.nySave && nySave.bridgeDownload(event.data);
+      if (!hit) return;
+      finish(hit.ok);
+    }
+    const timer = setTimeout(function(){ finish(false); }, 4000);
+    window.addEventListener('message', onMsg);
+    vkSend('VKWebAppDownloadFile', { url: url, filename: name });
+  });
+}
+async function saveBlob(id, name){
+  const r = await fetch('/api/works/'+id+'?dl=1&name='+encodeURIComponent(name), { headers: authHeaders() });
+  if (!r.ok) throw new Error(r.status === 404 ? 'Файл не найден' : 'Не удалось скачать файл');
+  const blob = await r.blob();
+  if (!blob || !blob.size) throw new Error('Файл пустой');
+  const href = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = href;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(function(){ URL.revokeObjectURL(href); }, 15000);
+}
+async function saveInBrowser(id, name){
+  try {
+    await saveBlob(id, name);
+  } catch (e) {
+    if (!isVk()) { alert(e.message || 'Не удалось скачать файл'); return; }
+    try {
+      await sendWorkToChat(id);
+      alert('Файл отправлен в чат сообщества. Сохраните его оттуда.');
+    } catch (err) {
+      alert(err.message || e.message || 'Не удалось скачать файл');
+    }
+  }
+}
 async function downloadWork(id, kind){
   const name = workFileName(id, kind);
-  const url = fileOrigin() + '/api/works/' + id + '?tk=' + encodeURIComponent(token||'') + '&dl=1';
-  const tg = window.Telegram && window.Telegram.WebApp;
-  if (tg && typeof tg.downloadFile === 'function') {
-    tg.downloadFile({ url: url, file_name: name }, function(ok){
-      if (ok) return;
-      sendWorkToChat(id).then(function(){ alert('Файл отправлен в чат бота. Сохраните его оттуда.'); }).catch(function(e){ alert(e.message); });
-    });
+  const url = workUrl(id, name);
+  const route = (window.nySave && nySave.saveRoute({ webApp: tg(), search: location.search })) || 'browser';
+  if (route === 'telegram') {
+    try {
+      tg().downloadFile({ url: url, file_name: name }, function(ok){
+        if (ok) return;
+        saveInBrowser(id, name);
+      });
+      return;
+    } catch (e) {}
+  }
+  if (route === 'vk-app') {
+    const ok = await askVkDownload(url, name);
+    if (ok) return;
+    try {
+      await sendWorkToChat(id);
+      alert('Файл отправлен в чат сообщества. Сохраните его оттуда.');
+    } catch (e) {
+      alert(e.message || 'Не удалось скачать файл');
+    }
     return;
   }
-  try {
-    await sendWorkToChat(id);
-    alert('Файл отправлен в чат бота. Сохраните его оттуда.');
-  } catch (e) { alert(e.message); }
+  if (route === 'vk-web' && insideFrame()) {
+    vkSend('VKWebAppOpenLink', { url: url });
+    return;
+  }
+  await saveInBrowser(id, name);
 }
 async function shareTemplate(id){
   try {
