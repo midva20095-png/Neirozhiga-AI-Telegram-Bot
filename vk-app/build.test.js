@@ -11,6 +11,9 @@ test('приложение ВК остаётся на своём адресе и
     assert.equal(html.includes('VKWebAppInit'), true);
     assert.equal(html.includes('@vkontakte/vk-bridge'), true);
     assert.equal(html.includes('document.write'), false);
+    assert.equal(html.includes('if (echoing) return;'), true);
+    assert.equal(html.includes('window.__nyVkBoot'), true);
+    assert.equal(html.split('VKWebAppInit').length, 3);
     const source = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
     assert.equal(source.includes('@vkontakte/vk-bridge'), false);
     assert.equal(html.includes('VKWebAppGetAuthToken'), true);

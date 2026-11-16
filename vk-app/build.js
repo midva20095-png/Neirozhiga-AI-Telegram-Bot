@@ -14,11 +14,18 @@ window.__nyApi = ${JSON.stringify(api)};
     return orig.call(this, input, init);
   };
 })();
-if (window.vkBridge && vkBridge.subscribe) {
+if (window.vkBridge && vkBridge.subscribe && (window.AndroidBridge || (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.VKWebAppClose))) {
+  var echoing = false;
   vkBridge.subscribe(function(event){
-    const detail = event && event.detail ? event.detail : {};
-    if (!detail.type) return;
-    window.dispatchEvent(new MessageEvent('message', { data: { type: detail.type, data: detail.data || {} } }));
+    if (echoing) return;
+    var detail = event && event.detail ? event.detail : {};
+    if (!detail.type || String(detail.type).indexOf('VKWebApp') !== 0) return;
+    echoing = true;
+    try {
+      window.dispatchEvent(new MessageEvent('message', { data: { type: detail.type, data: detail.data || {} } }));
+    } finally {
+      echoing = false;
+    }
   });
 }
 function vkSend(handler, params){
@@ -29,8 +36,11 @@ function vkSend(handler, params){
   try { parent.postMessage({ handler: handler, params: params || {}, type: 'vk-connect', connectVersion: '2.15.8', sendTime: Date.now() }, '*'); }
   catch (e) {}
 }
-vkSend('VKWebAppInit');
-vkSend('VKWebAppGetLaunchParams');
+if (!window.__nyVkBoot) {
+  window.__nyVkBoot = true;
+  vkSend('VKWebAppInit');
+  vkSend('VKWebAppGetLaunchParams');
+}
 function tell(msg){
   window.dispatchEvent(new MessageEvent('message', { data: msg }));
 }

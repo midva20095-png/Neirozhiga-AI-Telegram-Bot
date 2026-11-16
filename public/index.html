@@ -14,8 +14,11 @@ function vkSend(handler, params){
   try { parent.postMessage({ handler: handler, params: params || {}, type: 'vk-connect', connectVersion: '2.15.8', sendTime: Date.now() }, '*'); }
   catch (e) {}
 }
-vkSend('VKWebAppInit');
-vkSend('VKWebAppGetLaunchParams');
+if (!window.__nyVkBoot) {
+  window.__nyVkBoot = true;
+  vkSend('VKWebAppInit');
+  vkSend('VKWebAppGetLaunchParams');
+}
 function vkTell(msg){
   window.dispatchEvent(new MessageEvent('message', { data: msg }));
 }
@@ -458,16 +461,23 @@ function markVkChrome(){
 }
 async function load(){
   markVkChrome();
+  window.__nyLoadSeq = (window.__nyLoadSeq || 0) + 1;
+  const seq = window.__nyLoadSeq;
+  function live(){ return seq === window.__nyLoadSeq; }
   try {
     const gate = await fetchT('/api/maintenance');
     const closed = await gate.json();
+    if (!live()) return;
     if (closed && closed.on) {
       document.getElementById('view').innerHTML = '<div class="card"><p>'+esc(closed.message || 'Идёт обновление. Зайдите чуть позже: сейчас вход закрыт.')+'</p></div>';
       return;
     }
   } catch (e) {}
+  if (!live()) return;
   await adoptVkLaunch();
+  if (!live()) return;
   if (!userId && window.__nyApi) await adoptVkUser();
+  if (!live()) return;
   paintVkBot();
   if (!userId && window.__vkGoal === 'rate') {
     tab = 'rate';
@@ -478,6 +488,7 @@ async function load(){
   if (!userId) { draw(); return; }
   try {
     const r = await fetchT('/api/me', {headers: authHeaders()});
+    if (!live()) return;
     if (r.status === 401) { me = null; draw(); return; }
     if (r.status === 503) {
       const closed = await r.json().catch(function(){ return {}; });
@@ -491,7 +502,13 @@ async function load(){
     }
     me = await r.json();
     if (me.error) throw new Error(me.error);
-  } catch(e){ me = {error:true, balance:0, history:[], current_model:(cfg&&cfg.default_model)||'flash'}; window.__vkOffline = true; }
+  } catch(e){
+    if (!live()) return;
+    if (me && me.user_id && !me.error) { draw(); return; }
+    me = {error:true, balance:0, history:[], current_model:(cfg&&cfg.default_model)||'flash'};
+    window.__vkOffline = true;
+  }
+  if (!live()) return;
   await loadConfig();
   try { templates = ((await (await fetchT('/api/templates'+(isVk()?'?audience=vk':''))).json()).templates)||[]; } catch(e){ templates=[]; }
   if (pendingTpl && templates.some(function(t){ return String(t.id)===String(pendingTpl); })) {
@@ -679,6 +696,7 @@ window.addEventListener('message', function(event){
   bridgeGoal(data);
   if (data.type === 'ny-launch') {
     window.__vkLaunchSeen = true;
+    if (userId && me && me.user_id && !me.error) return;
     const had = !!userId;
     adoptVkLaunch(data.params || {}).then(function(){
       if (userId) { if (!had) load(); else draw(); return; }
