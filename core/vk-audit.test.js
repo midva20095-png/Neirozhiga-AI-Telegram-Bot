@@ -43,6 +43,17 @@ test('отчёт аудита ведёт в клуб и не содержит к
     assert.doesNotMatch(report, /access_token|vk1\.a\./);
 });
 
+test('аудит не отпускает чат, пока не нажата назад', () => {
+    assert.equal(vk.modeHolds('audit', ''), true);
+    assert.equal(vk.modeHolds('audit', 'models'), true);
+    assert.equal(vk.modeHolds('audit', 'model'), true);
+    assert.equal(vk.modeHolds('audit', 'pay_back'), false);
+    assert.equal(vk.modeHolds('audit', 'opt_cancel'), false);
+    assert.equal(vk.modeHolds('', 'https://vk.com/club1'), false);
+    const fallback = JSON.parse(vk.spareKeyboard(vk.payLockKeyboard()));
+    assert.equal(fallback.buttons.length, 0);
+});
+
 test('опрос доната не забирает ссылку, пока идёт аудит', () => {
     assert.equal(vk.surveyHolds('', { audit: true }), false);
     assert.equal(vk.surveyHolds('audit', {}), false);

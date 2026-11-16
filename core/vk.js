@@ -436,11 +436,44 @@ function noteKeyboard(error) {
 }
 
 function spareKeyboard(failed) {
+    const clear = JSON.stringify({ one_time: false, buttons: [] });
+    if (failed === payLockKeyboard()) return clear;
     const plain = textOnlyMenu();
     if (failed !== plain) return plain;
-    const clear = JSON.stringify({ buttons: [] });
     if (failed !== clear) return clear;
     return '';
+}
+
+function modeHolds(mode, action) {
+    if (mode !== 'audit' && mode !== 'club') return false;
+    return action !== 'pay_back' && action !== 'opt_cancel';
+}
+
+function dialogKind(account) {
+    const key = String(account);
+    if (pendingAudit.has(key)) return 'audit';
+    if (pendingClub.has(key)) return 'club';
+    return '';
+}
+
+async function rememberDialog(account, mode) {
+    const key = String(account);
+    pendingAudit.delete(key);
+    pendingClub.delete(key);
+    if (mode === 'audit') pendingAudit.add(key);
+    if (mode === 'club') pendingClub.add(key);
+    try { await db.setVkMode(account, mode === 'audit' || mode === 'club' ? mode : ''); } catch (error) {}
+}
+
+async function restoreDialog(account) {
+    const live = dialogKind(account);
+    if (live) return live;
+    let mode = '';
+    try { mode = await db.getVkMode(account); } catch (error) { return ''; }
+    const key = String(account);
+    if (mode === 'audit') pendingAudit.add(key);
+    if (mode === 'club') pendingClub.add(key);
+    return dialogKind(account);
 }
 
 async function sendPlain(token, params) {
@@ -1275,7 +1308,7 @@ async function holdMove(token, peerId, account, text, action) {
     return true;
 }
 
-async function goBack(token, peerId, account) {
+async function goBack(token, peerId, account, groupId) {
     const key = String(account);
     if (runningJob.has(key) || gen.isBusy(account)) {
         return sendText(token, peerId, 'Ответ ещё готовится.', payLockKeyboard());
@@ -1305,12 +1338,8 @@ async function goBack(token, peerId, account) {
         return sendText(token, peerId, 'Напишите номер или @имя в Telegram. «Назад» возвращает меню.', payLockKeyboard());
     }
     pendingMove.delete(key);
-    if (pendingAudit.has(key) || pendingClub.has(key)) {
-        pendingAudit.delete(key);
-        pendingClub.delete(key);
-        return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId));
-    }
-    return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId));
+    await rememberDialog(account, '');
+    return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId, groupId));
 }
 
 function messageParts(text) {
@@ -1338,48 +1367,55 @@ async function sendParts(token, peerId, text, keyboard) {
 async function holdAudit(token, peerId, account, text, action, groupId) {
     const key = String(account);
     if (!pendingAudit.has(key)) return false;
-    if (action) {
-        pendingAudit.delete(key);
-        return false;
-    }
-    if (!auditHere(groupId)) {
-        pendingAudit.delete(key);
-        return false;
-    }
+    if (action) return false;
     const raw = String(text || '').trim();
     if (!raw) {
         await sendText(token, peerId, audit.guide(), payLockKeyboard());
         return true;
     }
     if (runningAudit.has(key)) {
-        await sendText(token, peerId, 'Отчёт уже готовится. Дождитесь его в этом чате.', payLockKeyboard());
+        await sendText(token, peerId, 'Отчёт уже готовится. Дождитесь его в этом чате. «Назад» выходит из аудита.', payLockKeyboard());
         return true;
     }
     runningAudit.add(key);
-    await sendText(token, peerId, 'Смотрю сообщество. Отчёт придёт в этот чат.', payLockKeyboard());
+    await sendText(token, peerId, 'Смотрю сообщество. Отчёт придёт в этот чат. После него можно сразу прислать следующую ссылку.', payLockKeyboard());
     audit.run(raw, token).then(async report => {
-        await sendParts(token, peerId, report, payLockKeyboard());
-        await sendText(token, peerId, 'Отчёт готов. Чтобы проверить другое сообщество, снова вставьте только ссылку: vk.com/название. «Назад» возвращает меню.', payLockKeyboard());
+        const still = dialogKind(account) === 'audit';
+        const board = still ? payLockKeyboard() : mainMenu(peerId, groupId);
+        await sendParts(token, peerId, report, board);
+        if (!still) return;
+        await sendText(token, peerId, 'Аудит всё ещё открыт. Следующую ссылку пришлите сюда же, без кнопок моделей. «Назад» возвращает меню.', payLockKeyboard());
     }).catch(async error => {
         const shown = error && error.audit
             ? error.message
             : 'Не получилось разобрать это сообщество. Проверьте, что оно открытое и ссылка верная.';
-        try { await sendText(token, peerId, shown, payLockKeyboard()); } catch (e) {}
+        const board = dialogKind(account) === 'audit' ? payLockKeyboard() : mainMenu(peerId, groupId);
+        try { await sendText(token, peerId, shown, board); } catch (e) {}
     }).finally(() => runningAudit.delete(key));
     return true;
+}
+
+async function holdDialog(token, peerId, account, text, action, groupId, mode) {
+    if (mode === 'club') {
+        if (action && action !== 'club') {
+            return sendText(token, peerId, 'Сейчас открыт клуб. Напишите вопрос или нажмите «Назад».', payLockKeyboard());
+        }
+        if (action === 'club') return sendText(token, peerId, club.overview(), payLockKeyboard());
+        if (await holdClub(token, peerId, account, text, '', groupId)) return;
+        return sendText(token, peerId, club.overview(), payLockKeyboard());
+    }
+    if (action && action !== 'audit') {
+        return sendText(token, peerId, 'Сейчас открыт аудит. Пришлите ссылку на сообщество в это поле. Модели и остальные кнопки включатся после «Назад».', payLockKeyboard());
+    }
+    if (action === 'audit') return sendText(token, peerId, audit.guide(), payLockKeyboard());
+    if (await holdAudit(token, peerId, account, text, '', groupId)) return;
+    return sendText(token, peerId, audit.guide(), payLockKeyboard());
 }
 
 async function holdClub(token, peerId, account, text, action, groupId) {
     const key = String(account);
     if (!pendingClub.has(key)) return false;
-    if (action) {
-        pendingClub.delete(key);
-        return false;
-    }
-    if (!auditHere(groupId)) {
-        pendingClub.delete(key);
-        return false;
-    }
+    if (action) return false;
     const raw = String(text || '').trim();
     if (!raw) {
         await sendText(token, peerId, club.overview(), payLockKeyboard());
@@ -1398,15 +1434,16 @@ async function reply(token, peerId, account, text, payload, groupId, photoUrls) 
         pendingPay.delete(String(account));
         pendingMove.delete(String(account));
         pendingJob.delete(String(account));
-        pendingAudit.delete(String(account));
-        pendingClub.delete(String(account));
+        await rememberDialog(account, '');
         try { await db.clearDonutSurvey(account, groupId); } catch (error) {}
-        return sendText(token, peerId, 'Запрос отменён.', mainMenu(peerId));
+        return sendText(token, peerId, 'Запрос отменён.', mainMenu(peerId, groupId));
     }
     if (action === 'pay_back') {
         try { await db.clearDonutSurvey(account, groupId); } catch (error) {}
-        return goBack(token, peerId, account);
+        return goBack(token, peerId, account, groupId);
     }
+    const mode = await restoreDialog(account);
+    if (modeHolds(mode, action) && auditHere(groupId)) return holdDialog(token, peerId, account, text, action, groupId, mode);
     if (await holdDonutSurvey(token, peerId, account, text, action, payload, groupId)) return;
     if (action === 'quality' || action === 'duration' || action === 'size') {
         const job = pendingJob.get(String(account));
@@ -1451,9 +1488,8 @@ async function reply(token, peerId, account, text, payload, groupId, photoUrls) 
         pendingJob.delete(String(account));
         pendingPay.delete(String(account));
         pendingMove.delete(String(account));
-        if (!auditHere(groupId)) return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId));
-        pendingAudit.add(String(account));
-        pendingClub.delete(String(account));
+        if (!auditHere(groupId)) return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId, groupId));
+        await rememberDialog(account, 'audit');
         return sendText(
             token,
             peerId,
@@ -1466,9 +1502,8 @@ async function reply(token, peerId, account, text, payload, groupId, photoUrls) 
         pendingJob.delete(String(account));
         pendingPay.delete(String(account));
         pendingMove.delete(String(account));
-        pendingAudit.delete(String(account));
-        if (!auditHere(groupId)) return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId));
-        pendingClub.add(String(account));
+        if (!auditHere(groupId)) return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId, groupId));
+        await rememberDialog(account, 'club');
         return sendText(token, peerId, club.overview(), payLockKeyboard());
     }
     if (await holdClub(token, peerId, account, text, action, groupId)) return;
@@ -2538,5 +2573,5 @@ async function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, communitiesForNotice, surveyHolds, keepPhotos, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos, USER_HELP
 };
