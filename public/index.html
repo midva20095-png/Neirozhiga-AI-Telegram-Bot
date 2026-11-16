@@ -489,19 +489,14 @@ function paintVkBot(){
     el.dataset.out = url;
   });
 }
-function awayLink(url){
-  return 'https://vk.com/away.php?to=' + encodeURIComponent(url);
-}
 function coverCode(groupId, ids){
   const group = String(groupId).replace(/\D/g, '');
   const chat = 'https://vk.com/write-' + group;
-  const home = fileOrigin();
-  const rate = awayLink(home + '/vk.html?vk_group_id=' + group + '&goal=rate');
-  const site = awayLink((cfg && cfg.site_url) || 'https://babayagaland.ru');
+  const app = 'https://vk.com/app54895627_-' + group;
   const rows = [
     { title: 'Чат ИИ', button: 'Написать', cover_id: ids.chat, url: chat, button_url: chat, title_url: chat },
-    { title: 'Рейтинг', button: 'Открыть', cover_id: ids.rate, url: rate, button_url: rate, title_url: rate },
-    { title: 'Сайт', button: 'Открыть', cover_id: ids.site, url: site, button_url: site, title_url: site }
+    { title: 'Рейтинг', button: 'Открыть', cover_id: ids.rate, url: app + '#rate', button_url: app + '#rate', title_url: app + '#rate' },
+    { title: 'Сайт', button: 'Открыть', cover_id: ids.site, url: app + '#site', button_url: app + '#site', title_url: app + '#site' }
   ];
   return 'return ' + JSON.stringify({ title: 'НейроЯга', rows }) + ';';
 }
@@ -574,7 +569,7 @@ window.addEventListener('message', function(event){
 function viewMenu(){
   const mail = !!(me && me.mail);
   const cards = [
-    ['chat', 'Чат', 'Написать'],
+    ['chat', 'Чат ИИ', 'Написать'],
     ['rate', 'Рейтинг', 'Открыть'],
     ['site', 'Сайт', 'Открыть']
   ].map(function(row){
@@ -585,7 +580,7 @@ function viewMenu(){
     ? '<button type="button" class="sub" id="door-setup">'+(showSetup?'Скрыть настройки':'Настройки')+'</button>'
     : '';
   const setup = vkAdmin() && showSetup
-    ? '<div class="setup"><p class="hint">Кнопки откроют кабинет бота: чат, рейтинг и сайт. Картинку можно заменить своей.</p>'+
+    ? '<div class="setup"><p class="hint">Ключ сообщений не меняет эти кнопки. Нажмите «Поставить на страницу» здесь, в приложении сообщества, и разрешите кнопки. На телефоне «Рейтинг» и «Сайт» открывают это приложение, «Чат ИИ» — переписку.</p>'+
       '<label class="filebtn">Своя картинка для чата<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="chat"></label>'+
       '<label class="filebtn">Своя картинка для рейтинга<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="rate"></label>'+
       '<label class="filebtn">Своя картинка для сайта<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="site"></label>'+

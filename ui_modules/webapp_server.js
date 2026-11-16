@@ -170,6 +170,9 @@ function startWebApp() {
             if (!groupId) return res.status(400).json({ error: 'Откройте кабинет из сообщества.' });
             const code = widget.coverWidgetCode(groupId, ids);
             await widget.publishCover(token, code);
+            if (vk.communityList().some(item => item.id === groupId)) {
+                await db.setSetting(`vk_widget_${groupId}`, { token });
+            }
             res.json({ ok: true });
         } catch (e) {
             res.status(400).json({ error: e.message || 'ВК не поставил кнопки.' });

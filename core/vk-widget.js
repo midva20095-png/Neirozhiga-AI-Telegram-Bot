@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
-const catalog = require('./catalog');
 
 const COVERS = {
     chat: { title: 'Чат ИИ', button: 'Написать', file: 'chat.jpg', chat: true },
@@ -17,24 +16,11 @@ function chatLink(groupId) {
     return `https://vk.com/write-${groupNumber(groupId)}`;
 }
 
-function serviceBase() {
-    return String(process.env.WEBAPP_URL || 'https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app').replace(/\/$/, '');
-}
-
-function siteUrl() {
-    return catalog.getGeneral().site_url || 'https://babayagaland.ru';
-}
-
-function away(url) {
-    return `https://vk.com/away.php?to=${encodeURIComponent(url)}`;
-}
-
 function groupLink(groupId, hash) {
     const group = groupNumber(groupId);
     const goal = String(hash || '').replace(/^#/, '');
-    if (goal === 'site') return away(siteUrl());
-    if (goal === 'rate') return away(`${serviceBase()}/vk.html?vk_group_id=${group}&goal=rate`);
-    return away(`${serviceBase()}/vk.html?vk_group_id=${group}`);
+    const fragment = goal === 'rate' || goal === 'site' ? `#${goal}` : '';
+    return `https://vk.com/app54895627_-${group}${fragment}`;
 }
 
 function coverWidgetCode(groupId, ids) {
@@ -122,7 +108,7 @@ function defaultCover(name) {
 
 async function uploadCover(token, jpeg) {
     const access = String(token || '').trim();
-    if (access.length < 20 || access.length > 500) throw new Error('Нет разрешения сообщества.');
+    if (access.length < 20 || access.length > 2000) throw new Error('Нет разрешения сообщества.');
     const params = new URLSearchParams({ access_token: access, v: '5.199', image_type: '510x128' });
     const serverRes = await fetch(`https://api.vk.com/method/appWidgets.getGroupImageUploadServer?${params}`);
     const serverJson = await serverRes.json();
@@ -152,7 +138,7 @@ async function uploadCover(token, jpeg) {
 
 async function publishCover(token, code) {
     const access = String(token || '').trim();
-    if (access.length < 20 || access.length > 500) throw new Error('Нет разрешения сообщества.');
+    if (access.length < 20 || access.length > 2000) throw new Error('Нет разрешения сообщества.');
     const body = new URLSearchParams({ access_token: access, v: '5.199', type: 'cover_list', code: String(code || '') });
     const res = await fetch('https://api.vk.com/method/appWidgets.update', { method: 'POST', body });
     const json = await res.json();

@@ -2551,21 +2551,34 @@ async function startVk() {
         ensureLessonPin(item.token, item.id).catch(() => {
             console.error(`ВК ${item.id}: закреп уроков не подготовлен.`);
         });
-        ensureCommunityWidget(item.token, item.id).catch(() => {});
+        ensureCommunityWidget(item.id).catch(() => {});
     }
 }
 
-async function ensureCommunityWidget(token, groupId) {
+function widgetSettingKey(groupId) {
+    return `vk_widget_${String(groupId || '').replace(/\D/g, '')}`;
+}
+
+async function ensureCommunityWidget(groupId) {
+    const id = String(groupId || '').replace(/\D/g, '');
+    if (!id) return;
     try {
         const widget = require('./vk-widget');
+        const saved = await db.getSettings([widgetSettingKey(id)]);
+        const packed = saved[widgetSettingKey(id)];
+        const token = packed && typeof packed === 'object' ? String(packed.token || '') : '';
+        if (token.length < 20) {
+            console.log(`ВК ${id}: кнопки страницы ставит разрешение из приложения. Откройте приложение на компьютере: «Настройки» → «Поставить на страницу».`);
+            return;
+        }
         const ids = {};
         for (const name of ['chat', 'rate', 'site']) {
-            ids[name] = await widget.uploadCover(token, await widget.paintCover(name));
+            ids[name] = await widget.uploadCover(token, await widget.defaultCover(name));
         }
-        await widget.publishCover(token, widget.coverWidgetCode(groupId, ids));
-        console.log(`ВК ${groupId}: кнопки сообщества обновлены.`);
+        await widget.publishCover(token, widget.coverWidgetCode(id, ids));
+        console.log(`ВК ${id}: кнопки сообщества обновлены.`);
     } catch (error) {
-        console.error(`ВК ${groupId}: кнопки сообщества не обновлены. ${error && error.message ? error.message : ''}`.trim());
+        console.error(`ВК ${id}: кнопки сообщества не обновлены. ${error && error.message ? error.message : ''}`.trim());
     }
 }
 
