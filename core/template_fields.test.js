@@ -25,6 +25,8 @@ test('ответы встают в текст запроса, дата даёт 
     assert.equal(fields.zodiacSign('14.05.2000'), 'Телец');
     const extra = fields.buildPrompt('Просто портрет.', list, { имя: 'Маша' });
     assert.match(extra, /Имя: Маша/);
+    const years = fields.parseFields('число | возраст | Сколько лет');
+    assert.equal(fields.buildPrompt('Сейчас {возраст}, было {возраст-1}.', years, { возраст: '30' }), 'Сейчас 30, было 29.');
 });
 
 test('без обязательного ответа шаблон не запускается', () => {

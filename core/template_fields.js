@@ -109,6 +109,15 @@ function buildPrompt(prompt, fields, answers) {
         const value = String(map[field.key] || '').trim().slice(0, 600);
         const keys = [field.key, field.key.toLowerCase(), field.key.charAt(0).toUpperCase() + field.key.slice(1).toLowerCase()];
         keys.forEach(key => {
+            const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const before = text;
+            text = text.replace(new RegExp('\\{' + escaped + '\\s*([+-])\\s*(\\d+)\\}', 'gi'), (token, sign, amount) => {
+                const base = Number(String(value).replace(',', '.'));
+                if (!Number.isFinite(base)) return value;
+                const next = sign === '-' ? base - Number(amount) : base + Number(amount);
+                return String(next);
+            });
+            if (text !== before) used.add(field.key);
             const token = '{' + key + '}';
             if (!text.includes(token)) return;
             text = text.split(token).join(value);

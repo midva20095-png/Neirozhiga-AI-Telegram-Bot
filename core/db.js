@@ -1,5 +1,6 @@
 const { Pool } = require('pg');
 const worksLib = require('./works');
+const importedTemplates = require('../data/foreign-templates.json');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -73,6 +74,12 @@ async function initDB() {
         row
       );
     }
+  }
+  try {
+    const added = await importMissingTemplates(importedTemplates);
+    if (added) console.log('Добавлены шаблоны из готовых промптов: ' + added);
+  } catch (err) {
+    console.error('Импорт шаблонов пропущен:', err.message);
   }
   await pool.query(`
     CREATE TABLE IF NOT EXISTS gigachat_usage (
@@ -937,6 +944,26 @@ function cleanTemplateImage(value) {
   return s.slice(0, 2000);
 }
 
+async function importMissingTemplates(items) {
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) return 0;
+  const existing = await pool.query('SELECT lower(btrim(title)) AS title FROM templates');
+  const have = new Set(existing.rows.map(row => row.title));
+  let added = 0;
+  for (const item of list) {
+    const title = String(item && item.title || '').trim();
+    if (!title || have.has(title.toLowerCase())) continue;
+    try {
+      await saveTemplate(item);
+      have.add(title.toLowerCase());
+      added += 1;
+    } catch (err) {
+      console.error('Шаблон не добавлен:', title, err.message);
+    }
+  }
+  return added;
+}
+
 async function saveTemplate(data) {
   const values = [
     String(data.title || '').trim().slice(0, 120),
@@ -1071,6 +1098,7 @@ module.exports = {
   listHistory,
   listTemplates,
   saveTemplate,
+  importMissingTemplates,
   deleteTemplate,
   peekGiga,
   consumeGiga,
