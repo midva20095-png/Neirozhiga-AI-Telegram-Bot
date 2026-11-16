@@ -321,10 +321,11 @@ function startWebApp() {
             const userId = resolveUserId(req);
             const asked = String(req.query.group || '').replace(/\D/g, '');
             const known = asked && vk.communityList().some(item => item.id === asked) ? asked : '';
-            if (!userId && !known) return res.status(401).json({ error: 'auth_required' });
+            const group = known || vk.communityId('');
+            if (!userId && !group) return res.status(401).json({ error: 'auth_required' });
             const range = activity.weekRange(new Date());
             if (userId && Number(userId) >= 0) return res.json({ vk: false, week: range.label, rows: [], mine: null });
-            const rows = await vk.attachFaces(await db.listWeekActivity(range.start, known || vk.communityId(req.query.group)));
+            const rows = await vk.attachFaces(await db.listWeekActivity(range.start, group));
             const place = userId ? rows.findIndex(row => String(row.userId) === String(userId)) : -1;
             res.json({
                 vk: true,

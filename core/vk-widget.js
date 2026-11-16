@@ -16,11 +16,8 @@ function chatLink(groupId) {
     return `https://vk.com/write-${groupNumber(groupId)}`;
 }
 
-function groupLink(groupId, hash) {
-    const group = groupNumber(groupId);
-    const goal = String(hash || '').replace(/^#/, '');
-    const fragment = goal === 'rate' || goal === 'site' ? `#${goal}` : '';
-    return `https://vk.com/app54895627_-${group}${fragment}`;
+function groupLink(groupId) {
+    return `https://vk.com/app54895627_-${groupNumber(groupId)}`;
 }
 
 function coverWidgetCode(groupId, ids) {
@@ -28,7 +25,7 @@ function coverWidgetCode(groupId, ids) {
         const item = COVERS[key];
         const cover = String((ids && ids[key]) || '');
         if (!/^-?\d+_\d+$/.test(cover)) throw new Error('Нет картинки для кнопки.');
-        const url = item.chat ? chatLink(groupId) : groupLink(groupId, item.hash);
+        const url = item.chat ? chatLink(groupId) : groupLink(groupId);
         return {
             title: item.title,
             title_url: url,

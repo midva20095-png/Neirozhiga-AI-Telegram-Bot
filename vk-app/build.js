@@ -74,8 +74,16 @@ window.addEventListener('message', function(event){
     return;
   }
   if (bridgeType === 'VKWebAppGetLaunchParamsResult') {
-    const id = String((bridgeData && (bridgeData.vk_group_id || bridgeData.group_id)) || '').replace(/\\D/g, '');
+    const bag = {};
+    [bridgeData, bridgeData && bridgeData.params, bridgeData && bridgeData.data].forEach(function(level){
+      if (!level || typeof level !== 'object') return;
+      Object.keys(level).forEach(function(key){
+        if (key === 'sign' || key.indexOf('vk_') === 0) bag[key] = level[key];
+      });
+    });
+    const id = String(bag.vk_group_id || (bridgeData && bridgeData.group_id) || '').replace(/\\D/g, '');
     if (id) tell({ type: 'ny-group', id: id });
+    tell({ type: 'ny-launch', params: bag });
     return;
   }
   if (bridgeType === 'VKWebAppGetCommunityTokenResult' && bridgeData.access_token) {
