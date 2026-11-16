@@ -349,44 +349,48 @@ async function loadConfig(){
   const s = document.getElementById('site');
   if (cfg.site_url){ s.href = cfg.site_url; s.style.display=''; } else s.style.display='none';
 }
-function launchBag(extra){
-  const bag = {};
-  function take(source){
-    if (!source) return;
-    if (typeof source.forEach === 'function') {
-      source.forEach(function(value, key){
-        if (value && (key === 'sign' || key.indexOf('vk_') === 0)) bag[key] = value;
-      });
-      return;
-    }
-    Object.keys(source).forEach(function(key){
-      const value = source[key];
-      if (value != null && value !== '' && (key === 'sign' || key.indexOf('vk_') === 0)) bag[key] = String(value);
-    });
-  }
-  take(new URLSearchParams(location.search));
-  take(new URLSearchParams((location.hash || '').replace(/^#/, '')));
-  take(extra);
-  return bag;
+function sessionQuery(extra){
+  const search = location.search || '';
+  const sp = new URLSearchParams(search);
+  if (sp.get('sign') && sp.get('vk_user_id')) return search;
+  if (!extra || !extra.sign || !extra.vk_user_id) return '';
+  const q = new URLSearchParams();
+  Object.keys(extra).forEach(function(key){
+    if (key === 'sign' || key.indexOf('vk_') === 0) q.append(key, extra[key] == null ? '' : String(extra[key]));
+  });
+  return '?' + q.toString();
 }
 async function adoptVkLaunch(extra){
-  const bag = launchBag(extra);
-  const gid = String(bag.vk_group_id || vkGroupId() || '').replace(/\D/g, '');
+  const sp = new URLSearchParams(location.search);
+  const gid = String(sp.get('vk_group_id') || (extra && extra.vk_group_id) || vkGroupId() || '').replace(/\D/g, '');
   if (gid) window.__vkGroup = gid;
-  if (bag.vk_user_id && window.__vkGoal !== 'rate' && window.__vkGoal !== 'site') wantMenu = true;
-  if (token || !bag.sign || !bag.vk_user_id) return;
+  if ((sp.get('vk_user_id') || (extra && extra.vk_user_id)) && window.__vkGoal !== 'rate' && window.__vkGoal !== 'site') wantMenu = true;
+  const query = sessionQuery(extra);
+  if (token || !query) return;
   try {
-    const r = await fetchT('/api/vk/session?' + new URLSearchParams(bag).toString());
+    const r = await fetchT('/api/vk/session' + query);
     const d = await r.json();
     if (d && d.tk) {
       token = d.tk;
       userId = String(token).split('.')[0];
       if (d.group) window.__vkGroup = String(d.group).replace(/\D/g, '');
       window.__vkOffline = false;
+      window.__vkAuthError = '';
     } else if (d && d.error) window.__vkAuthError = d.error;
   } catch (e) { window.__vkOffline = true; }
 }
+function markVkChrome(){
+  const vk = !!(window.__nyApi || new URLSearchParams(location.search).get('vk_app_id') || new URLSearchParams(location.search).get('vk_user_id'));
+  if (!vk) return;
+  const bots = document.querySelector('.bots');
+  if (bots) bots.style.display = 'none';
+  const rateTab = document.getElementById('tabrate');
+  const menuTab = document.getElementById('tabmenu');
+  if (rateTab) rateTab.style.display = '';
+  if (menuTab) menuTab.style.display = '';
+}
 async function load(){
+  markVkChrome();
   await adoptVkLaunch();
   paintVkBot();
   if (!userId && window.__vkGoal === 'rate') {
