@@ -1,6 +1,5 @@
 const { Pool } = require('pg');
 const worksLib = require('./works');
-const foreignTitles = require('../data/foreign-template-titles.json');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -134,12 +133,6 @@ async function initDB() {
   await pool.query(`CREATE INDEX IF NOT EXISTS works_user_id_idx ON works (user_id, id DESC)`);
   await pool.query(`ALTER TABLE works ADD COLUMN IF NOT EXISTS template_id INTEGER`);
   await pool.query(`ALTER TABLE works ADD COLUMN IF NOT EXISTS shared_at TIMESTAMP`);
-  try {
-    const removed = await dropForeignTemplates(foreignTitles);
-    if (removed) console.log('Шаблоны чужого бота убраны из кабинета: ' + removed);
-  } catch (err) {
-    console.error('Шаблоны чужого бота не убраны:', err.message);
-  }
   await pool.query(`
     CREATE TABLE IF NOT EXISTS journal (
       id SERIAL PRIMARY KEY,
@@ -944,33 +937,6 @@ function cleanTemplateImage(value) {
   return s.slice(0, 2000);
 }
 
-async function dropForeignTemplates(titles) {
-  const key = 'foreign_templates_removed';
-  const saved = await getSettings([key]);
-  if (saved && saved[key]) return 0;
-  const list = [...new Set((Array.isArray(titles) ? titles : []).map(title => String(title || '').trim().toLowerCase()).filter(Boolean))];
-  let removed = 0;
-  if (list.length) {
-    await pool.query(
-      `UPDATE works w
-       SET prompt = t.title
-       FROM templates t
-       WHERE w.template_id = t.id
-         AND lower(btrim(t.title)) = ANY($1::text[])`,
-      [list]
-    );
-    const res = await pool.query(
-      `DELETE FROM templates
-       WHERE lower(btrim(title)) = ANY($1::text[])
-       RETURNING id`,
-      [list]
-    );
-    removed = res.rowCount;
-  }
-  await setSetting(key, { removed, at: new Date().toISOString() });
-  return removed;
-}
-
 async function saveTemplate(data) {
   const values = [
     String(data.title || '').trim().slice(0, 120),
@@ -1105,7 +1071,6 @@ module.exports = {
   listHistory,
   listTemplates,
   saveTemplate,
-  dropForeignTemplates,
   deleteTemplate,
   peekGiga,
   consumeGiga,

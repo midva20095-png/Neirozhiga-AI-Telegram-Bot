@@ -297,8 +297,8 @@ function getGeneral() {
     const previousBotsHelp = help.includes('«Канал» открывает канал') && !help.includes('https://max.ru/se14387925_bot');
     const previousBotLabels = help.includes('«ВК» открывает бота во ВКонтакте') && !help.includes('«Ещё боты»');
     const missingVkMove = help.includes('Один кредит равен одному рублю.') && !help.includes('Во ВК');
-    const generatorHelp = help.includes('write-236645486');
-    if (!help || help.startsWith(LEGACY_HELP) || previousTransferHelp || previousChannelHelp || previousBotsHelp || previousBotLabels || missingVkMove || generatorHelp) general.help_text = BASE_GENERAL.help_text;
+    const oldVkBot = /vk\.ru\/write-\d+/.test(help) && !help.includes('vk.ru/write-230706467');
+    if (!help || help.startsWith(LEGACY_HELP) || previousTransferHelp || previousChannelHelp || previousBotsHelp || previousBotLabels || missingVkMove || oldVkBot) general.help_text = BASE_GENERAL.help_text;
     return general;
 }
 

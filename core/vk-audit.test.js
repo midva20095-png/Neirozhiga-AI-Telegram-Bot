@@ -38,16 +38,12 @@ test('кнопка аудита есть только во втором сооб
         VK_GROUP_ID: process.env.VK_GROUP_ID,
         VK_GROUP_TOKEN: process.env.VK_GROUP_TOKEN,
         VK_GROUP_ID_2: process.env.VK_GROUP_ID_2,
-        VK_GROUP_TOKEN_2: process.env.VK_GROUP_TOKEN_2,
-        VK_GROUP_ID_3: process.env.VK_GROUP_ID_3,
-        VK_GROUP_TOKEN_3: process.env.VK_GROUP_TOKEN_3
+        VK_GROUP_TOKEN_2: process.env.VK_GROUP_TOKEN_2
     };
     process.env.VK_GROUP_ID = '230706467';
     process.env.VK_GROUP_TOKEN = 'secret-token-value';
     process.env.VK_GROUP_ID_2 = '555';
     process.env.VK_GROUP_TOKEN_2 = 'secret-two';
-    delete process.env.VK_GROUP_ID_3;
-    delete process.env.VK_GROUP_TOKEN_3;
     process.env.WEBAPP_URL = process.env.WEBAPP_URL || 'https://bot.example';
     const second = JSON.parse(vk.mainMenu(10, '555'));
     const first = JSON.parse(vk.mainMenu(10, '230706467'));

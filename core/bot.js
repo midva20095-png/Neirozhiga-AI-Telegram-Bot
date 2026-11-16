@@ -469,18 +469,6 @@ async function startBot(app) {
         console.log('✅ База данных PostgreSQL инициализирована');
         db.note('sys', 'Бот запущен').catch(() => {});
         try {
-            const cleared = await require('./yaga-import').clearImportedBalances();
-            if (cleared && !cleared.done) {
-                console.log(`ЯгаГенератор отключён: обнулены перенесённые балансы, счетов ${cleared.cleared}.`);
-            }
-            const dropped = await require('./yaga-import').clearImportedAccounts();
-            if (dropped && !dropped.done) {
-                console.log(`Админка: убраны пустые счета ЯгаГенератора, клиентов ${dropped.cleared}.`);
-            }
-        } catch (err) {
-            console.error('ЯгаГенератор: балансы не обнулены.', err.message);
-        }
-        try {
             const pending = await transferApi.resumePending();
             if (pending && pending.credited) console.log('✅ Доначислены кредиты с незавершённого переноса с сайта');
         } catch (err) {

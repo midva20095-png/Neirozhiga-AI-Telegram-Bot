@@ -191,7 +191,6 @@ test('справка в боте объясняет кнопки и не сод�
     assert.match(text, /Поддержка/);
     assert.match(text, /Ещё боты/);
     assert.match(text, /https:\/\/vk\.ru\/write-230706467/);
-    assert.doesNotMatch(text, /236645486/);
     assert.match(text, /https:\/\/max\.ru\/se14387925_bot/);
     assert.match(text, /https:\/\/babayagaland\.ru/);
     assert.match(text, /Во ВК/);

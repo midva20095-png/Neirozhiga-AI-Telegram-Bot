@@ -61,7 +61,7 @@ test('пустой ответ загрузки ВК не считается фо
 });
 
 test('аккаунт ВК не совпадает с числом Telegram', () => {
-    assert.equal(vk.accountId(236645486), -236645486);
+    assert.equal(vk.accountId(230706467), -230706467);
     assert.equal(vk.accountId(0), null);
     assert.equal(vk.accountId(-5), null);
     assert.equal(vk.accountId('нет'), null);
@@ -211,11 +211,11 @@ test('меню ВК открывает кабинет и не считает к�
 
 test('кабинет ВК открывает страницу бота, а не мини-приложение', () => {
     process.env.WEBAPP_URL = 'https://bot.example';
-    const personal = JSON.parse(vk.mainMenu(10, '236645486'));
+    const personal = JSON.parse(vk.mainMenu(10, '230706467'));
     const action = personal.buttons.flat().find(button => button.action.label === 'Кабинет').action;
     assert.equal(action.type, 'open_link');
     assert.match(action.link, /^https:\/\/bot\.example\/vk\.html\?tk=-10\./);
-    assert.match(action.link, /vk_group_id=236645486/);
+    assert.match(action.link, /vk_group_id=230706467/);
     assert.doesNotMatch(action.link, /vk\.ru\/app/);
 });
 
@@ -225,8 +225,6 @@ test('второе сообщество считается отдельно и �
         VK_GROUP_TOKEN: process.env.VK_GROUP_TOKEN,
         VK_GROUP_ID_2: process.env.VK_GROUP_ID_2,
         VK_GROUP_TOKEN_2: process.env.VK_GROUP_TOKEN_2,
-        VK_GROUP_ID_3: process.env.VK_GROUP_ID_3,
-        VK_GROUP_TOKEN_3: process.env.VK_GROUP_TOKEN_3,
         WEBAPP_URL: process.env.WEBAPP_URL
     };
     process.env.VK_GROUP_ID = '230706467';
@@ -246,19 +244,14 @@ test('второе сообщество считается отдельно и �
     process.env.VK_GROUP_ID_2 = '230706467';
     process.env.VK_GROUP_TOKEN_2 = 'token-two';
     assert.deepEqual(vk.communityList().map(item => item.id), ['230706467']);
-    process.env.VK_GROUP_ID_3 = '236645486';
-    process.env.VK_GROUP_TOKEN_3 = 'token-three';
     assert.deepEqual(vk.communityList().map(item => item.id), ['230706467']);
     assert.deepEqual(vk.adminHomes().map(item => item.title), ['Точки и Линии', 'НейроЯга']);
-    const third = JSON.parse(vk.mainMenu(10, '236645486'));
-    assert.equal(third.buttons.flat().some(button => button.action.label === 'Аудит'), false);
-    assert.equal(third.buttons.flat().some(button => button.action.label === 'Клуб'), false);
     const club = JSON.parse(vk.mainMenu(10, '214554778'));
     assert.equal(club.buttons.flat().some(button => button.action.label === 'Клуб'), false);
     process.env.VK_GROUP_ID_2 = '214554778';
     process.env.VK_GROUP_TOKEN_2 = 'token-two';
     assert.equal(JSON.parse(vk.mainMenu(10, '214554778')).buttons.flat().some(button => button.action.label === 'Клуб'), true);
-    assert.equal(JSON.parse(vk.mainMenu(10, '236645486')).buttons.flat().some(button => button.action.label === 'Клуб'), false);
+    assert.equal(JSON.parse(vk.mainMenu(10, '230706467')).buttons.flat().some(button => button.action.label === 'Клуб'), false);
     for (const key of Object.keys(saved)) {
         if (saved[key] == null) delete process.env[key];
         else process.env[key] = saved[key];
