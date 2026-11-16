@@ -163,6 +163,20 @@ function startWebApp() {
         }
     });
 
+    app.post('/api/vk/widget', async (req, res) => {
+        try {
+            const token = String((req.body && req.body.token) || '');
+            const ids = (req.body && req.body.ids) || {};
+            const groupId = String((req.body && req.body.group_id) || '').replace(/\D/g, '');
+            if (!groupId) return res.status(400).json({ error: 'Откройте кабинет из сообщества.' });
+            const code = widget.coverWidgetCode(groupId, ids);
+            await widget.publishCover(token, code);
+            res.json({ ok: true });
+        } catch (e) {
+            res.status(400).json({ error: e.message || 'ВК не поставил кнопки.' });
+        }
+    });
+
     app.get('/api/vk/me', async (req, res) => {
         try {
             const account = vkAccount(req);

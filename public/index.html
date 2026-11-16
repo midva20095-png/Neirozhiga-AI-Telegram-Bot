@@ -390,13 +390,12 @@ function chatLink(){
 }
 function coverCode(groupId, ids){
   const group = String(groupId).replace(/\D/g, '');
-  const root = String(window.__nyApi || location.origin || '').replace(/\/$/, '');
-  const app = root + '/vk.html?vk_group_id=' + group;
-  const chat = 'https://vk.ru/write-' + group;
+  const chat = 'https://vk.com/write-' + group;
+  const app = 'https://vk.com/app54895627_-' + group;
   const rows = [
     { title: 'Чат', button: 'Написать', cover_id: ids.chat, url: chat, button_url: chat, title_url: chat },
-    { title: 'Рейтинг', button: 'Открыть', cover_id: ids.rate, url: app + '&goal=rate', button_url: app + '&goal=rate', title_url: app + '&goal=rate' },
-    { title: 'Сайт', button: 'Открыть', cover_id: ids.site, url: app + '&goal=site', button_url: app + '&goal=site', title_url: app + '&goal=site' }
+    { title: 'Рейтинг', button: 'Открыть', cover_id: ids.rate, url: app + '#rate', button_url: app + '#rate', title_url: app + '#rate' },
+    { title: 'Сайт', button: 'Открыть', cover_id: ids.site, url: app + '#site', button_url: app + '#site', title_url: app + '#site' }
   ];
   return 'return ' + JSON.stringify({ title: 'НейроЯга', rows }) + ';';
 }
@@ -426,8 +425,19 @@ async function placeCovers(){
       if (pin) pin.disabled = false;
       return;
     }
-    nyPost({ type: 'ny-widget-show', group_id: Number(groupId), code: coverCode(groupId, ids) });
-    if (msg) msg.textContent = 'Подтвердите кнопки в окне ВК.';
+    const placed = await fetch('/api/vk/widget', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: token, group_id: groupId, ids: ids })
+    });
+    const placedBody = await placed.json().catch(function(){ return {}; });
+    if (placed.status === 404) {
+      nyPost({ type: 'ny-widget-show', group_id: Number(groupId), code: coverCode(groupId, ids) });
+      if (msg) msg.textContent = 'Подтвердите кнопки в окне ВК.';
+      return;
+    }
+    if (!placed.ok || !placedBody.ok) throw new Error(placedBody.error || 'ВК не поставил кнопки.');
+    if (msg) msg.textContent = 'Кнопки стоят на странице сообщества.';
   } catch (e) {
     if (msg) msg.textContent = e.message || 'Не удалось поставить кнопки.';
   } finally {
@@ -452,7 +462,7 @@ window.addEventListener('message', function(event){
   if (data.type === 'ny-goal') { applyGoal(data.goal); return; }
   if (data.type !== 'ny-widget-fail') return;
   const note = document.getElementById('submsg');
-  if (note && vkAdmin()) note.textContent = 'ВК не открыл окно кнопок. Откройте кабинет из сообщества ещё раз.';
+  if (note && vkAdmin()) note.textContent = (data.reason && String(data.reason)) || 'ВК не открыл окно кнопок. Откройте кабинет из сообщества ещё раз.';
 });
 function viewMenu(){
   const mail = !!(me && me.mail);

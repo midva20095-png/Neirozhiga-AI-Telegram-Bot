@@ -13,18 +13,14 @@ function groupNumber(groupId) {
 }
 
 function chatLink(groupId) {
-    return `https://vk.ru/write-${groupNumber(groupId)}`;
+    return `https://vk.com/write-${groupNumber(groupId)}`;
 }
 
 function groupLink(groupId, hash) {
     const group = groupNumber(groupId);
-    const base = String(process.env.WEBAPP_URL || '').replace(/\/$/, '');
     const goal = String(hash || '').replace(/^#/, '');
-    if (!base) return `https://vk.ru/write-${group}`;
-    const params = new URLSearchParams();
-    params.set('vk_group_id', group);
-    if (goal === 'rate' || goal === 'site' || goal === 'sub') params.set('goal', goal);
-    return `${base}/vk.html?${params.toString()}`;
+    const fragment = goal === 'rate' || goal === 'site' || goal === 'sub' ? `#${goal}` : '';
+    return `https://vk.com/app54895627_-${group}${fragment}`;
 }
 
 function coverWidgetCode(groupId, ids) {
@@ -57,6 +53,7 @@ function uploadFields(raw) {
 function vkMessage(error, fallback) {
     const code = Number(error && error.error_code);
     if (code === 15 || code === 27 || code === 28) return 'Разрешите приложению кнопки сообщества.';
+    if (code === 100) return 'ВК не принял ссылку кнопки.';
     if (code === 129) return 'ВК не принял картинку. Поставьте другую.';
     return fallback;
 }
@@ -139,4 +136,14 @@ async function uploadCover(token, jpeg) {
     return String(id);
 }
 
-module.exports = { COVERS, coverWidgetCode, chatLink, groupLink, uploadFields, fitCover, paintCover, coverSvg, defaultCover, uploadCover };
+async function publishCover(token, code) {
+    const access = String(token || '').trim();
+    if (access.length < 20 || access.length > 500) throw new Error('Нет разрешения сообщества.');
+    const body = new URLSearchParams({ access_token: access, v: '5.199', type: 'cover_list', code: String(code || '') });
+    const res = await fetch('https://api.vk.com/method/appWidgets.update', { method: 'POST', body });
+    const json = await res.json();
+    if (!json.response) throw new Error(vkMessage(json.error, 'ВК не поставил кнопки на страницу.'));
+    return true;
+}
+
+module.exports = { COVERS, coverWidgetCode, chatLink, groupLink, uploadFields, fitCover, paintCover, coverSvg, defaultCover, uploadCover, publishCover };

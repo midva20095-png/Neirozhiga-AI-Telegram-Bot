@@ -15,7 +15,7 @@ window.__nyApi = ${JSON.stringify(api)};
   };
 })();
 function vkSend(handler, params){
-  try { parent.postMessage({ handler: handler, params: params || {}, type: 'vk-connect', sendTime: Date.now() }, '*'); }
+  try { parent.postMessage({ handler: handler, params: params || {}, type: 'vk-connect', connectVersion: '2.15.8', sendTime: Date.now() }, '*'); }
   catch (e) {}
 }
 vkSend('VKWebAppInit');
@@ -85,7 +85,10 @@ window.addEventListener('message', function(event){
     tell({ type: 'ny-community-token-fail' });
     return;
   }
-  if (String(bridgeType).indexOf('WidgetPreviewBoxFailed') >= 0) tell({ type: 'ny-widget-fail' });
+  if (String(bridgeType).indexOf('WidgetPreviewBoxFailed') >= 0) {
+    const reason = bridgeData && (bridgeData.error_reason || (bridgeData.error_data && bridgeData.error_data.error_reason) || '');
+    tell({ type: 'ny-widget-fail', reason: String(reason || '').replace(/access_token=[^&\\s]+/g, '').slice(0, 180) });
+  }
 });
 </script>
 `;
