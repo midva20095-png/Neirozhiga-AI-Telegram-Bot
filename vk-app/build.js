@@ -25,8 +25,7 @@ function tell(msg){
 }
 function goalOf(value){
   const goal = String(value || '').replace(/^#/, '').split('&')[0].split('?')[0];
-  if (goal.indexOf('rate') === 0) return 'rate';
-  return goal === 'site' || goal === 'sub' ? goal : '';
+  return goal === 'rate' || goal === 'site' || goal === 'sub' ? goal : '';
 }
 window.__nyHost = function(msg){
   if (!msg || !msg.type) return;

@@ -5,9 +5,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>НейроЯга</title>
 <link rel="icon" href="cover.jpg">
-<script src="https://cdn.jsdelivr.net/npm/@vkontakte/vk-bridge/dist/browser.min.js"></script>
-<script>window.vkBridge||document.write('<script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"><\/script>')</script>
-<script>try { vkBridge.send('VKWebAppInit'); } catch (e) {}</script>
 <script>
 function vkSend(handler, params){
   try { parent.postMessage({ handler: handler, params: params || {}, type: 'vk-connect', connectVersion: '2.15.8', sendTime: Date.now() }, '*'); }
@@ -21,10 +18,7 @@ function vkTell(msg){
 window.__nyHost = function(msg){
   if (!msg || !msg.type) return;
   if (msg.type === 'ny-goal-ask') {
-    const raw = String(location.hash || '').replace(/^#/, '').split('&')[0].split('?')[0];
-    const goal = raw.indexOf('rate') === 0 ? 'rate' : raw;
-    const group = raw.indexOf('rate') === 0 ? raw.replace(/\D/g, '') : '';
-    if (group) vkTell({ type: 'ny-group', id: group });
+    const goal = String(location.hash || '').replace(/^#/, '').split('&')[0].split('?')[0];
     if (goal === 'rate' || goal === 'site' || goal === 'sub') vkTell({ type: 'ny-goal', goal: goal });
     return;
   }
@@ -264,10 +258,6 @@ function fileOrigin(){
 function openOut(url){
   const w = tg();
   if (w && w.openLink) { w.openLink(url); return; }
-  if (window.vkBridge && vkBridge.send) {
-    vkBridge.send('VKWebAppOpenLink', { url: url }).catch(function(){ window.open(url, '_blank', 'noopener'); });
-    return;
-  }
   let framed = false;
   try { framed = parent && parent !== window; } catch (e) { framed = true; }
   if (framed || window.__nyHost) nyPost({ type: 'ny-open', url: url });
@@ -290,13 +280,9 @@ function detectAuth(){
   if (hp.get('tpl') || sp.get('tpl')) pendingTpl = hp.get('tpl') || sp.get('tpl');
   if (hp.get('pkg') || sp.get('pkg')) pendingPkg = hp.get('pkg') || sp.get('pkg');
   window.__vkPaid = hp.get('paid') === '1' || sp.get('paid') === '1';
-  const rawGoal = sp.get('goal') || hash.split('&')[0].split('?')[0];
-  const goal = rawGoal.indexOf('rate') === 0 ? 'rate' : rawGoal;
-  if (rawGoal.indexOf('rate') === 0) {
-    const group = rawGoal.replace(/\D/g, '');
-    if (group) window.__vkGroup = group;
-  }
+  const goal = hash.split('&')[0].split('?')[0];
   window.__vkGoal = (goal === 'rate' || goal === 'site' || goal === 'sub') ? goal : '';
+  if (sp.get('vk_user_id') && window.__vkGoal !== 'rate' && window.__vkGoal !== 'site') wantMenu = true;
   if (window.__vkGoal === 'rate') { wantMenu = false; tab = 'rate'; }
   if (w && w.initDataUnsafe && w.initDataUnsafe.user && w.initDataUnsafe.user.id) userId = w.initDataUnsafe.user.id;
   else if (w && w.initData) userId = parseUser(w.initData);
@@ -372,42 +358,37 @@ async function loadConfig(){
   const s = document.getElementById('site');
   if (cfg.site_url){ s.href = cfg.site_url; s.style.display=''; } else s.style.display='none';
 }
-function rawLaunch(){
-  const search = location.search.charAt(0) === '?' ? location.search.slice(1) : location.search;
-  if (search.indexOf('sign=') >= 0) return search;
+function launchFields(extra){
+  const bag = {};
+  function put(source){
+    if (!source) return;
+    if (typeof source.forEach === 'function' && typeof source.get === 'function') {
+      source.forEach(function(value, key){
+        if (key === 'sign' || key.indexOf('vk_') === 0) bag[key] = value == null ? '' : String(value);
+      });
+      return;
+    }
+    Object.keys(source).forEach(function(key){
+      if (key === 'sign' || key.indexOf('vk_') === 0) bag[key] = source[key] == null ? '' : String(source[key]);
+    });
+  }
+  put(new URLSearchParams(location.search));
   const hash = (location.hash || '').replace(/^#/, '');
-  if (hash.indexOf('sign=') >= 0) return hash;
-  return search;
+  if (hash.indexOf('vk_user_id=') >= 0 || hash.indexOf('sign=') >= 0) put(new URLSearchParams(hash));
+  if (extra && extra.vk_user_id && extra.sign) put(extra);
+  return bag;
 }
-function launchValue(launch, key){
-  const match = new RegExp('(?:^|&)' + key + '=([^&]*)').exec(launch || '');
-  if (!match) return '';
-  try { return decodeURIComponent(match[1].replace(/\+/g, '%20')); }
-  catch (e) { return match[1]; }
-}
-async function bridgeLaunch(){
-  if (!window.vkBridge || !vkBridge.send) return '';
-  try {
-    const data = await vkBridge.send('VKWebAppGetLaunchParams');
-    const keys = Object.keys(data || {}).filter(function(key){ return key === 'sign' || key.indexOf('vk_') === 0; }).sort();
-    if (keys.indexOf('sign') < 0) return '';
-    return keys.map(function(key){
-      return key + '=' + encodeURIComponent(data[key] == null ? '' : String(data[key]));
-    }).join('&');
-  } catch (e) { return ''; }
-}
-async function adoptVkLaunch(){
-  let launch = rawLaunch();
-  if (launch.indexOf('sign=') < 0) launch = await bridgeLaunch() || launch;
-  const gid = String(launchValue(launch, 'vk_group_id') || vkGroupId() || '').replace(/\D/g, '');
+async function adoptVkLaunch(extra){
+  const bag = launchFields(extra);
+  const gid = String(bag.vk_group_id || vkGroupId() || '').replace(/\D/g, '');
   if (gid) window.__vkGroup = gid;
-  if (window.__vkGoal === 'rate') wantMenu = false;
-  if (token || launch.indexOf('sign=') < 0) return;
+  if (bag.vk_user_id && window.__vkGoal !== 'rate' && window.__vkGoal !== 'site') wantMenu = true;
+  if (token || !bag.sign || !bag.vk_user_id) return;
   try {
     const r = await fetchT('/api/vk/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ launch: launch })
+      body: JSON.stringify(bag)
     });
     const d = await r.json();
     if (d && d.tk) {
@@ -510,7 +491,7 @@ async function load(){
   const bots = document.querySelector('.bots');
   if (bots) bots.style.display = isVk() ? 'none' : '';
   if (!isVk() && (tab==='rate' || tab==='menu')) tab = 'gen';
-  if (isVk() && !window.__vkGoal && !pendingTpl && !pendingPkg && tab === 'gen') tab = 'tpl';
+  if (isVk() && wantMenu) tab = 'menu';
   if (window.__vkGoal === 'rate') tab = 'rate';
   draw();
   if (window.__vkGoal === 'site') openOut((cfg && cfg.site_url) || 'https://babayagaland.ru');
@@ -611,12 +592,10 @@ function coverCode(groupId, ids){
   const group = String(groupId).replace(/\D/g, '');
   const chat = 'https://vk.com/write-' + group;
   const app = 'https://vk.com/app54901511_-' + group;
-  const rate = app + '#rate';
-  const site = app + '#site';
   const rows = [
     { title: 'Чат ИИ', button: 'Написать', cover_id: ids.chat, url: chat, button_url: chat, title_url: chat },
-    { title: 'Рейтинг', button: 'Открыть', cover_id: ids.rate, url: rate, button_url: rate, title_url: rate },
-    { title: 'Сайт', button: 'Открыть', cover_id: ids.site, url: site, button_url: site, title_url: site }
+    { title: 'Рейтинг', button: 'Открыть', cover_id: ids.rate, url: app, button_url: app, title_url: app },
+    { title: 'Сайт', button: 'Открыть', cover_id: ids.site, url: app, button_url: app, title_url: app }
   ];
   return 'return ' + JSON.stringify({ title: 'НейроЯга', rows }) + ';';
 }
@@ -667,14 +646,9 @@ async function placeCovers(){
 }
 function bridgeGoal(data){
   const bag = data && (data.params || (data.data && data.data.data) || data.data || data) || {};
-  const raw = String(bag.location || bag.hash || '').replace(/^#/, '').split('&')[0].split('?')[0];
-  if (raw.indexOf('rate') === 0) {
-    const group = raw.replace(/\D/g, '');
-    if (group) window.__vkGroup = group;
-    applyGoal('rate');
-    return;
-  }
-  if (raw === 'site' || raw === 'sub') applyGoal(raw);
+  const raw = bag.location || bag.hash || '';
+  const goal = String(raw).replace(/^#/, '').split('&')[0].split('?')[0];
+  if (goal === 'rate' || goal === 'site' || goal === 'sub') applyGoal(goal);
 }
 window.addEventListener('hashchange', function(){ bridgeGoal({ hash: location.hash }); });
 window.addEventListener('message', function(event){
@@ -683,7 +657,7 @@ window.addEventListener('message', function(event){
   if (data.type === 'ny-launch') {
     window.__vkLaunchSeen = true;
     const had = !!userId;
-    adoptVkLaunch().then(function(){
+    adoptVkLaunch(data.params || {}).then(function(){
       if (userId) { if (!had) load(); else draw(); return; }
       return adoptVkUser().then(function(){ if (userId) load(); else draw(); });
     });
@@ -714,7 +688,7 @@ function viewMenu(){
     ? '<button type="button" class="sub" id="door-setup">'+(showSetup?'Скрыть настройки':'Настройки')+'</button>'
     : '';
   const setup = vkAdmin() && showSetup
-    ? '<div class="setup"><p class="hint">Ключ сообщений не меняет эти кнопки. Нажмите «Поставить на страницу» и разрешите их. «Рейтинг» открывает вкладку рейтинга, «Сайт» — сайт, «Чат ИИ» — переписку.</p>'+
+    ? '<div class="setup"><p class="hint">Ключ сообщений не меняет эти кнопки. Нажмите «Поставить на страницу» и разрешите их. На телефоне ссылка с #rate теряет сообщество и не открывает приложение, поэтому «Рейтинг» и «Сайт» ведут в приложение этого сообщества, а «Чат ИИ» — в переписку.</p>'+
       '<label class="filebtn">Своя картинка для чата<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="chat"></label>'+
       '<label class="filebtn">Своя картинка для рейтинга<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="rate"></label>'+
       '<label class="filebtn">Своя картинка для сайта<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="site"></label>'+
@@ -821,7 +795,6 @@ function viewTpl(){
   const topicRow = topics.length ? '<div class="tcats"><button type="button" data-ttopic="" class="'+(tplTopic?'':'on')+'">Все темы</button>'+
     topics.map(c=>'<button type="button" data-ttopic="'+esc(c)+'" class="'+(tplTopic===c?'on':'')+'">'+esc(c)+'</button>').join('')+'</div>' : '';
   const kindName = tplKind === 'video' ? 'видео' : tplKind === 'image' ? 'картинки' : tplKind === 'chat' ? 'текст' : tplKind === 'audio' ? 'голос' : tplKind === 'fix' ? 'улучшение' : 'все';
-  const purse = '<div class="now">Баланс: <b>'+((me&&me.balance)||0)+' кр</b></div>';
   const cards = list.length ? list.map(t=>{
     const src = safeSrc(t.image);
     const cat = t.category||'image';
@@ -833,7 +806,7 @@ function viewTpl(){
     return '<button class="titem" data-tpl="'+esc(t.id)+'">'+face+
       '<div class="tcap"><b>'+esc(t.title)+'</b><em>'+(t.cost||0)+' кр.</em></div></button>';
   }).join('') : '<div class="empty">Пока здесь пусто</div>';
-  return purse+'<input class="tsearch" id="tq" placeholder="Найти шаблон" value="'+esc(tplQuery)+'">'+
+  return '<input class="tsearch" id="tq" placeholder="Найти шаблон" value="'+esc(tplQuery)+'">'+
     kindRow+topicRow+
     '<div class="ttitle">Шаблоны · '+kindName+(tplTopic?' · '+esc(tplTopic):'')+' ('+list.length+')</div>'+
     '<div class="tgallery">'+cards+'</div>';

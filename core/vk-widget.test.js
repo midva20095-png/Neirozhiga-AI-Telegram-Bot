@@ -10,11 +10,8 @@ test('код обложек содержит картинки и не содер
     assert.match(code, /Чат ИИ/);
     assert.match(code, /Написать/);
     assert.match(code, /vk\.com\/write-230706467/);
-    assert.match(code, /https:\/\/vk\.com\/app54901511_-230706467#rate/);
-    assert.match(code, /https:\/\/vk\.com\/app54901511_-230706467#site/);
-    assert.doesNotMatch(code, /away\.vk\.ru/);
-    assert.doesNotMatch(code, /babayagaland\.ru/);
-    assert.doesNotMatch(code, /app54895627/);
+    assert.match(code, /https:\/\/vk\.com\/app54901511_-230706467/);
+    assert.doesNotMatch(code, /#rate|#site|away\.vk\.ru|babayagaland|app54895627/);
     assert.match(code, /title_url/);
     assert.doesNotMatch(code, /descr/);
     assert.throws(() => widget.coverWidgetCode('1', { chat: 'bad' }));

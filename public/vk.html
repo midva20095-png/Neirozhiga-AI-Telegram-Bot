@@ -15,8 +15,8 @@ q.forEach(function(value, key){
   if (key === 'sign' || key.indexOf('vk_') === 0 || key === 'tk' || key === 'pkg' || key === 'paid') dest.set(key, value);
 });
 const goal = q.get('goal') || (location.hash || '').replace(/^#/, '').split('&')[0].split('?')[0];
-if (goal === 'rate' || goal === 'site' || goal === 'sub') dest.set('goal', goal);
-location.replace('/?' + dest.toString());
+const hash = (goal === 'rate' || goal === 'site' || goal === 'sub') ? '#' + goal : '';
+location.replace('/?' + dest.toString() + hash);
 </script>
 </body>
 </html>

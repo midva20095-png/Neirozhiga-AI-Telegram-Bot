@@ -4,8 +4,8 @@ const sharp = require('sharp');
 
 const COVERS = {
     chat: { title: 'Чат ИИ', button: 'Написать', file: 'chat.jpg', chat: true },
-    rate: { title: 'Рейтинг', button: 'Открыть', file: 'rate.jpg', hash: 'rate' },
-    site: { title: 'Сайт', button: 'Открыть', file: 'site.jpg', hash: 'site' }
+    rate: { title: 'Рейтинг', button: 'Открыть', file: 'rate.jpg' },
+    site: { title: 'Сайт', button: 'Открыть', file: 'site.jpg' }
 };
 
 function groupNumber(groupId) {
@@ -16,12 +16,8 @@ function chatLink(groupId) {
     return `https://vk.com/write-${groupNumber(groupId)}`;
 }
 
-function appLink(groupId, goal) {
-    const id = groupNumber(groupId);
-    const base = `https://vk.com/app54901511_-${id}`;
-    if (goal === 'site') return `${base}#site`;
-    if (goal === 'rate') return `${base}#rate`;
-    return base;
+function appLink(groupId) {
+    return `https://vk.com/app54901511_-${groupNumber(groupId)}`;
 }
 
 function coverWidgetCode(groupId, ids) {
@@ -29,7 +25,7 @@ function coverWidgetCode(groupId, ids) {
         const item = COVERS[key];
         const cover = String((ids && ids[key]) || '');
         if (!/^-?\d+_\d+$/.test(cover)) throw new Error('Нет картинки для кнопки.');
-        const url = item.chat ? chatLink(groupId) : appLink(groupId, item.hash);
+        const url = item.chat ? chatLink(groupId) : appLink(groupId);
         return {
             title: item.title,
             title_url: url,
