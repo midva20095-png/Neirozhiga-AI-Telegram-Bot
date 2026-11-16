@@ -1,6 +1,6 @@
 const { Pool } = require('pg');
 const worksLib = require('./works');
-const importedTemplates = require('../data/foreign-templates.json');
+const foreignTitles = require('../data/foreign-template-titles.json');
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -75,14 +75,6 @@ async function initDB() {
       );
     }
   }
-  try {
-    const added = await importMissingTemplates(importedTemplates);
-    if (added) console.log('Добавлены шаблоны из готовых промптов: ' + added);
-    const priced = await alignImportedTemplates(importedTemplates);
-    if (priced) console.log('Цены вставленных шаблонов приведены к каталогу: ' + priced);
-  } catch (err) {
-    console.error('Импорт шаблонов пропущен:', err.message);
-  }
   await pool.query(`
     CREATE TABLE IF NOT EXISTS gigachat_usage (
       user_id BIGINT NOT NULL,
@@ -142,6 +134,12 @@ async function initDB() {
   await pool.query(`CREATE INDEX IF NOT EXISTS works_user_id_idx ON works (user_id, id DESC)`);
   await pool.query(`ALTER TABLE works ADD COLUMN IF NOT EXISTS template_id INTEGER`);
   await pool.query(`ALTER TABLE works ADD COLUMN IF NOT EXISTS shared_at TIMESTAMP`);
+  try {
+    const removed = await dropForeignTemplates(foreignTitles);
+    if (removed) console.log('Шаблоны чужого бота убраны из кабинета: ' + removed);
+  } catch (err) {
+    console.error('Шаблоны чужого бота не убраны:', err.message);
+  }
   await pool.query(`
     CREATE TABLE IF NOT EXISTS journal (
       id SERIAL PRIMARY KEY,
@@ -946,50 +944,31 @@ function cleanTemplateImage(value) {
   return s.slice(0, 2000);
 }
 
-async function alignImportedTemplates(items) {
-  const list = Array.isArray(items) ? items : [];
-  let changed = 0;
-  for (const item of list) {
-    const title = String(item && item.title || '').trim();
-    if (!title) continue;
-    const quality = String(item.quality || '').trim() || null;
-    const formats = String(item.formats || '').trim() || null;
-    const duration = Number(item.duration) > 0 ? Math.round(Number(item.duration)) : null;
-    const cost = Math.max(0, Math.round(Number(item.cost) || 0));
-    const res = await pool.query(
-      `UPDATE templates
-       SET cost = $2, model = $3, quality = $4, formats = $5, duration = $6, category = $7
-       WHERE lower(btrim(title)) = lower(btrim($1))
-         AND (
-           cost IS DISTINCT FROM $2 OR model IS DISTINCT FROM $3 OR quality IS DISTINCT FROM $4
-           OR formats IS DISTINCT FROM $5 OR duration IS DISTINCT FROM $6 OR category IS DISTINCT FROM $7
-         )
-       RETURNING id`,
-      [title, cost, item.model, quality, formats, duration, item.category || 'image']
+async function dropForeignTemplates(titles) {
+  const key = 'foreign_templates_removed';
+  const saved = await getSettings([key]);
+  if (saved && saved[key]) return 0;
+  const list = [...new Set((Array.isArray(titles) ? titles : []).map(title => String(title || '').trim().toLowerCase()).filter(Boolean))];
+  let removed = 0;
+  if (list.length) {
+    await pool.query(
+      `UPDATE works w
+       SET prompt = t.title
+       FROM templates t
+       WHERE w.template_id = t.id
+         AND lower(btrim(t.title)) = ANY($1::text[])`,
+      [list]
     );
-    changed += res.rowCount;
+    const res = await pool.query(
+      `DELETE FROM templates
+       WHERE lower(btrim(title)) = ANY($1::text[])
+       RETURNING id`,
+      [list]
+    );
+    removed = res.rowCount;
   }
-  return changed;
-}
-
-async function importMissingTemplates(items) {
-  const list = Array.isArray(items) ? items : [];
-  if (!list.length) return 0;
-  const existing = await pool.query('SELECT lower(btrim(title)) AS title FROM templates');
-  const have = new Set(existing.rows.map(row => row.title));
-  let added = 0;
-  for (const item of list) {
-    const title = String(item && item.title || '').trim();
-    if (!title || have.has(title.toLowerCase())) continue;
-    try {
-      await saveTemplate(item);
-      have.add(title.toLowerCase());
-      added += 1;
-    } catch (err) {
-      console.error('Шаблон не добавлен:', title, err.message);
-    }
-  }
-  return added;
+  await setSetting(key, { removed, at: new Date().toISOString() });
+  return removed;
 }
 
 async function saveTemplate(data) {
@@ -1126,8 +1105,7 @@ module.exports = {
   listHistory,
   listTemplates,
   saveTemplate,
-  importMissingTemplates,
-  alignImportedTemplates,
+  dropForeignTemplates,
   deleteTemplate,
   peekGiga,
   consumeGiga,
