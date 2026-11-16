@@ -1,11 +1,12 @@
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
+const catalog = require('./catalog');
 
 const COVERS = {
-    chat: { title: 'Чат', button: 'Написать', file: 'chat.jpg', chat: true },
-    rate: { title: 'Рейтинг', button: 'Открыть', file: 'rate.jpg', hash: '#rate' },
-    site: { title: 'Сайт', button: 'Открыть', file: 'site.jpg', hash: '#site' }
+    chat: { title: 'Чат ИИ', button: 'Написать', file: 'chat.jpg', chat: true },
+    rate: { title: 'Рейтинг', button: 'Открыть', file: 'rate.jpg', hash: 'rate' },
+    site: { title: 'Сайт', button: 'Открыть', file: 'site.jpg', hash: 'site' }
 };
 
 function groupNumber(groupId) {
@@ -16,11 +17,24 @@ function chatLink(groupId) {
     return `https://vk.com/write-${groupNumber(groupId)}`;
 }
 
+function serviceBase() {
+    return String(process.env.WEBAPP_URL || 'https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app').replace(/\/$/, '');
+}
+
+function siteUrl() {
+    return catalog.getGeneral().site_url || 'https://babayagaland.ru';
+}
+
+function away(url) {
+    return `https://vk.com/away.php?to=${encodeURIComponent(url)}`;
+}
+
 function groupLink(groupId, hash) {
     const group = groupNumber(groupId);
     const goal = String(hash || '').replace(/^#/, '');
-    const fragment = goal === 'rate' || goal === 'site' || goal === 'sub' ? `#${goal}` : '';
-    return `https://vk.com/app54895627_-${group}${fragment}`;
+    if (goal === 'site') return away(siteUrl());
+    if (goal === 'rate') return away(`${serviceBase()}/vk.html?vk_group_id=${group}&goal=rate`);
+    return away(`${serviceBase()}/vk.html?vk_group_id=${group}`);
 }
 
 function coverWidgetCode(groupId, ids) {
@@ -59,7 +73,7 @@ function vkMessage(error, fallback) {
 }
 
 const LOOKS = {
-    chat: { word: 'Чат', from: '#7c3aed', via: '#4c1d95', to: '#12081f', mark: 'M21 12.2c0 3.8-3.6 6.8-8.2 6.8-.8 0-1.6-.1-2.3-.2L6 21.2l.7-3.2C5 16.6 3.8 14.5 3.8 12.2 3.8 8.4 7.4 5.4 12 5.4s9 3 9 6.8z' },
+    chat: { word: 'Чат ИИ', from: '#7c3aed', via: '#4c1d95', to: '#12081f', mark: 'M21 12.2c0 3.8-3.6 6.8-8.2 6.8-.8 0-1.6-.1-2.3-.2L6 21.2l.7-3.2C5 16.6 3.8 14.5 3.8 12.2 3.8 8.4 7.4 5.4 12 5.4s9 3 9 6.8z' },
     rate: { word: 'Рейтинг', from: '#f59e0b', via: '#b45309', to: '#1c1208', mark: 'M12 2.2l2.7 5.6 6.2.9-4.5 4.3 1.1 6.1L12 16.2 6.5 19.1l1.1-6.1L3.1 8.7l6.2-.9z' },
     site: { word: 'Сайт', from: '#14b8a6', via: '#0f766e', to: '#04201c', mark: 'M4 6.5h16a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 20 17.5H4A1.5 1.5 0 0 1 2.5 16V8A1.5 1.5 0 0 1 4 6.5zm5.2 13h5.6' }
 };
@@ -88,7 +102,7 @@ function coverSvg(name) {
       <path d="${look.mark}"/>
     </g>
   </g>
-  <text x="765" y="268" text-anchor="middle" font-family="Inter, DejaVu Sans, sans-serif" font-size="92" font-weight="700" fill="#ffffff">${look.word}</text>
+  <text x="765" y="268" text-anchor="middle" font-family="Inter, DejaVu Sans, sans-serif" font-size="${look.word.length > 5 ? 72 : 92}" font-weight="700" fill="#ffffff">${look.word}</text>
 </svg>`;
 }
 

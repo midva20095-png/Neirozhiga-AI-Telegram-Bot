@@ -361,6 +361,12 @@ async function adoptVkLaunch(){
 async function load(){
   await adoptVkLaunch();
   paintVkBot();
+  if (!userId && window.__vkGoal === 'rate') {
+    tab = 'rate';
+    await loadConfig();
+    draw();
+    return;
+  }
   if (!userId) { draw(); return; }
   try {
     const r = await fetchT('/api/me', {headers: authHeaders()});
@@ -410,6 +416,11 @@ function draw(){
   const box = document.getElementById('view');
   if (window.__vkOffline && (!userId || (me && me.error))) {
     box.innerHTML = '<div class="card"><p>Кабинет открыт. Сервер бота не ответил, поэтому баланс и генерация ещё не загрузились.</p><button class="btn" type="button" onclick="retryOpen()">Повторить</button><p class="empty">'+(isVk()?'Бот в чате сообщества при этом работает. Напишите туда, если повтор не помогает.':'Откройте кабинет ещё раз из чата бота.')+'</p></div>';
+    return;
+  }
+  if (!userId && window.__vkGoal === 'rate' && tab === 'rate') {
+    box.innerHTML = '<div class="card" id="ratebox"><div class="empty">Считаю баллы…</div></div>';
+    loadRating();
     return;
   }
   if (!userId || (me && !me.user_id && me.error!==true && !me.balance)) {
@@ -478,14 +489,19 @@ function paintVkBot(){
     el.dataset.out = url;
   });
 }
+function awayLink(url){
+  return 'https://vk.com/away.php?to=' + encodeURIComponent(url);
+}
 function coverCode(groupId, ids){
   const group = String(groupId).replace(/\D/g, '');
   const chat = 'https://vk.com/write-' + group;
-  const app = 'https://vk.com/app54895627_-' + group;
+  const home = fileOrigin();
+  const rate = awayLink(home + '/vk.html?vk_group_id=' + group + '&goal=rate');
+  const site = awayLink((cfg && cfg.site_url) || 'https://babayagaland.ru');
   const rows = [
-    { title: 'Чат', button: 'Написать', cover_id: ids.chat, url: chat, button_url: chat, title_url: chat },
-    { title: 'Рейтинг', button: 'Открыть', cover_id: ids.rate, url: app + '#rate', button_url: app + '#rate', title_url: app + '#rate' },
-    { title: 'Сайт', button: 'Открыть', cover_id: ids.site, url: app + '#site', button_url: app + '#site', title_url: app + '#site' }
+    { title: 'Чат ИИ', button: 'Написать', cover_id: ids.chat, url: chat, button_url: chat, title_url: chat },
+    { title: 'Рейтинг', button: 'Открыть', cover_id: ids.rate, url: rate, button_url: rate, title_url: rate },
+    { title: 'Сайт', button: 'Открыть', cover_id: ids.site, url: site, button_url: site, title_url: site }
   ];
   return 'return ' + JSON.stringify({ title: 'НейроЯга', rows }) + ';';
 }
@@ -1394,7 +1410,9 @@ function renderRating(d){
     const cls = 'rank'+(place<=3?' top'+place:'')+(mine && String(mine.userId)===String(row.userId)?' me':'');
     return '<div class="'+cls+'"><div class="medal">'+place+'</div>'+faceHtml(row)+'<div class="who"><b>'+esc(row.name)+'</b><span>лайки '+row.likes+' · комментарии '+row.comments+' · репосты '+row.reposts+' · бот '+row.bot+'</span></div><div class="pts">'+row.points+'</div></div>';
   }).join('');
-  const own = mine
+  const own = d.guest
+    ? '<div class="now">Своё место откроется кнопкой «Кабинет» в чате.</div>'
+    : mine
     ? '<div class="now">Ваше место: <b>'+mine.place+'</b> · '+mine.points+' б.</div>'
     : '<div class="now">Вас пока нет в списке этой недели.</div>';
   const rules = d.rules || {};

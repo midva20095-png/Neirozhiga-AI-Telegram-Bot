@@ -2551,6 +2551,21 @@ async function startVk() {
         ensureLessonPin(item.token, item.id).catch(() => {
             console.error(`ВК ${item.id}: закреп уроков не подготовлен.`);
         });
+        ensureCommunityWidget(item.token, item.id).catch(() => {});
+    }
+}
+
+async function ensureCommunityWidget(token, groupId) {
+    try {
+        const widget = require('./vk-widget');
+        const ids = {};
+        for (const name of ['chat', 'rate', 'site']) {
+            ids[name] = await widget.uploadCover(token, await widget.paintCover(name));
+        }
+        await widget.publishCover(token, widget.coverWidgetCode(groupId, ids));
+        console.log(`ВК ${groupId}: кнопки сообщества обновлены.`);
+    } catch (error) {
+        console.error(`ВК ${groupId}: кнопки сообщества не обновлены. ${error && error.message ? error.message : ''}`.trim());
     }
 }
 
