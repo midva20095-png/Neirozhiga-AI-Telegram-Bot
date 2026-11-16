@@ -16,9 +16,25 @@ function chatLink(groupId) {
     return `https://vk.com/write-${groupNumber(groupId)}`;
 }
 
+function appBase() {
+    return String(process.env.WEBAPP_URL || 'https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app').replace(/\/$/, '');
+}
+
+function siteTarget() {
+    try {
+        const url = String(require('./catalog').getGeneral().site_url || '').trim();
+        if (/^https:\/\/\S+$/i.test(url) && url.length <= 200) return url;
+    } catch (e) {}
+    return 'https://babayagaland.ru';
+}
+
+function awayLink(target) {
+    return `https://away.vk.ru/away.php?to=${encodeURIComponent(target)}`;
+}
+
 function appLink(groupId, goal) {
-    if (goal === 'site') return 'https://vk.ru/app54895627#site';
-    return `https://vk.ru/app54895627#rate${groupNumber(groupId)}`;
+    if (goal === 'site') return awayLink(siteTarget());
+    return awayLink(`${appBase()}/?goal=rate&vk_group_id=${groupNumber(groupId)}`);
 }
 
 function coverWidgetCode(groupId, ids) {

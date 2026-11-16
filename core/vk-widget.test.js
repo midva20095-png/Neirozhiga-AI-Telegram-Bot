@@ -11,9 +11,11 @@ test('код обложек содержит картинки и не содер
     assert.match(code, /Чат ИИ/);
     assert.match(code, /Написать/);
     assert.match(code, /vk\.com\/write-230706467/);
-    assert.match(code, /https:\/\/vk\.ru\/app54895627#rate230706467/);
-    assert.match(code, /https:\/\/vk\.ru\/app54895627#site/);
-    assert.doesNotMatch(code, /railway|babayagaland|away\.php|goal=rate/);
+    assert.match(code, /https:\/\/away\.vk\.ru\/away\.php\?to=/);
+    assert.match(code, /goal%3Drate/);
+    assert.match(code, /vk_group_id%3D230706467/);
+    assert.match(code, /babayagaland\.ru/);
+    assert.doesNotMatch(code, /app54895627/);
     assert.match(code, /title_url/);
     assert.doesNotMatch(code, /descr/);
     assert.throws(() => widget.coverWidgetCode('1', { chat: 'bad' }));
