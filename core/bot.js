@@ -726,7 +726,20 @@ async function startBot(app) {
     bot.hears(['ℹ Справка', 'ℹ️ Справка', '❓ Справка'], async (ctx) => {
         userAwaitingEmail.delete(ctx.from.id);
         userAwaitingSupport.delete(ctx.from.id);
-        await ctx.reply(catalog.getGeneral().help_text, mainKeyboard(ctx.from.id));
+        const help = catalog.clientHelp('tg');
+        const size = 3500;
+        let rest = help;
+        const parts = [];
+        while (rest.length > size) {
+            let cut = rest.lastIndexOf('\n', size);
+            if (cut < size * 0.4) cut = size;
+            parts.push(rest.slice(0, cut));
+            rest = rest.slice(cut).replace(/^\n+/, '');
+        }
+        if (rest) parts.push(rest);
+        for (let i = 0; i < parts.length; i++) {
+            await ctx.reply(parts[i], i === parts.length - 1 ? mainKeyboard(ctx.from.id) : undefined);
+        }
     });
 
     bot.action('vk_move_start', async (ctx) => {

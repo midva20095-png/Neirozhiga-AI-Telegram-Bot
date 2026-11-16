@@ -13,8 +13,6 @@ const vk = require('../core/vk');
 const widget = require('../core/vk-widget');
 const bridge = require('../core/bridge');
 const activity = require('../core/activity');
-const cutter = require('../core/cutter');
-
 // Определяет пользователя из initData Telegram или из подписанной ссылки.
 function resolveUserId(req) {
     const initData = req.headers['x-telegram-init-data'] || (req.body && req.body.initData);
@@ -496,24 +494,6 @@ function startWebApp() {
             res.json({ success: true, model });
         } catch (e) {
             res.status(500).json({ error: e.message });
-        }
-    });
-
-    app.post('/api/cut', requireUser, async (req, res) => {
-        try {
-            const user = await db.getUser(req.userId);
-            if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
-            if (user.blocked) return res.status(403).json({ error: 'blocked' });
-            const quote = cutter.cutQuote(user.balance);
-            if (!quote.ok) return res.status(402).json({ error: quote.error });
-            const debit = await db.debitBalance(req.userId, quote.cost, 'Резак карусели');
-            if (!debit.ok) {
-                const again = await db.getUser(req.userId);
-                return res.status(402).json({ error: cutter.cutQuote(again && again.balance).error });
-            }
-            res.json({ ok: true, balance: debit.balance, cost: quote.cost });
-        } catch (e) {
-            res.status(500).json({ error: 'Не удалось списать кредиты' });
         }
     });
 

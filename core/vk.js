@@ -998,31 +998,14 @@ async function sendStatus(token, peerId, account, groupId) {
     );
 }
 
-const USER_HELP = [
-    'Как пользоваться',
-    '1. Нажмите «Модели» и выберите раздел: текст, картинки, видео или музыка.',
-    '2. Напишите запрос своими словами. Если у модели несколько цен или размеров, выберите их кнопками внизу. Если модель просит фото, прикрепите его к сообщению.',
-    '3. Ответ придёт в этот чат. Картинки также лежат в кабинете, вкладка «История».',
-    `${activity.rulesText()} Кнопка «Рейтинг». Кредиты по этому списку начисляет администратор.`,
-    '',
-    'Как пополнить',
-    '1. Нажмите «Пополнить» внизу или на вкладке «Баланс» в кабинете.',
-    '2. Выберите пакет. Останутся только пакеты и «Назад».',
-    '3. Напишите почту для чека одним сообщением.',
-    '4. Нажмите «Оплатить». Если ВК спросит, подтвердите переход: откроется страница банка.',
-    '5. После оплаты кредиты придут в этот чат. То же можно сделать в кабинете: вкладка «Баланс», пакет и почта для чека. «Назад» возвращает меню.',
-    '',
-    'Баланс ВК и Telegram разные. Кнопка «Перенос» внизу отправляет кредиты в Telegram. Чтобы получить кредиты из Telegram, там нажмите «Во ВК» и впишите номер, который бот покажет после «Перенос».'
-].join('\n');
-
-async function sendHelp(token, peerId) {
-    await sendText(token, peerId, USER_HELP);
+async function sendHelp(token, peerId, groupId) {
+    await sendParts(token, peerId, catalog.clientHelp('vk'), mainMenu(peerId, groupId));
 }
 
 async function openMenu(token, peerId, account, action, groupId) {
     if (action === 'hello' || action === 'balance') return sendStatus(token, peerId, account, groupId);
     if (action === 'more') return sendText(token, peerId, 'Справка или рейтинг.', moreKeyboard());
-    if (action === 'help') return sendHelp(token, peerId);
+    if (action === 'help') return sendHelp(token, peerId, groupId);
     if (action === 'rate') return sendRating(token, peerId, account, groupId);
     if (action === 'models') {
         const board = JSON.parse(sectionKeyboard());
@@ -2573,5 +2556,5 @@ async function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos
 };

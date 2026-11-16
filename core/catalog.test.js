@@ -182,20 +182,23 @@ test('цена из админки списывается, в том числе 
     assert.equal(saved.models['sora-2'].cost, 240);
 });
 
-test('справка в боте объясняет кнопки и не содержит внутренних пометок', () => {
-    const text = catalog.getGeneral().help_text;
-    assert.match(text, /Кредиты списываются только когда ответ готов/);
-    assert.match(text, /Кабинет/);
-    assert.match(text, /На сайт/);
-    assert.match(text, /С сайта/);
-    assert.match(text, /Поддержка/);
-    assert.match(text, /Ещё боты/);
+test('справка для клиента перечисляет модели и не содержит служебного', () => {
+    const text = catalog.clientHelp('tg');
+    const vk = catalog.clientHelp('vk');
+    assert.match(text, /Кредиты списываются, когда ответ готов/);
+    assert.match(text, /Текст задания вам не показывается/);
+    assert.match(text, /Чат Flash/);
+    assert.match(text, /GPT Image 2/);
+    assert.match(text, /Аудит сообщества/);
+    assert.match(text, /https:\/\/vk\.me\/neuroyaga/);
+    assert.match(text, /https:\/\/vk\.ru\/write-214554778/);
     assert.match(text, /https:\/\/vk\.ru\/write-230706467/);
     assert.match(text, /https:\/\/max\.ru\/se14387925_bot/);
     assert.match(text, /https:\/\/babayagaland\.ru/);
-    assert.match(text, /Во ВК/);
-    assert.ok(text.length < 3900);
-    assert.equal(/kie|railway|api[_ -]?key|себестоимость|оптом|\$0/i.test(text), false);
+    assert.match(vk, /Как пополнить/);
+    assert.match(vk, /https:\/\/vk\.com\/@neuroyaga-navigator-po-klubu-babki-targetologa/);
+    catalog.listModels({ audience: 'tg' }).forEach(model => assert.match(text, new RegExp(model.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))));
+    assert.equal(/kie|railway|api[_ -]?key|себестоимость|оптом|админк|братух|промпт/i.test(text + '\n' + vk), false);
 });
 
 test('цена из админки ВК не включает модель в Telegram', async () => {

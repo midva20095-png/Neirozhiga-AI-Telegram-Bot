@@ -1044,9 +1044,7 @@ async function loadSettings(){
   const el = document.getElementById('section-settings');
   const d = await api('/api/admin/general?platform='+place); generalData = d.general||{};
   const models = d.models||[];
-  const help = place==='vk'
-    ? '<p class="note">Справка в чате ВК здесь не меняется. Приветственный бонус, модель по умолчанию, сайт и поддержка общие для обоих чатов. В списке только модели, включённые во ВК.</p>'
-    : '<label>Текст справки в Telegram</label><textarea id="g-help" style="min-height:140px">'+esc(generalData.help_text||'')+'</textarea>';
+  const help = '<p class="note">Справка в чате собирается из включённых моделей: название, что модель делает и нужна ли фотография. Цена берётся с кнопки. Скрытые задания шаблонов и служебные названия клиентам не показываются. Приветственный бонус, модель по умолчанию, сайт и поддержка общие.</p>';
   el.innerHTML = '<div class="card"><h3>Настройки · '+placeName()+'</h3>'+
     '<label>Приветственный бонус новым клиентам, кредитов</label><input id="g-bonus" type="number" value="'+(generalData.start_bonus||0)+'">'+
     '<label>Модель по умолчанию</label><select id="g-model">'+models.map(m=>'<option value="'+m.key+'"'+(m.key===generalData.default_model?' selected':'')+'>'+esc(m.short||m.key)+'</option>').join('')+'</select>'+

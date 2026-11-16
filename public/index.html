@@ -154,14 +154,10 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .tcats button.on{color:#fff;border-color:#ff3fd0;background:linear-gradient(135deg,#2a0f5e,#4a0f6e);box-shadow:0 0 12px #ff3fd066}
 .tsearch{border-radius:14px;margin:0 0 10px;padding:12px 14px;border:1px solid #3a2a66;background:#160b2c}
 .tgallery{display:grid;grid-template-columns:1fr 1fr;gap:11px}
-.carousel{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;padding:2px 2px 10px;scrollbar-width:none}
 .titem{position:relative;display:flex;min-width:0;flex-direction:column;padding:0;border:1px solid #31205a;background:#130a26;border-radius:16px;overflow:hidden;text-align:left}
 .titem:active{transform:scale(.98)}
 .tbadge{position:absolute;top:8px;right:8px;z-index:2;background:#000b;border:1px solid #22e1ff;color:#22e1ff;border-radius:9px;padding:3px 8px;font-size:11px;font-weight:800}
-.cutlink{width:100%;margin:0 0 12px;padding:12px;border-radius:14px;border:1px dashed #22e1ff;background:#22e1ff0d;color:#22e1ff;font-weight:800}
 .ttitle{margin:2px 2px 10px;font-weight:800;font-size:15px;color:#ffe9a8}
-.cslide{flex:0 0 86%;scroll-snap-align:center;background:#0b0614;border-radius:16px;overflow:hidden}
-.cslide img{display:block;width:100%;max-height:420px;object-fit:contain;background:#0b0614}
 .tph{position:relative;aspect-ratio:3/4;overflow:hidden;display:grid;place-items:center;font-size:40px;background:linear-gradient(150deg,#22164a,#0d2b3a)}
 .tph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top}
 .tph.txt{display:flex;flex-direction:column;gap:4px;background:radial-gradient(circle at 50% 35%,rgba(0,212,255,.22),transparent 60%),linear-gradient(160deg,#1c1240,#0f0a24)}
@@ -225,8 +221,7 @@ input,select{width:100%;border-radius:14px;border:1px solid var(--line);backgrou
 const KIND = {text:'Текст', image:'Картинка', video:'Видео', audio:'Музыка'};
 let tab='gen', me=null, cfg=null, templates=[], works=null, worksLoading=false, userId=null, token=null, busy=false, last=null, wantMenu=false, tplAnswers={}, tplPhotos={};
 let openTpl=null, photoData=null, pickedFormat=null, genPhoto=null, draft='', pendingTpl='', pendingPkg='';
-let tplKind='', tplTopic='', tplQuery='', cutterOn=false, cutCount=3, cutSource='', cutSlides=[], cutError='', cutBusy=false;
-const CUT_COST = 10;
+let tplKind='', tplTopic='', tplQuery='';
 const TCAT = {image:'Картинки', fix:'Улучшение', chat:'Текст', video:'Видео', audio:'Голос'};
 const TMARK = {image:'🪄', fix:'✨', chat:'✍️', video:'🎬', audio:'🎙'};
 let pickedQuality=null, pickedDuration=null, pickedAspect=null;
@@ -638,7 +633,6 @@ function tplTopics(t){
   return Array.isArray(t && t.cats) ? t.cats : [];
 }
 function viewTpl(){
-  if (cutterOn) return viewCutter();
   if (openTpl) return viewTplRun();
   const q = tplQuery.trim().toLowerCase();
   const have = {};
@@ -677,83 +671,8 @@ function viewTpl(){
   }).join('') : '<div class="empty">Пока здесь пусто</div>';
   return '<input class="tsearch" id="tq" placeholder="Найти шаблон" value="'+esc(tplQuery)+'">'+
     kindRow+topicRow+
-    '<button class="cutlink" type="button" id="openCut">Резак карусели · '+CUT_COST+' кр.</button>'+
     '<div class="ttitle">Шаблоны · '+kindName+(tplTopic?' · '+esc(tplTopic):'')+' ('+list.length+')</div>'+
     '<div class="tgallery">'+cards+'</div>';
-}
-function viewCutter(){
-  const counts = [2,3,4,5,6,8,10].map(function(n){
-    return '<button type="button" data-cut="'+n+'" class="'+(cutCount===n?'on':'')+'">'+n+'</button>';
-  }).join('');
-  const slides = cutSlides.map(function(src, i){
-    return '<div class="cslide"><img src="'+src+'" alt=""><button type="button" class="dl" data-cutdl="'+i+'">Скачать '+(i+1)+'</button></div>';
-  }).join('');
-  return '<div class="card"><button class="back" id="backCut" type="button">← Шаблоны</button>'+
-    '<div class="name">Резак</div>'+
-    '<div class="meta" style="margin:6px 0 12px">Режет одно фото на кадры карусели, слева направо. Карусель стоит '+CUT_COST+' кредитов за фото. Число кадров у того же фото можно менять без доплаты.</div>'+
-    (cutError?'<p class="err">'+esc(cutError)+'</p>':'')+
-    '<label class="filebtn">'+(cutSource?'Другое фото · ещё '+CUT_COST+' кр.':'Выбрать фото · '+CUT_COST+' кр.')+'<input id="cutfile" type="file" accept="image/*"></label>'+
-    '<div class="hint">Сколько кадров</div><div class="chips">'+counts+'</div>'+
-    (slides?'<div class="carousel">'+slides+'</div>':'')+'</div>';
-}
-function slicePhoto(dataUrl, count){
-  return new Promise(function(resolve, reject){
-    const img = new Image();
-    img.onload = function(){
-      const n = Math.max(2, Math.min(10, Number(count) || 3));
-      const width = Math.max(1, Math.floor(img.width / n));
-      const slides = [];
-      for (let i = 0; i < n; i++) {
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = img.height;
-        canvas.getContext('2d').drawImage(img, i * width, 0, width, img.height, 0, 0, width, img.height);
-        slides.push(canvas.toDataURL('image/jpeg', 0.9));
-      }
-      resolve(slides);
-    };
-    img.onerror = function(){ reject(new Error('Не удалось прочитать фото')); };
-    img.src = dataUrl;
-  });
-}
-async function payCarousel(){
-  const lack = shortOf(CUT_COST);
-  if (lack) { cutError = lack; return false; }
-  try {
-    const r = await fetch('/api/cut', {method:'POST', headers: authHeaders(), body: '{}'});
-    const d = await r.json().catch(function(){ return {}; });
-    if (!r.ok || !d.ok) { cutError = d.error || 'Не удалось списать кредиты'; return false; }
-    if (me) me.balance = d.balance;
-    const bal = document.getElementById('bal');
-    if (bal) bal.textContent = d.balance+' кр';
-    cutError = '';
-    return true;
-  } catch (e) {
-    cutError = 'Не удалось списать кредиты';
-    return false;
-  }
-}
-async function cutPhoto(file){
-  if (cutBusy) return;
-  cutBusy = true;
-  try {
-    const jpeg = await fileToJpeg(file);
-    const slides = await slicePhoto(jpeg, cutCount);
-    const paid = await payCarousel();
-    if (!paid) return;
-    cutSource = jpeg;
-    cutSlides = slides;
-  } finally {
-    cutBusy = false;
-  }
-}
-function downloadSlide(index){
-  const src = cutSlides[index];
-  if (!src) return;
-  const link = document.createElement('a');
-  link.href = src;
-  link.download = 'кадр-'+(index+1)+'.jpg';
-  link.click();
 }
 function viewTplRun(){
   const t = templates.find(x=>String(x.id)===String(openTpl));
@@ -856,16 +775,51 @@ function viewTop(){
   return head+move+back+'<div class="groupttl">Пакеты</div><div class="card">'+packs.map(p=>'<div class="pack"><div><div class="name">'+esc(p.title)+'</div><div class="meta">'+p.credits+' кредитов</div></div><button data-pkg="'+esc(p.id)+'">'+p.price+' ₽</button></div>').join('')+
     '</div><div class="hint">Оплата открывается в чате бота: мы отправим кнопку оплаты туда.</div>';
 }
+function photoLine(m){
+  if (m.audio) return 'нужны фото и голосовое';
+  if (m.image==='required') return 'нужно фото';
+  if (m.image==='forbidden') return 'только текст, без фото';
+  if (m.image==='optional') return 'можно с фото';
+  return 'без фото';
+}
+function cleanDesc(text){
+  return String(text||'').replace(/цена задаётся в админке,?\s*/ig,'').replace(/0\s*[—-]\s*бесплатно/ig,'бесплатно').replace(/\s+/g,' ').trim();
+}
+function modelGuide(){
+  const groups = (cfg&&cfg.groups)||{};
+  let html = '';
+  Object.keys(groups).forEach(function(g){
+    const list = ((cfg&&cfg.models)||[]).filter(function(m){ return m.group===g; });
+    if (!list.length) return;
+    html += '<div class="groupttl">'+esc(groups[g])+'</div><div class="card">'+
+      list.map(function(m){
+        const about = cleanDesc(m.desc);
+        return '<p><b>'+esc(m.name)+'</b> — '+esc((about?about+'. ':'')+photoLine(m)+'. '+(m.label||''))+'.</p>';
+      }).join('')+'</div>';
+  });
+  return html;
+}
 function viewHelp(){
+  const steps = '<div class="card"><div class="now">Как пользоваться</div>'+
+    '<p>1. «Генерация» — свой запрос. «Модели» — выберите, чем отвечать. На кнопке написана цена.</p>'+
+    '<p>2. «Шаблоны» — готовые карточки. Заполните поля и нажмите «Создать». Текст задания не показывается.</p>'+
+    '<p>3. Если у модели сказано «нужно фото» или «можно с фото», прикрепите снимок. «Только текст» — без фото.</p>'+
+    '<p>4. Кредиты списываются, когда ответ готов. Если не получилось, баланс не меняется.</p></div>';
+  const audit = '<div class="card"><div class="now">Аудит сообщества</div>'+
+    '<p>Кнопка «Аудит» есть в чате НейроЯги. Кредиты не списываются. Нажмите её, вставьте ссылку vk.com/название и дождитесь отчёта. «Назад» возвращает меню.</p>'+
+    '<p>Если аудит не открылся, напишите в поддержку:</p>'+
+    '<a class="btn ghost" href="https://vk.me/neuroyaga" data-out="https://vk.me/neuroyaga">Чат НейроЯги</a>'+
+    '<a class="btn ghost" href="https://vk.ru/write-214554778" data-out="https://vk.ru/write-214554778">Сообщения сообщества</a>'+
+    '<a class="btn ghost" href="https://vk.com/@neuroyaga-navigator-po-klubu-babki-targetologa" data-out="https://vk.com/@neuroyaga-navigator-po-klubu-babki-targetologa">Уроки клуба</a></div>';
   if (isVk()) {
-    return '<div class="card"><div class="now">Как пользоваться</div><p>1. «Генерация» — свой запрос. «Шаблоны» — готовые карточки: заполните поля и нажмите «Создать».</p><p>2. Если карточка просит фото, прикрепите его. Результат появится здесь и в чате этого сообщества.</p><p>3. «История» хранит готовые файлы. «Баланс» — пакеты и перенос в Telegram.</p></div>'+
+    return steps+modelGuide()+audit+
       '<div class="card"><div class="now">Как пополнить</div><p>1. Вкладка «Баланс»: почта для чека и пакет.</p><p>2. Либо «Пополнить в чате» — то же самое в переписке.</p><p>3. После оплаты кредиты придут в чат этого сообщества.</p></div>'+
       (cfg && cfg.support_enabled===false ? '' : '<div class="card"><div class="now">Напишите нам — ответ придёт в чат.</div>'+
       '<textarea id="supmsg" placeholder="Опишите вопрос или проблему"></textarea>'+
       '<button class="btn" id="supsend">Отправить</button><p id="supok" class="hint"></p></div>');
   }
   if (cfg && cfg.support_enabled===false) return '<div class="card"><div class="empty">Поддержка временно недоступна.</div></div>';
-  return '<div class="card"><div class="now">Ещё боты. Им можно писать, это не сообщества.</div>'+
+  return steps+modelGuide()+audit+'<div class="card"><div class="now">Ещё боты. Им можно писать, это не сообщества.</div>'+
     '<a class="btn ghost" href="https://vk.ru/write-230706467" data-out="https://vk.ru/write-230706467" data-vkbot="1">Бот во ВКонтакте</a>'+
     '<a class="btn ghost" href="https://max.ru/se14387925_bot" data-out="https://max.ru/se14387925_bot">Бот в Макс</a>'+
     '<a class="btn ghost" href="https://babayagaland.ru" data-out="https://babayagaland.ru">Сайт babayagaland.ru</a></div>'+
@@ -926,31 +880,6 @@ function onCoverFile(input){
   reader.readAsDataURL(file);
 }
 function bind(){
-  const openCut = document.getElementById('openCut');
-  if (openCut) openCut.onclick = function(){ cutterOn = true; draw(); };
-  const backCut = document.getElementById('backCut');
-  if (backCut) backCut.onclick = function(){ cutterOn = false; draw(); };
-  const cutfile = document.getElementById('cutfile');
-  if (cutfile) cutfile.onchange = async function(){
-    const file = cutfile.files && cutfile.files[0];
-    if (!file) return;
-    try { await cutPhoto(file); }
-    catch (e) { alert(e.message); }
-    draw();
-  };
-  document.querySelectorAll('[data-cut]').forEach(function(button){
-    button.onclick = async function(){
-      cutCount = Number(button.dataset.cut) || 3;
-      if (cutSource) {
-        try { cutSlides = await slicePhoto(cutSource, cutCount); }
-        catch (e) { alert(e.message); }
-      }
-      draw();
-    };
-  });
-  document.querySelectorAll('[data-cutdl]').forEach(function(button){
-    button.onclick = function(){ downloadSlide(Number(button.dataset.cutdl)); };
-  });
   const pin = document.getElementById('door-pin');
   if (pin) pin.onclick = placeCovers;
   const gear = document.getElementById('door-setup');
