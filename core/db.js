@@ -108,6 +108,7 @@ async function initDB() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gens INTEGER DEFAULT 0`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP DEFAULT NOW()`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS vk_group BIGINT NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS vk_mode TEXT`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS site_pulls (
       id TEXT PRIMARY KEY,
@@ -250,6 +251,17 @@ async function saveDonutSurvey(userId, groupId, step, gaps) {
      DO UPDATE SET step = $3, gaps = $4::jsonb, updated_at = NOW()`,
     [String(userId), String(groupId), Math.max(0, Number(step) || 0), JSON.stringify(surveyGaps(gaps))]
   );
+}
+
+async function setVkMode(userId, mode) {
+  const next = mode === 'audit' || mode === 'club' ? mode : null;
+  await pool.query('UPDATE users SET vk_mode = $2, updated_at = NOW() WHERE user_id = $1', [String(userId), next]);
+}
+
+async function getVkMode(userId) {
+  const res = await pool.query('SELECT vk_mode FROM users WHERE user_id = $1', [String(userId)]);
+  const mode = res.rows[0] && res.rows[0].vk_mode;
+  return mode === 'audit' || mode === 'club' ? mode : '';
 }
 
 async function clearDonutSurvey(userId, groupId) {
@@ -1084,6 +1096,8 @@ module.exports = {
   releaseGiga,
   getDonutSurvey,
   saveDonutSurvey,
+  setVkMode,
+  getVkMode,
   clearDonutSurvey,
   recordDonut,
   listDonutLog,
