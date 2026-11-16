@@ -262,6 +262,7 @@ test('уведомление об оплате остаётся в сообще�
     const list = [{ id: '230706467' }, { id: '214554778' }];
     assert.deepEqual(vk.communitiesForNotice(list, '230706467').map(item => item.id), ['230706467']);
     assert.deepEqual(vk.communitiesForNotice(list, '214554778').map(item => item.id), ['214554778']);
+    assert.equal(vk.communitiesForNotice(list, '214554778').some(item => item.id === '230706467'), false);
     assert.deepEqual(vk.communitiesForNotice(list, '999'), []);
     assert.deepEqual(vk.communitiesForNotice(list, '').map(item => item.id), ['230706467', '214554778']);
 });

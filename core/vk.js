@@ -295,7 +295,9 @@ function payLinkKeyboard(url) {
 }
 
 function chatReturnUrl(groupId) {
-    const group = String(groupId || process.env.VK_GROUP_ID || '').replace(/\D/g, '');
+    const asked = String(groupId || '').replace(/\D/g, '');
+    const group = asked || String(process.env.VK_GROUP_ID || '').replace(/\D/g, '');
+    if (asked) return `https://vk.com/im?sel=-${asked}`;
     if (group) return `https://vk.com/im?sel=-${group}`;
     return siteLink();
 }
@@ -1188,7 +1190,7 @@ async function holdPayment(token, peerId, account, text, action, groupId) {
         await sendText(token, peerId, 'Оплата не открылась. Напишите почту ещё раз или нажмите «Назад».', payLockKeyboard());
         return true;
     }
-    pendingPay.set(key, { stage: 'link', pkgId: pkg.id, url });
+    pendingPay.set(key, { stage: 'link', pkgId: pkg.id, url, groupId: String(pending.groupId || groupId || '').replace(/\D/g, '') });
     await sendText(
         token,
         peerId,
