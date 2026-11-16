@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { vkPageOrigin, vkCorsHeaders } = require('./webapp_server');
+const { vkPageOrigin, vkCorsHeaders, vkRequestToken } = require('./webapp_server');
 
 test('кабинет на хостинге ВК может обращаться к серверу', () => {
     assert.equal(vkPageOrigin('https://vk.com'), true);
@@ -15,4 +15,21 @@ test('кабинет на хостинге ВК может обращаться 
     assert.equal(vkPageOrigin(''), false);
     assert.match(vkCorsHeaders, /X-User-Token/);
     assert.match(vkCorsHeaders, /X-Telegram-Init-Data/);
+});
+
+test('пополнение и перенос ВК видят токен из заголовка кабинета', () => {
+    const header = vkRequestToken({
+        headers: { 'x-user-token': 'header-token' },
+        query: {},
+        body: { group: '214554778' }
+    });
+    assert.equal(header, 'header-token');
+    const body = vkRequestToken({
+        headers: {},
+        query: {},
+        body: { tk: 'body-token', packageId: 'pack' }
+    });
+    assert.equal(body, 'body-token');
+    const query = vkRequestToken({ headers: {}, query: { tk: 'query-token' }, body: {} });
+    assert.equal(query, 'query-token');
 });

@@ -140,6 +140,61 @@ function verifyVkLaunch(input) {
     return String(-id);
 }
 
+let vkServiceCache = { token: '', until: 0 };
+
+async function vkServiceToken(fetchImpl) {
+    const secret = String(process.env.VK_APP_SECRET || '').trim();
+    if (!secret) return '';
+    if (!fetchImpl && vkServiceCache.token && vkServiceCache.until > Date.now()) return vkServiceCache.token;
+    const fetchFn = fetchImpl || fetch;
+    const body = new URLSearchParams({
+        client_id: VK_APP_ID,
+        client_secret: secret,
+        grant_type: 'client_credentials',
+        v: '5.199'
+    });
+    for (const url of ['https://oauth.vk.ru/access_token', 'https://oauth.vk.com/access_token']) {
+        try {
+            const res = await fetchFn(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: body.toString()
+            });
+            const data = await res.json();
+            const token = data && data.access_token ? String(data.access_token) : '';
+            if (!token) continue;
+            if (!fetchImpl) {
+                const expires = Number(data.expires_in);
+                const ttl = expires > 60 ? (expires - 60) * 1000 : 12 * 3600 * 1000;
+                vkServiceCache = { token, until: Date.now() + ttl };
+            }
+            return token;
+        } catch (error) {}
+    }
+    return '';
+}
+
+// Пользовательский ключ принимается только если его выпустило приложение 54901511.
+async function vkUserForAppToken(access, fetchImpl) {
+    const service = await vkServiceToken(fetchImpl);
+    if (!service) return null;
+    const fetchFn = fetchImpl || fetch;
+    try {
+        const url = 'https://api.vk.ru/method/secure.checkToken?' + new URLSearchParams({
+            token: String(access || ''),
+            access_token: service,
+            v: '5.199'
+        });
+        const data = await (await fetchFn(url)).json();
+        const row = data && data.response;
+        const id = Number(row && row.user_id);
+        if (!row || Number(row.success) !== 1 || !Number.isInteger(id) || id <= 0) return null;
+        return String(-id);
+    } catch (error) {
+        return null;
+    }
+}
+
 function issueAdminToken(subject) {
     const exp = Math.floor(Date.now() / 1000) + ADMIN_TOKEN_TTL_SEC;
     const body = Buffer.from(JSON.stringify({ sub: String(subject), exp })).toString('base64url');
@@ -175,6 +230,7 @@ module.exports = {
     signUserId,
     verifyUserToken,
     verifyVkLaunch,
+    vkUserForAppToken,
     issueAdminToken,
     verifyAdminToken,
     checkAdminPassword

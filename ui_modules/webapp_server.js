@@ -94,6 +94,13 @@ function vkPageOrigin(origin) {
 
 const vkCorsHeaders = 'Content-Type, Authorization, X-User-Token, X-Telegram-Init-Data';
 
+function vkRequestToken(req) {
+    const body = (req && req.body) || {};
+    const query = (req && req.query) || {};
+    const headers = (req && req.headers) || {};
+    return String(headers['x-user-token'] || query.tk || body.tk || '');
+}
+
 function startWebApp() {
     const app = express();
     app.use((req, res, next) => {
@@ -119,7 +126,7 @@ function startWebApp() {
     function vkAccount(req) {
         const body = req.body || {};
         const query = Object.assign({}, req.query || {});
-        const tk = query.tk || body.tk;
+        const tk = vkRequestToken(req);
         const id = tk ? auth.verifyUserToken(tk) : null;
         if (id && String(id).startsWith('-')) return String(id);
         return auth.verifyVkLaunch(query) || auth.verifyVkLaunch(body.launch || {}) || null;
@@ -156,11 +163,9 @@ function startWebApp() {
             return res.status(400).json({ error: 'ВК не подтвердил вход.' });
         }
         try {
-            const url = 'https://api.vk.ru/method/users.get?' + new URLSearchParams({ access_token: access, v: '5.199' });
-            const data = await (await fetch(url)).json();
-            const id = data && data.response && data.response[0] && Number(data.response[0].id);
-            if (!Number.isInteger(id) || id <= 0) return res.status(401).json({ error: 'ВК не подтвердил вход.' });
-            res.json({ tk: auth.signUserId(String(-id)) });
+            const account = await auth.vkUserForAppToken(access);
+            if (!account) return res.status(401).json({ error: 'ВК не подтвердил вход.' });
+            res.json({ tk: auth.signUserId(account) });
         } catch (e) {
             res.status(500).json({ error: 'Вход не выполнился.' });
         }
@@ -1043,4 +1048,4 @@ function startWebApp() {
     return app;
 }
 
-module.exports = { startWebApp, vkPageOrigin, vkCorsHeaders };
+module.exports = { startWebApp, vkPageOrigin, vkCorsHeaders, vkRequestToken };

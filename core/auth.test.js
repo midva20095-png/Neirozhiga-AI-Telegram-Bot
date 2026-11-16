@@ -29,3 +29,24 @@ test('подпись запуска ВК включает пустые и нул
     const otherSign = crypto.createHmac('sha256', 'protected-key').update(otherPairs).digest('base64url');
     assert.equal(auth.verifyVkLaunch(Object.assign({ sign: otherSign }, other)), null);
 });
+
+test('ключ пользователя ВК принимается только от нового приложения', async () => {
+    process.env.VK_APP_SECRET = 'protected-key';
+    const auth = require('./auth');
+    const ok = async (url) => {
+        if (String(url).includes('oauth')) return { json: async () => ({ access_token: 'service-token', expires_in: 0 }) };
+        const query = new URL(String(url)).searchParams;
+        assert.equal(query.get('access_token'), 'service-token');
+        assert.equal(query.get('token'), 'user-token-from-app');
+        return { json: async () => ({ response: { success: 1, user_id: 462733829 } }) };
+    };
+    assert.equal(await auth.vkUserForAppToken('user-token-from-app', ok), '-462733829');
+    const denied = async (url) => {
+        if (String(url).includes('oauth')) return { json: async () => ({ access_token: 'service-token' }) };
+        return { json: async () => ({ error: { error_code: 15, error_msg: 'Access denied' } }) };
+    };
+    assert.equal(await auth.vkUserForAppToken('foreign-token', denied), null);
+    delete process.env.VK_APP_SECRET;
+    assert.equal(await auth.vkUserForAppToken('user-token-from-app', ok), null);
+    process.env.VK_APP_SECRET = 'protected-key';
+});
