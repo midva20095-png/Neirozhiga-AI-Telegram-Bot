@@ -4,12 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Админ · НейроЯга</title>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Unbounded:wght@700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0b0614;--card:#140c24;--text:#f3efff;--mut:#a79cc4;--line:rgba(255,255,255,.12)}
 *{box-sizing:border-box}
-body{margin:0 auto;background:var(--bg);color:var(--text);font:15px/1.45 Manrope,sans-serif;padding:16px 16px calc(20px + env(safe-area-inset-bottom,0px));max-width:960px}
-h1{font-family:Unbounded,sans-serif;font-size:22px;margin:0 0 4px}
+body{margin:0 auto;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,sans-serif;padding:16px 16px calc(20px + env(safe-area-inset-bottom,0px));max-width:960px}
+h1{font-family:system-ui,sans-serif;font-size:22px;margin:0 0 4px}
 h1 i{font-style:normal;background:linear-gradient(135deg,#00ffe0,#b366ff,#ff2d95);-webkit-background-clip:text;background-clip:text;color:transparent}
 h3{margin:0 0 10px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
@@ -71,7 +70,7 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
 </head>
 <body>
 <h1>Админ <i>НейроЯга</i></h1>
-<p class="note" id="intro">Сначала вход. Потом Telegram или ВКонтакте. Во ВК дальше выбирается одно сообщество.</p>
+<p class="note" id="intro">Вход по паролю. Дальше отдельно Telegram и каждое сообщество ВК: клиенты, баланс, модели, шаблоны, поддержка, рейтинг и донат.</p>
 
 <div class="card" id="login">
   <div class="row"><input id="pass" type="password" placeholder="Пароль администратора"><button onclick="login()">Войти</button></div>
@@ -145,12 +144,18 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;',
 function tgInit(){ try{ return (window.Telegram&&window.Telegram.WebApp&&window.Telegram.WebApp.initData)||''; }catch(e){ return ''; } }
 
 async function api(path, opts){
-  opts = opts||{};
+  opts = Object.assign({}, opts||{});
   opts.headers = Object.assign({'Content-Type':'application/json'}, opts.headers||{});
   if (token) opts.headers['Authorization'] = 'Bearer '+token;
-  const r = await fetch(path, opts);
+  const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(function(){ ctrl.abort(); }, 12000) : 0;
+  if (ctrl) opts.signal = ctrl.signal;
+  let r;
+  try { r = await fetch(path, opts); }
+  catch (e) { throw new Error('Сервер не ответил. Откройте раздел ещё раз.'); }
+  finally { if (timer) clearTimeout(timer); }
   if (r.status===401){ logout(); throw new Error('Требуется вход'); }
-  return r.json();
+  return r.json().catch(function(){ return { error: 'Сервер ответил пустой страницей.' }; });
 }
 
 async function login(){
@@ -158,13 +163,18 @@ async function login(){
   const body = { password: pass };
   const init = tgInit(); if (init) body.initData = init;
   try{
-    const r = await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(function(){ ctrl.abort(); }, 12000) : 0;
+    let r;
+    try {
+      r = await fetch('/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:ctrl?ctrl.signal:undefined});
+    } finally { if (timer) clearTimeout(timer); }
     const d = await r.json();
     if (!r.ok || !d.token) throw new Error(d.error||'Неверный пароль');
     token = d.token; sessionStorage.setItem('ny_admin_token', token);
     place = ''; sessionStorage.removeItem('ny_admin_place');
     showPanel();
-  }catch(e){ document.getElementById('lerr').textContent = e.message; }
+  }catch(e){ document.getElementById('lerr').textContent = (e && e.name==='AbortError') ? 'Сервер не ответил. Попробуйте ещё раз.' : e.message; }
 }
 function logout(){
   token=null; place=''; vkHome='';
@@ -291,18 +301,23 @@ async function showPanel(){
 }
 
 async function loadSection(k){
-  if (k==='home') return loadHome();
-  if (k==='stats') return loadStats();
-  if (k==='rate') return loadRate();
-  if (k==='donut') return loadDonut();
-  if (k==='users') return loadUsers('');
-  if (k==='tpl') return loadTpl();
-  if (k==='models') return loadModels();
-  if (k==='journal') return loadJournal();
-  if (k==='packages') return loadPackages();
-  if (k==='tickets') return loadTickets('open');
-  if (k==='broadcast') return renderBroadcast();
-  if (k==='settings') return loadSettings();
+  try {
+    if (k==='home') return await loadHome();
+    if (k==='stats') return await loadStats();
+    if (k==='rate') return await loadRate();
+    if (k==='donut') return await loadDonut();
+    if (k==='users') return await loadUsers('');
+    if (k==='tpl') return await loadTpl();
+    if (k==='models') return await loadModels();
+    if (k==='journal') return await loadJournal();
+    if (k==='packages') return await loadPackages();
+    if (k==='tickets') return await loadTickets('open');
+    if (k==='broadcast') return await renderBroadcast();
+    if (k==='settings') return await loadSettings();
+  } catch (e) {
+    const node = document.getElementById('section-'+k);
+    if (node) node.innerHTML = '<div class="card bad">'+esc(e.message || 'Раздел не открылся. Нажмите вкладку ещё раз.')+'</div>';
+  }
 }
 async function loadHome(){
   const el = document.getElementById('section-home');
@@ -474,7 +489,13 @@ function whenAt(value){
 async function loadUsers(q){
   const el = document.getElementById('section-users');
   usersQuery = q || '';
-  const d = await api('/api/admin/users?platform='+place+'&q='+encodeURIComponent(usersQuery)+groupQuery());
+  let d;
+  try {
+    d = await api('/api/admin/users?platform='+place+'&q='+encodeURIComponent(usersQuery)+groupQuery());
+  } catch (e) {
+    el.innerHTML = '<div class="card bad">'+esc(e.message)+'</div>';
+    return;
+  }
   if (d.error && !d.users) {
     el.innerHTML = '<div class="card bad">'+esc(d.error)+'</div>';
     return;

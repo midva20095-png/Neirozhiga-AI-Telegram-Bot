@@ -95,8 +95,8 @@ window.addEventListener('message', function(event){
 `;
 
 let html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-html = html.replace('<script src="https://telegram.org/js/telegram-web-app.js"></script>\n', '');
-html = html.replace('<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Unbounded:wght@700&display=swap" rel="stylesheet">\n', '');
+html = html.replace(/<script src="https:\/\/telegram\.org\/js\/telegram-web-app\.js"(?: defer)?><\/script>\n?/g, '');
+html = html.replace(/<link href="https:\/\/fonts\.googleapis\.com[^"]*" rel="stylesheet">\n?/g, '');
 const saver = fs.readFileSync(path.join(root, 'save-work.js'), 'utf8');
 if (!html.includes('<script src="/save-work.js"></script>')) throw new Error('В кабинете нет сохранения работ');
 html = html.replace('<script src="/save-work.js"></script>', '<script>\n' + saver + '\n</script>');

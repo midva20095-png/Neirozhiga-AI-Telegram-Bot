@@ -177,21 +177,21 @@ function siteLink() {
     return catalog.getGeneral().site_url || 'https://babayagaland.ru';
 }
 
-function appBase() {
-    return String(process.env.WEBAPP_URL || '').replace(/\/$/, '');
+function miniAppUrl(options) {
+    const opts = options || {};
+    const app = String(process.env.VK_APP_ID || '54895627').replace(/\D/g, '') || '54895627';
+    const group = String(opts.groupId || '').replace(/\D/g, '');
+    const base = group ? `https://vk.com/app${app}_-${group}` : `https://vk.com/app${app}`;
+    const hash = new URLSearchParams();
+    if (opts.pkgId) hash.set('pkg', String(opts.pkgId));
+    if (opts.paid) hash.set('paid', '1');
+    const extra = hash.toString();
+    return extra ? `${base}#${extra}` : base;
 }
 
 function appCabinetUrl(account, options) {
-    const opts = options || {};
-    const base = appBase();
-    if (!base || account == null) return siteLink();
-    const params = new URLSearchParams();
-    params.set('tk', auth.signUserId(account));
-    if (opts.pkgId) params.set('pkg', String(opts.pkgId));
-    if (opts.paid) params.set('paid', '1');
-    const group = String(opts.groupId || '').replace(/\D/g, '');
-    if (group) params.set('vk_group_id', group);
-    return `${base}/vk.html?${params.toString()}`;
+    if (account == null) return siteLink();
+    return miniAppUrl(options || {});
 }
 
 function cabinetLink(account, pkgId, groupId) {

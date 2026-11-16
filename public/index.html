@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>НейроЯга</title>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <script>
 function vkSend(handler, params){
   try { parent.postMessage({ handler: handler, params: params || {}, type: 'vk-connect', connectVersion: '2.15.8', sendTime: Date.now() }, '*'); }
@@ -75,11 +74,10 @@ window.addEventListener('message', function(event){
   }
 });
 </script>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Unbounded:wght@700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0b0614;--card:#140c24;--text:#f3efff;--mut:#a79cc4;--line:rgba(255,255,255,.1);--grad:linear-gradient(135deg,#00ffe0,#b366ff 55%,#ff2d95)}
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 Manrope,system-ui,sans-serif;min-height:100%}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,sans-serif;min-height:100%}
 button,textarea,input,select{font:inherit;color:inherit}
 .app{max-width:620px;margin:0 auto;padding:12px 12px calc(84px + env(safe-area-inset-bottom))}
 .top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
@@ -323,8 +321,19 @@ function chips(list, current, attr){
   }).join('')+'</div>';
 }
 
+function fetchT(url, opts, ms){
+  const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(function(){ ctrl.abort(); }, ms || 7000) : 0;
+  const next = Object.assign({}, opts || {});
+  if (ctrl) next.signal = ctrl.signal;
+  return fetch(url, next).finally(function(){ if (timer) clearTimeout(timer); });
+}
+function retryOpen(){
+  window.__vkOffline = false;
+  load();
+}
 async function loadConfig(){
-  try { cfg = await (await fetch('/api/config'+(isVk()?'?audience=vk':''))).json(); }
+  try { cfg = await (await fetchT('/api/config'+(isVk()?'?audience=vk':''))).json(); }
   catch(e){ cfg = {models:[],packages:[],groups:{}}; }
   const s = document.getElementById('site');
   if (cfg.site_url){ s.href = cfg.site_url; s.style.display=''; } else s.style.display='none';
@@ -336,21 +345,22 @@ async function adoptVkLaunch(){
   const sp = new URLSearchParams(location.search);
   if (!sp.get('sign') || !sp.get('vk_user_id')) return;
   try {
-    const r = await fetch('/api/vk/session' + location.search);
+    const r = await fetchT('/api/vk/session' + location.search);
     const d = await r.json();
     if (d && d.tk) {
       token = d.tk;
       userId = String(token).split('.')[0];
       if (d.group) window.__vkGroup = String(d.group).replace(/\D/g, '');
+      window.__vkOffline = false;
     } else if (d && d.error) window.__vkAuthError = d.error;
-  } catch (e) {}
+  } catch (e) { window.__vkOffline = true; }
 }
 async function load(){
   await adoptVkLaunch();
   paintVkBot();
   if (!userId) { draw(); return; }
   try {
-    const r = await fetch('/api/me', {headers: authHeaders()});
+    const r = await fetchT('/api/me', {headers: authHeaders()});
     if (r.status === 401) { me = null; draw(); return; }
     if (r.status === 403) {
       const d = await r.json().catch(function(){ return {}; });
@@ -360,9 +370,9 @@ async function load(){
     }
     me = await r.json();
     if (me.error) throw new Error(me.error);
-  } catch(e){ me = {error:true, balance:0, history:[], current_model:(cfg&&cfg.default_model)||'flash'}; }
+  } catch(e){ me = {error:true, balance:0, history:[], current_model:(cfg&&cfg.default_model)||'flash'}; window.__vkOffline = true; }
   await loadConfig();
-  try { templates = ((await (await fetch('/api/templates'+(isVk()?'?audience=vk':''))).json()).templates)||[]; } catch(e){ templates=[]; }
+  try { templates = ((await (await fetchT('/api/templates'+(isVk()?'?audience=vk':''))).json()).templates)||[]; } catch(e){ templates=[]; }
   if (pendingTpl && templates.some(function(t){ return String(t.id)===String(pendingTpl); })) {
     tab = 'tpl';
     openTpl = pendingTpl;
@@ -395,8 +405,12 @@ function applyGoal(goal){
 function draw(){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.t===tab));
   const box = document.getElementById('view');
+  if (window.__vkOffline && (!userId || (me && me.error))) {
+    box.innerHTML = '<div class="card"><p>Кабинет открыт. Сервер бота не ответил, поэтому баланс и генерация ещё не загрузились.</p><button class="btn" type="button" onclick="retryOpen()">Повторить</button><p class="empty">'+(isVk()?'Бот в чате сообщества при этом работает. Напишите туда, если повтор не помогает.':'Откройте кабинет ещё раз из чата бота.')+'</p></div>';
+    return;
+  }
   if (!userId || (me && !me.user_id && me.error!==true && !me.balance)) {
-    box.innerHTML = '<div class="card"><p class="empty">Откройте кабинет из чата бота или из сообщества.</p></div>';
+    box.innerHTML = '<div class="card"><p class="empty">'+(window.__vkAuthError ? 'Сессия сообщества не открылась. Закройте кабинет и откройте его кнопкой из чата.' : 'Откройте кабинет из чата бота или из сообщества.')+'</p></div>';
     return;
   }
   if (me && me.channel) {
@@ -1411,5 +1425,6 @@ detectAuth();
 let tries=0;
 (function retry(){ if (!userId && tries<20){ tries++; detectAuth(); if (userId){ load(); return; } setTimeout(retry,250); } })();
 </script>
+<script src="https://telegram.org/js/telegram-web-app.js" defer></script>
 </body>
 </html>

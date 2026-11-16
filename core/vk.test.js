@@ -152,8 +152,8 @@ test('меню ВК открывает кабинет и не считает к�
     process.env.WEBAPP_URL = 'https://bot.example';
     const personal = JSON.parse(vk.mainMenu(10));
     const cabinet = personal.buttons.flat().find(button => button.action.label === 'Кабинет');
-    assert.match(cabinet.action.link, /^https:\/\/bot\.example\/vk\.html\?tk=-10\./);
-    assert.doesNotMatch(cabinet.action.link, /vk\.ru\/app/);
+    assert.equal(cabinet.action.link, 'https://vk.com/app54895627');
+    assert.doesNotMatch(cabinet.action.link, /bot\.example|railway\.app/);
     assert.doesNotMatch(vk.cabinetLink(-10, 'pack_100'), /yookassa|yoomoney/);
     const pay = JSON.parse(vk.payKeyboard());
     assert.equal(pay.buttons.at(-1)[0].action.label, 'Назад');
@@ -212,14 +212,13 @@ test('меню ВК открывает кабинет и не считает к�
     assert.equal(event.payload.m, 'flash');
 });
 
-test('кабинет ВК открывает страницу бота, а не мини-приложение', () => {
+test('кабинет ВК открывает мини-приложение, а не адрес сервера', () => {
     process.env.WEBAPP_URL = 'https://bot.example';
     const personal = JSON.parse(vk.mainMenu(10, '230706467'));
     const action = personal.buttons.flat().find(button => button.action.label === 'Кабинет').action;
     assert.equal(action.type, 'open_link');
-    assert.match(action.link, /^https:\/\/bot\.example\/vk\.html\?tk=-10\./);
-    assert.match(action.link, /vk_group_id=230706467/);
-    assert.doesNotMatch(action.link, /vk\.ru\/app/);
+    assert.equal(action.link, 'https://vk.com/app54895627_-230706467');
+    assert.doesNotMatch(action.link, /bot\.example|railway\.app|vk\.html/);
 });
 
 test('второе сообщество считается отдельно и не подменяет первое', () => {
@@ -239,8 +238,7 @@ test('второе сообщество считается отдельно и �
     assert.equal(vk.communityId('999'), '999');
     assert.equal(vk.communityId(''), '230706467');
     process.env.WEBAPP_URL = 'https://bot.example';
-    assert.match(vk.cabinetLink(-10, '', '555'), /https:\/\/bot\.example\/vk\.html\?tk=-10\./);
-    assert.match(vk.cabinetLink(-10, '', '555'), /vk_group_id=555/);
+    assert.equal(vk.cabinetLink(-10, '', '555'), 'https://vk.com/app54895627_-555');
     process.env.VK_GROUP_ID_2 = '';
     process.env.VK_GROUP_TOKEN_2 = '';
     assert.deepEqual(vk.communityList().map(item => item.id), ['230706467']);
