@@ -611,10 +611,9 @@ function paintVkBot(){
 function coverCode(groupId, ids){
   const group = String(groupId).replace(/\D/g, '');
   const chat = 'https://vk.com/write-' + group;
-  const home = String(window.__nyApi || location.origin).replace(/\/$/, '');
-  const siteTarget = (cfg && /^https:\/\//.test(String(cfg.site_url || ''))) ? cfg.site_url : 'https://babayagaland.ru';
-  const rate = 'https://away.vk.ru/away.php?to=' + encodeURIComponent(home + '/?goal=rate&vk_group_id=' + group);
-  const site = 'https://away.vk.ru/away.php?to=' + encodeURIComponent(siteTarget);
+  const app = 'https://vk.com/app54901511_-' + group;
+  const rate = app;
+  const site = app;
   const rows = [
     { title: 'Чат ИИ', button: 'Написать', cover_id: ids.chat, url: chat, button_url: chat, title_url: chat },
     { title: 'Рейтинг', button: 'Открыть', cover_id: ids.rate, url: rate, button_url: rate, title_url: rate },
