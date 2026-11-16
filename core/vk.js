@@ -209,12 +209,20 @@ function textRows() {
     return [
         [textButton('Баланс', { a: 'balance' }, 'primary'), textButton('Модели', { a: 'models' }, 'primary')],
         [textButton('Пополнить', { a: 'pay' }, 'positive'), textButton('Перенос', { a: 'move' }, 'primary')],
-        [textButton('Справка/Рейтинг', { a: 'more' }, 'secondary')]
+        [textButton('Справка', { a: 'help' }, 'secondary'), textButton('Рейтинг', { a: 'rate' }, 'secondary')]
     ];
 }
 
 function textOnlyMenu() {
     return JSON.stringify({ one_time: false, buttons: textRows() });
+}
+
+function communityTitle(groupId) {
+    const id = String(groupId || '').replace(/\D/g, '');
+    if (id === '230706467') return 'Точки и Линии';
+    if (id === '214554778') return 'НейроЯга';
+    if (id && id === clubGroupId()) return 'НейроЯга';
+    return 'НейроЯга';
 }
 
 function clubGroupId() {
@@ -948,12 +956,12 @@ async function createPayment(amount, description, email, metadata, returnUrl) {
     return response.data && response.data.confirmation && response.data.confirmation.confirmation_url;
 }
 
-async function sendStatus(token, peerId, account) {
+async function sendStatus(token, peerId, account, groupId) {
     const balance = await db.getUserBalance(account);
     const model = catalog.getModel((await db.getCurrentModel(account)) || catalog.defaultModelKey('vk'), { audience: 'vk' });
-    const empty = Number(balance) > 0 ? '' : '\n\nСейчас 0 кредитов. Нажмите «Пополнить». После оплаты они придут в этот чат.';
+    const empty = Number(balance) > 0 ? '' : '\n\nСейчас 0 кредитов. Нажмите «Пополнить» или откройте «Баланс» в кабинете. После оплаты они придут в этот чат.';
     await sendText(token, peerId,
-        `НейроЯга во ВКонтакте.\n\nБаланс: ${balance} кр.\nМодель: ${model ? model.name : 'текст'}.${empty}\n\n«Модели» — выбрать, что генерировать. «Пополнить» — оплата. «Кабинет» — шаблоны, история и перенос в Telegram. Подробности — кнопка «Справка».`
+        `${communityTitle(groupId)}.\n\nБаланс: ${balance} кр.\nМодель: ${model ? model.name : 'текст'}.${empty}\n\n«Модели» — что генерировать. «Пополнить» — оплата в этот чат. «Кабинет» — шаблоны, история и баланс. «Справка» и «Рейтинг» — отдельные кнопки внизу.`
     );
 }
 
@@ -969,7 +977,7 @@ const USER_HELP = [
     '2. Выберите пакет. Останутся только пакеты и «Назад».',
     '3. Напишите почту для чека одним сообщением.',
     '4. Нажмите «Оплатить». Если ВК спросит, подтвердите переход: откроется страница банка.',
-    '5. После оплаты кредиты придут в этот чат. «Назад» возвращает меню.',
+    '5. После оплаты кредиты придут в этот чат. То же можно сделать в кабинете: вкладка «Баланс», пакет и почта для чека. «Назад» возвращает меню.',
     '',
     'Баланс ВК и Telegram разные. Кнопка «Перенос» внизу отправляет кредиты в Telegram. Чтобы получить кредиты из Telegram, там нажмите «Во ВК» и впишите номер, который бот покажет после «Перенос».'
 ].join('\n');
@@ -979,7 +987,7 @@ async function sendHelp(token, peerId) {
 }
 
 async function openMenu(token, peerId, account, action, groupId) {
-    if (action === 'hello' || action === 'balance') return sendStatus(token, peerId, account);
+    if (action === 'hello' || action === 'balance') return sendStatus(token, peerId, account, groupId);
     if (action === 'more') return sendText(token, peerId, 'Справка или рейтинг.', moreKeyboard());
     if (action === 'help') return sendHelp(token, peerId);
     if (action === 'rate') return sendRating(token, peerId, account, groupId);

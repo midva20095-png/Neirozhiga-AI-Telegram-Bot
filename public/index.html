@@ -111,10 +111,8 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .plus{color:#3ee08f;font-weight:800}.minus{color:#ff8be0;font-weight:800}
 .pack{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#1c1233;border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:8px}
 .pack button{border:0;border-radius:10px;padding:8px 14px;font-weight:800;color:#fff;background:var(--grad)}
-.tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;gap:4px;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:rgba(11,6,20,.96);border-top:1px solid var(--line);backdrop-filter:blur(8px)}
-.tabbar button{flex:1;border:0;background:transparent;color:var(--mut);font-size:11px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0}
-.tabbar:has(#tabrate:not([style*="display:none"])){gap:2px;padding-left:6px;padding-right:6px;overflow-x:auto}
-.tabbar:has(#tabrate:not([style*="display:none"])) button{min-width:52px;font-size:10px}
+.tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;gap:2px;padding:8px 8px calc(8px + env(safe-area-inset-bottom));background:rgba(11,6,20,.96);border-top:1px solid var(--line);backdrop-filter:blur(8px);overflow-x:auto}
+.tabbar button{flex:1 0 auto;min-width:68px;border:0;background:transparent;color:var(--mut);font-size:11px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 2px}
 .rank{display:flex;gap:10px;align-items:center;padding:10px 4px;border-bottom:1px solid var(--line)}
 .rank:last-child{border-bottom:0}
 .rank .medal{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;background:#1c1233;flex:0 0 auto}
@@ -831,8 +829,12 @@ function viewTop(){
   const head = paid+'<div class="card"><div class="now">Текущий баланс</div><div id="topbal" style="font-size:28px;font-weight:800">'+((me&&me.balance)||0)+' кр</div></div>';
   if (isVk()) {
     const mine = String(userId||'').replace(/^-/, '');
-    return head+
-      '<div class="card"><button class="btn" id="vktop" type="button">Пополнить</button><p id="vktopmsg" class="hint">Откроется чат. Выберите пакет, напишите почту для чека и нажмите «Оплатить». «Назад» возвращает меню.</p></div>'+
+    const mail = '<label class="flabel" for="paymail">Почта для чека</label><input id="paymail" type="email" inputmode="email" autocomplete="email" placeholder="name@mail.ru">';
+    const packBlock = packs.length
+      ? '<div class="groupttl">Пакеты</div><div class="card">'+mail+packs.map(p=>'<div class="pack"><div><div class="name">'+esc(p.title)+'</div><div class="meta">'+p.credits+' кредитов</div></div><button data-pkg="'+esc(p.id)+'">'+p.price+' ₽</button></div>').join('')+'<p class="hint">Откроется страница банка. Кредиты придут в чат этого сообщества.</p></div>'
+      : '';
+    return head+packBlock+
+      '<div class="card"><button class="btn ghost" id="vktop" type="button">Пополнить в чате</button><p id="vktopmsg" class="hint">Если удобнее в переписке: откроется чат, там пакет, почта и кнопка «Оплатить».</p></div>'+
       '<div class="card"><div class="now">Перенос</div>'+
       '<p class="hint">Баланс ВК и Telegram разные. Ваш номер ВК: <b>'+esc(mine)+'</b>. Его вписывают в Telegram: «Перенос» → «Во ВК».</p>'+
       '<input id="tgto" inputmode="text" autocomplete="off" placeholder="номер или @имя в Telegram">'+
@@ -856,8 +858,8 @@ function viewTop(){
 }
 function viewHelp(){
   if (isVk()) {
-    return '<div class="card"><div class="now">Как пользоваться</div><p>1. «Модели» — выберите текст, картинку, видео или музыку.</p><p>2. Напишите запрос. Если модель просит фото, прикрепите его.</p><p>3. Ответ придёт в чат. Картинки также есть на вкладке «История».</p></div>'+
-      '<div class="card"><div class="now">Как пополнить</div><p>1. Нажмите «Пополнить» здесь или в чате.</p><p>2. Выберите пакет и напишите почту для чека.</p><p>3. Нажмите «Оплатить». Если ВК спросит, подтвердите переход.</p><p>4. Кредиты придут в чат. «Назад» возвращает меню.</p></div>'+
+    return '<div class="card"><div class="now">Как пользоваться</div><p>1. «Генерация» — свой запрос. «Шаблоны» — готовые карточки: заполните поля и нажмите «Создать».</p><p>2. Если карточка просит фото, прикрепите его. Результат появится здесь и в чате этого сообщества.</p><p>3. «История» хранит готовые файлы. «Баланс» — пакеты и перенос в Telegram.</p></div>'+
+      '<div class="card"><div class="now">Как пополнить</div><p>1. Вкладка «Баланс»: почта для чека и пакет.</p><p>2. Либо «Пополнить в чате» — то же самое в переписке.</p><p>3. После оплаты кредиты придут в чат этого сообщества.</p></div>'+
       (cfg && cfg.support_enabled===false ? '' : '<div class="card"><div class="now">Напишите нам — ответ придёт в чат.</div>'+
       '<textarea id="supmsg" placeholder="Опишите вопрос или проблему"></textarea>'+
       '<button class="btn" id="supsend">Отправить</button><p id="supok" class="hint"></p></div>');
@@ -989,7 +991,11 @@ function bind(){
   if (paymail && pendingPkg) paymail.focus();
   const back=document.getElementById('back'); if (back) back.onclick=()=>{ openTpl=null; photoData=null; tplAnswers={}; tplPhotos={}; last=null; draw(); };
   const file=document.getElementById('file'); if (file) file.onchange=()=>onPhoto(file);
-  document.querySelectorAll('[data-answer]').forEach(function(el){ el.oninput = function(){ tplAnswers[el.dataset.answer] = el.value; }; });
+  document.querySelectorAll('[data-answer]').forEach(function(el){
+    const save = function(){ tplAnswers[el.dataset.answer] = el.value; };
+    el.oninput = save;
+    el.onchange = save;
+  });
   document.querySelectorAll('[data-field]').forEach(function(el){ el.onchange = function(){ onTplFieldPhoto(el); }; });
   document.querySelectorAll('[data-unphoto]').forEach(function(button){
     button.onclick = function(){
@@ -1019,6 +1025,8 @@ function bind(){
   const pull = document.getElementById('pull'); if (pull) pull.onclick = sendPull;
   const vktop = document.getElementById('vktop'); if (vktop) vktop.onclick = openVkTopup;
   const vkmove = document.getElementById('vkmove'); if (vkmove) vkmove.onclick = sendVkMove;
+  const currentTab = document.querySelector('.tabbar button.on');
+  if (currentTab && currentTab.scrollIntoView) currentTab.scrollIntoView({ inline: 'center', block: 'nearest' });
   paintVkBot();
 }
 async function openVkTopup(){
@@ -1132,7 +1140,7 @@ function fieldForm(t){
     }
     if (f.type === 'выбор') {
       const opts = (f.options || []).map(function(o){
-        return '<option'+(tplAnswers[f.key]===o?' selected':'')+'>'+esc(o)+'</option>';
+        return '<option value="'+esc(o)+'"'+(tplAnswers[f.key]===o?' selected':'')+'>'+esc(o)+'</option>';
       }).join('');
       return '<span class="flabel">'+esc(f.label)+star+'</span><select data-answer="'+esc(f.key)+'"><option value="">Выберите</option>'+opts+'</select>';
     }
@@ -1158,7 +1166,7 @@ function fileToJpeg(file){
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
-      const max = 1280;
+      const max = 2048;
       const scale = Math.min(1, max / Math.max(img.width, img.height));
       const w = Math.max(1, Math.round(img.width * scale));
       const h = Math.max(1, Math.round(img.height * scale));
@@ -1166,7 +1174,7 @@ function fileToJpeg(file){
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
       URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL('image/jpeg', 0.86));
+      resolve(canvas.toDataURL('image/jpeg', 0.92));
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Не удалось прочитать фото')); };
     img.src = url;
