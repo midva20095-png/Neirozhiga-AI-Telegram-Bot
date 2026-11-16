@@ -111,4 +111,5 @@ fs.mkdirSync(path.join(buildDir, 'widget'), { recursive: true });
 for (const name of ['chat', 'rate', 'site']) {
     fs.copyFileSync(path.join(root, 'widget', name + '.jpg'), path.join(buildDir, 'widget', name + '.jpg'));
 }
+fs.copyFileSync(path.join(root, 'cover.jpg'), path.join(buildDir, 'cover.jpg'));
 fs.writeFileSync(path.join(buildDir, 'index.html'), html);

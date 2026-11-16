@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" style="background:#0b0614">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>НейроЯга</title>
+<link rel="icon" href="cover.jpg">
 <script>
 function vkSend(handler, params){
   try { parent.postMessage({ handler: handler, params: params || {}, type: 'vk-connect', connectVersion: '2.15.8', sendTime: Date.now() }, '*'); }
@@ -186,10 +187,12 @@ a.btn{display:block;text-align:center;text-decoration:none}
 input,select{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1233;padding:12px;outline:none;margin-top:8px}
 #genmodel{font-size:16px;margin:0 0 10px}
 .flabel{display:block;margin-top:12px;font-weight:800;font-size:13px}
+.cover{display:block;width:100%;height:196px;object-fit:cover;object-position:center 20%;border-radius:18px;margin:0 0 12px;background:#140c24}
 </style>
 </head>
-<body>
+<body style="background:#0b0614;margin:0">
 <div class="app">
+  <img class="cover" src="cover.jpg" alt="НейроЯга">
   <div class="top">
     <div class="logo">НейроЯга</div>
     <div class="bal" id="bal">—</div>

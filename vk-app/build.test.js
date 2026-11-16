@@ -13,6 +13,9 @@ test('приложение ВК остаётся на своём адресе и
     assert.equal(html.includes('https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app'), true);
     assert.equal(html.includes('nySave'), true);
     assert.equal(fs.existsSync(path.join(__dirname, 'build/widget/chat.jpg')), true);
+    assert.equal(fs.existsSync(path.join(__dirname, 'build/cover.jpg')), true);
+    assert.equal(html.includes('class="cover"'), true);
+    assert.equal(html.includes('src="cover.jpg"'), true);
     const initAt = html.indexOf('VKWebAppInit');
     const appAt = html.indexOf('function downloadWork');
     assert.ok(initAt > 0 && appAt > initAt);
