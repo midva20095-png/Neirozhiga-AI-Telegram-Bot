@@ -166,8 +166,11 @@ test('меню ВК открывает кабинет и не считает к�
     assert.equal(vk.emailOk('user@example.com'), true);
     assert.equal(vk.emailOk('не почта'), false);
     assert.equal(vk.menuAction('Назад', { a: 'pay_back' }), 'pay_back');
-    assert.match(vk.USER_HELP, /Как пополнить/);
-    assert.doesNotMatch(vk.USER_HELP, /окно ВК|базе бота/);
+    const help = require('./catalog').clientHelp('vk');
+    assert.match(help, /Как пополнить/);
+    assert.match(help, /Аудит сообщества/);
+    assert.match(help, /https:\/\/vk\.me\/neuroyaga/);
+    assert.doesNotMatch(help, /окно ВК|базе бота|админк|братух|kie/i);
     const auth = require('./auth');
     assert.equal(auth.verifyUserToken(auth.signUserId(-10)), '-10');
     assert.equal(auth.verifyUserToken(auth.signUserId(5)), '5');
