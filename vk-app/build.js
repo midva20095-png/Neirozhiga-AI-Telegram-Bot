@@ -52,6 +52,10 @@ window.__nyHost = function(msg){
     vkSend('VKWebAppShowCommunityWidgetPreviewBox', { group_id: Number(id), type: 'cover_list', code: body });
     return;
   }
+  if (msg.type === 'ny-user-ask') {
+    vkSend('VKWebAppGetAuthToken', { app_id: 54895627, scope: '' });
+    return;
+  }
   if ((msg.type === 'ny-open' || msg.type === 'ny-pay') && /^https:\\/\\//.test(String(msg.url || ''))) {
     vkSend('VKWebAppOpenLink', { url: msg.url });
   }
@@ -92,6 +96,14 @@ window.addEventListener('message', function(event){
   }
   if (bridgeType === 'VKWebAppGetCommunityTokenFailed') {
     tell({ type: 'ny-community-token-fail' });
+    return;
+  }
+  if (bridgeType === 'VKWebAppGetAuthTokenResult' && bridgeData.access_token) {
+    tell({ type: 'ny-user-token', token: bridgeData.access_token });
+    return;
+  }
+  if (bridgeType === 'VKWebAppGetAuthTokenFailed') {
+    tell({ type: 'ny-user-token-fail' });
     return;
   }
   if (String(bridgeType).indexOf('WidgetPreviewBoxFailed') >= 0) {

@@ -141,6 +141,22 @@ function startWebApp() {
     app.get('/api/vk/session', (req, res) => sendVkSession(res, req.query));
     app.post('/api/vk/session', (req, res) => sendVkSession(res, req.body));
 
+    app.post('/api/vk/user-token', async (req, res) => {
+        const access = String((req.body && req.body.access_token) || '').trim();
+        if (!/^[A-Za-z0-9._-]{20,500}$/.test(access)) {
+            return res.status(400).json({ error: 'ВК не подтвердил вход.' });
+        }
+        try {
+            const url = 'https://api.vk.ru/method/users.get?' + new URLSearchParams({ access_token: access, v: '5.199' });
+            const data = await (await fetch(url)).json();
+            const id = data && data.response && data.response[0] && Number(data.response[0].id);
+            if (!Number.isInteger(id) || id <= 0) return res.status(401).json({ error: 'ВК не подтвердил вход.' });
+            res.json({ tk: auth.signUserId(String(-id)) });
+        } catch (e) {
+            res.status(500).json({ error: 'Вход не выполнился.' });
+        }
+    });
+
     app.post('/api/vk/widget-image', async (req, res) => {
         try {
             const name = String((req.body && req.body.name) || '');

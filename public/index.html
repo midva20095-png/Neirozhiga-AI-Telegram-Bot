@@ -40,6 +40,10 @@ window.__nyHost = function(msg){
     vkSend('VKWebAppShowCommunityWidgetPreviewBox', { group_id: Number(id), type: 'cover_list', code: body });
     return;
   }
+  if (msg.type === 'ny-user-ask') {
+    vkSend('VKWebAppGetAuthToken', { app_id: 54895627, scope: '' });
+    return;
+  }
   if ((msg.type === 'ny-open' || msg.type === 'ny-pay') && /^https:\/\//.test(String(msg.url || ''))) {
     vkSend('VKWebAppOpenLink', { url: msg.url });
   }
@@ -77,6 +81,11 @@ window.addEventListener('message', function(event){
     return;
   }
   if (bridgeType === 'VKWebAppGetCommunityTokenFailed') vkTell({ type: 'ny-community-token-fail' });
+  if (bridgeType === 'VKWebAppGetAuthTokenResult' && bridgeData.access_token) {
+    vkTell({ type: 'ny-user-token', token: bridgeData.access_token });
+    return;
+  }
+  if (bridgeType === 'VKWebAppGetAuthTokenFailed') vkTell({ type: 'ny-user-token-fail' });
   if (String(bridgeType).indexOf('WidgetPreviewBoxFailed') >= 0) {
     const reason = bridgeData && (bridgeData.error_reason || (bridgeData.error_data && bridgeData.error_data.error_reason) || '');
     vkTell({ type: 'ny-widget-fail', reason: String(reason || '').replace(/access_token=[^&\s]+/g, '').slice(0, 180) });
@@ -391,6 +400,47 @@ async function adoptVkLaunch(extra){
     } else if (d && d.error && (!window.__nyApi || window.__vkLaunchSeen)) window.__vkAuthError = d.error;
   } catch (e) { window.__vkOffline = true; }
 }
+function askVkUserToken(){
+  if (window.__vkUserAsk) return window.__vkUserAsk;
+  window.__vkUserAsk = new Promise(function(resolve){
+    const timer = setTimeout(function(){ cleanup(); resolve(''); }, 12000);
+    function onMsg(event){
+      const data = event.data || {};
+      if (data.type === 'ny-user-token' && data.token) { cleanup(); resolve(String(data.token)); }
+      if (data.type === 'ny-user-token-fail') { cleanup(); resolve(''); }
+    }
+    function cleanup(){
+      clearTimeout(timer);
+      window.removeEventListener('message', onMsg);
+      window.__vkUserAsk = null;
+    }
+    window.addEventListener('message', onMsg);
+    nyPost({ type: 'ny-user-ask' });
+  });
+  return window.__vkUserAsk;
+}
+async function adoptVkUser(){
+  if (token || userId || !window.__nyApi) return;
+  const access = await askVkUserToken();
+  if (!access) {
+    window.__vkAuthError = '1';
+    return;
+  }
+  try {
+    const r = await fetchT('/api/vk/user-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token: access })
+    });
+    const d = await r.json();
+    if (d && d.tk) {
+      token = d.tk;
+      userId = String(token).split('.')[0];
+      window.__vkAuthError = '';
+      window.__vkOffline = false;
+    } else window.__vkAuthError = '1';
+  } catch (e) { window.__vkOffline = true; }
+}
 function markVkChrome(){
   const vk = !!(window.__nyApi || new URLSearchParams(location.search).get('vk_app_id') || new URLSearchParams(location.search).get('vk_user_id'));
   if (!vk) return;
@@ -404,6 +454,7 @@ function markVkChrome(){
 async function load(){
   markVkChrome();
   await adoptVkLaunch();
+  if (!userId && window.__nyApi) await adoptVkUser();
   paintVkBot();
   if (!userId && window.__vkGoal === 'rate') {
     tab = 'rate';
@@ -607,8 +658,8 @@ window.addEventListener('message', function(event){
     window.__vkLaunchSeen = true;
     const had = !!userId;
     adoptVkLaunch(data.params || {}).then(function(){
-      if (!had && userId) load();
-      else draw();
+      if (userId) { if (!had) load(); else draw(); return; }
+      return adoptVkUser().then(function(){ if (userId) load(); else draw(); });
     });
     return;
   }
@@ -1496,10 +1547,8 @@ const w = tg(); if (w){ try{ w.ready(); w.expand(); }catch(e){} }
 detectAuth();
 (async function boot(){ await loadConfig(); await load(); })();
 setTimeout(function(){
-  if (userId || window.__vkLaunchSeen || !window.__nyApi) return;
-  window.__vkLaunchSeen = true;
-  if (!window.__vkAuthError) window.__vkAuthError = '1';
-  draw();
+  if (userId || !window.__nyApi) return;
+  adoptVkUser().then(function(){ if (userId) load(); else draw(); });
 }, 4000);
 let tries=0;
 (function retry(){ if (!userId && tries<20){ tries++; detectAuth(); if (userId){ load(); return; } setTimeout(retry,250); } })();

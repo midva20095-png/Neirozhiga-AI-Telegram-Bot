@@ -9,6 +9,7 @@ test('приложение ВК остаётся на своём адресе и
     assert.equal(html.includes('location.replace'), false);
     assert.equal(html.includes('telegram.org'), false);
     assert.equal(html.includes('VKWebAppInit'), true);
+    assert.equal(html.includes('VKWebAppGetAuthToken'), true);
     assert.equal(html.includes('function launchFields'), true);
     assert.equal(html.includes("method: 'POST'"), true);
     assert.equal(html.includes("'/api/vk/session'"), true);
