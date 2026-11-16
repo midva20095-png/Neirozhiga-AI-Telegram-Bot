@@ -122,6 +122,7 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .sub.on{background:linear-gradient(135deg,#b366ff,#ff2d95)}
 .setup{margin-top:14px}
 input,select{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1233;padding:12px;outline:none;margin-top:8px}
+#genmodel{font-size:16px;margin:0 0 10px}
 .flabel{display:block;margin-top:12px;font-weight:800;font-size:13px}
 </style>
 </head>
@@ -475,13 +476,41 @@ function viewMenu(){
     '<button type="button" id="door-sub" class="sub'+(mail?' on':'')+'">'+(mail?'Вы подписаны':'Подписаться')+'</button>'+
     gear+setup+'<p id="submsg" class="hint"></p></div>';
 }
+function modelPicker(cur){
+  const groups = (cfg&&cfg.groups)||{};
+  const used = {};
+  let html = '<label class="now" for="genmodel">Модель</label><select id="genmodel">';
+  Object.keys(groups).forEach(function(g){
+    const list = ((cfg&&cfg.models)||[]).filter(function(item){ return item.group===g; }).slice().sort(function(a,b){ return (a.from||0)-(b.from||0); });
+    if (!list.length) return;
+    html += '<optgroup label="'+esc(groups[g])+'">';
+    list.forEach(function(item){
+      used[item.key] = 1;
+      html += '<option value="'+esc(item.key)+'"'+(item.key===cur?' selected':'')+'>'+esc(item.name)+' · '+esc(costLabel(item))+'</option>';
+    });
+    html += '</optgroup>';
+  });
+  const rest = ((cfg&&cfg.models)||[]).filter(function(item){ return !used[item.key]; });
+  if (rest.length) {
+    html += '<optgroup label="Другие">';
+    rest.forEach(function(item){
+      html += '<option value="'+esc(item.key)+'"'+(item.key===cur?' selected':'')+'>'+esc(item.name)+' · '+esc(costLabel(item))+'</option>';
+    });
+    html += '</optgroup>';
+  }
+  const current = modelOf(cur);
+  if (cur && !used[cur] && !rest.some(function(item){ return item.key===cur; })) {
+    html += '<option value="'+esc(cur)+'" selected>'+esc(current?current.name:cur)+'</option>';
+  }
+  return html+'</select>';
+}
 function viewGen(){
   const cur = (me&&me.current_model)||(cfg&&cfg.default_model)||'flash';
   const m = modelOf(cur);
   syncPicks(m);
   const res = last ? renderResult(last) : '';
   const price = m ? quote(m, {quality:pickedQuality, duration:pickedDuration}) : 0;
-  const info = m ? ('<div class="now">Модель: <b>'+esc(m.name)+'</b> · '+(m.audio ? costLabel(m) : (price+' кр'))+'</div>') : '';
+  const info = modelPicker(cur) + (m ? ('<div class="now">'+(m.audio ? esc(costLabel(m)) : ('К списанию: <b>'+price+' кр</b>'))+'</div>') : '');
   let opts = '';
   if (m && m.qualities && m.qualities.length > 1) opts += '<div class="hint">Режим</div>'+chips(m.qualities, pickedQuality, 'q');
   if (m && m.durations && m.durations.length > 1) opts += '<div class="hint">Длина</div>'+chips(m.durations.map(function(d){ return {id:d, name:d+' сек · '+quote(m,{quality:pickedQuality,duration:d})+' кр'}; }), pickedDuration, 'dur');
@@ -851,6 +880,12 @@ function bind(){
   document.querySelectorAll('[data-asp]').forEach(b=>b.onclick=function(){ draft=(document.getElementById('prompt')||{}).value||draft; pickedAspect=b.dataset.asp; draw(); });
   const genfile=document.getElementById('genfile'); if (genfile) genfile.onchange=function(){ onGenPhoto(genfile); };
   document.querySelectorAll('[data-model]').forEach(b=>b.onclick=()=>setModel(b.dataset.model));
+  const genmodel = document.getElementById('genmodel');
+  if (genmodel) genmodel.onchange = function(){
+    draft = (document.getElementById('prompt')||{}).value || draft;
+    if (genmodel.value === ((me&&me.current_model)||'')) return;
+    setModel(genmodel.value);
+  };
   document.querySelectorAll('[data-tpl]').forEach(b=>b.onclick=()=>useTpl(b.dataset.tpl));
   document.querySelectorAll('[data-tkind]').forEach(b=>b.onclick=()=>{ tplKind=b.dataset.tkind||''; draw(); });
   document.querySelectorAll('[data-ttopic]').forEach(b=>b.onclick=()=>{ tplTopic=b.dataset.ttopic||''; draw(); });

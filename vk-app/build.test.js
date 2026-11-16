@@ -12,6 +12,8 @@ test('приложение ВК содержит кабинет и не вста
     assert.equal(html.includes('telegram.org'), false);
     assert.equal(html.includes('window.__nyHost'), true);
     assert.equal(html.includes('function nyPost('), true);
+    assert.equal(html.includes('function modelPicker'), true);
+    assert.equal(html.includes("getElementById('genmodel')"), true);
     assert.equal(html.includes('https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app'), true);
     for (const name of ['chat', 'rate', 'site']) {
         assert.equal(fs.existsSync(path.join(__dirname, 'build/widget', name + '.jpg')), true);
