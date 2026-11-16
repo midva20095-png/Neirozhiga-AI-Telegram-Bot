@@ -7,7 +7,7 @@ test('подпись запуска ВК включает пустые и нул
     const auth = require('./auth');
     const fields = {
         vk_access_token_settings: '',
-        vk_app_id: '54895627',
+        vk_app_id: '54901511',
         vk_are_notifications_enabled: '0',
         vk_is_app_user: '1',
         vk_is_favorite: '0',
@@ -24,4 +24,8 @@ test('подпись запуска ВК включает пустые и нул
     const dropped = Object.assign({ sign }, fields);
     delete dropped.vk_access_token_settings;
     assert.equal(auth.verifyVkLaunch(dropped), null);
+    const other = Object.assign({}, fields, { vk_app_id: '54895627' });
+    const otherPairs = Object.keys(other).sort().map(key => `${key}=${other[key]}`).join('&');
+    const otherSign = crypto.createHmac('sha256', 'protected-key').update(otherPairs).digest('base64url');
+    assert.equal(auth.verifyVkLaunch(Object.assign({ sign: otherSign }, other)), null);
 });

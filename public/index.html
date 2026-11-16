@@ -612,8 +612,8 @@ function coverCode(groupId, ids){
   const group = String(groupId).replace(/\D/g, '');
   const chat = 'https://vk.com/write-' + group;
   const app = 'https://vk.com/app54901511_-' + group;
-  const rate = app;
-  const site = app;
+  const rate = app + '#rate';
+  const site = app + '#site';
   const rows = [
     { title: 'Чат ИИ', button: 'Написать', cover_id: ids.chat, url: chat, button_url: chat, title_url: chat },
     { title: 'Рейтинг', button: 'Открыть', cover_id: ids.rate, url: rate, button_url: rate, title_url: rate },

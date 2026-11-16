@@ -81,6 +81,12 @@ function decodeLaunchPart(value) {
     catch (e) { return String(value || ''); }
 }
 
+const VK_APP_ID = '54901511';
+
+function sameApp(value) {
+    return String(value || '') === VK_APP_ID;
+}
+
 // Строка запуска как в адресе мини-приложения: vk_user_id=1&sign=...
 function verifyVkLaunchString(search) {
     const secret = String(process.env.VK_APP_SECRET || '').trim();
@@ -101,6 +107,8 @@ function verifyVkLaunchString(search) {
     const expected = crypto.createHmac('sha256', secret).update(params.map(item => `${item.key}=${item.value}`).join('&')).digest('base64url');
     const actual = sign.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     if (!safeEqual(expected, actual)) return null;
+    const app = params.find(item => item.key === 'vk_app_id');
+    if (!app || !sameApp(app.value)) return null;
     const user = params.find(item => item.key === 'vk_user_id');
     const id = Number(user && user.value);
     if (!Number.isInteger(id) || id <= 0) return null;
@@ -126,6 +134,7 @@ function verifyVkLaunch(input) {
     const expected = crypto.createHmac('sha256', secret).update(pairs.join('&')).digest('base64url');
     const actual = sign.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     if (!safeEqual(expected, actual)) return null;
+    if (!sameApp(input.vk_app_id)) return null;
     const id = Number(input.vk_user_id);
     if (!Number.isInteger(id) || id <= 0) return null;
     return String(-id);

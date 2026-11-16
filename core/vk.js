@@ -2578,7 +2578,12 @@ async function ensureCommunityWidget(groupId) {
         await widget.publishCover(token, widget.coverWidgetCode(id, ids));
         console.log(`ВК ${id}: кнопки сообщества обновлены.`);
     } catch (error) {
-        console.error(`ВК ${id}: кнопки сообщества не обновлены. ${error && error.message ? error.message : ''}`.trim());
+        const code = Number(error && error.vkCode);
+        if (code === 15 || code === 27 || code === 28) {
+            await db.setSetting(widgetSettingKey(id), { token: '' }).catch(() => {});
+        }
+        const mark = code ? ` Код ${code}.` : '';
+        console.error(`ВК ${id}: кнопки сообщества не обновлены.${mark} ${error && error.message ? error.message : ''}`.trim());
     }
 }
 

@@ -16,8 +16,12 @@ function chatLink(groupId) {
     return `https://vk.com/write-${groupNumber(groupId)}`;
 }
 
-function appLink(groupId) {
-    return `https://vk.com/app54901511_-${groupNumber(groupId)}`;
+function appLink(groupId, goal) {
+    const id = groupNumber(groupId);
+    const base = `https://vk.com/app54901511_-${id}`;
+    if (goal === 'site') return `${base}#site`;
+    if (goal === 'rate') return `${base}#rate`;
+    return base;
 }
 
 function coverWidgetCode(groupId, ids) {
@@ -25,7 +29,7 @@ function coverWidgetCode(groupId, ids) {
         const item = COVERS[key];
         const cover = String((ids && ids[key]) || '');
         if (!/^-?\d+_\d+$/.test(cover)) throw new Error('Нет картинки для кнопки.');
-        const url = item.chat ? chatLink(groupId) : appLink(groupId);
+        const url = item.chat ? chatLink(groupId) : appLink(groupId, item.hash);
         return {
             title: item.title,
             title_url: url,
@@ -53,6 +57,13 @@ function vkMessage(error, fallback) {
     if (code === 100) return 'ВК не принял ссылку кнопки.';
     if (code === 129) return 'ВК не принял картинку. Поставьте другую.';
     return fallback;
+}
+
+function vkFail(error, fallback) {
+    const code = Number(error && error.error_code);
+    const err = new Error(vkMessage(error, fallback));
+    if (code) err.vkCode = code;
+    return err;
 }
 
 const LOOKS = {
@@ -110,7 +121,7 @@ async function uploadCover(token, jpeg) {
     const serverRes = await fetch(`https://api.vk.com/method/appWidgets.getGroupImageUploadServer?${params}`);
     const serverJson = await serverRes.json();
     const uploadUrl = serverJson.response && serverJson.response.upload_url;
-    if (!uploadUrl) throw new Error(vkMessage(serverJson.error, 'ВК не открыл загрузку картинки.'));
+    if (!uploadUrl) throw vkFail(serverJson.error, 'ВК не открыл загрузку картинки.');
     const form = new FormData();
     form.append('file', new Blob([jpeg], { type: 'image/jpeg' }), 'cover.jpg');
     const uploaded = await fetch(uploadUrl, {
@@ -129,7 +140,7 @@ async function uploadCover(token, jpeg) {
     const savedRes = await fetch('https://api.vk.com/method/appWidgets.saveGroupImage', { method: 'POST', body: save });
     const saved = await savedRes.json();
     const id = saved.response && saved.response.id;
-    if (!id) throw new Error(vkMessage(saved.error, 'ВК не сохранил картинку.'));
+    if (!id) throw vkFail(saved.error, 'ВК не сохранил картинку.');
     return String(id);
 }
 
@@ -139,7 +150,7 @@ async function publishCover(token, code) {
     const body = new URLSearchParams({ access_token: access, v: '5.199', type: 'cover_list', code: String(code || '') });
     const res = await fetch('https://api.vk.com/method/appWidgets.update', { method: 'POST', body });
     const json = await res.json();
-    if (!json.response) throw new Error(vkMessage(json.error, 'ВК не поставил кнопки на страницу.'));
+    if (!json.response) throw vkFail(json.error, 'ВК не поставил кнопки на страницу.');
     return true;
 }
 
