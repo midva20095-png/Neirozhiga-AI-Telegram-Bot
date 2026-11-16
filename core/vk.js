@@ -2098,15 +2098,25 @@ function surveyKeyboard() {
     });
 }
 
+function surveyHolds(action, busy) {
+    const state = busy || {};
+    if (state.audit || state.club || state.pay || state.move) return false;
+    if (action && action !== 'survey' && action !== 'hello') return false;
+    return true;
+}
+
 async function holdDonutSurvey(token, peerId, account, text, action, payload, groupId) {
     if (!auditHere(groupId)) return false;
+    const key = String(account);
+    if (!surveyHolds(action, {
+        audit: pendingAudit.has(key),
+        club: pendingClub.has(key),
+        pay: pendingPay.has(key),
+        move: pendingMove.has(key)
+    })) return false;
     let survey = null;
     try { survey = await db.getDonutSurvey(account, groupId); } catch (error) { return false; }
     if (!survey) return false;
-    if (action && action !== 'survey' && action !== 'hello') return false;
-    pendingJob.delete(String(account));
-    pendingAudit.delete(String(account));
-    pendingClub.delete(String(account));
     const answer = donut.parseAnswer(text, payload);
     if (!answer) {
         try {
@@ -2115,6 +2125,9 @@ async function holdDonutSurvey(token, peerId, account, text, action, payload, gr
         } catch (error) {}
         return true;
     }
+    pendingJob.delete(key);
+    pendingAudit.delete(key);
+    pendingClub.delete(key);
     const gaps = survey.gaps.slice();
     if (answer === 'no') gaps.push(survey.step);
     const next = survey.step + 1;
@@ -2525,5 +2538,5 @@ async function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, communitiesForNotice, keepPhotos, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, communitiesForNotice, surveyHolds, keepPhotos, USER_HELP
 };

@@ -33,6 +33,14 @@ test('отчёт аудита ведёт в клуб и не содержит к
     assert.doesNotMatch(report, /access_token|vk1\.a\./);
 });
 
+test('опрос доната не забирает ссылку, пока идёт аудит', () => {
+    assert.equal(vk.surveyHolds('', { audit: true }), false);
+    assert.equal(vk.surveyHolds('audit', {}), false);
+    assert.equal(vk.surveyHolds('', {}), true);
+    assert.equal(vk.surveyHolds('survey', {}), true);
+    assert.equal(vk.surveyHolds('hello', { pay: true }), false);
+});
+
 test('кнопка аудита есть только во втором сообществе', () => {
     const saved = {
         VK_GROUP_ID: process.env.VK_GROUP_ID,
