@@ -85,9 +85,13 @@ function verifyVkLaunch(input) {
     const pairs = Object.keys(input)
         .filter(key => key.startsWith('vk_'))
         .sort()
-        .map(key => `${key}=${Array.isArray(input[key]) ? input[key][0] : input[key]}`);
+        .map(key => {
+            const raw = Array.isArray(input[key]) ? input[key][0] : input[key];
+            return `${key}=${raw == null ? '' : String(raw)}`;
+        });
     const expected = crypto.createHmac('sha256', secret).update(pairs.join('&')).digest('base64url');
-    if (!safeEqual(expected, sign.replace(/=+$/, ''))) return null;
+    const actual = sign.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    if (!safeEqual(expected, actual)) return null;
     const id = Number(input.vk_user_id);
     if (!Number.isInteger(id) || id <= 0) return null;
     return String(-id);

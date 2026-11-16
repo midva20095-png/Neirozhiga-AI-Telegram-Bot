@@ -349,26 +349,38 @@ async function loadConfig(){
   const s = document.getElementById('site');
   if (cfg.site_url){ s.href = cfg.site_url; s.style.display=''; } else s.style.display='none';
 }
-function sessionQuery(extra){
-  const search = location.search || '';
-  const sp = new URLSearchParams(search);
-  if (sp.get('sign') && sp.get('vk_user_id')) return search;
-  if (!extra || !extra.sign || !extra.vk_user_id) return '';
-  const q = new URLSearchParams();
-  Object.keys(extra).forEach(function(key){
-    if (key === 'sign' || key.indexOf('vk_') === 0) q.append(key, extra[key] == null ? '' : String(extra[key]));
-  });
-  return '?' + q.toString();
+function launchFields(extra){
+  const bag = {};
+  function put(source){
+    if (!source) return;
+    if (typeof source.forEach === 'function' && typeof source.get === 'function') {
+      source.forEach(function(value, key){
+        if (key === 'sign' || key.indexOf('vk_') === 0) bag[key] = value == null ? '' : String(value);
+      });
+      return;
+    }
+    Object.keys(source).forEach(function(key){
+      if (key === 'sign' || key.indexOf('vk_') === 0) bag[key] = source[key] == null ? '' : String(source[key]);
+    });
+  }
+  put(new URLSearchParams(location.search));
+  const hash = (location.hash || '').replace(/^#/, '');
+  if (hash.indexOf('vk_user_id=') >= 0 || hash.indexOf('sign=') >= 0) put(new URLSearchParams(hash));
+  if (extra && extra.vk_user_id && extra.sign) put(extra);
+  return bag;
 }
 async function adoptVkLaunch(extra){
-  const sp = new URLSearchParams(location.search);
-  const gid = String(sp.get('vk_group_id') || (extra && extra.vk_group_id) || vkGroupId() || '').replace(/\D/g, '');
+  const bag = launchFields(extra);
+  const gid = String(bag.vk_group_id || vkGroupId() || '').replace(/\D/g, '');
   if (gid) window.__vkGroup = gid;
-  if ((sp.get('vk_user_id') || (extra && extra.vk_user_id)) && window.__vkGoal !== 'rate' && window.__vkGoal !== 'site') wantMenu = true;
-  const query = sessionQuery(extra);
-  if (token || !query) return;
+  if (bag.vk_user_id && window.__vkGoal !== 'rate' && window.__vkGoal !== 'site') wantMenu = true;
+  if (token || !bag.sign || !bag.vk_user_id) return;
   try {
-    const r = await fetchT('/api/vk/session' + query);
+    const r = await fetchT('/api/vk/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bag)
+    });
     const d = await r.json();
     if (d && d.tk) {
       token = d.tk;
@@ -376,7 +388,7 @@ async function adoptVkLaunch(extra){
       if (d.group) window.__vkGroup = String(d.group).replace(/\D/g, '');
       window.__vkOffline = false;
       window.__vkAuthError = '';
-    } else if (d && d.error) window.__vkAuthError = d.error;
+    } else if (d && d.error && (!window.__nyApi || window.__vkLaunchSeen)) window.__vkAuthError = d.error;
   } catch (e) { window.__vkOffline = true; }
 }
 function markVkChrome(){
@@ -453,6 +465,10 @@ function draw(){
   if (!userId && window.__vkGoal === 'rate' && tab === 'rate') {
     box.innerHTML = '<div class="card" id="ratebox"><div class="empty">Считаю баллы…</div></div>';
     loadRating();
+    return;
+  }
+  if (!userId && window.__nyApi && !window.__vkLaunchSeen && !window.__vkAuthError) {
+    box.innerHTML = '<div class="card"><p class="empty">Открываю кабинет…</p></div>';
     return;
   }
   if (!userId || (me && !me.user_id && me.error!==true && !me.balance)) {
@@ -588,10 +604,11 @@ window.addEventListener('message', function(event){
   const data = event.data || {};
   bridgeGoal(data);
   if (data.type === 'ny-launch') {
+    window.__vkLaunchSeen = true;
     const had = !!userId;
     adoptVkLaunch(data.params || {}).then(function(){
       if (!had && userId) load();
-      else if (window.__vkGoal === 'rate') { tab = 'rate'; draw(); }
+      else draw();
     });
     return;
   }
@@ -1478,6 +1495,12 @@ document.getElementById('tabs').onclick = function(e){
 const w = tg(); if (w){ try{ w.ready(); w.expand(); }catch(e){} }
 detectAuth();
 (async function boot(){ await loadConfig(); await load(); })();
+setTimeout(function(){
+  if (userId || window.__vkLaunchSeen || !window.__nyApi) return;
+  window.__vkLaunchSeen = true;
+  if (!window.__vkAuthError) window.__vkAuthError = '1';
+  draw();
+}, 4000);
 let tries=0;
 (function retry(){ if (!userId && tries<20){ tries++; detectAuth(); if (userId){ load(); return; } setTimeout(retry,250); } })();
 </script>

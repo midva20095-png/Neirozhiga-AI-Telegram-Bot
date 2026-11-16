@@ -9,8 +9,9 @@ test('приложение ВК остаётся на своём адресе и
     assert.equal(html.includes('location.replace'), false);
     assert.equal(html.includes('telegram.org'), false);
     assert.equal(html.includes('VKWebAppInit'), true);
-    assert.equal(html.includes('function sessionQuery'), true);
-    assert.equal(html.includes("if (sp.get('sign') && sp.get('vk_user_id')) return search"), true);
+    assert.equal(html.includes('function launchFields'), true);
+    assert.equal(html.includes("method: 'POST'"), true);
+    assert.equal(html.includes("'/api/vk/session'"), true);
     assert.equal(html.includes('window.__nyApi'), true);
     assert.equal(html.includes('https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app'), true);
     assert.equal(html.includes('nySave'), true);
