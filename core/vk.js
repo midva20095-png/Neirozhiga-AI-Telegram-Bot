@@ -1348,7 +1348,7 @@ async function holdAudit(token, peerId, account, text, action, groupId) {
     }
     const raw = String(text || '').trim();
     if (!raw) {
-        await sendText(token, peerId, 'Пришлите ссылку на сообщество: vk.com/название.', payLockKeyboard());
+        await sendText(token, peerId, audit.guide(), payLockKeyboard());
         return true;
     }
     if (runningAudit.has(key)) {
@@ -1359,7 +1359,7 @@ async function holdAudit(token, peerId, account, text, action, groupId) {
     await sendText(token, peerId, 'Смотрю сообщество. Отчёт придёт в этот чат.', payLockKeyboard());
     audit.run(raw, token).then(async report => {
         await sendParts(token, peerId, report, payLockKeyboard());
-        await sendText(token, peerId, 'Можно прислать ещё одну ссылку. «Назад» возвращает меню.', payLockKeyboard());
+        await sendText(token, peerId, 'Отчёт готов. Чтобы проверить другое сообщество, снова вставьте только ссылку: vk.com/название. «Назад» возвращает меню.', payLockKeyboard());
     }).catch(async error => {
         const shown = error && error.audit
             ? error.message
@@ -1457,7 +1457,7 @@ async function reply(token, peerId, account, text, payload, groupId, photoUrls) 
         return sendText(
             token,
             peerId,
-            'Аудит сообщества.\n\nПришлите ссылку: vk.com/название или vk.ru/название. Разберу последние записи и пришлю отчёт. Кредиты не списываются.\n\n«Назад» возвращает меню.',
+            audit.guide(),
             payLockKeyboard()
         );
     }

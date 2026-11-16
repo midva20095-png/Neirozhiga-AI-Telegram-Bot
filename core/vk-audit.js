@@ -13,6 +13,25 @@ class AuditError extends Error {
     }
 }
 
+function guide() {
+    return [
+        'Как сделать аудит',
+        '',
+        '1. Откройте сообщество, которое хотите проверить.',
+        '2. Нажмите «Поделиться» и «Скопировать ссылку». На компьютере скопируйте адрес из строки браузера.',
+        '3. Вернитесь в этот чат. Другие кнопки скрыты, внизу только «Назад».',
+        '4. Нажмите на поле, куда пишете сообщение. Вставьте ссылку и отправьте. Больше ничего писать не нужно.',
+        '5. Подождите. Отчёт придёт сюда же. Кредиты не списываются.',
+        '',
+        'Правильная ссылка выглядит так: vk.com/название',
+        'Пример: vk.com/club123',
+        '',
+        'Так не сработает: название словами, фото экрана, ссылка на человека, ссылка на одну запись.',
+        '',
+        '«Назад» возвращает меню.'
+    ].join('\n');
+}
+
 const STOP_WORDS = new Set(('чтобы,который,которые,которая,может,можно,будет,будут,очень,также,только,когда,после,этого,этот,' +
     'нужно,своей,своих,сегодня,завтра,потому,здесь,между,через,перед,около,всего,всегда,много,более,менее,снова,' +
     'вместе,просто,нашей,наших,ваших,вашей,других,другой,каждый,каждая,такой,такие,этими,ссылке,группе,группы,' +
@@ -32,7 +51,7 @@ function extractScreenName(raw) {
     s = m ? m[1] : s.replace(/^@/, '');
     s = s.replace(/[^A-Za-z0-9_.]/g, '').replace(/\.+$/, '');
     if (!s || /^(away|im|feed|wall|write)$/i.test(s)) {
-        throw new AuditError('Не понял ссылку. Пришлите её в виде vk.com/название');
+        throw new AuditError('Не понял ссылку.\n\n' + guide());
     }
     return s;
 }
@@ -136,7 +155,7 @@ async function resolveGroupId(token, screen) {
     if (/^(club|public|event)?\d+$/i.test(screen)) return screen.replace(/\D/g, '');
     try {
         const resolved = (await vkCall('utils.resolveScreenName', { screen_name: screen }, token)).response;
-        if (resolved && resolved.type === 'user') throw new AuditError('Это личная страница. Пришлите ссылку на группу или паблик');
+        if (resolved && resolved.type === 'user') throw new AuditError('Это страница человека, а не сообщества.\n\n' + guide());
         if (resolved && resolved.type === 'group' && resolved.object_id) return String(resolved.object_id);
     } catch (error) {
         if (error && error.audit) throw error;
@@ -649,6 +668,7 @@ function readerToken() {
 module.exports = {
     AuditError,
     extractScreenName,
+    guide,
     formatReport,
     groupOf,
     readerToken,
