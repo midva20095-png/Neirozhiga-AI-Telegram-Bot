@@ -13,6 +13,7 @@ const vk = require('../core/vk');
 const widget = require('../core/vk-widget');
 const bridge = require('../core/bridge');
 const activity = require('../core/activity');
+const maintenance = require('../core/maintenance');
 const saveWork = require('../public/save-work');
 // Определяет пользователя из initData Telegram или из подписанной ссылки.
 function resolveUserId(req) {
@@ -29,11 +30,22 @@ function resolveUserId(req) {
     return null;
 }
 
-function requireUser(req, res, next) {
-    const userId = resolveUserId(req);
-    if (!userId) return res.status(401).json({ error: 'auth_required' });
-    req.userId = userId;
-    next();
+async function requireUser(req, res, next) {
+    try {
+        const userId = resolveUserId(req);
+        if (!userId) return res.status(401).json({ error: 'auth_required' });
+        if (await maintenance.isOn()) return res.status(503).json({ maintenance: true, error: maintenance.NOTICE });
+        req.userId = userId;
+        next();
+    } catch (error) {
+        next(error);
+    }
+}
+
+async function refuseUpdate(res) {
+    if (!(await maintenance.isOn())) return false;
+    res.status(503).json({ maintenance: true, error: maintenance.NOTICE });
+    return true;
 }
 
 function requireAdmin(req, res, next) {
@@ -214,6 +226,7 @@ function startWebApp() {
 
     app.get('/api/vk/me', async (req, res) => {
         try {
+            if (await refuseUpdate(res)) return;
             const account = vkAccount(req);
             if (!account) return res.status(401).json({ error: 'Откройте кабинет кнопкой из чата ВК.' });
             const user = await db.getUser(account);
@@ -231,6 +244,7 @@ function startWebApp() {
 
     app.post('/api/vk/pay', async (req, res) => {
         try {
+            if (await refuseUpdate(res)) return;
             const account = vkAccount(req);
             if (!account) return res.status(401).json({ error: 'Откройте кабинет кнопкой из чата ВК.' });
             const pkg = catalog.getPackage(req.body && req.body.packageId);
@@ -263,6 +277,7 @@ function startWebApp() {
 
     app.post('/api/vk/topup', async (req, res) => {
         try {
+            if (await refuseUpdate(res)) return;
             const account = vkAccount(req);
             if (!account) return res.status(401).json({ error: 'Откройте кабинет кнопкой из чата ВК.' });
             const url = await vk.askTopup(account, req.body && req.body.group);
@@ -291,6 +306,7 @@ function startWebApp() {
 
     app.post('/api/vk/transfer', async (req, res) => {
         try {
+            if (await refuseUpdate(res)) return;
             const account = vkAccount(req);
             if (!account) return res.status(401).json({ error: 'Откройте кабинет кнопкой из чата ВК.' });
             const amount = bridge.amountOf(req.body && req.body.amount);
@@ -727,6 +743,19 @@ function startWebApp() {
     });
 
     // ---- Админка: вход ----
+    app.get('/api/maintenance', async (req, res) => {
+        res.json({ on: await maintenance.isOn(), message: maintenance.NOTICE });
+    });
+
+    app.get('/api/admin/maintenance', requireAdmin, async (req, res) => {
+        res.json({ on: await maintenance.isOn() });
+    });
+
+    app.post('/api/admin/maintenance', requireAdmin, async (req, res) => {
+        const on = await maintenance.setOn(req.body && req.body.on);
+        res.json({ ok: true, on });
+    });
+
     app.post('/api/admin/login', (req, res) => {
         const { password, initData } = req.body || {};
         if (initData) {

@@ -169,7 +169,8 @@ test('меню ВК открывает кабинет и не считает к�
     const help = require('./catalog').clientHelp('vk');
     assert.match(help, /Как пополнить/);
     assert.match(help, /Аудит сообщества/);
-    assert.match(help, /https:\/\/vk\.me\/neuroyaga/);
+    assert.match(help, /https:\/\/vk\.com\/app54901511_-214554778#help/);
+    assert.doesNotMatch(help, /vk\.me\/neuroyaga/);
     assert.doesNotMatch(help, /окно ВК|базе бота|админк|братух|kie/i);
     const auth = require('./auth');
     assert.equal(auth.verifyUserToken(auth.signUserId(-10)), '-10');

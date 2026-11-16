@@ -12,6 +12,7 @@ const audit = require('./vk-audit');
 const club = require('./vk-club');
 const donut = require('./vk-donut');
 const lesson = require('./vk-lesson');
+const maintenance = require('./maintenance');
 let gigaPlugin = null;
 try { gigaPlugin = require('../ai_plugins/gigachat_plugin'); } catch (e) {}
 
@@ -2268,10 +2269,18 @@ async function handleUpdate(token, update, groupId) {
     const event = readEvent(update);
     if (event) {
         if (keepsQuiet(groupId, event.peerId)) return;
+        if (await maintenance.isOn()) {
+            await sendText(token, event.peerId, maintenance.NOTICE, mainMenu(event.peerId, groupId));
+            return;
+        }
         return handleEvent(token, event, groupId);
     }
     const incoming = readIncoming(update);
     if (!incoming || keepsQuiet(groupId, incoming.peerId)) return;
+    if (await maintenance.isOn()) {
+        await sendText(token, incoming.peerId, maintenance.NOTICE, mainMenu(incoming.peerId, groupId));
+        return;
+    }
     const account = accountId(incoming.fromId);
     if (!account) return;
     const { isNew } = await db.ensureUser(account, `vk:${incoming.fromId}`);

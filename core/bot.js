@@ -11,6 +11,7 @@ const share = require('./share');
 const templatesSrc = require('./templates');
 const vk = require('./vk');
 const bridge = require('./bridge');
+const maintenance = require('./maintenance');
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 16 * 60 * 1000 });
 vk.setTelegramNotify((id, text) => bot.telegram.sendMessage(id, text));
@@ -558,6 +559,16 @@ async function startBot(app) {
         try { await ctx.reply(text, channelKeyboard()); } catch (e) {}
         return false;
     }
+
+    bot.use(async (ctx, next) => {
+        if (!ctx.from || ctx.from.is_bot) return next();
+        if (auth.isAdminId(ctx.from.id)) return next();
+        if (!(await maintenance.isOn())) return next();
+        if (ctx.callbackQuery) {
+            try { await ctx.answerCbQuery('Идёт обновление'); } catch (e) {}
+        }
+        try { await ctx.reply(maintenance.NOTICE); } catch (e) {}
+    });
 
     bot.use(async (ctx, next) => {
         if (!ctx.from || ctx.from.is_bot) return next();

@@ -7,6 +7,10 @@
 <link rel="icon" href="cover.jpg">
 <script>
 function vkSend(handler, params){
+  if (window.vkBridge && vkBridge.send) {
+    vkBridge.send(handler, params || {}).catch(function(){});
+    return;
+  }
   try { parent.postMessage({ handler: handler, params: params || {}, type: 'vk-connect', connectVersion: '2.15.8', sendTime: Date.now() }, '*'); }
   catch (e) {}
 }
@@ -19,7 +23,7 @@ window.__nyHost = function(msg){
   if (!msg || !msg.type) return;
   if (msg.type === 'ny-goal-ask') {
     const goal = String(location.hash || '').replace(/^#/, '').split('&')[0].split('?')[0];
-    if (goal === 'rate' || goal === 'site' || goal === 'sub') vkTell({ type: 'ny-goal', goal: goal });
+    if (goal === 'rate' || goal === 'site' || goal === 'sub' || goal === 'help') vkTell({ type: 'ny-goal', goal: goal });
     return;
   }
   if (msg.type === 'ny-group-ask') {
@@ -60,7 +64,7 @@ window.addEventListener('message', function(event){
   }
   if (bridgeType === 'VKWebAppChangeFragment' || bridgeType === 'VKWebAppLocationChanged') {
     const goal = String((bridgeData && (bridgeData.location || bridgeData.hash)) || '').replace(/^#/, '').split('&')[0].split('?')[0];
-    if (goal === 'rate' || goal === 'site' || goal === 'sub') vkTell({ type: 'ny-goal', goal: goal });
+    if (goal === 'rate' || goal === 'site' || goal === 'sub' || goal === 'help') vkTell({ type: 'ny-goal', goal: goal });
     return;
   }
   if (bridgeType === 'VKWebAppGetLaunchParamsResult') {
@@ -281,9 +285,10 @@ function detectAuth(){
   if (hp.get('pkg') || sp.get('pkg')) pendingPkg = hp.get('pkg') || sp.get('pkg');
   window.__vkPaid = hp.get('paid') === '1' || sp.get('paid') === '1';
   const goal = hash.split('&')[0].split('?')[0];
-  window.__vkGoal = (goal === 'rate' || goal === 'site' || goal === 'sub') ? goal : '';
-  if (sp.get('vk_user_id') && window.__vkGoal !== 'rate' && window.__vkGoal !== 'site') wantMenu = true;
+  window.__vkGoal = (goal === 'rate' || goal === 'site' || goal === 'sub' || goal === 'help') ? goal : '';
+  if (sp.get('vk_user_id') && window.__vkGoal !== 'rate' && window.__vkGoal !== 'site' && window.__vkGoal !== 'help') wantMenu = true;
   if (window.__vkGoal === 'rate') { wantMenu = false; tab = 'rate'; }
+  if (window.__vkGoal === 'help') { wantMenu = false; tab = 'help'; }
   if (w && w.initDataUnsafe && w.initDataUnsafe.user && w.initDataUnsafe.user.id) userId = w.initDataUnsafe.user.id;
   else if (w && w.initData) userId = parseUser(w.initData);
   else if (token) userId = token.split('.')[0];
@@ -453,6 +458,14 @@ function markVkChrome(){
 }
 async function load(){
   markVkChrome();
+  try {
+    const gate = await fetchT('/api/maintenance');
+    const closed = await gate.json();
+    if (closed && closed.on) {
+      document.getElementById('view').innerHTML = '<div class="card"><p>'+esc(closed.message || 'Идёт обновление. Зайдите чуть позже: сейчас вход закрыт.')+'</p></div>';
+      return;
+    }
+  } catch (e) {}
   await adoptVkLaunch();
   if (!userId && window.__nyApi) await adoptVkUser();
   paintVkBot();
@@ -466,6 +479,10 @@ async function load(){
   try {
     const r = await fetchT('/api/me', {headers: authHeaders()});
     if (r.status === 401) { me = null; draw(); return; }
+    if (r.status === 503) {
+      const closed = await r.json().catch(function(){ return {}; });
+      if (closed.maintenance) { me = { maintenance: true }; draw(); return; }
+    }
     if (r.status === 403) {
       const d = await r.json().catch(function(){ return {}; });
       me = { channel: d.channel || 'https://t.me/neuroyaga_AI' };
@@ -493,6 +510,7 @@ async function load(){
   if (!isVk() && (tab==='rate' || tab==='menu')) tab = 'gen';
   if (isVk() && wantMenu) tab = 'menu';
   if (window.__vkGoal === 'rate') tab = 'rate';
+  if (window.__vkGoal === 'help') tab = 'help';
   draw();
   if (window.__vkGoal === 'site') openOut((cfg && cfg.site_url) || 'https://babayagaland.ru');
   if (window.__vkGoal === 'sub' && me && me.user_id && !me.mail) subscribeMail(true);
@@ -500,15 +518,20 @@ async function load(){
   nyPost({ type: 'ny-group-ask' });
 }
 function applyGoal(goal){
-  if (goal !== 'rate' && goal !== 'site' && goal !== 'sub') return;
+  if (goal !== 'rate' && goal !== 'site' && goal !== 'sub' && goal !== 'help') return;
   window.__vkGoal = goal;
   if (goal === 'rate') { wantMenu = false; tab = 'rate'; draw(); }
+  if (goal === 'help') { wantMenu = false; tab = 'help'; draw(); }
   if (goal === 'site') openOut((cfg && cfg.site_url) || 'https://babayagaland.ru');
   if (goal === 'sub' && me && me.user_id && !me.mail) subscribeMail(true);
 }
 function draw(){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.t===tab));
   const box = document.getElementById('view');
+  if (me && me.maintenance) {
+    box.innerHTML = '<div class="card"><p>Идёт обновление. Зайдите чуть позже: сейчас вход закрыт.</p></div>';
+    return;
+  }
   if (window.__vkOffline && (!userId || (me && me.error))) {
     box.innerHTML = '<div class="card"><p>Кабинет открыт. Сервер бота не ответил, поэтому баланс и генерация ещё не загрузились.</p><button class="btn" type="button" onclick="retryOpen()">Повторить</button><p class="empty">'+(isVk()?'Бот в чате сообщества при этом работает. Напишите туда, если повтор не помогает.':'Откройте кабинет ещё раз из чата бота.')+'</p></div>';
     return;
@@ -648,7 +671,7 @@ function bridgeGoal(data){
   const bag = data && (data.params || (data.data && data.data.data) || data.data || data) || {};
   const raw = bag.location || bag.hash || '';
   const goal = String(raw).replace(/^#/, '').split('&')[0].split('?')[0];
-  if (goal === 'rate' || goal === 'site' || goal === 'sub') applyGoal(goal);
+  if (goal === 'rate' || goal === 'site' || goal === 'sub' || goal === 'help') applyGoal(goal);
 }
 window.addEventListener('hashchange', function(){ bridgeGoal({ hash: location.hash }); });
 window.addEventListener('message', function(event){
@@ -944,9 +967,8 @@ function viewHelp(){
     '<p>4. Кредиты списываются, когда ответ готов. Если не получилось, баланс не меняется.</p></div>';
   const audit = '<div class="card"><div class="now">Аудит сообщества</div>'+
     '<p>Кнопка «Аудит» есть в чате НейроЯги. Кредиты не списываются. Нажмите её, вставьте ссылку vk.com/название и дождитесь отчёта. «Назад» возвращает меню.</p>'+
-    '<p>Если аудит не открылся, напишите в поддержку:</p>'+
-    '<a class="btn ghost" href="https://vk.me/neuroyaga" data-out="https://vk.me/neuroyaga">Чат НейроЯги</a>'+
-    '<a class="btn ghost" href="https://vk.ru/write-214554778" data-out="https://vk.ru/write-214554778">Сообщения сообщества</a>'+
+    '<p>Если аудит не открылся, напишите в поддержку в этой справке: форма ниже. Ответ придёт в чат.</p>'+
+    '<a class="btn ghost" href="https://vk.com/app54901511_-214554778#help" data-out="https://vk.com/app54901511_-214554778#help">Поддержка в приложении</a>'+
     '<a class="btn ghost" href="https://vk.com/@neuroyaga-navigator-po-klubu-babki-targetologa" data-out="https://vk.com/@neuroyaga-navigator-po-klubu-babki-targetologa">Уроки клуба</a></div>';
   if (isVk()) {
     return steps+modelGuide()+audit+

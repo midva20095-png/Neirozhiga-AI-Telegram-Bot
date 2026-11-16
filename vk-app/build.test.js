@@ -9,6 +9,10 @@ test('приложение ВК остаётся на своём адресе и
     assert.equal(html.includes('location.replace'), false);
     assert.equal(html.includes('telegram.org'), false);
     assert.equal(html.includes('VKWebAppInit'), true);
+    assert.equal(html.includes('@vkontakte/vk-bridge'), true);
+    assert.equal(html.includes('document.write'), false);
+    const source = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+    assert.equal(source.includes('@vkontakte/vk-bridge'), false);
     assert.equal(html.includes('VKWebAppGetAuthToken'), true);
     assert.equal(html.includes('function launchFields'), true);
     assert.equal(html.includes('54901511'), true);

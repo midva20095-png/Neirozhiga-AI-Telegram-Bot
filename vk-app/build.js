@@ -14,7 +14,18 @@ window.__nyApi = ${JSON.stringify(api)};
     return orig.call(this, input, init);
   };
 })();
+if (window.vkBridge && vkBridge.subscribe) {
+  vkBridge.subscribe(function(event){
+    const detail = event && event.detail ? event.detail : {};
+    if (!detail.type) return;
+    window.dispatchEvent(new MessageEvent('message', { data: { type: detail.type, data: detail.data || {} } }));
+  });
+}
 function vkSend(handler, params){
+  if (window.vkBridge && vkBridge.send) {
+    vkBridge.send(handler, params || {}).catch(function(){});
+    return;
+  }
   try { parent.postMessage({ handler: handler, params: params || {}, type: 'vk-connect', connectVersion: '2.15.8', sendTime: Date.now() }, '*'); }
   catch (e) {}
 }
@@ -25,7 +36,7 @@ function tell(msg){
 }
 function goalOf(value){
   const goal = String(value || '').replace(/^#/, '').split('&')[0].split('?')[0];
-  return goal === 'rate' || goal === 'site' || goal === 'sub' ? goal : '';
+  return goal === 'rate' || goal === 'site' || goal === 'sub' || goal === 'help' ? goal : '';
 }
 window.__nyHost = function(msg){
   if (!msg || !msg.type) return;
@@ -123,7 +134,8 @@ html = html.replace('<script src="/save-work.js"></script>', '<script>\n' + save
 if (!html.includes('function nyPost(')) throw new Error('В кабинете нет связи с приложением ВК');
 const at = html.indexOf('<script>');
 if (at < 0) throw new Error('В кабинете нет скрипта');
-html = html.slice(0, at) + host + html.slice(at);
+const bridge = '<script src="https://cdn.jsdelivr.net/npm/@vkontakte/vk-bridge/dist/browser.min.js"></script>\n';
+html = html.slice(0, at) + bridge + host + html.slice(at);
 if (html.includes('location.replace')) throw new Error('Приложение ВК не должно уходить с адреса ВК');
 
 fs.rmSync(buildDir, { recursive: true, force: true });

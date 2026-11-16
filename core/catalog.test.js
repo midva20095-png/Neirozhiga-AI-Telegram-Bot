@@ -190,8 +190,8 @@ test('справка для клиента перечисляет модели �
     assert.match(text, /Чат Flash/);
     assert.match(text, /GPT Image 2/);
     assert.match(text, /Аудит сообщества/);
-    assert.match(text, /https:\/\/vk\.me\/neuroyaga/);
-    assert.match(text, /https:\/\/vk\.ru\/write-214554778/);
+    assert.match(text, /https:\/\/vk\.com\/app54901511_-214554778#help/);
+    assert.doesNotMatch(text + '\n' + vk, /vk\.me\/neuroyaga/);
     assert.match(text, /https:\/\/vk\.ru\/write-230706467/);
     assert.match(text, /https:\/\/max\.ru\/se14387925_bot/);
     assert.match(text, /https:\/\/babayagaland\.ru/);

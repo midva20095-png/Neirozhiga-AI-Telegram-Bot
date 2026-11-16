@@ -72,6 +72,12 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
 <h1>Админ <i>НейроЯга</i></h1>
 <p class="note" id="intro">Вход по паролю. Дальше отдельно Telegram и каждое сообщество ВК: клиенты, баланс, модели, шаблоны, поддержка, рейтинг и донат.</p>
 
+<div class="card" id="gate" style="display:none">
+  <h3>Обновление</h3>
+  <p class="note" id="gateNote">Вход открыт.</p>
+  <button type="button" id="gateBtn" onclick="toggleGate()">Закрыть вход на обновление</button>
+</div>
+
 <div class="card" id="login">
   <div class="row"><input id="pass" type="password" placeholder="Пароль администратора"><button onclick="login()">Войти</button></div>
   <p id="lerr" class="bad"></p>
@@ -186,6 +192,7 @@ function logout(){
   document.getElementById('panel').style.display='none';
   document.getElementById('door').style.display='none';
   document.getElementById('communities').style.display='none';
+  document.getElementById('gate').style.display='none';
 }
 function inCommunity(){ return place==='vk' && /^\d+$/.test(vkHome); }
 function groupQuery(){ return inCommunity() ? '&group='+encodeURIComponent(vkHome) : ''; }
@@ -196,12 +203,34 @@ function placeName(){
   const home = homeNow();
   return home ? home.title : 'ВКонтакте';
 }
+async function refreshGate(){
+  if (!token) { document.getElementById('gate').style.display='none'; return; }
+  try {
+    const d = await api('/api/admin/maintenance');
+    const on = !!(d && d.on);
+    document.getElementById('gate').style.display='block';
+    document.getElementById('gateNote').textContent = on
+      ? 'Вход закрыт. Бот и кабинет никого не пускают, пока вы не откроете.'
+      : 'Вход открыт. Клиенты могут писать боту и открывать кабинет.';
+    const btn = document.getElementById('gateBtn');
+    btn.textContent = on ? 'Открыть вход' : 'Закрыть вход на обновление';
+    btn.className = on ? '' : 'danger';
+  } catch (e) {}
+}
+async function toggleGate(){
+  const d = await api('/api/admin/maintenance');
+  const next = !(d && d.on);
+  if (next && !confirm('Закрыть вход для всех, пока идёт обновление?')) return;
+  await api('/api/admin/maintenance', { method:'POST', body: JSON.stringify({ on: next }) });
+  await refreshGate();
+}
 function showDoor(){
   document.getElementById('login').style.display='none';
   document.getElementById('intro').style.display='none';
   document.getElementById('panel').style.display='none';
   document.getElementById('communities').style.display='none';
   document.getElementById('door').style.display='block';
+  refreshGate();
 }
 function showCommunities(){
   document.getElementById('login').style.display='none';
@@ -210,6 +239,7 @@ function showCommunities(){
   document.getElementById('door').style.display='none';
   document.getElementById('communities').style.display='block';
   renderCommunityDoor();
+  refreshGate();
 }
 function renderCommunityDoor(){
   document.getElementById('communityDoor').innerHTML = homes.map(item =>
@@ -290,6 +320,7 @@ function go(k){
 async function showPanel(){
   document.getElementById('login').style.display='none';
   try{ await api('/api/admin/me'); }catch(e){ return; }
+  refreshGate();
   if (place==='tg') enterPlace('tg');
   else if (place==='vk' && vkHome==='shared') enterShared();
   else if (place==='vk' && /^\d+$/.test(vkHome)) {
