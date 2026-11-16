@@ -59,6 +59,11 @@ window.addEventListener('message', function(event){
     if (goal === 'rate' || goal === 'site' || goal === 'sub') vkTell({ type: 'ny-goal', goal: goal });
     return;
   }
+  if (bridgeType === 'VKWebAppGetLaunchParamsResult') {
+    const id = String((bridgeData && (bridgeData.vk_group_id || bridgeData.group_id)) || '').replace(/\D/g, '');
+    if (id) vkTell({ type: 'ny-group', id: id });
+    return;
+  }
   if (bridgeType === 'VKWebAppGetCommunityTokenResult' && bridgeData.access_token) {
     vkTell({ type: 'ny-community-token', token: bridgeData.access_token });
     return;
@@ -201,7 +206,7 @@ input,select{width:100%;border-radius:14px;border:1px solid var(--line);backgrou
   <div class="bots">
     <div class="lbl">Ещё боты</div>
     <div class="row">
-      <a href="https://vk.ru/write-230706467" data-out="https://vk.ru/write-230706467">Бот ВК</a>
+      <a id="vkbot" href="https://vk.ru/write-230706467" data-out="https://vk.ru/write-230706467" data-vkbot="1">Бот ВК</a>
       <a href="https://max.ru/se14387925_bot" data-out="https://max.ru/se14387925_bot">Бот Макс</a>
       <a href="https://babayagaland.ru" data-out="https://babayagaland.ru">Сайт</a>
     </div>
@@ -348,6 +353,7 @@ async function adoptVkLaunch(){
 }
 async function load(){
   await adoptVkLaunch();
+  paintVkBot();
   if (!userId) { draw(); return; }
   try {
     const r = await fetch('/api/me', {headers: authHeaders()});
@@ -453,6 +459,14 @@ function chatLink(){
   const id = vkGroupId();
   return id ? 'https://vk.ru/write-' + id : '';
 }
+function paintVkBot(){
+  const url = chatLink();
+  if (!url) return;
+  document.querySelectorAll('[data-vkbot]').forEach(function(el){
+    el.href = url;
+    el.dataset.out = url;
+  });
+}
 function coverCode(groupId, ids){
   const group = String(groupId).replace(/\D/g, '');
   const chat = 'https://vk.com/write-' + group;
@@ -521,6 +535,7 @@ window.addEventListener('message', function(event){
   bridgeGoal(data);
   if (data.type === 'ny-group' && data.id) {
     window.__vkGroup = String(data.id).replace(/\D/g, '');
+    paintVkBot();
     if (tab === 'rate') loadRating();
     return;
   }
@@ -849,7 +864,7 @@ function viewHelp(){
   }
   if (cfg && cfg.support_enabled===false) return '<div class="card"><div class="empty">Поддержка временно недоступна.</div></div>';
   return '<div class="card"><div class="now">Ещё боты. Им можно писать, это не сообщества.</div>'+
-    '<a class="btn ghost" href="https://vk.ru/write-230706467" data-out="https://vk.ru/write-230706467">Бот во ВКонтакте</a>'+
+    '<a class="btn ghost" href="https://vk.ru/write-230706467" data-out="https://vk.ru/write-230706467" data-vkbot="1">Бот во ВКонтакте</a>'+
     '<a class="btn ghost" href="https://max.ru/se14387925_bot" data-out="https://max.ru/se14387925_bot">Бот в Макс</a>'+
     '<a class="btn ghost" href="https://babayagaland.ru" data-out="https://babayagaland.ru">Сайт babayagaland.ru</a></div>'+
     '<div class="card"><div class="now">Напишите нам — ответ придёт в чат бота.</div>'+
@@ -874,7 +889,7 @@ async function subscribeMail(on){
   const msg = document.getElementById('submsg');
   if (btn) btn.disabled = true;
   try {
-    const r = await fetch('/api/vk/subscribe', { method:'POST', headers: authHeaders(), body: JSON.stringify({ on: on }) });
+    const r = await fetch('/api/vk/subscribe', { method:'POST', headers: authHeaders(), body: JSON.stringify({ on: on, group: vkGroupId() }) });
     const d = await r.json();
     if (!r.ok || !d.ok) throw new Error(d.error || 'Не удалось сохранить');
     if (me) me.mail = !!d.mail;
@@ -1004,13 +1019,14 @@ function bind(){
   const pull = document.getElementById('pull'); if (pull) pull.onclick = sendPull;
   const vktop = document.getElementById('vktop'); if (vktop) vktop.onclick = openVkTopup;
   const vkmove = document.getElementById('vkmove'); if (vkmove) vkmove.onclick = sendVkMove;
+  paintVkBot();
 }
 async function openVkTopup(){
   const msg = document.getElementById('vktopmsg');
   const btn = document.getElementById('vktop');
   if (btn) btn.disabled = true;
   try {
-    const r = await fetch('/api/vk/topup', {method:'POST', headers: authHeaders(), body:'{}'});
+    const r = await fetch('/api/vk/topup', {method:'POST', headers: authHeaders(), body: JSON.stringify({ group: vkGroupId() })});
     const d = await r.json();
     if (!r.ok || !d.url) { if (msg) msg.textContent = (d && d.error) || 'Чат не открылся. Нажмите «Пополнить» в диалоге.'; return; }
     if (msg) msg.textContent = 'В чате уже можно выбрать пакет.';
@@ -1025,7 +1041,7 @@ async function sendVkMove(){
   const amount = ((document.getElementById('tgamt')||{}).value||'').trim();
   if (msg) msg.textContent = '';
   try {
-    const r = await fetch('/api/vk/transfer', {method:'POST', headers: authHeaders(), body: JSON.stringify({telegram, amount})});
+    const r = await fetch('/api/vk/transfer', {method:'POST', headers: authHeaders(), body: JSON.stringify({telegram, amount, group: vkGroupId()})});
     const d = await r.json();
     if (!r.ok || !d.ok) { if (msg) msg.textContent = (d && d.error) || 'Перенос не выполнился.'; return; }
     if (me) me.balance = d.balance;
@@ -1042,7 +1058,7 @@ function workFileName(id, kind){
   return 'neuroyaga-'+id+'.'+ext;
 }
 async function sendWorkToChat(id){
-  const r = await fetch('/api/works/'+id+'/send', {method:'POST', headers: authHeaders()});
+  const r = await fetch('/api/works/'+id+'/send', {method:'POST', headers: authHeaders(), body: JSON.stringify({ group: vkGroupId() })});
   const d = await r.json().catch(function(){ return {}; });
   if (!r.ok || !d.ok) throw new Error(d.error || 'Не удалось отправить файл');
 }
@@ -1237,7 +1253,7 @@ function buy(pkgId){
   if (isVk()) {
     const email = ((document.getElementById('paymail')||{}).value||'').trim();
     if (!email) { alert('Укажите почту для чека'); return; }
-    fetch('/api/vk/pay', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tk: token, packageId: pkgId, email})})
+    fetch('/api/vk/pay', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tk: token, packageId: pkgId, email, group: vkGroupId()})})
       .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
       .then(function(x){
         if (!x.ok || !x.d.url) { alert((x.d && x.d.error) || 'Оплата не открылась'); return; }

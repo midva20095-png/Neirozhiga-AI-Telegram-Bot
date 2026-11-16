@@ -204,15 +204,19 @@ function startWebApp() {
                 return res.status(400).json({ error: 'Выберите пакет и укажите почту для чека.' });
             }
             await db.ensureUser(account, `vk:${String(account).replace(/^-/, '')}`);
+            const groupId = String((req.body && req.body.group) || '').replace(/\D/g, '');
+            if (groupId) {
+                try { await db.rememberCommunity(account, groupId); } catch (e) {}
+            }
             const back = vk.appCabinetUrl(account, {
-                groupId: String((req.body && req.body.group) || ''),
+                groupId,
                 paid: true
             });
             const url = await vk.createPayment(
                 pkg.price,
                 `Покупка ${pkg.title}`,
                 email,
-                { userId: String(account), credits: String(pkg.credits) },
+                { userId: String(account), credits: String(pkg.credits), vkGroup: groupId },
                 back
             );
             if (!url) return res.status(502).json({ error: 'Оплата сейчас не открылась. Попробуйте ещё раз.' });
@@ -226,7 +230,7 @@ function startWebApp() {
         try {
             const account = vkAccount(req);
             if (!account) return res.status(401).json({ error: 'Откройте кабинет кнопкой из чата ВК.' });
-            const url = await vk.askTopup(account);
+            const url = await vk.askTopup(account, req.body && req.body.group);
             if (!url) return res.status(502).json({ error: 'Чат не открылся. Нажмите «Пополнить» в диалоге ВК.' });
             res.json({ url });
         } catch (e) {
@@ -243,7 +247,7 @@ function startWebApp() {
             const text = on
                 ? 'Вы подписались на рассылку сообщества. Новые сообщения придут в этот чат.'
                 : 'Вы отписались от рассылки сообщества.';
-            try { await vk.notify(req.userId, text); } catch (e) {}
+            try { await vk.notify(req.userId, text, req.body && req.body.group); } catch (e) {}
             res.json({ ok: true, mail: on });
         } catch (e) {
             res.status(500).json({ error: 'Не удалось сохранить подписку.' });
@@ -276,7 +280,7 @@ function startWebApp() {
             if (bot) {
                 try { await bot.telegram.sendMessage(to, `Из ВК перенесли ${amount} кр. Они уже на балансе Telegram.`); } catch (e) {}
             }
-            try { await vk.notify(account, `Перенесли ${amount} кр. в Telegram. Здесь осталось ${moved.balance} кр.`); } catch (e) {}
+            try { await vk.notify(account, `Перенесли ${amount} кр. в Telegram. Здесь осталось ${moved.balance} кр.`, req.body && req.body.group); } catch (e) {}
             res.json({ ok: true, balance: moved.balance });
         } catch (e) {
             res.status(500).json({ error: 'Перенос не выполнился. Кредиты остались на месте.' });
@@ -393,7 +397,7 @@ function startWebApp() {
             if (!row || !row.bytes) return res.status(404).json({ error: 'Файл не найден' });
             const mime = row.mime || 'image/png';
             if (String(req.userId).startsWith('-')) {
-                const sent = await vk.sendToUser(req.userId, row.bytes, mime, 'Файл из кабинета.');
+                const sent = await vk.sendToUser(req.userId, row.bytes, mime, 'Файл из кабинета.', req.body && req.body.group);
                 if (!sent) return res.status(503).json({ error: 'Не удалось отправить файл в чат ВК. Сохраните его из кабинета.' });
                 return res.json({ ok: true });
             }

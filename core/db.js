@@ -392,6 +392,12 @@ async function rememberCommunity(userId, groupId) {
   await pool.query('UPDATE users SET vk_group = $2 WHERE user_id = $1', [String(userId), group]);
 }
 
+async function communityOf(userId) {
+  const res = await pool.query('SELECT vk_group::text AS vk_group FROM users WHERE user_id = $1', [String(userId)]);
+  const group = String((res.rows[0] && res.rows[0].vk_group) || '').replace(/\D/g, '');
+  return group && group !== '0' ? group : '';
+}
+
 async function answerTicket(id, answer) {
   const res = await pool.query(
     `UPDATE support_tickets SET answer = $2, status = 'answered', answered_at = NOW() WHERE id = $1 RETURNING *`,
@@ -1038,6 +1044,7 @@ module.exports = {
   createTicket,
   listTickets,
   rememberCommunity,
+  communityOf,
   answerTicket,
   recordActivity,
   removeActivity,
