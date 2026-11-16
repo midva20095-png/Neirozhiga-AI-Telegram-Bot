@@ -357,7 +357,7 @@ function askCommunityToken(){
   return new Promise(function(resolve, reject){
     const timer = setTimeout(function(){
       window.removeEventListener('message', onMsg);
-      reject(new Error('ВК не открыл разрешение. Откройте приложение из сообщества.'));
+      reject(new Error('ВК не открыл разрешение. Откройте кабинет из сообщества.'));
     }, 20000);
     function onMsg(event){
       const data = event.data || {};
@@ -422,7 +422,7 @@ async function placeCovers(){
     }
     const groupId = vkGroupId();
     if (!groupId) {
-      if (msg) msg.textContent = 'Откройте приложение из этого сообщества и поставьте кнопки ещё раз.';
+      if (msg) msg.textContent = 'Откройте кабинет из этого сообщества и поставьте кнопки ещё раз.';
       if (pin) pin.disabled = false;
       return;
     }
@@ -452,7 +452,7 @@ window.addEventListener('message', function(event){
   if (data.type === 'ny-goal') { applyGoal(data.goal); return; }
   if (data.type !== 'ny-widget-fail') return;
   const note = document.getElementById('submsg');
-  if (note && vkAdmin()) note.textContent = 'ВК не открыл окно кнопок. Откройте приложение из сообщества ещё раз.';
+  if (note && vkAdmin()) note.textContent = 'ВК не открыл окно кнопок. Откройте кабинет из сообщества ещё раз.';
 });
 function viewMenu(){
   const mail = !!(me && me.mail);
@@ -468,7 +468,7 @@ function viewMenu(){
     ? '<button type="button" class="sub" id="door-setup">'+(showSetup?'Скрыть настройки':'Настройки')+'</button>'
     : '';
   const setup = vkAdmin() && showSetup
-    ? '<div class="setup"><p class="hint">Картинка встанет на страницу сообщества. Можно заменить свою.</p>'+
+    ? '<div class="setup"><p class="hint">Кнопки откроют кабинет бота: чат, рейтинг и сайт. Картинку можно заменить своей.</p>'+
       '<label class="filebtn">Своя картинка для чата<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="chat"></label>'+
       '<label class="filebtn">Своя картинка для рейтинга<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="rate"></label>'+
       '<label class="filebtn">Своя картинка для сайта<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="site"></label>'+

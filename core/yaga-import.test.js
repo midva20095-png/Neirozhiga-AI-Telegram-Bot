@@ -20,4 +20,7 @@ test('перенос ЯгаГенератора не трогает чужие �
     assert.equal(yaga.balanceAfterImport(140, ['Перенос баланса ЯгаГенератор']), 0);
     assert.equal(yaga.balanceAfterImport(500, ['ЮKassa']), 500);
     assert.equal(yaga.balanceAfterImport(80, []), 80);
+    assert.equal(yaga.isImportedLeftover({ balance: 0, gens: 0, spent: 0, vk_group: '236645486', username: 'vk:1' }, ['Перенос баланса ЯгаГенератор']), true);
+    assert.equal(yaga.isImportedLeftover({ balance: 500, gens: 0, spent: 0, vk_group: '236645486', username: 'vk:1' }, ['Перенос баланса ЯгаГенератор', 'ЮKassa']), false);
+    assert.equal(yaga.isImportedLeftover({ balance: 0, gens: 2, spent: 10, vk_group: '230706467', username: 'vk:2' }, []), false);
 });

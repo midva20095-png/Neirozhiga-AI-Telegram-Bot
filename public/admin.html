@@ -692,12 +692,12 @@ async function loadTpl(){
     (preview?'<button class="ghost" type="button" onclick="clearTplPhoto()" style="margin-top:8px">Убрать фото</button>':'')+
     '<label>2. Название</label><input id="tt" placeholder="Например: Портрет в неоне" value="'+esc(editing?editing.title:'')+'">'+
     '<label>Тип результата</label><select id="tc">'+TCATS.map(c=>'<option value="'+c[0]+'"'+((editing?editing.category:'image')===c[0]?' selected':'')+'>'+c[1]+'</option>').join('')+'</select>'+
-    '<p class="note">«Видео» и «Голос» говорят приложению, чем закончится шаблон. Для видео выберите видеомодель.</p>'+
-    '<label>Категории. Через запятую, как темы в приложении</label><input id="ttopics" placeholder="Портреты, День рождения, Знаки зодиака" value="'+esc(editing&&editing.topics?editing.topics:'')+'">'+
+    '<p class="note">«Видео» и «Голос» говорят кабинету, чем закончится шаблон. Для видео выберите видеомодель.</p>'+
+    '<label>Категории. Через запятую, как темы в кабинете</label><input id="ttopics" placeholder="Портреты, День рождения, Знаки зодиака" value="'+esc(editing&&editing.topics?editing.topics:'')+'">'+
     (knownTopics().length ? '<div class="row" style="flex-wrap:wrap;margin-top:8px">'+knownTopics().map(name=>'<button type="button" class="ghost" data-addtopic="'+esc(name)+'">'+esc(name)+'</button>').join('')+'</div>' : '')+
     '<p class="note">Нажатие на готовую тему добавляет её или убирает. Один шаблон может быть в нескольких категориях. Пустое поле не прячет шаблон: он остаётся во «Все темы».</p>'+
     '<label>3. Что должна сделать нейросеть. Человек это не видит</label><textarea id="tp" placeholder="Опишите стиль, свет и что оставить от фото человека. Ответы полей пишите как {имя}">'+esc(editing?editing.prompt:'')+'</textarea>'+
-    '<label>Поля, как в таблице Google. Пусто — как раньше, одно своё фото</label><textarea id="tfields" placeholder="фото | Ваше фото | до 3&#10;текст | имя | Как вас зовут?&#10;выбор | стиль | Стиль | Неон; Плёнка&#10;дата | дата | Дата рождения | необязательно&#10;число | возраст | Сколько лет?">'+esc(editing&&editing.fields?editing.fields:'')+'</textarea>'+
+    '<label>Поля для ответов человека. Пусто — одно своё фото</label><textarea id="tfields" placeholder="фото | Ваше фото | до 3&#10;текст | имя | Как вас зовут?&#10;выбор | стиль | Стиль | Неон; Плёнка&#10;дата | дата | Дата рождения | необязательно&#10;число | возраст | Сколько лет?">'+esc(editing&&editing.fields?editing.fields:'')+'</textarea>'+
     '<p class="note">Каждая строка — одно поле: фото, текст, выбор, дата или число. В тексте запроса {имя} заменится ответом человека. Несколько фото уходят в модель вместе, текст запроса не переписывается.</p>'+
     '<label>4. Модель и цена для человека</label>'+
     '<div class="row"><select id="tm">'+modelOptions(currentModel)+'</select>'+
