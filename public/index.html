@@ -297,7 +297,6 @@ function detectAuth(){
     if (group) window.__vkGroup = group;
   }
   window.__vkGoal = (goal === 'rate' || goal === 'site' || goal === 'sub') ? goal : '';
-  if (sp.get('vk_user_id') && window.__vkGoal !== 'rate' && window.__vkGoal !== 'site') wantMenu = true;
   if (window.__vkGoal === 'rate') { wantMenu = false; tab = 'rate'; }
   if (w && w.initDataUnsafe && w.initDataUnsafe.user && w.initDataUnsafe.user.id) userId = w.initDataUnsafe.user.id;
   else if (w && w.initData) userId = parseUser(w.initData);
@@ -402,7 +401,7 @@ async function adoptVkLaunch(){
   if (launch.indexOf('sign=') < 0) launch = await bridgeLaunch() || launch;
   const gid = String(launchValue(launch, 'vk_group_id') || vkGroupId() || '').replace(/\D/g, '');
   if (gid) window.__vkGroup = gid;
-  if (launchValue(launch, 'vk_user_id') && window.__vkGoal !== 'rate' && window.__vkGoal !== 'site') wantMenu = true;
+  if (window.__vkGoal === 'rate') wantMenu = false;
   if (token || launch.indexOf('sign=') < 0) return;
   try {
     const r = await fetchT('/api/vk/session', {
@@ -511,7 +510,7 @@ async function load(){
   const bots = document.querySelector('.bots');
   if (bots) bots.style.display = isVk() ? 'none' : '';
   if (!isVk() && (tab==='rate' || tab==='menu')) tab = 'gen';
-  if (isVk() && wantMenu) tab = 'menu';
+  if (isVk() && !window.__vkGoal && !pendingTpl && !pendingPkg && tab === 'gen') tab = 'tpl';
   if (window.__vkGoal === 'rate') tab = 'rate';
   draw();
   if (window.__vkGoal === 'site') openOut((cfg && cfg.site_url) || 'https://babayagaland.ru');
@@ -822,6 +821,7 @@ function viewTpl(){
   const topicRow = topics.length ? '<div class="tcats"><button type="button" data-ttopic="" class="'+(tplTopic?'':'on')+'">Все темы</button>'+
     topics.map(c=>'<button type="button" data-ttopic="'+esc(c)+'" class="'+(tplTopic===c?'on':'')+'">'+esc(c)+'</button>').join('')+'</div>' : '';
   const kindName = tplKind === 'video' ? 'видео' : tplKind === 'image' ? 'картинки' : tplKind === 'chat' ? 'текст' : tplKind === 'audio' ? 'голос' : tplKind === 'fix' ? 'улучшение' : 'все';
+  const purse = '<div class="now">Баланс: <b>'+((me&&me.balance)||0)+' кр</b></div>';
   const cards = list.length ? list.map(t=>{
     const src = safeSrc(t.image);
     const cat = t.category||'image';
@@ -833,7 +833,7 @@ function viewTpl(){
     return '<button class="titem" data-tpl="'+esc(t.id)+'">'+face+
       '<div class="tcap"><b>'+esc(t.title)+'</b><em>'+(t.cost||0)+' кр.</em></div></button>';
   }).join('') : '<div class="empty">Пока здесь пусто</div>';
-  return '<input class="tsearch" id="tq" placeholder="Найти шаблон" value="'+esc(tplQuery)+'">'+
+  return purse+'<input class="tsearch" id="tq" placeholder="Найти шаблон" value="'+esc(tplQuery)+'">'+
     kindRow+topicRow+
     '<div class="ttitle">Шаблоны · '+kindName+(tplTopic?' · '+esc(tplTopic):'')+' ('+list.length+')</div>'+
     '<div class="tgallery">'+cards+'</div>';
