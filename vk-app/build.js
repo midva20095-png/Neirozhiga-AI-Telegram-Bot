@@ -43,7 +43,7 @@ window.__nyHost = function(msg){
   if (msg.type === 'ny-community-token') {
     const id = new URLSearchParams(location.search).get('vk_group_id') || '';
     if (!id) { tell({ type: 'ny-community-token-fail' }); return; }
-    vkSend('VKWebAppGetCommunityToken', { app_id: 54895627, group_id: Number(id), scope: 'app_widget' });
+    vkSend('VKWebAppGetCommunityToken', { app_id: 54901511, group_id: Number(id), scope: 'app_widget' });
     return;
   }
   if (msg.type === 'ny-widget-show') {
@@ -54,7 +54,7 @@ window.__nyHost = function(msg){
     return;
   }
   if (msg.type === 'ny-user-ask') {
-    vkSend('VKWebAppGetAuthToken', { app_id: 54895627, scope: '' });
+    vkSend('VKWebAppGetAuthToken', { app_id: 54901511, scope: '' });
     return;
   }
   if ((msg.type === 'ny-open' || msg.type === 'ny-pay') && /^https:\\/\\//.test(String(msg.url || ''))) {

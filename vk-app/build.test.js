@@ -13,6 +13,8 @@ test('приложение ВК остаётся на своём адресе и
     assert.equal(html.includes('location.search.slice(1)') || html.includes("location.search.charAt(0) === '?' ? location.search.slice(1)"), true);
     assert.equal(html.includes('launch: launch'), true);
     assert.equal(html.includes('VKWebAppGetAuthToken'), true);
+    assert.equal(html.includes('54901511'), true);
+    assert.equal(html.includes('54895627'), false);
     assert.equal(html.includes('function rawLaunch'), true);
     assert.equal(html.includes("method: 'POST'"), true);
     assert.equal(html.includes("'/api/vk/session'"), true);
