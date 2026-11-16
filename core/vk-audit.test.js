@@ -3,6 +3,16 @@ const assert = require('node:assert/strict');
 const audit = require('./vk-audit');
 const vk = require('./vk');
 
+test('инструкция аудита объясняет, куда вставить ссылку', () => {
+    const text = audit.guide();
+    assert.match(text, /1\. Откройте сообщество/);
+    assert.match(text, /4\. Нажмите на поле/);
+    assert.match(text, /vk\.com\/название/);
+    assert.match(text, /vk\.com\/club123/);
+    assert.match(text, /фото экрана/);
+    assert.match(text, /Кредиты не списываются/);
+});
+
 test('ссылка на сообщество приводится к короткому имени', () => {
     assert.equal(audit.extractScreenName('https://vk.com/club123?w=wall'), 'club123');
     assert.equal(audit.extractScreenName('https://vk.ru/babki_target'), 'babki_target');
