@@ -510,7 +510,7 @@ async function startBot(app) {
                 await db.note('pay', `ЮKassa: +${creditsToAdd} кр. пользователю ${userId}, баланс ${newBalance}`);
                 const paidText = `Оплата получена. Начислено ${creditsToAdd} кр. Баланс: ${newBalance} кр.`;
                 if (String(userId).startsWith('-')) {
-                    await vk.notify(userId, paidText);
+                    await vk.notify(userId, paidText, metadata.vkGroup || '');
                 } else {
                     try {
                         await bot.telegram.sendMessage(

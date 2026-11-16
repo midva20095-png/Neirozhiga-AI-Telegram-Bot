@@ -258,6 +258,14 @@ test('второе сообщество считается отдельно и �
     }
 });
 
+test('уведомление об оплате остаётся в сообществе, где платили', () => {
+    const list = [{ id: '230706467' }, { id: '214554778' }];
+    assert.deepEqual(vk.communitiesForNotice(list, '230706467').map(item => item.id), ['230706467']);
+    assert.deepEqual(vk.communitiesForNotice(list, '214554778').map(item => item.id), ['214554778']);
+    assert.deepEqual(vk.communitiesForNotice(list, '999'), []);
+    assert.deepEqual(vk.communitiesForNotice(list, '').map(item => item.id), ['230706467', '214554778']);
+});
+
 test('комментарий сообщества сначала уходит от имени ключа, а не чужим номером', () => {
     const reply = vk.communityCommentAttempts('214554778', { postId: 9, replyTo: 4, message: 'урок', guid: 'reply-214554778-4' });
     assert.equal(reply[0].from_group, '1');

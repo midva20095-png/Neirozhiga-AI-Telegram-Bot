@@ -294,10 +294,17 @@ function payLinkKeyboard(url) {
     });
 }
 
-function chatReturnUrl() {
-    const groupId = String(process.env.VK_GROUP_ID || '').replace(/\D/g, '');
-    if (groupId) return `https://vk.com/im?sel=-${groupId}`;
+function chatReturnUrl(groupId) {
+    const group = String(groupId || process.env.VK_GROUP_ID || '').replace(/\D/g, '');
+    if (group) return `https://vk.com/im?sel=-${group}`;
     return siteLink();
+}
+
+function communitiesForNotice(list, groupId) {
+    const id = String(groupId || '').replace(/\D/g, '');
+    const items = Array.isArray(list) ? list : [];
+    if (!id || id === '0') return items.slice();
+    return items.filter(item => String(item.id) === id);
 }
 
 function textButton(label, payload, color) {
@@ -1141,7 +1148,7 @@ async function runJob(token, peerId, account, job) {
     }
 }
 
-async function holdPayment(token, peerId, account, text, action) {
+async function holdPayment(token, peerId, account, text, action, groupId) {
     const key = String(account);
     const pending = pendingPay.get(key);
     if (!pending) return false;
@@ -1166,12 +1173,13 @@ async function holdPayment(token, peerId, account, text, action) {
     }
     let url = null;
     try {
+        const home = String(pending.groupId || groupId || '').replace(/\D/g, '');
         url = await createPayment(
             pkg.price,
             `Покупка ${pkg.title}`,
             email,
-            { userId: key, credits: String(pkg.credits) },
-            chatReturnUrl()
+            { userId: key, credits: String(pkg.credits), vkGroup: home },
+            chatReturnUrl(home)
         );
     } catch (e) {
         url = null;
@@ -1405,7 +1413,7 @@ async function reply(token, peerId, account, text, payload, groupId, photoUrls) 
         const pkg = catalog.getPackage(payload && payload.p);
         if (!pkg) return sendText(token, peerId, 'Пакет недоступен.');
         pendingMove.delete(String(account));
-        pendingPay.set(String(account), { stage: 'email', pkgId: pkg.id });
+        pendingPay.set(String(account), { stage: 'email', pkgId: pkg.id, groupId: String(groupId || '').replace(/\D/g, '') });
         return sendText(
             token,
             peerId,
@@ -1427,7 +1435,7 @@ async function reply(token, peerId, account, text, payload, groupId, photoUrls) 
             payLockKeyboard()
         );
     }
-    if (await holdPayment(token, peerId, account, text, action)) return;
+    if (await holdPayment(token, peerId, account, text, action, groupId)) return;
     if (await holdMove(token, peerId, account, text, action)) return;
     if (action === 'audit') {
         pendingJob.delete(String(account));
@@ -2234,11 +2242,23 @@ async function handleUpdate(token, update, groupId) {
     await reply(token, incoming.peerId, account, incoming.text, incoming.payload, groupId, photos);
 }
 
-async function sendToUser(accountIdValue, buffer, mime, caption) {
+async function noticeGroup(accountIdValue, groupId) {
+    const explicit = String(groupId || '').replace(/\D/g, '');
+    if (explicit && explicit !== '0') return explicit;
+    try {
+        return await db.communityOf(accountIdValue);
+    } catch (e) {
+        return '';
+    }
+}
+
+async function sendToUser(accountIdValue, buffer, mime, caption, groupId) {
     const id = Number(accountIdValue);
     if (!Number.isInteger(id) || id >= 0 || !buffer) return false;
     const peerId = -id;
-    for (const item of communityList()) {
+    const home = await noticeGroup(id, groupId);
+    const targets = communitiesForNotice(communityList(), home);
+    for (const item of targets) {
         try {
             const kind = String(mime || '');
             if (kind.startsWith('image/')) {
@@ -2248,34 +2268,51 @@ async function sendToUser(accountIdValue, buffer, mime, caption) {
             } else if (kind.startsWith('audio/')) {
                 await sendMedia(item.token, peerId, buffer, 'audio', caption || 'Аудио из кабинета.');
             } else {
-                await sendText(item.token, peerId, caption || 'Файл готов в кабинете.');
+                await sendText(item.token, peerId, caption || 'Файл готов в кабинете.', mainMenu(peerId, item.id));
             }
             return true;
-        } catch (e) {}
+        } catch (e) {
+            console.error(`ВК ${item.id}: файл в чат не ушёл.`);
+            if (home) return false;
+        }
     }
     return false;
 }
 
-async function askTopup(accountIdValue) {
+async function askTopup(accountIdValue, groupId) {
     const id = Number(accountIdValue);
     if (!Number.isInteger(id) || id >= 0) return null;
-    for (const item of communityList()) {
+    const home = await noticeGroup(id, groupId);
+    const targets = communitiesForNotice(communityList(), home);
+    for (const item of targets) {
         try {
             await sendText(item.token, -id, 'Выберите пакет внизу. Другие кнопки скрыты. «Назад» возвращает меню.', payKeyboard());
-            return chatReturnUrl();
-        } catch (e) {}
+            return chatReturnUrl(item.id);
+        } catch (e) {
+            console.error(`ВК ${item.id}: пополнение в чат не ушло.`);
+            if (home) return null;
+        }
     }
     return null;
 }
 
-async function notify(accountIdValue, message) {
+async function notify(accountIdValue, message, groupId) {
     const id = Number(accountIdValue);
     if (!Number.isInteger(id) || id >= 0) return false;
-    for (const item of communityList()) {
+    const home = await noticeGroup(id, groupId);
+    const targets = communitiesForNotice(communityList(), home);
+    if (home && !targets.length) {
+        console.error(`ВК ${home}: уведомление не отправлено, это сообщество не подключено.`);
+        return false;
+    }
+    for (const item of targets) {
         try {
-            await sendText(item.token, -id, message);
+            await sendText(item.token, -id, message, mainMenu(-id, item.id));
             return true;
-        } catch (e) {}
+        } catch (e) {
+            console.error(`ВК ${item.id}: уведомление не ушло.`);
+            if (home) return false;
+        }
     }
     return false;
 }
@@ -2478,5 +2515,5 @@ async function startVk() {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, keepPhotos, USER_HELP
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, communitiesForNotice, keepPhotos, USER_HELP
 };
