@@ -606,10 +606,7 @@ async function startBot(app) {
                 parse_mode: 'Markdown',
                 ...Markup.inlineKeyboard([
                     [Markup.button.webApp('📱 Открыть кабинет', webappUrlFor(ctx.from.id))],
-                    [Markup.button.url('📢 Канал', channel.CHANNEL_URL)],
-                    [Markup.button.url('Бот во ВКонтакте', catalog.vkBotUrl())],
-                    [Markup.button.url('Бот в Макс', 'https://max.ru/se14387925_bot')],
-                    [Markup.button.url('Сайт', siteUrl())]
+                    [Markup.button.url('📢 Канал', channel.CHANNEL_URL)]
                 ])
             }
         );
