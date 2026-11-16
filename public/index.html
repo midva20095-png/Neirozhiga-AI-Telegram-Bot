@@ -156,7 +156,8 @@ input,select{width:100%;border-radius:14px;border:1px solid var(--line);backgrou
 const KIND = {text:'Текст', image:'Картинка', video:'Видео', audio:'Музыка'};
 let tab='gen', me=null, cfg=null, templates=[], works=null, worksLoading=false, userId=null, token=null, busy=false, last=null, wantMenu=false, tplAnswers={}, tplPhotos={};
 let openTpl=null, photoData=null, pickedFormat=null, genPhoto=null, draft='', pendingTpl='', pendingPkg='';
-let tplKind='', tplTopic='', tplQuery='', cutterOn=false, cutCount=3, cutSource='', cutSlides=[];
+let tplKind='', tplTopic='', tplQuery='', cutterOn=false, cutCount=3, cutSource='', cutSlides=[], cutError='', cutBusy=false;
+const CUT_COST = 10;
 const TCAT = {image:'Картинки', fix:'Улучшение', chat:'Текст', video:'Видео', audio:'Голос'};
 const TMARK = {image:'🪄', fix:'✨', chat:'✍️', video:'🎬', audio:'🎙'};
 let pickedQuality=null, pickedDuration=null, pickedAspect=null;
@@ -557,7 +558,7 @@ function viewTpl(){
   }).join('') : '<div class="empty">Пока здесь пусто</div>';
   return '<input class="tsearch" id="tq" placeholder="Найти шаблон" value="'+esc(tplQuery)+'">'+
     kindRow+topicRow+
-    '<button class="cutlink" type="button" id="openCut">Резак карусели · без кредитов</button>'+
+    '<button class="cutlink" type="button" id="openCut">Резак карусели · '+CUT_COST+' кр.</button>'+
     '<div class="ttitle">Шаблоны · '+kindName+(tplTopic?' · '+esc(tplTopic):'')+' ('+list.length+')</div>'+
     '<div class="tgallery">'+cards+'</div>';
 }
@@ -570,8 +571,9 @@ function viewCutter(){
   }).join('');
   return '<div class="card"><button class="back" id="backCut" type="button">← Шаблоны</button>'+
     '<div class="name">Резак</div>'+
-    '<div class="meta" style="margin:6px 0 12px">Режет одно фото на кадры карусели, слева направо. Кредиты не списываются.</div>'+
-    '<label class="filebtn">'+(cutSource?'Другое фото':'Выбрать фото')+'<input id="cutfile" type="file" accept="image/*"></label>'+
+    '<div class="meta" style="margin:6px 0 12px">Режет одно фото на кадры карусели, слева направо. Карусель стоит '+CUT_COST+' кредитов за фото. Число кадров у того же фото можно менять без доплаты.</div>'+
+    (cutError?'<p class="err">'+esc(cutError)+'</p>':'')+
+    '<label class="filebtn">'+(cutSource?'Другое фото · ещё '+CUT_COST+' кр.':'Выбрать фото · '+CUT_COST+' кр.')+'<input id="cutfile" type="file" accept="image/*"></label>'+
     '<div class="hint">Сколько кадров</div><div class="chips">'+counts+'</div>'+
     (slides?'<div class="carousel">'+slides+'</div>':'')+'</div>';
 }
@@ -595,9 +597,36 @@ function slicePhoto(dataUrl, count){
     img.src = dataUrl;
   });
 }
+async function payCarousel(){
+  const lack = shortOf(CUT_COST);
+  if (lack) { cutError = lack; return false; }
+  try {
+    const r = await fetch('/api/cut', {method:'POST', headers: authHeaders(), body: '{}'});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok || !d.ok) { cutError = d.error || 'Не удалось списать кредиты'; return false; }
+    if (me) me.balance = d.balance;
+    const bal = document.getElementById('bal');
+    if (bal) bal.textContent = d.balance+' кр';
+    cutError = '';
+    return true;
+  } catch (e) {
+    cutError = 'Не удалось списать кредиты';
+    return false;
+  }
+}
 async function cutPhoto(file){
-  cutSource = await fileToJpeg(file);
-  cutSlides = await slicePhoto(cutSource, cutCount);
+  if (cutBusy) return;
+  cutBusy = true;
+  try {
+    const jpeg = await fileToJpeg(file);
+    const slides = await slicePhoto(jpeg, cutCount);
+    const paid = await payCarousel();
+    if (!paid) return;
+    cutSource = jpeg;
+    cutSlides = slides;
+  } finally {
+    cutBusy = false;
+  }
 }
 function downloadSlide(index){
   const src = cutSlides[index];
