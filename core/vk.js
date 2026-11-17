@@ -3,6 +3,7 @@ const axios = require('axios');
 const FormData = require('form-data');
 const sharp = require('sharp');
 const db = require('./db');
+const leader = require('./leader');
 const bridge = require('./bridge');
 const catalog = require('./catalog');
 const gen = require('./generate');
@@ -1851,7 +1852,6 @@ async function ensureLessonPin(token, groupId) {
         ? `ВК ${groupId}: пост уроков закреплён ${url}`
         : `ВК ${groupId}: пост уроков опубликован ${url}. Закрепите его вручную.`;
     db.note('sys', line).catch(() => {});
-    console.log(line);
     watchLessonPin(token, groupId);
 }
 
@@ -2409,10 +2409,16 @@ function communityStatus() {
     });
 }
 
+let vkStopped = false;
+
+function stopVk() {
+    vkStopped = true;
+}
+
 async function poll(token, groupId) {
     let online = false;
     let failLogged = false;
-    for (;;) {
+    while (!vkStopped) {
         try {
             let server = await call(token, 'groups.getLongPollServer', { group_id: groupId });
             if (!online) {
@@ -2424,7 +2430,7 @@ async function poll(token, groupId) {
                 await enableActivity(token, groupId);
                 watchCommunityActivity(token, groupId);
             }
-            for (;;) {
+            while (!vkStopped) {
                 let res;
                 try {
                     res = await axios.get(server.server, {
@@ -2465,6 +2471,7 @@ async function poll(token, groupId) {
                 console.error(`ВК ${groupId} не подключился${code ? ` (${code})` : ''}. ${full} Telegram работает как прежде.`);
                 db.note('sys', `ВК ${groupId} не подключился. ${full}`).catch(() => {});
             }
+            if (vkStopped) return;
             await new Promise(r => setTimeout(r, 15000));
         }
     }
@@ -2541,6 +2548,7 @@ function communityId(value) {
 }
 
 async function startVk() {
+    await leader.hold(() => db.tryHoldBotLock());
     const raw = communitiesFromEnv();
     const next = [];
     const seen = new Set();
@@ -2597,5 +2605,5 @@ async function ensureCommunityWidget(groupId) {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, stopVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos
 };

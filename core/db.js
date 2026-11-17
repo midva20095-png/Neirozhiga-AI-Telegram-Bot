@@ -1043,6 +1043,56 @@ async function releaseGiga(userId, model) {
   );
 }
 
+// Сессионная блокировка: живёт, пока это соединение не вернулось в пул.
+// Второй контейнер получает false и не открывает второй Long Poll.
+const BOT_LOCK_A = 7103;
+const BOT_LOCK_B = 4021;
+let lockClient = null;
+
+async function tryHoldBotLock() {
+  if (lockClient) return true;
+  const client = await pool.connect();
+  let held = false;
+  try {
+    const res = await client.query('SELECT pg_try_advisory_lock($1::int, $2::int) AS ok', [BOT_LOCK_A, BOT_LOCK_B]);
+    held = !!(res.rows[0] && res.rows[0].ok);
+  } catch (err) {
+    try { client.release(err); } catch (e) {}
+    throw err;
+  }
+  if (!held) {
+    client.release();
+    return false;
+  }
+  lockClient = client;
+  client.on('error', (error) => {
+    console.error('Соединение блокировки бота оборвалось:', error.message);
+    dropLockClient(client, error);
+  });
+  return true;
+}
+
+function dropLockClient(client, err) {
+  if (!client || client.lockReleased) return;
+  client.lockReleased = true;
+  if (lockClient === client) lockClient = null;
+  try { client.release(err); } catch (e) {}
+}
+
+async function releaseBotLock() {
+  const client = lockClient;
+  if (!client || client.lockReleased) {
+    lockClient = null;
+    return;
+  }
+  try {
+    await client.query('SELECT pg_advisory_unlock($1::int, $2::int)', [BOT_LOCK_A, BOT_LOCK_B]);
+    dropLockClient(client);
+  } catch (e) {
+    dropLockClient(client, e);
+  }
+}
+
 module.exports = {
   initDB,
   getUser,
@@ -1103,5 +1153,7 @@ module.exports = {
   clearDonutSurvey,
   recordDonut,
   listDonutLog,
+  tryHoldBotLock,
+  releaseBotLock,
   pool,
 };
