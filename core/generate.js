@@ -105,7 +105,7 @@ async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mim
             : catalog.quote(model, { duration, quality, seconds: audioSeconds });
         const balance = await db.updateBalance(id, -cost, reason || `Генерация · ${model.name}`);
         await db.recordGeneration(id, cost);
-        if (Number(id) < 0) {
+        if (Number(id) < 0 && String(groupId || '').replace(/\D/g, '')) {
             try {
                 const activity = require('./activity');
                 await db.recordActivity(id, 'bot', `bot:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`, activity.POINTS.bot, groupId);

@@ -566,9 +566,9 @@ async function loadUsers(q){
   }
   users = d.users||[];
   const hint = place==='vk' ? 'Номер ВК' : 'ID или @имя';
-  const scopeNote = usersQuery
-    ? '<p class="note">Поиск идёт по всем клиентам этой стороны, не только по открытому сообществу.</p>'
-    : (inCommunity() ? '<p class="note">Список этого сообщества. Чтобы открыть человека из другого сообщества, введите его номер.</p>' : '');
+  const scopeNote = inCommunity()
+    ? '<p class="note">Здесь только люди этого сообщества: кто писал его боту или активен на его стене. Баланс у человека общий, если он есть и во втором сообществе. Чужие клиенты в этот список не попадают.</p>'
+    : '';
   el.innerHTML =
     '<div class="card" id="uedit" style="display:none"></div>'+
     '<div class="card"><h3>Клиенты · '+placeName()+'</h3>'+scopeNote+'<div class="row"><input id="q" placeholder="'+hint+'" value="'+esc(usersQuery)+'"><button type="button" id="userSearch">Найти</button></div>'+
@@ -577,7 +577,7 @@ async function loadUsers(q){
       const who = clientWho(u);
       return '<tr><td>'+who.where+'</td><td>'+esc(who.num)+'</td><td>'+esc(who.name)+'</td><td class="ok">'+u.balance+'</td><td>'+esc(u.current_model||'')+'</td><td>'+(u.gens||0)+'</td><td>'+(u.blocked?'<span class="bad">ЧС</span>':'—')+'</td><td><button type="button" class="ghost" data-open="'+esc(u.user_id)+'">Открыть</button></td></tr>';
     }).join('')+
-    (users.length?'':'<tr><td colspan="8" class="note">Таких клиентов нет.</td></tr>')+
+    (users.length?'':'<tr><td colspan="8" class="note">'+(inCommunity()?'В этом сообществе своих клиентов нет.':'Таких клиентов нет.')+'</td></tr>')+
     '</table></div>';
   const search = document.getElementById('userSearch');
   const field = document.getElementById('q');
@@ -588,13 +588,31 @@ async function loadUsers(q){
   });
   if (openUserId) editUser(openUserId, true);
 }
+function communityName(id){
+  const key = String(id || '').replace(/\D/g, '');
+  const home = homes.find(item => item.id === key);
+  if (home) return home.title;
+  if (key === '230706467') return 'Точки и Линии';
+  if (key === '214554778') return 'НейроЯга';
+  return key ? ('Сообщество ' + key) : '';
+}
 function clientWho(u){
   const id = String(u.user_id);
   const vk = id.startsWith('-') || Number(id) < 0;
   const num = vk ? id.replace(/^-/, '') : id;
   const raw = String(u.username || '');
   const name = vk ? (raw.replace(/^vk:/, '') === num ? '' : raw) : (raw ? (raw.charAt(0)==='@' ? raw : '@'+raw) : '');
-  return { where: vk ? 'ВКонтакте' : 'Telegram', num, name };
+  const ids = String(u.groups || u.vk_group || '').split(',').map(part => part.replace(/\D/g, '')).filter(part => part && part !== '0');
+  const seen = {};
+  const titles = [];
+  ids.forEach(part => {
+    if (seen[part]) return;
+    seen[part] = 1;
+    const title = communityName(part);
+    if (title) titles.push(title);
+  });
+  const where = vk ? (titles.length ? titles.join(', ') : 'ВК, сообщество не известно') : 'Telegram';
+  return { where, num, name };
 }
 async function editUser(id, quiet){
   openUserId = String(id||'');
@@ -613,7 +631,8 @@ async function editUser(id, quiet){
     '<tr><td>'+whenAt(row.created_at)+'</td><td>'+esc(row.reason||'')+'</td><td class="'+(Number(row.delta)>=0?'ok':'bad')+'">'+(Number(row.delta)>0?'+':'')+row.delta+'</td><td>'+row.balance+'</td></tr>'
   ).join('');
   box.innerHTML = '<h3>'+who.where+' · '+esc(who.num)+(who.name?(' · '+esc(who.name)):'')+'</h3>'+
-    '<p class="note">Баланс <b class="ok">'+u.balance+'</b> кр. · генераций '+(u.gens||0)+' · потрачено '+(u.spent||0)+'</p>'+
+    '<p class="note">'+esc(who.where)+'</p>'+
+    '<p class="note">Баланс <b class="ok">'+u.balance+'</b> кр. общий для аккаунта · генераций '+(u.gens||0)+' · потрачено '+(u.spent||0)+'</p>'+
     '<div class="row"><input id="delta" type="number" placeholder="+100 или -50"><input id="reason" placeholder="Причина, видна в истории"></div>'+
     '<div class="row"><button type="button" id="balGo">Начислить / списать</button>'+
     '<button type="button" class="danger" id="banGo">'+(u.blocked?'Убрать из ЧС':'В чёрный список')+'</button></div>'+
@@ -1078,7 +1097,7 @@ async function loadTickets(status){
   const el = document.getElementById('section-tickets');
   const d = await api('/api/admin/tickets?platform='+place+'&status='+encodeURIComponent(status||'open')+groupQuery());
   const list = d.tickets||[];
-  const ticketNote = inCommunity() ? '<p class="note">Обращения тех, кто писал этому сообществу.</p>' : '';
+  const ticketNote = inCommunity() ? '<p class="note">Обращения только этого сообщества.</p>' : '';
   el.innerHTML = '<div class="card"><h3>Поддержка · '+placeName()+'</h3>'+ticketNote+'<div class="row">'+
     ['open','answered','all'].map(s=>'<button class="'+(s===status?'':'ghost')+'" onclick="loadTickets(\''+s+'\')">'+({open:'Открытые',answered:'Отвеченные',all:'Все'}[s])+'</button>').join('')+'</div></div>'+
     (list.length?list.map(t=>'<div class="card"><div class="note">#'+t.id+' · '+esc(ticketWho(t))+' · '+(t.status==='open'?'<span class="bad">открыт</span>':'<span class="ok">отвечен</span>')+'</div>'+

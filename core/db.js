@@ -179,8 +179,31 @@ async function initDB() {
   `);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS vk_activity_event_idx ON vk_activity (user_id, kind, object_key, group_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS vk_activity_week_idx ON vk_activity (created_at DESC)`);
-  const homeGroup = String(process.env.VK_GROUP_ID || '').replace(/\D/g, '');
-  if (homeGroup) await pool.query('UPDATE vk_activity SET group_id = $1 WHERE group_id = 0', [homeGroup]);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vk_member (
+      user_id BIGINT NOT NULL,
+      group_id BIGINT NOT NULL,
+      seen_at TIMESTAMP DEFAULT NOW(),
+      PRIMARY KEY (user_id, group_id)
+    )
+  `);
+  await pool.query(`
+    INSERT INTO vk_member (user_id, group_id)
+    SELECT DISTINCT user_id, group_id FROM vk_activity
+    WHERE group_id <> 0 AND kind IN ('like', 'comment', 'repost')
+    ON CONFLICT DO NOTHING
+  `);
+  await pool.query(`
+    INSERT INTO vk_member (user_id, group_id)
+    SELECT u.user_id, u.vk_group FROM users u
+    WHERE u.vk_group <> 0
+      AND NOT EXISTS (
+        SELECT 1 FROM vk_activity a
+        WHERE a.user_id = u.user_id AND a.group_id <> 0 AND a.group_id <> u.vk_group
+          AND a.kind IN ('like', 'comment', 'repost')
+      )
+    ON CONFLICT DO NOTHING
+  `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS vk_profiles (
       user_id BIGINT PRIMARY KEY,
@@ -391,7 +414,7 @@ async function listTickets(status, platform, groupId) {
   const group = String(groupId || '').replace(/\D/g, '');
   if (group) {
     params.push(group);
-    parts.push(`user_id IN (SELECT user_id FROM users WHERE vk_group = $${params.length})`);
+    parts.push(`user_id IN (SELECT user_id FROM vk_member WHERE group_id = $${params.length})`);
   }
   const where = parts.length ? `WHERE ${parts.join(' AND ')}` : '';
   const res = await pool.query(`SELECT * FROM support_tickets ${where} ORDER BY id DESC LIMIT 200`, params);
@@ -400,7 +423,12 @@ async function listTickets(status, platform, groupId) {
 
 async function rememberCommunity(userId, groupId) {
   const group = String(groupId || '').replace(/\D/g, '');
-  if (!group) return;
+  if (!group || group === '0') return;
+  await pool.query(
+    `INSERT INTO vk_member (user_id, group_id, seen_at) VALUES ($1, $2, NOW())
+     ON CONFLICT (user_id, group_id) DO UPDATE SET seen_at = NOW()`,
+    [String(userId), group]
+  );
   await pool.query('UPDATE users SET vk_group = $2 WHERE user_id = $1', [String(userId), group]);
 }
 
@@ -419,7 +447,7 @@ async function answerTicket(id, answer) {
 }
 
 function activityGroup(groupId) {
-  return String(groupId || process.env.VK_GROUP_ID || '').replace(/\D/g, '') || '0';
+  return String(groupId || '').replace(/\D/g, '') || '0';
 }
 
 async function recordActivity(userId, kind, objectKey, points, groupId) {
@@ -909,6 +937,11 @@ async function adminClient(userId) {
     [id]
   );
   if (!res.rows[0]) return null;
+  const homes = await pool.query(
+    'SELECT group_id::text AS group_id FROM vk_member WHERE user_id = $1 ORDER BY seen_at DESC',
+    [id]
+  );
+  res.rows[0].groups = homes.rows.map(row => row.group_id).join(',');
   return { user: res.rows[0], history: await listHistory(id, 40) };
 }
 

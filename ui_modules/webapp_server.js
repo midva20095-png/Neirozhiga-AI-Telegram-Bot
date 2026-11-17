@@ -158,12 +158,17 @@ function startWebApp() {
         catch (e) { return String(match[1]).replace(/\D/g, ''); }
     }
 
-    function sendVkSession(res, source) {
+    async function sendVkSession(res, source) {
         const account = auth.verifyVkLaunch(source || {});
         if (!account) {
             return res.status(401).json({ error: 'Откройте кабинет из бота или из сообщества.' });
         }
-        res.json({ tk: auth.signUserId(account), group: launchGroup(source) });
+        const group = launchGroup(source);
+        if (group) {
+            try { await db.ensureUser(account, `vk:${String(account).replace(/^-/, '')}`); } catch (e) {}
+            try { await db.rememberCommunity(account, group); } catch (e) {}
+        }
+        res.json({ tk: auth.signUserId(account), group });
     }
 
     app.get('/api/vk/session', (req, res) => sendVkSession(res, req.query));
@@ -612,6 +617,10 @@ function startWebApp() {
             const incoming = photos.length ? photos : (body.image ? [body.image] : []);
             const files = allowPhoto ? incoming.slice(0, templateFields.MAX_PHOTOS).filter(Boolean).map(decodeImage) : [];
             const file = files[0] || null;
+            const askedGroup = String((body && body.group) || '').replace(/\D/g, '');
+            if (askedGroup && String(req.userId).startsWith('-')) {
+                try { await db.rememberCommunity(req.userId, askedGroup); } catch (e) {}
+            }
             const fields = {
                 userId: req.userId,
                 prompt,
@@ -629,7 +638,7 @@ function startWebApp() {
                 keepModel,
                 strict,
                 audience,
-                groupId: vk.communityId(body.group)
+                groupId: askedGroup
             };
             const photoKb = file && file.buffer ? Math.max(1, Math.round(file.buffer.length / 1024)) : 0;
             if (templateTitle) {
@@ -908,12 +917,13 @@ function startWebApp() {
                 search = `(${search} OR user_id::text LIKE $${params.length})`;
             }
             let groupSql = '';
-            if (group && !q) {
+            if (group) {
                 params.push(group);
-                groupSql = ` AND vk_group = $${params.length}`;
+                groupSql = ` AND user_id IN (SELECT user_id FROM vk_member WHERE group_id = $${params.length})`;
             }
             const result = await db.pool.query(
-                `SELECT user_id::text AS user_id, username, balance, current_model, blocked, gens, spent, created_at, last_seen, vk_group::text AS vk_group
+                `SELECT user_id::text AS user_id, username, balance, current_model, blocked, gens, spent, created_at, last_seen, vk_group::text AS vk_group,
+                        COALESCE((SELECT string_agg(m.group_id::text, ',' ORDER BY m.seen_at DESC) FROM vk_member m WHERE m.user_id = users.user_id), '') AS groups
                  FROM users
                  WHERE ${search} ${gate}${groupSql}
                  ORDER BY last_seen DESC NULLS LAST LIMIT 100`,
