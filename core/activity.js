@@ -1,4 +1,4 @@
-// Баллы активности ВК. Неделя считается по Москве, с понедельника.
+// Баллы активности ВК. Месяц считается по Москве, с первого числа.
 // Лайк, комментарий и репост — только на стене сообщества. Запрос — удачная генерация бота.
 
 const POINTS = { like: 3, comment: 6, repost: 10, bot: 1 };
@@ -30,6 +30,41 @@ function shouldPublishWeek(now) {
     const date = now instanceof Date ? now : new Date();
     const moscow = new Date(date.getTime() + MOSCOW);
     return moscow.getUTCDay() === 1 && moscow.getUTCHours() >= 9;
+}
+
+function monthRange(now) {
+    const date = now instanceof Date ? now : new Date();
+    const moscow = new Date(date.getTime() + MOSCOW);
+    const start = new Date(Date.UTC(moscow.getUTCFullYear(), moscow.getUTCMonth(), 1) - MOSCOW);
+    const end = new Date(Date.UTC(moscow.getUTCFullYear(), moscow.getUTCMonth() + 1, 1) - MOSCOW);
+    const label = new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow', month: 'long', year: 'numeric' }).format(start);
+    return { start, end, label };
+}
+
+function previousMonth(now) {
+    const current = monthRange(now);
+    return monthRange(new Date(current.start.getTime() - 60 * 60 * 1000));
+}
+
+function shouldPublishMonth(now) {
+    const date = now instanceof Date ? now : new Date();
+    const moscow = new Date(date.getTime() + MOSCOW);
+    return moscow.getUTCDate() === 1 && moscow.getUTCHours() >= 9;
+}
+
+function bonusGrants(rows, places, rest) {
+    const tail = Math.max(0, Math.round(Number(rest) || 0));
+    const top = (Array.isArray(places) ? places : []).map(item => {
+        const value = Math.round(Number(item));
+        return Number.isFinite(value) && value > 0 ? value : tail;
+    });
+    const grants = [];
+    (Array.isArray(rows) ? rows : []).forEach((row, index) => {
+        const amount = index < top.length ? top[index] : tail;
+        const userId = String(row && row.userId || '');
+        if (amount > 0 && userId) grants.push({ userId, amount, place: index + 1 });
+    });
+    return grants;
 }
 
 function communityId(groupId) {
@@ -190,11 +225,11 @@ function formatRating(rows, meId, range) {
         `Рейтинг · ${range.label}`,
         rulesText(),
         'Лайк, комментарий и репост приводят людей, поэтому баллов больше, чем за запрос боту.',
-        'В понедельник баллы начинаются заново. Кредиты по этому списку начисляет администратор.',
+        'В первый день месяца баллы начинаются заново. Кредиты по этому списку начисляет администратор.',
         ''
     ];
     if (!rows.length) {
-        lines.push('На этой неделе пока тихо. Лайкайте записи сообщества, комментируйте, делайте репосты и пишите боту.');
+        lines.push('В этом месяце пока тихо. Лайкайте записи сообщества, комментируйте, делайте репосты и пишите боту.');
     } else {
         rows.slice(0, 10).forEach((row, index) => {
             lines.push(`${index + 1}. ${row.name} — ${row.points} б.`);
@@ -205,21 +240,21 @@ function formatRating(rows, meId, range) {
     lines.push('');
     lines.push(place >= 0
         ? `Ваши баллы: ${rows[place].points}. Место: ${place + 1}.`
-        : 'Вас пока нет в списке этой недели.');
+        : 'Вас пока нет в списке этого месяца.');
     return lines.join('\n').slice(0, 3500);
 }
 
 function wallSummary(rows, range) {
     const lines = [
-        `Итог недели · ${range.label}`,
+        `Итог месяца · ${range.label}`,
         rulesText(),
         'Кредиты по этому списку начисляет администратор.',
-        'Новая неделя уже началась, баллы считаются заново.',
+        'Новый месяц уже начался, баллы считаются заново.',
         ''
     ];
     const list = Array.isArray(rows) ? rows : [];
     if (!list.length) {
-        lines.push('На прошлой неделе баллов не было.');
+        lines.push('В прошлом месяце баллов не было.');
     } else {
         list.slice(0, 10).forEach((row, index) => {
             lines.push(`${index + 1}. ${row.name} — ${row.points} б. (лайки ${row.likes}, комментарии ${row.comments}, репосты ${row.reposts}, бот ${row.bot})`);
@@ -243,6 +278,7 @@ function freshIds(seen, ids) {
 
 module.exports = {
     POINTS, rulesText, weekRange, previousWeek, shouldPublishWeek,
+    monthRange, previousMonth, shouldPublishMonth, bonusGrants,
     parseCommunityActivity, readWallComment, wallCommentIssue, readWallPost,
     faceOf, present, formatRating, wallSummary, freshIds
 };

@@ -4,6 +4,28 @@ const activity = require('./activity');
 
 const GROUP = '230706467';
 
+test('месяц начинается первого числа по Москве и бонус считается по местам', () => {
+    const november = activity.monthRange(new Date('2026-11-16T12:00:00.000Z'));
+    assert.equal(november.start.toISOString(), '2026-10-31T21:00:00.000Z');
+    assert.equal(november.end.toISOString(), '2026-11-30T21:00:00.000Z');
+    assert.match(november.label, /ноябрь/i);
+    const first = new Date('2026-12-01T06:00:00.000Z');
+    assert.equal(activity.shouldPublishMonth(first), true);
+    assert.equal(activity.shouldPublishMonth(new Date('2026-12-01T05:00:00.000Z')), false);
+    assert.equal(activity.shouldPublishMonth(new Date('2026-11-16T12:00:00.000Z')), false);
+    const prev = activity.previousMonth(first);
+    assert.equal(prev.start.toISOString(), november.start.toISOString());
+    const rows = [
+        { userId: '-1' },
+        { userId: '-2' },
+        { userId: '-3' },
+        { userId: '-4' }
+    ];
+    assert.deepEqual(activity.bonusGrants(rows, [100, 50], 10).map(item => item.amount), [100, 50, 10, 10]);
+    assert.deepEqual(activity.bonusGrants(rows, [], 20).map(item => item.amount), [20, 20, 20, 20]);
+    assert.deepEqual(activity.bonusGrants(rows, [], 0), []);
+});
+
 test('неделя начинается в понедельник по Москве', () => {
     const monday = activity.weekRange(new Date('2026-11-08T21:00:00.000Z'));
     assert.equal(monday.start.toISOString(), '2026-11-08T21:00:00.000Z');
@@ -108,9 +130,9 @@ test('итог недели публикуется в понедельник у�
         { name: 'Анна', points: 8, likes: 1, comments: 1, reposts: 0, bot: 1 }
     ], prev);
     assert.match(text, /Анна — 8 б\./);
-    assert.match(text, /Новая неделя уже началась/);
+    assert.match(text, /Новый месяц уже начался/);
     assert.doesNotMatch(text, /Ваши баллы|access_token|vk1\.a\./);
-    assert.match(activity.wallSummary([], prev), /На прошлой неделе баллов не было/);
+    assert.match(activity.wallSummary([], prev), /В прошлом месяце баллов не было/);
     const own = activity.readWallComment({
         type: 'wall_reply_new',
         object: { from_id: -230706467, id: 3, post_id: 9, text: '#как сделать обложку?', owner_id: -230706467 }

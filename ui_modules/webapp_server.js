@@ -372,9 +372,9 @@ function startWebApp() {
             const known = asked && vk.communityList().some(item => item.id === asked) ? asked : '';
             const group = known || vk.communityId('');
             if (!userId && !group) return res.status(401).json({ error: 'auth_required' });
-            const range = activity.weekRange(new Date());
+            const range = activity.monthRange(new Date());
             if (userId && Number(userId) >= 0) return res.json({ vk: false, week: range.label, rows: [], mine: null });
-            const rows = await vk.attachFaces(await db.listWeekActivity(range.start, group));
+            const rows = await vk.attachFaces(await db.listWeekActivity(range.start, group, range.end));
             const place = userId ? rows.findIndex(row => String(row.userId) === String(userId)) : -1;
             res.json({
                 vk: true,
@@ -831,11 +831,61 @@ function startWebApp() {
 
     app.get('/api/admin/vk/rating', requireAdmin, async (req, res) => {
         try {
-            const range = activity.weekRange(new Date());
-            const rows = await vk.attachFaces(await db.listWeekActivity(range.start, vk.communityId(req.query.group)));
-            res.json({ week: range.label, rules: activity.rulesText(), points: activity.POINTS, rows });
+            const now = new Date();
+            const range = req.query.period === 'previous' ? activity.previousMonth(now) : activity.monthRange(now);
+            const group = vk.communityId(req.query.group);
+            const rows = await vk.attachFaces(await db.listWeekActivity(range.start, group, range.end, 200));
+            const key = `vk_rate_bonus_${group}_${range.start.toISOString().slice(0, 10)}`;
+            const saved = await db.getSettings([key]);
+            res.json({
+                week: range.label,
+                period: req.query.period === 'previous' ? 'previous' : 'current',
+                rules: activity.rulesText(),
+                points: activity.POINTS,
+                rows,
+                paid: saved[key] || null
+            });
         } catch (e) {
             res.status(500).json({ error: 'Не удалось открыть рейтинг.' });
+        }
+    });
+
+    app.post('/api/admin/vk/rating-bonus', requireAdmin, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const group = vk.communityId(body.group);
+            if (!group) return res.status(400).json({ ok: false, error: 'Нет сообщества' });
+            const now = new Date();
+            const range = body.period === 'current' ? activity.monthRange(now) : activity.previousMonth(now);
+            const key = `vk_rate_bonus_${group}_${range.start.toISOString().slice(0, 10)}`;
+            const saved = await db.getSettings([key]);
+            if (saved[key] && !body.again) {
+                return res.json({
+                    ok: false,
+                    already: true,
+                    paid: saved[key],
+                    error: 'За этот месяц бонус уже начислен.'
+                });
+            }
+            const rows = await vk.attachFaces(await db.listWeekActivity(range.start, group, range.end, 200));
+            const grants = activity.bonusGrants(rows, body.places, body.rest);
+            if (!grants.length) return res.json({ ok: false, error: 'Некому начислять: укажите сумму и проверьте список.' });
+            let count = 0;
+            let total = 0;
+            for (const grant of grants) {
+                const balance = await db.updateBalance(grant.userId, grant.amount, `Рейтинг · ${range.label} · место ${grant.place}`);
+                if (balance === null) continue;
+                count += 1;
+                total += grant.amount;
+                try {
+                    await tellClient(grant.userId, `Бонус за рейтинг: ${grant.amount} кредитов.\n${range.label}, место ${grant.place}.\nБаланс: ${balance} кр.`);
+                } catch (e) {}
+            }
+            const paid = { at: new Date().toISOString(), count, total, label: range.label };
+            await db.setSetting(key, paid);
+            res.json({ ok: count > 0, count, total, label: range.label, error: count ? '' : 'Не получилось начислить' });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Не удалось начислить бонус.' });
         }
     });
 

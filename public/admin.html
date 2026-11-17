@@ -373,7 +373,7 @@ async function loadHome(){
     '<div class="stat"><div class="n">'+(report.members||0)+'</div><div class="l">Участники</div></div>'+
     '<div class="stat"><div class="n">'+(report.donorTotal||0)+'</div><div class="l">Доны</div></div>'+
     '<div class="stat"><div class="n">'+others+'</div><div class="l">Не доны</div></div>'+
-    '<div class="stat"><div class="n">'+(report.weekPoints||0)+'</div><div class="l">Баллы недели</div></div>'+
+    '<div class="stat"><div class="n">'+(report.weekPoints||0)+'</div><div class="l">Баллы месяца</div></div>'+
     '<div class="stat"><div class="n">'+(report.weekPeople||0)+'</div><div class="l">Людей в рейтинге</div></div>'+
     '</div></div>';
 }
@@ -464,31 +464,64 @@ async function loadDonut(){
     el.innerHTML = '<div class="card bad">'+esc(e.message)+'</div>';
   }
 }
+let ratePeriod = 'current';
 async function loadRate(){
   const el = document.getElementById('section-rate');
   el.innerHTML = '<div class="card">Считаю баллы…</div>';
   try {
-    const d = await api('/api/admin/vk/rating?group='+encodeURIComponent(vkHome));
+    const d = await api('/api/admin/vk/rating?group='+encodeURIComponent(vkHome)+'&period='+encodeURIComponent(ratePeriod));
     const rows = d.rows || [];
+    const paid = d.paid;
     el.innerHTML =
       '<div class="card"><h3>Рейтинг · '+esc(placeName())+'</h3>'+
       '<p class="note">'+esc(d.week||'')+'</p>'+
-      '<p class="note">'+esc(d.rules||'')+' Лайк, комментарий и репост приводят новых людей. Запрос боту приносит только оплату, поэтому за него балл один. В понедельник список начинается заново. Кредиты сами не приходят: впишите сумму и начислите человеку.</p>'+
+      '<p class="note">'+esc(d.rules||'')+' Лайк, комментарий и репост приводят новых людей. Запрос боту приносит только оплату, поэтому за него балл один. Список начинается заново первого числа. Прошлый месяц остаётся здесь, чтобы начислить бонус после закрытия.</p>'+
+      '<div class="row"><button type="button" class="'+(ratePeriod==='current'?'':'ghost')+'" onclick="ratePeriod=\'current\';loadRate()">Этот месяц</button>'+
+      '<button type="button" class="'+(ratePeriod==='previous'?'':'ghost')+'" onclick="ratePeriod=\'previous\';loadRate()">Прошлый месяц</button></div>'+
+      '<div class="row" style="margin-top:8px"><input id="prize1" type="number" placeholder="1 место"><input id="prize2" type="number" placeholder="2 место"><input id="prize3" type="number" placeholder="3 место"><input id="prizeRest" type="number" placeholder="Остальным"></div>'+
+      '<div class="row"><button type="button" onclick="payRate(false)">Начислить всем из списка</button></div>'+
+      '<p id="paymsg" class="note">'+(paid ? ('Уже начислено '+paid.count+' людям, '+paid.total+' кр.') : 'Пустое место берёт сумму «Остальным». Если заполнен только этот столбец, её получают все.')+'</p>'+
       '<table><tr><th></th><th>Подписчик</th><th>Баллы</th><th>Лайки</th><th>Коммент.</th><th>Репосты</th><th>Бот</th><th>Кредиты</th></tr>'+
       rows.map((row, i)=>'<tr><td>'+(i+1)+'</td><td>'+rateFace(row)+esc(row.name)+'</td><td class="ok">'+row.points+'</td><td>'+row.likes+'</td><td>'+row.comments+'</td><td>'+row.reposts+'</td><td>'+row.bot+'</td>'+
         '<td><div class="row" style="margin:0"><input id="cr'+esc(row.userId)+'" type="number" placeholder="100"><button onclick="grantRate(\''+esc(row.userId)+'\')">Начислить</button></div><p id="crm'+esc(row.userId)+'" class="note"></p></td></tr>').join('')+
-      (rows.length?'':'<tr><td colspan="8" class="note">На этой неделе пока нет активности.</td></tr>')+
+      (rows.length?'':'<tr><td colspan="8" class="note">В этом списке пока нет активности.</td></tr>')+
       '</table></div>';
   } catch (e) {
     el.innerHTML = '<div class="card bad">'+esc(e.message)+'</div>';
   }
+}
+function ratePrizes(){
+  const raw = ['prize1','prize2','prize3'].map(id => {
+    const node = document.getElementById(id);
+    return node ? String(node.value||'').trim() : '';
+  });
+  let last = -1;
+  raw.forEach((value, index) => { if (value) last = index; });
+  const places = raw.slice(0, last + 1).map(value => value ? Math.round(Number(value)) : 0);
+  const restNode = document.getElementById('prizeRest');
+  const rest = restNode ? Math.round(Number(restNode.value) || 0) : 0;
+  return { places, rest };
+}
+async function payRate(again){
+  const msg = document.getElementById('paymsg');
+  const prize = ratePrizes();
+  if (!prize.places.some(value => value > 0) && !(prize.rest > 0)) {
+    if (msg) msg.textContent = 'Укажите сумму: местам или всем остальным.';
+    return;
+  }
+  if (!again && !confirm('Начислить бонус всем из этого списка?')) return;
+  const d = await api('/api/admin/vk/rating-bonus', { method:'POST', body: JSON.stringify({
+    group: vkHome, period: ratePeriod, places: prize.places, rest: prize.rest, again: !!again
+  }) });
+  if (d.already && confirm('За этот месяц бонус уже начислен. Начислить ещё раз?')) return payRate(true);
+  if (msg) msg.textContent = d.ok ? ('Начислено '+d.count+' людям, '+d.total+' кр.') : (d.error||'Не получилось');
 }
 async function grantRate(id){
   const input = document.getElementById('cr'+id);
   const delta = parseInt(input && input.value, 10);
   const msg = document.getElementById('crm'+id);
   if (!delta) { if (msg) msg.textContent = 'Укажите сумму'; return; }
-  const d = await api('/api/admin/balance',{method:'POST',body:JSON.stringify({userId:id,delta,reason:'Рейтинг · неделя'})});
+  const d = await api('/api/admin/balance',{method:'POST',body:JSON.stringify({userId:id,delta,reason:'Рейтинг · месяц'})});
   if (msg) msg.textContent = d.ok ? ('Начислено. Баланс: '+d.balance) : (d.error||'Не получилось');
 }
 

@@ -1597,10 +1597,10 @@ async function attachFaces(rows) {
 }
 
 async function sendRating(token, peerId, account, groupId) {
-    const range = activity.weekRange(new Date());
+    const range = activity.monthRange(new Date());
     let rows = [];
     try {
-        rows = await attachFaces(await db.listWeekActivity(range.start, groupId));
+        rows = await attachFaces(await db.listWeekActivity(range.start, groupId, range.end));
     } catch (error) {}
     await sendText(token, peerId, activity.formatRating(rows, account, range));
 }
@@ -2067,11 +2067,11 @@ async function handleCommunityWall(token, update, groupId) {
 
 async function publishWeeklyRatings(now) {
     const moment = now instanceof Date ? now : new Date();
-    if (!activity.shouldPublishWeek(moment)) return;
-    const prev = activity.previousWeek(moment);
+    if (!activity.shouldPublishMonth(moment)) return;
+    const prev = activity.previousMonth(moment);
     const day = prev.start.toISOString().slice(0, 10);
     for (const item of communityList()) {
-        const key = `vk_week_${item.id}_${day}`;
+        const key = `vk_month_${item.id}_${day}`;
         if (wallDone.has(key)) continue;
         try {
             const saved = await db.getSettings([key]);
@@ -2086,12 +2086,12 @@ async function publishWeeklyRatings(now) {
                 message: activity.wallSummary(rows, prev)
             });
             await wallFinish(key);
-            db.note('sys', `ВК ${item.id}: итог недели на стене`).catch(() => {});
+            db.note('sys', `ВК ${item.id}: итог месяца на стене`).catch(() => {});
         } catch (error) {
             if (ratingWarned.has(key)) continue;
             ratingWarned.add(key);
             const code = Number(error && error.code);
-            console.error(`ВК ${item.id}: итог недели не опубликован${code ? ` (${code})` : ''}.`);
+            console.error(`ВК ${item.id}: итог месяца не опубликован${code ? ` (${code})` : ''}.`);
         }
     }
 }
@@ -2248,11 +2248,11 @@ async function communityDonut(groupId) {
     } catch (error) {
         donorError = 'Список донов сейчас не открылся.';
     }
-    const range = activity.weekRange(new Date());
+    const range = activity.monthRange(new Date());
     let weekPeople = 0;
     let weekPoints = 0;
     try {
-        const rows = await db.listWeekActivity(range.start, id);
+        const rows = await db.listWeekActivity(range.start, id, range.end);
         weekPeople = rows.length;
         weekPoints = rows.reduce((sum, row) => sum + (Number(row.points) || 0), 0);
     } catch (error) {}

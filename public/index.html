@@ -1557,12 +1557,12 @@ function renderRating(d){
     ? '<div class="now">Своё место откроется кнопкой «Кабинет» в чате.</div>'
     : mine
     ? '<div class="now">Ваше место: <b>'+mine.place+'</b> · '+mine.points+' б.</div>'
-    : '<div class="now">Вас пока нет в списке этой недели.</div>';
+    : '<div class="now">Вас пока нет в списке этого месяца.</div>';
   const rules = d.rules || {};
   return '<h3 style="margin:0 0 6px">Рейтинг</h3><div class="now">'+esc(d.week||'')+'</div>'+
     '<div class="rules"><span>лайк '+(rules.like||0)+'</span><span>комментарий '+(rules.comment||0)+'</span><span>репост '+(rules.repost||0)+'</span><span>запрос боту '+(rules.bot||0)+'</span></div>'+
-    '<p class="now">Лайк, комментарий и репост приводят людей, поэтому баллов больше, чем за запрос боту. В понедельник список начинается заново.</p>'+
-    own+(list||'<p class="empty">На этой неделе пока тихо. Лайкайте записи, комментируйте, делайте репосты и пишите боту.</p>');
+    '<p class="now">Лайк, комментарий и репост приводят людей, поэтому баллов больше, чем за запрос боту. Первого числа список начинается заново.</p>'+
+    own+(list||'<p class="empty">В этом месяце пока тихо. Лайкайте записи, комментируйте, делайте репосты и пишите боту.</p>');
 }
 async function loadRating(){
   const box = document.getElementById('ratebox');
