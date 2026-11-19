@@ -3093,7 +3093,7 @@ async function ensureCommunityWidget(groupId) {
             return;
         }
         const ids = {};
-        for (const name of ['chat', 'rate', 'site']) {
+        for (const name of ['chat', 'rate', 'shop']) {
             ids[name] = await widget.uploadCover(token, await widget.defaultCover(name));
         }
         await widget.publishCover(token, widget.coverWidgetCode(id, ids));

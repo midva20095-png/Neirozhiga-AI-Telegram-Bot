@@ -4,10 +4,12 @@ const sharp = require('sharp');
 const widget = require('./vk-widget');
 
 test('код обложек содержит картинки и не содержит служебных подписей', () => {
-    const code = widget.coverWidgetCode('230706467', { chat: '1_2', rate: '3_4', site: '5_6' });
+    const code = widget.coverWidgetCode('230706467', { chat: '1_2', rate: '3_4', shop: '5_6' });
     assert.match(code, /^return \{.*\};$/);
     assert.match(code, /"cover_id":"1_2"/);
+    assert.match(code, /"cover_id":"5_6"/);
     assert.match(code, /Чат ИИ/);
+    assert.match(code, /Магазин/);
     assert.match(code, /Написать/);
     assert.match(code, /vk\.com\/write-230706467/);
     assert.match(code, /https:\/\/vk\.com\/app54901511_-230706467/);
@@ -24,9 +26,9 @@ test('ответ загрузки картинки готовится для с�
 });
 
 test('обложка для телефона держит короткое слово по центру', async () => {
-    for (const name of ['chat', 'rate', 'site']) {
+    for (const name of ['chat', 'rate', 'shop']) {
         const svg = widget.coverSvg(name);
-        const word = name === 'chat' ? 'Чат ИИ' : name === 'rate' ? 'Рейтинг' : 'Сайт';
+        const word = name === 'chat' ? 'Чат ИИ' : name === 'rate' ? 'Рейтинг' : 'Магазин';
         assert.match(svg, new RegExp(word));
         assert.match(svg, /text-anchor="middle"/);
         const cover = await widget.paintCover(name);

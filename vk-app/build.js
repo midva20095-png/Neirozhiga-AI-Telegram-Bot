@@ -46,7 +46,7 @@ function tell(msg){
 }
 function goalOf(value){
   const goal = String(value || '').replace(/^#/, '').split('&')[0].split('?')[0];
-  return goal === 'rate' || goal === 'site' || goal === 'sub' || goal === 'help' ? goal : '';
+  return goal === 'rate' || goal === 'site' || goal === 'shop' || goal === 'sub' || goal === 'help' ? goal : '';
 }
 window.__nyHost = function(msg){
   if (!msg || !msg.type) return;
@@ -150,7 +150,7 @@ if (html.includes('location.replace')) throw new Error('Приложение В�
 
 fs.rmSync(buildDir, { recursive: true, force: true });
 fs.mkdirSync(path.join(buildDir, 'widget'), { recursive: true });
-for (const name of ['chat', 'rate', 'site']) {
+for (const name of ['chat', 'rate', 'shop']) {
     fs.copyFileSync(path.join(root, 'widget', name + '.jpg'), path.join(buildDir, 'widget', name + '.jpg'));
 }
 fs.copyFileSync(path.join(root, 'cover.jpg'), path.join(buildDir, 'cover.jpg'));

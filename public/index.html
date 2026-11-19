@@ -26,7 +26,7 @@ window.__nyHost = function(msg){
   if (!msg || !msg.type) return;
   if (msg.type === 'ny-goal-ask') {
     const goal = String(location.hash || '').replace(/^#/, '').split('&')[0].split('?')[0];
-    if (goal === 'rate' || goal === 'site' || goal === 'sub' || goal === 'help') vkTell({ type: 'ny-goal', goal: goal });
+    if (goal === 'rate' || goal === 'site' || goal === 'shop' || goal === 'sub' || goal === 'help') vkTell({ type: 'ny-goal', goal: goal });
     return;
   }
   if (msg.type === 'ny-group-ask') {
@@ -67,7 +67,7 @@ window.addEventListener('message', function(event){
   }
   if (bridgeType === 'VKWebAppChangeFragment' || bridgeType === 'VKWebAppLocationChanged') {
     const goal = String((bridgeData && (bridgeData.location || bridgeData.hash)) || '').replace(/^#/, '').split('&')[0].split('?')[0];
-    if (goal === 'rate' || goal === 'site' || goal === 'sub' || goal === 'help') vkTell({ type: 'ny-goal', goal: goal });
+    if (goal === 'rate' || goal === 'site' || goal === 'shop' || goal === 'sub' || goal === 'help') vkTell({ type: 'ny-goal', goal: goal });
     return;
   }
   if (bridgeType === 'VKWebAppGetLaunchParamsResult') {
@@ -212,6 +212,38 @@ input,select{width:100%;border-radius:14px;border:1px solid var(--line);backgrou
 #genmodel{font-size:16px;margin:0 0 10px}
 .flabel{display:block;margin-top:12px;font-weight:800;font-size:13px}
 .cover{display:block;width:100%;height:196px;object-fit:cover;object-position:center 20%;border-radius:18px;margin:0 0 12px;background:#140c24}
+body.vkapp .cover{display:none}
+#tabmenu,#tabrate,#tabshop,#tabcab{display:none}
+body.vkapp #tabs button[data-t="models"],
+body.vkapp #tabs button[data-t="tpl"],
+body.vkapp #tabs button[data-t="hist"],
+body.vkapp #tabs button[data-t="top"],
+body.vkapp #tabs button[data-t="help"],
+body.vkapp #tabmenu{display:none}
+body.vkapp #tabs button[data-t="gen"],
+body.vkapp #tabrate,
+body.vkapp #tabshop,
+body.vkapp #tabcab{display:flex}
+body.vkapp .tabbar button{min-height:52px;border-radius:14px;background:#1c1233;margin:0 2px;font-size:12px;font-weight:800}
+body.vkapp .tabbar button.on{background:linear-gradient(135deg,#7c3aed,#4c1d95);color:#fff}
+.podium{display:flex;align-items:flex-end;gap:8px;margin:4px 0 16px}
+.podium .col{flex:1;min-width:0}
+.podium .bar{border-radius:18px 18px 10px 10px;padding:12px 6px 14px;display:flex;flex-direction:column;align-items:center;gap:6px;min-height:108px}
+.podium .p1{order:2}
+.podium .p1 .bar{min-height:148px;background:linear-gradient(180deg,#ffe7a3,#c9a227);color:#1a1204}
+.podium .p2{order:1}
+.podium .p2 .bar{min-height:120px;background:linear-gradient(180deg,#f7f8fb,#b7becc);color:#1a1204}
+.podium .p3{order:3}
+.podium .p3 .bar{background:linear-gradient(180deg,#f3c7a4,#c47a4a);color:#1a1204}
+.podium .ava,.podium .letter{width:48px;height:48px;border-radius:50%;object-fit:cover;background:rgba(255,255,255,.35);display:flex;align-items:center;justify-content:center;font-weight:800}
+.podium .p1 .ava,.podium .p1 .letter{width:64px;height:64px}
+.podium b{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.podium span{font-weight:800;font-size:18px}
+.podium .place{font-size:12px;font-weight:800;letter-spacing:.04em}
+.kicker{font-size:13px;font-weight:800;color:var(--mut)}
+.cabbal{font-size:32px;font-weight:800;line-height:1.1;margin:4px 0 6px}
+.cabrow{display:flex;width:100%;text-align:left;align-items:center;justify-content:space-between;background:#1c1233;border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:8px;font-weight:800}
+.cabrow:after{content:'›';color:var(--mut);font-size:22px}
 </style>
 </head>
 <body style="background:#0b0614;margin:0">
@@ -233,15 +265,16 @@ input,select{width:100%;border-radius:14px;border:1px solid var(--line);backgrou
   <div id="view"></div>
 </div>
 <div class="tabbar" id="tabs">
-  <button data-t="menu" id="tabmenu" style="display:none"><span class="ic">⌂</span>Меню</button>
+  <button data-t="menu" id="tabmenu"><span class="ic">⌂</span>Меню</button>
   <button data-t="gen" class="on"><span class="ic">✨</span>Генерация</button>
   <button data-t="models"><span class="ic">🤖</span>Модели</button>
   <button data-t="tpl"><span class="ic">📋</span>Шаблоны</button>
   <button data-t="hist"><span class="ic">🧾</span>История</button>
   <button data-t="top"><span class="ic">💳</span>Баланс</button>
   <button data-t="help"><span class="ic">💬</span>Помощь</button>
-  <button data-t="rate" id="tabrate" style="display:none"><span class="ic">🏆</span>Рейтинг</button>
-  <button data-t="shop" id="tabshop" style="display:none"><span class="ic">🎁</span>Магазин</button>
+  <button data-t="rate" id="tabrate"><span class="ic">🏆</span>Рейтинг</button>
+  <button data-t="shop" id="tabshop"><span class="ic">🛍</span>Магазин</button>
+  <button data-t="cab" id="tabcab"><span class="ic">👤</span>Кабинет</button>
 </div>
 <script src="/save-work.js"></script>
 <script>
@@ -252,7 +285,7 @@ let tplKind='', tplTopic='', tplQuery='';
 const TCAT = {image:'Картинки', fix:'Улучшение', chat:'Текст', video:'Видео', audio:'Голос'};
 const TMARK = {image:'🪄', fix:'✨', chat:'✍️', video:'🎬', audio:'🎙'};
 let pickedQuality=null, pickedDuration=null, pickedAspect=null;
-const widgetPics = { chat: '', rate: '', site: '' };
+const widgetPics = { chat: '', rate: '', shop: '' };
 let showSetup = false;
 let shopNote = '';
 
@@ -290,9 +323,10 @@ function detectAuth(){
   if (hp.get('pkg') || sp.get('pkg')) pendingPkg = hp.get('pkg') || sp.get('pkg');
   window.__vkPaid = hp.get('paid') === '1' || sp.get('paid') === '1';
   const goal = hash.split('&')[0].split('?')[0];
-  window.__vkGoal = (goal === 'rate' || goal === 'site' || goal === 'sub' || goal === 'help') ? goal : '';
+  window.__vkGoal = (goal === 'rate' || goal === 'site' || goal === 'shop' || goal === 'sub' || goal === 'help') ? goal : '';
   if (sp.get('vk_user_id') && window.__vkGoal !== 'rate' && window.__vkGoal !== 'site' && window.__vkGoal !== 'help') wantMenu = true;
   if (window.__vkGoal === 'rate') { wantMenu = false; tab = 'rate'; }
+  if (window.__vkGoal === 'shop') { wantMenu = false; tab = 'shop'; }
   if (window.__vkGoal === 'help') { wantMenu = false; tab = 'help'; }
   if (w && w.initDataUnsafe && w.initDataUnsafe.user && w.initDataUnsafe.user.id) userId = w.initDataUnsafe.user.id;
   else if (w && w.initData) userId = parseUser(w.initData);
@@ -451,15 +485,16 @@ async function adoptVkUser(){
     } else window.__vkAuthError = '1';
   } catch (e) { window.__vkOffline = true; }
 }
+function inVkApp(){
+  return !!(window.__nyApi || new URLSearchParams(location.search).get('vk_app_id') || new URLSearchParams(location.search).get('vk_user_id') || String(token || userId || '').startsWith('-'));
+}
 function markVkChrome(){
-  const vk = !!(window.__nyApi || new URLSearchParams(location.search).get('vk_app_id') || new URLSearchParams(location.search).get('vk_user_id'));
-  if (!vk) return;
+  const vk = inVkApp();
+  document.body.classList.toggle('vkapp', vk);
+  const gen = document.querySelector('#tabs button[data-t="gen"]');
+  if (gen) gen.innerHTML = '<span class="ic">'+(vk ? '💬' : '✨')+'</span>'+(vk ? 'Чат' : 'Генерация');
   const bots = document.querySelector('.bots');
-  if (bots) bots.style.display = 'none';
-  const rateTab = document.getElementById('tabrate');
-  const menuTab = document.getElementById('tabmenu');
-  if (rateTab) rateTab.style.display = '';
-  if (menuTab) menuTab.style.display = '';
+  if (bots) bots.style.display = vk ? 'none' : '';
 }
 async function load(){
   markVkChrome();
@@ -520,17 +555,11 @@ async function load(){
   }
   if (pendingPkg) tab = 'top';
   document.getElementById('bal').textContent = (me.balance||0)+' кр';
-  const rateTab = document.getElementById('tabrate');
-  const shopTab = document.getElementById('tabshop');
-  const menuTab = document.getElementById('tabmenu');
-  if (rateTab) rateTab.style.display = isVk() ? '' : 'none';
-  if (shopTab) shopTab.style.display = isVk() ? '' : 'none';
-  if (menuTab) menuTab.style.display = isVk() ? '' : 'none';
-  const bots = document.querySelector('.bots');
-  if (bots) bots.style.display = isVk() ? 'none' : '';
-  if (!isVk() && (tab==='rate' || tab==='shop' || tab==='menu')) tab = 'gen';
-  if (isVk() && wantMenu) tab = 'menu';
+  markVkChrome();
+  if (!isVk() && (tab==='rate' || tab==='shop' || tab==='menu' || tab==='cab')) tab = 'gen';
+  if (isVk() && tab === 'menu' && !window.__vkGoal) tab = 'gen';
   if (window.__vkGoal === 'rate') tab = 'rate';
+  if (window.__vkGoal === 'shop') tab = 'shop';
   if (window.__vkGoal === 'help') tab = 'help';
   draw();
   if (window.__vkGoal === 'site') openOut((cfg && cfg.site_url) || 'https://babayagaland.ru');
@@ -539,9 +568,10 @@ async function load(){
   nyPost({ type: 'ny-group-ask' });
 }
 function applyGoal(goal){
-  if (goal !== 'rate' && goal !== 'site' && goal !== 'sub' && goal !== 'help') return;
+  if (goal !== 'rate' && goal !== 'site' && goal !== 'shop' && goal !== 'sub' && goal !== 'help') return;
   window.__vkGoal = goal;
   if (goal === 'rate') { wantMenu = false; tab = 'rate'; draw(); }
+  if (goal === 'shop') { wantMenu = false; tab = 'shop'; draw(); }
   if (goal === 'help') { wantMenu = false; tab = 'help'; draw(); }
   if (goal === 'site') openOut((cfg && cfg.site_url) || 'https://babayagaland.ru');
   if (goal === 'sub' && me && me.user_id && !me.mail) subscribeMail(true);
@@ -558,7 +588,7 @@ function draw(){
     return;
   }
   if (!userId && window.__vkGoal === 'rate' && tab === 'rate') {
-    box.innerHTML = '<div class="card" id="ratebox"><div class="empty">Считаю баллы…</div></div>';
+    box.innerHTML = '<div id="ratebox"><div class="card"><div class="empty">Считаю баллы…</div></div></div>';
     loadRating();
     return;
   }
@@ -576,14 +606,18 @@ function draw(){
   }
   if (me && me.blocked) { box.innerHTML = '<div class="card err">Аккаунт в чёрном списке.</div>'; return; }
   if (tab==='menu') box.innerHTML = viewMenu();
+  else if (tab==='cab') box.innerHTML = viewCab();
   else if (tab==='gen') box.innerHTML = viewGen();
   else if (tab==='models') box.innerHTML = viewModels();
   else if (tab==='tpl') box.innerHTML = viewTpl();
   else if (tab==='hist') box.innerHTML = viewHist();
   else if (tab==='top') box.innerHTML = viewTop();
-  else if (tab==='rate') { box.innerHTML = '<div class="card" id="ratebox"><p>Считаю баллы…</p></div>'; loadRating(); }
-  else if (tab==='shop') { box.innerHTML = '<div class="card" id="shopbox"><p>Открываю магазин…</p></div>'; loadShop(); }
+  else if (tab==='rate') { box.innerHTML = '<div id="ratebox"><div class="card"><p>Считаю баллы…</p></div></div>'; loadRating(); }
+  else if (tab==='shop') { box.innerHTML = '<div id="shopbox"><div class="card"><p>Открываю магазин…</p></div></div>'; loadShop(); }
   else box.innerHTML = viewHelp();
+  if (inVkApp() && tab !== 'gen' && tab !== 'rate' && tab !== 'shop' && tab !== 'cab') {
+    box.insertAdjacentHTML('afterbegin', '<button type="button" class="back" id="cab-back">Кабинет</button>');
+  }
   bind();
 }
 function vkAdmin(){
@@ -640,7 +674,7 @@ function coverCode(groupId, ids){
   const rows = [
     { title: 'Чат ИИ', button: 'Написать', cover_id: ids.chat, url: chat, button_url: chat, title_url: chat },
     { title: 'Рейтинг', button: 'Открыть', cover_id: ids.rate, url: app, button_url: app, title_url: app },
-    { title: 'Сайт', button: 'Открыть', cover_id: ids.site, url: app, button_url: app, title_url: app }
+    { title: 'Магазин', button: 'Открыть', cover_id: ids.shop, url: app, button_url: app, title_url: app }
   ];
   return 'return ' + JSON.stringify({ title: 'НейроЯга', rows }) + ';';
 }
@@ -652,7 +686,7 @@ async function placeCovers(){
   try {
     const token = await askCommunityToken();
     const ids = {};
-    const keys = ['chat', 'rate', 'site'];
+    const keys = ['chat', 'rate', 'shop'];
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i];
       const r = await fetch('/api/vk/widget-image', {
@@ -693,7 +727,7 @@ function bridgeGoal(data){
   const bag = data && (data.params || (data.data && data.data.data) || data.data || data) || {};
   const raw = bag.location || bag.hash || '';
   const goal = String(raw).replace(/^#/, '').split('&')[0].split('?')[0];
-  if (goal === 'rate' || goal === 'site' || goal === 'sub' || goal === 'help') applyGoal(goal);
+  if (goal === 'rate' || goal === 'site' || goal === 'shop' || goal === 'sub' || goal === 'help') applyGoal(goal);
 }
 window.addEventListener('hashchange', function(){ bridgeGoal({ hash: location.hash }); });
 window.addEventListener('message', function(event){
@@ -725,7 +759,7 @@ function viewMenu(){
   const cards = [
     ['chat', 'Чат ИИ', 'Написать'],
     ['rate', 'Рейтинг', 'Открыть'],
-    ['site', 'Сайт', 'Открыть']
+    ['shop', 'Магазин', 'Открыть']
   ].map(function(row){
     const src = widgetPics[row[0]] || ('/widget/' + row[0] + '.jpg');
     return '<button type="button" class="banner" id="door-'+row[0]+'"><img alt="'+row[1]+'" src="'+src+'"><span>'+row[2]+'</span></button>';
@@ -734,16 +768,28 @@ function viewMenu(){
     ? '<button type="button" class="sub" id="door-setup">'+(showSetup?'Скрыть настройки':'Настройки')+'</button>'
     : '';
   const setup = vkAdmin() && showSetup
-    ? '<div class="setup"><p class="hint">Ключ сообщений не меняет эти кнопки. Нажмите «Поставить на страницу» и разрешите их. На телефоне ссылка с #rate теряет сообщество и не открывает приложение, поэтому «Рейтинг» и «Сайт» ведут в приложение этого сообщества, а «Чат ИИ» — в переписку.</p>'+
+    ? '<div class="setup"><p class="hint">Чат открывает переписку. Рейтинг и магазин открывают это приложение.</p>'+
       '<label class="filebtn">Своя картинка для чата<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="chat"></label>'+
       '<label class="filebtn">Своя картинка для рейтинга<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="rate"></label>'+
-      '<label class="filebtn">Своя картинка для сайта<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="site"></label>'+
+      '<label class="filebtn">Своя картинка для магазина<input type="file" accept="image/jpeg,image/png,image/webp" data-cover="shop"></label>'+
       '<button class="btn" id="door-pin" type="button">Поставить на страницу</button></div>'
     : '';
-  return '<div class="card"><div class="now">НейроЯга</div><div class="banners">'+cards+'</div>'+
-    '<button type="button" id="door-shop" class="btn">Магазин бонусов</button>'+
+  return '<div class="card"><div class="now">Кнопки на странице сообщества</div><div class="banners">'+cards+'</div>'+
     '<button type="button" id="door-sub" class="sub'+(mail?' on':'')+'">'+(mail?'Вы подписаны':'Подписаться')+'</button>'+
     gear+setup+'<p id="submsg" class="hint"></p></div>';
+}
+function viewCab(){
+  const balance = (me && me.balance) || 0;
+  const rows = [
+    ['top', 'Баланс и оплата'],
+    ['tpl', 'Шаблоны'],
+    ['models', 'Модели'],
+    ['hist', 'История'],
+    ['help', 'Помощь']
+  ];
+  if (vkAdmin()) rows.push(['menu', 'Кнопки сообщества']);
+  return '<div class="card"><div class="kicker">Кабинет</div><div class="cabbal">'+balance+' кр</div><p class="now">Чат, рейтинг и магазин — внизу.</p></div>'+
+    rows.map(function(row){ return '<button type="button" class="cabrow" data-go="'+row[0]+'">'+row[1]+'</button>'; }).join('');
 }
 function modelPicker(cur){
   const groups = (cfg&&cfg.groups)||{};
@@ -794,7 +840,8 @@ function viewGen(){
   const go = m && m.audio ? '' : (lack
     ? '<button class="btn" type="button" disabled>Недостаточно кредитов</button><p class="err">'+esc(lack)+'</p><button class="btn ghost" id="goTop" type="button">Пополнить</button>'
     : '<button class="btn" id="go"'+(busy?' disabled':'')+'>'+(busy?'<span class="spin"></span>Генерирую…':'Сгенерировать · '+price+' кр')+'</button>');
-  return '<div class="card">'+info+opts+
+  const hello = inVkApp() ? '<div class="kicker">Чат</div><p class="now">Напишите, что сделать: картинка, текст или видео.</p>' : '';
+  return '<div class="card">'+hello+info+opts+
     '<textarea id="prompt" placeholder="Опишите, что сгенерировать">'+esc(draft || (last&&last._prompt) || '')+'</textarea>'+
     photo+go+note+res+'</div>';
 }
@@ -997,7 +1044,7 @@ function viewHelp(){
     '<a class="btn ghost" href="https://vk.com/@neuroyaga-navigator-po-klubu-babki-targetologa" data-out="https://vk.com/@neuroyaga-navigator-po-klubu-babki-targetologa">Уроки клуба</a></div>';
   if (isVk()) {
     return steps+modelGuide()+audit+
-      '<div class="card"><div class="now">Как пополнить</div><p>1. Вкладка «Баланс»: почта для чека и пакет.</p><p>2. Либо «Пополнить в чате» — то же самое в переписке.</p><p>3. После оплаты кредиты придут в чат этого сообщества.</p></div>'+
+      '<div class="card"><div class="now">Как пополнить</div><p>1. Кабинет → Баланс и оплата: почта для чека и пакет.</p><p>2. Либо «Пополнить в чате» — то же самое в переписке.</p><p>3. После оплаты кредиты придут в чат этого сообщества.</p></div>'+
       (cfg && cfg.support_enabled===false ? '' : '<div class="card"><div class="now">Напишите нам — ответ придёт в чат.</div>'+
       '<textarea id="supmsg" placeholder="Опишите вопрос или проблему"></textarea>'+
       '<button class="btn" id="supsend">Отправить</button><p id="supok" class="hint"></p></div>');
@@ -1077,6 +1124,11 @@ function bind(){
   if (rate) rate.onclick = function(){ tab = 'rate'; wantMenu = false; draw(); };
   const shopDoor = document.getElementById('door-shop');
   if (shopDoor) shopDoor.onclick = function(){ tab = 'shop'; wantMenu = false; draw(); };
+  document.querySelectorAll('[data-go]').forEach(function(button){
+    button.onclick = function(){ tab = button.dataset.go; draw(); };
+  });
+  const cabBack = document.getElementById('cab-back');
+  if (cabBack) cabBack.onclick = function(){ tab = 'cab'; draw(); };
   const site = document.getElementById('door-site');
   if (site) site.onclick = function(){ openOut((cfg && cfg.site_url) || 'https://babayagaland.ru'); };
   const sub = document.getElementById('door-sub');
@@ -1555,25 +1607,35 @@ function faceHtml(row){
   if (/^https:\/\/([a-z0-9-]+\.)?(userapi\.com|vk\.com|vkuser\.net)\//i.test(photo)) return '<img class="ava" src="'+esc(photo)+'" alt="">';
   return '<div class="ava letter">'+esc((row.name||'?').trim().charAt(0))+'</div>';
 }
+function podiumFace(row){
+  const photo = String(row.photo||'');
+  if (/^https:\/\/([a-z0-9-]+\.)?(userapi\.com|vk\.com|vkuser\.net)\//i.test(photo)) return '<img class="ava" src="'+esc(photo)+'" alt="">';
+  return '<div class="letter">'+esc((row.name||'?').trim().charAt(0))+'</div>';
+}
 function renderRating(d){
   const rows = d.rows || [];
   const mine = d.mine;
-  const list = rows.map(function(row, i){
-    const place = i + 1;
-    const cls = 'rank'+(place<=3?' top'+place:'')+(mine && String(mine.userId)===String(row.userId)?' me':'');
-    return '<div class="'+cls+'"><div class="medal">'+place+'</div>'+faceHtml(row)+'<div class="who"><b>'+esc(row.name)+'</b><span>лайки '+row.likes+' · комментарии '+row.comments+' · репосты '+row.reposts+' · бот '+row.bot+'</span></div><div class="pts">'+row.points+'</div></div>';
+  const podium = [1, 2, 3].map(function(place){
+    const row = rows[place - 1];
+    if (!row) return '<div class="col p'+place+'"><div class="bar"><div class="place">'+place+' место</div><b>свободно</b></div></div>';
+    return '<div class="col p'+place+'"><div class="bar"><div class="place">'+place+' место</div>'+podiumFace(row)+'<b>'+esc(row.name)+'</b><span>'+row.points+'</span></div></div>';
+  }).join('');
+  const list = rows.slice(3).map(function(row, index){
+    const place = index + 4;
+    const cls = 'rank'+(mine && String(mine.userId)===String(row.userId)?' me':'');
+    return '<div class="'+cls+'"><div class="medal">'+place+'</div>'+faceHtml(row)+'<div class="who"><b>'+esc(row.name)+'</b><span>лайки '+row.likes+' · комментарии '+row.comments+' · репосты '+row.reposts+'</span></div><div class="pts">'+row.points+'</div></div>';
   }).join('');
   const own = d.guest
-    ? '<div class="now">Своё место откроется кнопкой «Кабинет» в чате.</div>'
+    ? '<div class="now">Своё место видно после входа.</div>'
     : mine
     ? '<div class="now">Ваше место: <b>'+mine.place+'</b> · '+mine.points+' б.</div>'
     : '<div class="now">Вас пока нет в списке этого месяца.</div>';
   const rules = d.rules || {};
-  return '<h3 style="margin:0 0 6px">Рейтинг</h3><div class="now">'+esc(d.week||'')+'</div>'+
-    '<div class="rules"><span>лайк '+(rules.like||0)+'</span><span>комментарий '+(rules.comment||0)+'</span><span>репост '+(rules.repost||0)+'</span><span>запрос боту '+(rules.bot||0)+'</span></div>'+
-    '<p class="now">Лайк, комментарий и репост считаются только на постах этого месяца. Старые записи не входят. Первого числа список начинается заново. Приз получают первые три места.</p>'+
-    '<button class="btn" type="button" id="rate-shop">Магазин бонусов</button>'+
-    own+(list||'<p class="empty">В этом месяце пока тихо. Лайкайте записи, комментируйте, делайте репосты и пишите боту.</p>');
+  return '<div class="card"><div class="kicker">Рейтинг</div><div class="cabbal" style="font-size:22px">'+esc(d.week||'Этот месяц')+'</div>'+
+    '<div class="rules"><span>лайк '+(rules.like||0)+'</span><span>комментарий '+(rules.comment||0)+'</span><span>репост '+(rules.repost||0)+'</span><span>запрос '+(rules.bot||0)+'</span></div>'+
+    '<div class="podium">'+podium+'</div>'+own+
+    (list ? '<div class="groupttl">Дальше</div>'+list : (!rows.length ? '<p class="empty">В этом месяце пока тихо.</p>' : ''))+
+    '<button class="btn" type="button" id="rate-shop">В магазин</button></div>';
 }
 function renderShop(d){
   const items = d.items || [];
@@ -1601,14 +1663,13 @@ function renderShop(d){
     return '<p class="now">'+esc(item.code)+' · '+esc(item.title)+(item.status==='open'?'':' · использован')+'</p>';
   }).join('');
   const own = mine ? '<p class="now">'+esc(mine.code)+' · '+esc(mine.title)+(mine.status==='open' && mine.usesLeft>0?'':' · использован')+'</p>' : '';
-  return '<h3 style="margin:0 0 6px">Магазин</h3>'+
-    '<div class="now">Бонусы: <b>'+(Number(d.bonuses)||0)+'</b>. Это баллы закрытых месяцев. Текущий рейтинг не тратится.</div>'+
-    '<p class="now">10 бонусов = 1 кредит. Заявка ждёт подтверждения, само начисление не происходит.</p>'+
+  const promoBlock = own+bought+offers+sale;
+  return '<div class="card shophello"><div class="kicker">Магазин бонусов</div><div class="cabbal">'+(Number(d.bonuses)||0)+'</div><p class="now">Баллы закрытых месяцев. 10 бонусов = 1 кредит.</p></div>'+
     (shopNote ? '<p class="now">'+esc(shopNote)+'</p>' : '')+
-    own+bought+offers+sale+
-    goods+
-    '<div class="pack"><input id="shop-amount" type="number" min="10" step="10" placeholder="Сколько бонусов" style="flex:1;background:#1c1233;border:1px solid var(--line);border-radius:10px;padding:8px"><button type="button" id="shop-credit">На кредиты</button></div>'+
-    '<h3 style="margin:16px 0 6px">Ученики</h3>'+honor;
+    '<div class="groupttl">Промокод</div><div class="card">'+(promoBlock || '<p class="empty">Промокодов сейчас нет.</p>')+'</div>'+
+    '<div class="groupttl">Товары</div><div class="card">'+goods+'</div>'+
+    '<div class="groupttl">Кредиты</div><div class="card"><div class="pack"><input id="shop-amount" type="number" min="10" step="10" placeholder="Сколько бонусов" style="flex:1;background:#1c1233;border:1px solid var(--line);border-radius:10px;padding:8px"><button type="button" id="shop-credit">Обменять</button></div><p class="now">Заявка ждёт подтверждения.</p></div>'+
+    '<div class="groupttl">Прошлые призёры</div><div class="card">'+honor+'</div>';
 }
 function bindShop(){
   document.querySelectorAll('[data-buy]').forEach(function(button){

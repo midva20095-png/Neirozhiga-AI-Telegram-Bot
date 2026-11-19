@@ -5,7 +5,7 @@ const sharp = require('sharp');
 const COVERS = {
     chat: { title: 'Чат ИИ', button: 'Написать', file: 'chat.jpg', chat: true },
     rate: { title: 'Рейтинг', button: 'Открыть', file: 'rate.jpg' },
-    site: { title: 'Сайт', button: 'Открыть', file: 'site.jpg' }
+    shop: { title: 'Магазин', button: 'Открыть', file: 'shop.jpg' }
 };
 
 function groupNumber(groupId) {
@@ -65,7 +65,7 @@ function vkFail(error, fallback) {
 const LOOKS = {
     chat: { word: 'Чат ИИ', from: '#7c3aed', via: '#4c1d95', to: '#12081f', mark: 'M21 12.2c0 3.8-3.6 6.8-8.2 6.8-.8 0-1.6-.1-2.3-.2L6 21.2l.7-3.2C5 16.6 3.8 14.5 3.8 12.2 3.8 8.4 7.4 5.4 12 5.4s9 3 9 6.8z' },
     rate: { word: 'Рейтинг', from: '#f59e0b', via: '#b45309', to: '#1c1208', mark: 'M12 2.2l2.7 5.6 6.2.9-4.5 4.3 1.1 6.1L12 16.2 6.5 19.1l1.1-6.1L3.1 8.7l6.2-.9z' },
-    site: { word: 'Сайт', from: '#14b8a6', via: '#0f766e', to: '#04201c', mark: 'M4 6.5h16a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 20 17.5H4A1.5 1.5 0 0 1 2.5 16V8A1.5 1.5 0 0 1 4 6.5zm5.2 13h5.6' }
+    shop: { word: 'Магазин', from: '#22c55e', via: '#15803d', to: '#05210f', mark: 'M6 8h12l-1 11H7L6 8zm3-3h6l1 3H8l1-3z' }
 };
 
 function coverSvg(name) {
