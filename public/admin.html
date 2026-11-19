@@ -478,7 +478,7 @@ async function loadRate(){
       '<div class="card"><h3>Рейтинг · '+esc(placeName())+'</h3>'+
       '<p class="note">'+esc(d.week||'')+'</p>'+
       '<p class="note">'+esc(d.rules||'')+' Лайки, комментарии и репосты берутся только с постов выбранного месяца: в ноябре — все посты ноября, в декабре — все посты декабря. Лайки записей прошлого года и более старых постов не считаются. Запрос боту считается отдельно за этот месяц.</p>'+
-      '<p class="note">Постов в расчёте: '+(Number(d.posts)||0)+'. Комментарии и ответы на них по этим постам собираются целиком, в том числе написанные до перезапуска.</p>'+
+      '<p class="note">Постов в расчёте: '+(Number(d.posts)||0)+'. В список входят лайки и комментарии людей на этих постах, включая ответы в ветках. Ответы самого сообщества не считаются. У «Точек и Линий» и «НейроЯги» списки разные.</p>'+
       '<div class="row"><button type="button" class="'+(ratePeriod==='current'?'':'ghost')+'" onclick="ratePeriod=\'current\';loadRate()">Этот месяц</button>'+
       '<button type="button" class="'+(ratePeriod==='previous'?'':'ghost')+'" onclick="ratePeriod=\'previous\';loadRate()">Прошлый месяц</button>'+
       '<button type="button" class="ghost" onclick="loadRate()">Обновить рейтинг</button></div>'+

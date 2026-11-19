@@ -731,6 +731,51 @@ async function awardReaction(groupId, kind, objectKey, vkId) {
 
 const reactionFlight = new Map();
 
+async function callRetry(token, method, params) {
+    let last;
+    for (let attempt = 0; attempt < 5; attempt++) {
+        try { return await call(token, method, params); }
+        catch (error) {
+            last = error;
+            const code = Number(error && error.code);
+            if (code !== 6 && code !== 9 && code !== 10) throw error;
+            await pause(400 * (attempt + 1));
+        }
+    }
+    throw last;
+}
+
+function readTokens(token) {
+    const list = [];
+    const add = value => {
+        const item = String(value || '').trim();
+        if (item && !list.includes(item)) list.push(item);
+    };
+    add(token);
+    try { add(audit.readerToken()); } catch (error) {}
+    return list;
+}
+
+async function callReadable(tokens, method, params) {
+    let pack = null;
+    let last;
+    for (const token of tokens) {
+        try {
+            const next = await callRetry(token, method, params);
+            if (!pack || (next && Array.isArray(next.items) && next.items.length)) pack = next;
+            if (pack && Array.isArray(pack.items) && pack.items.length) return pack;
+        } catch (error) {
+            last = error;
+            const code = Number(error && error.code);
+            if (code === 27 || code === 15 || code === 5 || code === 28) continue;
+            if (!pack) throw error;
+            return pack;
+        }
+    }
+    if (pack) return pack;
+    throw last || new Error(method);
+}
+
 async function listReactionIds(token, owner, postId, filter) {
     const ids = [];
     const seen = new Set();
@@ -739,7 +784,7 @@ async function listReactionIds(token, owner, postId, filter) {
         await pause(80);
         let pack;
         try {
-            pack = await call(token, 'likes.getList', {
+            pack = await callRetry(token, 'likes.getList', {
                 type: 'post',
                 owner_id: String(owner),
                 item_id: String(postId),
@@ -771,6 +816,8 @@ async function scanCommunityActivityNow(token, groupId) {
     const range = activity.monthRange(new Date());
     let posts = [];
     try { posts = await loadMonthPosts(token, groupId, range); } catch (error) { return; }
+    const humans = new Set();
+    let humanComments = 0;
     for (const post of posts) {
         const likers = await listReactionIds(token, owner, post.id, 'likes');
         for (const id of likers) await awardReaction(groupId, 'like', `post:${post.id}`, id);
@@ -778,14 +825,17 @@ async function scanCommunityActivityNow(token, groupId) {
         let comments = [];
         try { comments = await listPostComments(token, owner, post.id); } catch (e) {}
         for (const comment of comments) {
-            const fromId = Number(comment && comment.from_id);
+            const fromId = Number(comment && (comment.from_id || comment.user_id));
             if (!Number.isInteger(fromId) || fromId <= 0 || !comment.id) continue;
+            humanComments += 1;
+            humans.add(fromId);
             await awardReaction(groupId, 'comment', `comment:${post.id}:${comment.id}`, fromId);
         }
 
         const copies = await listReactionIds(token, owner, post.id, 'copies');
         for (const id of copies) await awardReaction(groupId, 'repost', `repost:${post.id}:${id}`, id);
     }
+    console.log(`ВК ${groupId}: рейтинг месяца, постов ${posts.length}, комментарии людей ${humanComments}, человек ${humans.size}.`);
 }
 
 async function scanCommunityActivity(token, groupId) {
@@ -805,6 +855,7 @@ function keepComment(list, seen, comment) {
 }
 
 async function listPostComments(token, owner, postId) {
+    const tokens = readTokens(token);
     const list = [];
     const seen = new Set();
     let offset = 0;
@@ -812,7 +863,7 @@ async function listPostComments(token, owner, postId) {
         await pause(80);
         let pack;
         try {
-            pack = await call(token, 'wall.getComments', {
+            pack = await callReadable(tokens, 'wall.getComments', {
                 owner_id: String(owner),
                 post_id: String(postId),
                 count: '100',
@@ -831,16 +882,25 @@ async function listPostComments(token, owner, postId) {
             replies.forEach(reply => keepComment(list, seen, reply));
             const total = Number(thread && thread.count) || 0;
             if (comment && comment.id && total > replies.length) {
-                await pause(80);
-                try {
-                    const deep = await call(token, 'wall.getComments', {
-                        owner_id: String(owner),
-                        post_id: String(postId),
-                        comment_id: String(comment.id),
-                        count: '100'
-                    });
-                    ((deep && deep.items) || []).forEach(reply => keepComment(list, seen, reply));
-                } catch (error) {}
+                let threadOffset = 0;
+                for (let deepPage = 0; deepPage < 4; deepPage++) {
+                    await pause(80);
+                    try {
+                        const deep = await callReadable(tokens, 'wall.getComments', {
+                            owner_id: String(owner),
+                            post_id: String(postId),
+                            comment_id: String(comment.id),
+                            count: '100',
+                            offset: String(threadOffset)
+                        });
+                        const more = (deep && deep.items) || [];
+                        more.forEach(reply => keepComment(list, seen, reply));
+                        threadOffset += more.length;
+                        if (more.length < 100) break;
+                    } catch (error) {
+                        break;
+                    }
+                }
             }
         }
         offset += items.length;
