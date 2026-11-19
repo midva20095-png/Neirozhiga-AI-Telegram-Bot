@@ -116,16 +116,19 @@ function parseCommunityActivity(update, groupId) {
         };
     }
     if (update.type === 'wall_reply_new' || update.type === 'wall_reply_delete' || update.type === 'wall_reply_restore') {
-        const comment = obj.comment || obj;
-        const owner = Number(comment.owner_id || comment.post_owner_id || obj.post_owner_id || 0);
-        if (owner && group && owner !== group) return null;
-        const vkId = person(comment.from_id || obj.from_id);
-        const commentId = comment.id || obj.id;
-        if (!vkId || !commentId) return null;
+        const raw = eventObject(update);
+        const comment = raw.comment && typeof raw.comment === 'object' ? raw.comment : raw;
+        const owner = Number(comment.post_owner_id || raw.post_owner_id || comment.owner_id || raw.owner_id || 0);
+        if (owner && group && Math.abs(owner) !== Math.abs(group)) return null;
+        const vkId = person(comment.from_id || raw.from_id || comment.user_id || raw.user_id);
+        const nestedPost = comment.post && comment.post.id ? comment.post.id : (raw.post && raw.post.id);
+        const postId = Number(comment.post_id || raw.post_id || nestedPost || 0);
+        const commentId = comment.id || raw.id || comment.comment_id || raw.comment_id;
+        if (!vkId || !commentId || !postId) return null;
         return {
             vkId,
             kind: 'comment',
-            objectKey: `comment:${comment.post_id || obj.post_id || 0}:${commentId}`,
+            objectKey: `comment:${postId}:${commentId}`,
             remove: update.type === 'wall_reply_delete'
         };
     }
@@ -285,6 +288,16 @@ function wallSummary(rows, range) {
     return lines.join('\n').slice(0, 3500);
 }
 
+function ratingAccount(value) {
+    const n = Math.abs(Number(String(value || '').replace(/[^\d]/g, '')));
+    return n ? String(-n) : '';
+}
+
+function withoutHidden(rows, hidden) {
+    const skip = new Set((hidden || []).map(ratingAccount).filter(Boolean));
+    return (Array.isArray(rows) ? rows : []).filter(row => !skip.has(ratingAccount(row.user_id || row.userId)));
+}
+
 function freshIds(seen, ids) {
     const next = seen || new Set();
     const first = !seen;
@@ -302,5 +315,5 @@ module.exports = {
     POINTS, rulesText, postIdFromKey, postsInRange, weekRange, previousWeek, shouldPublishWeek,
     monthRange, previousMonth, shouldPublishMonth, bonusGrants,
     parseCommunityActivity, readWallComment, wallCommentIssue, readWallPost,
-    faceOf, present, formatRating, wallSummary, freshIds
+    faceOf, present, formatRating, wallSummary, ratingAccount, withoutHidden, freshIds
 };

@@ -846,6 +846,7 @@ function startWebApp() {
             const group = vk.communityId(req.query.group);
             const pack = await vk.monthActivity(group, range, 200);
             const rows = await vk.attachFaces(pack.rows);
+            const hidden = await vk.attachFaces((pack.hidden || []).map(id => ({ user_id: id })));
             const key = `vk_rate_bonus_${group}_${range.start.toISOString().slice(0, 10)}`;
             const saved = await db.getSettings([key]);
             res.json({
@@ -855,10 +856,23 @@ function startWebApp() {
                 points: activity.POINTS,
                 posts: pack.posts.length,
                 rows,
+                hidden,
                 paid: saved[key] || null
             });
         } catch (e) {
             res.status(500).json({ error: 'Не удалось открыть рейтинг.' });
+        }
+    });
+
+    app.post('/api/admin/vk/rating-hide', requireAdmin, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const group = vk.communityId(body.group);
+            if (!group) return res.status(400).json({ ok: false, error: 'Нет сообщества' });
+            const ids = await vk.setRatingHidden(group, body.userId, !!body.hide);
+            res.json({ ok: true, hidden: ids });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Не удалось изменить список рейтинга.' });
         }
     });
 

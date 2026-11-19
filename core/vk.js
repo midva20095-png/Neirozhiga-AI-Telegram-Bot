@@ -668,8 +668,38 @@ async function monthActivity(groupId, range, limit) {
     if (item && item.token) {
         try { posts = await loadMonthPosts(item.token, id, range); } catch (error) {}
     }
-    const rows = await db.listWeekActivity(range.start, id, range.end, limit, posts.map(post => post.id));
-    return { posts, rows };
+    const hidden = await ratingHidden(id);
+    const rows = activity.withoutHidden(
+        await db.listWeekActivity(range.start, id, range.end, limit, posts.map(post => post.id)),
+        hidden
+    );
+    return { posts, rows, hidden };
+}
+
+function ratingHideKey(groupId) {
+    return `vk_rate_hide_${String(groupId || '').replace(/\D/g, '')}`;
+}
+
+async function ratingHidden(groupId) {
+    try {
+        const saved = await db.getSettings([ratingHideKey(groupId)]);
+        const ids = saved[ratingHideKey(groupId)] && saved[ratingHideKey(groupId)].ids;
+        return [...new Set((Array.isArray(ids) ? ids : []).map(activity.ratingAccount).filter(Boolean))];
+    } catch (error) {
+        return [];
+    }
+}
+
+async function setRatingHidden(groupId, userId, hide) {
+    const account = activity.ratingAccount(userId);
+    const ids = new Set(await ratingHidden(groupId));
+    if (account) {
+        if (hide) ids.add(account);
+        else ids.delete(account);
+    }
+    const next = [...ids];
+    await db.setSetting(ratingHideKey(groupId), { ids: next });
+    return next;
 }
 
 function rememberLivePost(update, groupId) {
@@ -702,7 +732,6 @@ async function scanCommunityActivity(token, groupId) {
     const range = activity.monthRange(new Date());
     let posts = [];
     try { posts = await loadMonthPosts(token, groupId, range); } catch (error) { return; }
-    const started = scanCommunityActivity.started || (scanCommunityActivity.started = Math.floor(Date.now() / 1000) - 30);
     for (const post of posts) {
         await pause(280);
         let likers = [];
@@ -717,23 +746,11 @@ async function scanCommunityActivity(token, groupId) {
         reactionSeen.set(likeKey, likePick.seen);
         for (const id of likePick.fresh) await awardReaction(groupId, 'like', `post:${post.id}`, id);
 
-        await pause(280);
         let comments = [];
-        try {
-            const thread = await call(token, 'wall.getComments', {
-                owner_id: String(owner), post_id: String(post.id), count: '40', thread_items_count: '5'
-            });
-            comments = (thread && thread.items) || [];
-        } catch (e) {}
-        const flat = [];
-        comments.forEach(comment => {
-            flat.push(comment);
-            ((comment.thread && comment.thread.items) || []).forEach(reply => flat.push(reply));
-        });
-        for (const comment of flat) {
+        try { comments = await listPostComments(token, owner, post.id); } catch (e) {}
+        for (const comment of comments) {
             const fromId = Number(comment && comment.from_id);
             if (!Number.isInteger(fromId) || fromId <= 0 || !comment.id) continue;
-            if (Number(comment.date) < started) continue;
             await awardReaction(groupId, 'comment', `comment:${post.id}:${comment.id}`, fromId);
         }
 
@@ -750,6 +767,59 @@ async function scanCommunityActivity(token, groupId) {
         reactionSeen.set(copyKey, copyPick.seen);
         for (const id of copyPick.fresh) await awardReaction(groupId, 'repost', `repost:${post.id}:${id}`, id);
     }
+}
+
+function keepComment(list, seen, comment) {
+    const id = Number(comment && comment.id);
+    if (!Number.isInteger(id) || id <= 0 || seen.has(id)) return;
+    seen.add(id);
+    list.push(comment);
+}
+
+async function listPostComments(token, owner, postId) {
+    const list = [];
+    const seen = new Set();
+    let offset = 0;
+    for (let page = 0; page < 6; page++) {
+        await pause(220);
+        let pack;
+        try {
+            pack = await call(token, 'wall.getComments', {
+                owner_id: String(owner),
+                post_id: String(postId),
+                count: '100',
+                offset: String(offset),
+                thread_items_count: '10'
+            });
+        } catch (error) {
+            break;
+        }
+        const items = (pack && pack.items) || [];
+        if (!items.length) break;
+        for (const comment of items) {
+            keepComment(list, seen, comment);
+            const thread = comment && comment.thread;
+            const replies = (thread && thread.items) || [];
+            replies.forEach(reply => keepComment(list, seen, reply));
+            const total = Number(thread && thread.count) || 0;
+            if (comment && comment.id && total > replies.length) {
+                await pause(220);
+                try {
+                    const deep = await call(token, 'wall.getComments', {
+                        owner_id: String(owner),
+                        post_id: String(postId),
+                        comment_id: String(comment.id),
+                        count: '100'
+                    });
+                    ((deep && deep.items) || []).forEach(reply => keepComment(list, seen, reply));
+                } catch (error) {}
+            }
+        }
+        offset += items.length;
+        const count = Number(pack && pack.count) || 0;
+        if (items.length < 100 || (count && offset >= count)) break;
+    }
+    return list;
 }
 
 function watchCommunityActivity(token, groupId) {
@@ -2683,5 +2753,5 @@ async function ensureCommunityWidget(groupId) {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, monthActivity, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, monthActivity, setRatingHidden, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos
 };

@@ -476,7 +476,7 @@ async function loadRate(){
       '<div class="card"><h3>Рейтинг · '+esc(placeName())+'</h3>'+
       '<p class="note">'+esc(d.week||'')+'</p>'+
       '<p class="note">'+esc(d.rules||'')+' Лайки, комментарии и репосты берутся только с постов выбранного месяца: в ноябре — все посты ноября, в декабре — все посты декабря. Лайки записей прошлого года и более старых постов не считаются. Запрос боту считается отдельно за этот месяц.</p>'+
-      '<p class="note">Постов в расчёте: '+(Number(d.posts)||0)+'.</p>'+
+      '<p class="note">Постов в расчёте: '+(Number(d.posts)||0)+'. Комментарии и ответы на них по этим постам собираются целиком, в том числе написанные до перезапуска.</p>'+
       '<div class="row"><button type="button" class="'+(ratePeriod==='current'?'':'ghost')+'" onclick="ratePeriod=\'current\';loadRate()">Этот месяц</button>'+
       '<button type="button" class="'+(ratePeriod==='previous'?'':'ghost')+'" onclick="ratePeriod=\'previous\';loadRate()">Прошлый месяц</button>'+
       '<button type="button" class="ghost" onclick="loadRate()">Обновить рейтинг</button></div>'+
@@ -485,8 +485,16 @@ async function loadRate(){
       '<p id="paymsg" class="note">'+(paid ? ('Уже начислено '+paid.count+' людям, '+paid.total+' кр.') : 'Пустое место берёт сумму «Остальным». Если заполнен только этот столбец, её получают все.')+'</p>'+
       '<table><tr><th></th><th>Подписчик</th><th>Баллы</th><th>Лайки</th><th>Коммент.</th><th>Репосты</th><th>Бот</th><th>Кредиты</th></tr>'+
       rows.map((row, i)=>'<tr><td>'+(i+1)+'</td><td>'+rateFace(row)+esc(row.name)+'</td><td class="ok">'+row.points+'</td><td>'+row.likes+'</td><td>'+row.comments+'</td><td>'+row.reposts+'</td><td>'+row.bot+'</td>'+
-        '<td><div class="row" style="margin:0"><input id="cr'+esc(row.userId)+'" type="number" placeholder="100"><button onclick="grantRate(\''+esc(row.userId)+'\')">Начислить</button></div><p id="crm'+esc(row.userId)+'" class="note"></p></td></tr>').join('')+
+        '<td><div class="row" style="margin:0"><input id="cr'+esc(row.userId)+'" type="number" placeholder="100"><button onclick="grantRate(\''+esc(row.userId)+'\')">Начислить</button>'+
+        '<button type="button" class="ghost" onclick="hideRate(\''+esc(row.userId)+'\', true)">Убрать</button></div><p id="crm'+esc(row.userId)+'" class="note"></p></td></tr>').join('')+
       (rows.length?'':'<tr><td colspan="8" class="note">В этом списке пока нет активности.</td></tr>')+
+      '</table></div>'+
+      '<div class="card"><h3>Не в рейтинге</h3>'+
+      '<p class="note">Сюда убираются администраторы и те, кого не нужно показывать. Их нет в списке бота и они не получают бонус за места.</p>'+
+      '<div class="row"><input id="hideId" placeholder="Номер ВК"><button type="button" onclick="hideRate((document.getElementById(\'hideId\')||{}).value, true)">Исключить</button></div>'+
+      '<table><tr><th>Человек</th><th></th></tr>'+
+      (d.hidden||[]).map(row => '<tr><td>'+rateFace(row)+esc(row.name||row.userId)+'</td><td><button type="button" onclick="hideRate(\''+esc(row.userId)+'\', false)">Вернуть</button></td></tr>').join('')+
+      ((d.hidden||[]).length?'':'<tr><td colspan="2" class="note">Никого не исключали.</td></tr>')+
       '</table></div>';
   } catch (e) {
     el.innerHTML = '<div class="card bad">'+esc(e.message)+'</div>';
@@ -517,6 +525,16 @@ async function payRate(again){
   }) });
   if (d.already && confirm('За этот месяц бонус уже начислен. Начислить ещё раз?')) return payRate(true);
   if (msg) msg.textContent = d.ok ? ('Начислено '+d.count+' людям, '+d.total+' кр.') : (d.error||'Не получилось');
+}
+async function hideRate(id, hide){
+  const num = String(id||'').replace(/\D/g, '');
+  if (!num) return;
+  if (hide && !confirm('Убрать этого человека из рейтинга?')) return;
+  try {
+    const d = await api('/api/admin/vk/rating-hide', { method:'POST', body: JSON.stringify({ group: vkHome, userId: num, hide: !!hide }) });
+    if (d && d.ok) loadRate();
+    else alert((d && d.error) || 'Не получилось убрать из рейтинга.');
+  } catch (e) { alert(e.message || 'Не получилось убрать из рейтинга.'); }
 }
 async function grantRate(id){
   const input = document.getElementById('cr'+id);

@@ -96,6 +96,17 @@ test('лайк, комментарий и репост считаются тол
         object: { comment: { from_id: 9, id: 4, post_id: 8, owner_id: -230706467 } }
     }, GROUP);
     assert.equal(nested.objectKey, 'comment:8:4');
+    const shifted = activity.parseCommunityActivity({
+        type: 'wall_reply_new',
+        object: { from_id: 7, id: 6, owner_id: 7, post_owner_id: 230706467, post: { id: 16047 } }
+    }, GROUP);
+    assert.equal(shifted && shifted.objectKey, 'comment:16047:6');
+    assert.equal(shifted.vkId, 7);
+    const hidden = activity.withoutHidden([
+        { user_id: '-5', points: 3 },
+        { user_id: '-8', points: 1 }
+    ], ['5', '-5']);
+    assert.deepEqual(hidden.map(row => row.user_id), ['-8']);
     const first = activity.freshIds(null, [5, 5, -1]);
     assert.deepEqual(first.fresh, []);
     const second = activity.freshIds(first.seen, [5, 6]);
