@@ -632,22 +632,35 @@ function monthHasPost(groupId, range, postId) {
     return cachedMonthPosts(groupId, range).some(item => item.id === id);
 }
 
+async function readWallPage(token, owner, offset) {
+    const plain = { owner_id: owner, count: '100', offset: String(offset) };
+    const filtered = Object.assign({ filter: 'owner' }, plain);
+    let code = 0;
+    try {
+        const wall = await call(token, 'wall.get', filtered);
+        const items = (wall && wall.items) || [];
+        if (items.length || offset > 0) return { items, code: 0 };
+    } catch (error) {
+        code = Number(error && error.code) || -1;
+    }
+    try {
+        const wall = await call(token, 'wall.get', plain);
+        return { items: (wall && wall.items) || [], code: 0 };
+    } catch (error) {
+        return { items: [], code: Number(error && error.code) || code || -1 };
+    }
+}
+
 async function fetchMonthPosts(token, groupId, range) {
     const owner = String(-Number(String(groupId || '').replace(/\D/g, '')));
     const start = Math.floor(range.start.getTime() / 1000);
     const collected = [];
     let offset = 0;
+    let code = 0;
     for (let page = 0; page < 4; page++) {
-        const params = { owner_id: owner, count: '100', offset: String(offset), filter: 'owner' };
-        let wall;
-        try {
-            wall = await call(token, 'wall.get', params);
-        } catch (error) {
-            if (page > 0 || Number(error && error.code) !== 100) break;
-            delete params.filter;
-            try { wall = await call(token, 'wall.get', params); } catch (e) { break; }
-        }
-        const items = (wall && wall.items) || [];
+        const pack = await readWallPage(token, owner, offset);
+        code = pack.code || code;
+        const items = pack.items || [];
         if (!items.length) break;
         collected.push(...items);
         offset += items.length;
@@ -658,21 +671,32 @@ async function fetchMonthPosts(token, groupId, range) {
         }, Number.MAX_SAFE_INTEGER);
         if (oldest < start || items.length < 100) break;
     }
-    return activity.postsInRange(collected, range.start, range.end);
+    return { posts: activity.postsInRange(collected, range.start, range.end), raw: collected.length, code };
 }
 
 async function loadMonthPosts(token, groupId, range) {
     let found = [];
+    let raw = 0;
+    let code = 0;
     for (const item of readTokens(token)) {
         try {
-            const posts = await fetchMonthPosts(item, groupId, range);
-            if (posts.length) {
-                found = posts;
+            const pack = await fetchMonthPosts(item, groupId, range);
+            raw = Math.max(raw, pack.raw);
+            if (pack.code) code = pack.code;
+            if (pack.posts.length) {
+                found = pack.posts;
+                code = 0;
                 break;
             }
-        } catch (error) {}
+        } catch (error) {
+            code = Number(error && error.code) || code || -1;
+        }
     }
-    return storeMonthPosts(groupId, range, found, true);
+    if (!found.length) {
+        const mark = code ? `, код ${code}` : '';
+        console.error(`ВК ${groupId}: посты ${range.label} не найдены, стена отдала ${raw} записей${mark}.`);
+    }
+    return storeMonthPosts(groupId, range, found, found.length > 0 || raw > 0);
 }
 
 async function monthActivity(groupId, range, limit, options) {
@@ -767,7 +791,10 @@ function readTokens(token) {
         if (item && !list.includes(item)) list.push(item);
     };
     add(token);
-    try { add(audit.readerToken()); } catch (error) {}
+    try {
+        const many = typeof audit.readerTokens === 'function' ? audit.readerTokens() : [audit.readerToken()];
+        (Array.isArray(many) ? many : [many]).forEach(add);
+    } catch (error) {}
     return list;
 }
 
@@ -874,7 +901,7 @@ async function scanCommunityActivityNow(token, groupId) {
             await awardReaction(groupId, 'repost', `repost:${post.id}:${id}`, id);
         }
     }
-    console.log(`ВК ${groupId}: рейтинг месяца, постов ${posts.length}, комментарии людей ${humanComments}, человек ${humans.size}, в зачёте ${score.size}.`);
+    console.log(`ВК ${groupId}: рейтинг ${range.label}, постов ${posts.length}, комментарии людей ${humanComments}, человек ${humans.size}, в зачёте ${score.size}.`);
     return sawWall ? [...score.values()] : null;
 }
 
