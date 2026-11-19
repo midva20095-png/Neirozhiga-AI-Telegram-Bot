@@ -982,14 +982,16 @@ async function listPostComments(token, owner, postId) {
     return list;
 }
 
+const WALL_RECOUNT_MS = 12 * 60 * 60 * 1000;
+
 function watchCommunityActivity(token, groupId) {
     if (reactionScanning.has(groupId)) return;
     reactionScanning.add(groupId);
     const tick = async () => {
         try { await scanCommunityActivity(token, groupId); } catch (e) {}
-        setTimeout(tick, 3 * 60 * 1000);
+        setTimeout(tick, WALL_RECOUNT_MS);
     };
-    tick();
+    setTimeout(tick, WALL_RECOUNT_MS);
 }
 
 function imageKind(buffer) {
@@ -3107,5 +3109,5 @@ async function ensureCommunityWidget(groupId) {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, monthActivity, setRatingHidden, publishPrize, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, monthActivity, setRatingHidden, publishPrize, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos, WALL_RECOUNT_MS
 };

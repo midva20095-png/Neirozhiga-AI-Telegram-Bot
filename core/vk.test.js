@@ -135,6 +135,10 @@ test('из события ВК берётся только входящий те
     assert.equal(vk.isGreeting('нарисуй кота'), false);
 });
 
+test('полный пересчёт стены идёт раз в 12 часов', () => {
+    assert.equal(vk.WALL_RECOUNT_MS, 12 * 60 * 60 * 1000);
+});
+
 test('меню ВК открывает кабинет и не считает кнопки запросом', () => {
     const menu = JSON.parse(vk.mainMenu());
     const labels = menu.buttons.flat().map(button => button.action.label);
