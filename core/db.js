@@ -319,6 +319,14 @@ async function initDB() {
       PRIMARY KEY (code_id, user_id)
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS yookassa_payment (
+      payment_id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      credits INTEGER NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
   console.log('✅ Таблица users готова (PostgreSQL)');
 }
 
@@ -752,6 +760,21 @@ async function debitBalance(userId, amount, reason) {
     console.error('❌ debitBalance error:', err.message);
     return { ok: false, error: 'balance' };
   }
+}
+
+async function claimPayment(paymentId, userId, credits) {
+  const res = await pool.query(
+    `INSERT INTO yookassa_payment (payment_id, user_id, credits)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (payment_id) DO NOTHING
+     RETURNING payment_id`,
+    [String(paymentId), String(userId), Math.round(Number(credits) || 0)]
+  );
+  return !!res.rows[0];
+}
+
+async function releasePayment(paymentId) {
+  await pool.query('DELETE FROM yookassa_payment WHERE payment_id = $1', [String(paymentId)]);
 }
 
 async function findTelegramUser(raw) {
@@ -1190,6 +1213,8 @@ module.exports = {
   getUserBalance,
   updateBalance,
   debitBalance,
+  claimPayment,
+  releasePayment,
   findTelegramUser,
   creditIncoming,
   insertSitePull,

@@ -130,6 +130,24 @@ function preview(row, userId, packageId) {
     return Object.assign({ ok: true, id: row.id, code: row.code }, quote);
 }
 
+async function hasGrant(client, codeId, userId) {
+    const found = await client.query(
+        `SELECT 1 FROM vk_promo_grant WHERE code_id = $1 AND user_id = $2`,
+        [codeId, userId]
+    );
+    return !!found.rows.length;
+}
+
+async function canUse(raw, userId, packageId) {
+    const account = accountOf(userId);
+    const row = await findCode(raw);
+    const shown = preview(row, account, packageId);
+    if (!shown.ok || !(row.price > 0)) return shown;
+    const allowed = await hasGrant(database().pool, row.id, account);
+    if (!allowed) return { ok: false, error: 'Сначала купите этот промокод в магазине.' };
+    return shown;
+}
+
 async function take(raw, userId, packageId) {
     const code = normalizeCode(raw);
     const account = accountOf(userId);
@@ -137,13 +155,20 @@ async function take(raw, userId, packageId) {
     try {
         return await withTx(async client => {
             const found = await client.query(
-                `SELECT id, code, owner_id::text AS owner_id, package_id, percent, uses_left, source, status
+                `SELECT id, code, owner_id::text AS owner_id, package_id, percent, uses_left, source, shop_price, status
                  FROM vk_promo WHERE code = $1 FOR UPDATE`,
                 [code]
             );
             const row = mapRow(found.rows[0]);
             const shown = preview(row, account, packageId);
             if (!shown.ok) throw shopError(shown.error);
+            if (row.price > 0) {
+                const grant = await client.query(
+                    `DELETE FROM vk_promo_grant WHERE code_id = $1 AND user_id = $2 RETURNING code_id`,
+                    [row.id, account]
+                );
+                if (!grant.rows.length) throw shopError('Сначала купите этот промокод в магазине.');
+            }
             const left = row.usesLeft - 1;
             await client.query(
                 `UPDATE vk_promo SET uses_left = $2, status = $3 WHERE id = $1`,
@@ -156,12 +181,20 @@ async function take(raw, userId, packageId) {
     }
 }
 
-async function giveBack(id) {
+async function giveBack(id, userId) {
     const promoId = Math.round(Number(id) || 0);
+    const account = accountOf(userId);
     if (!promoId) return;
     await database().pool.query(
         `UPDATE vk_promo SET uses_left = uses_left + 1, status = 'open' WHERE id = $1 AND status <> 'off'`,
         [promoId]
+    );
+    if (!account) return;
+    await database().pool.query(
+        `INSERT INTO vk_promo_grant (code_id, user_id)
+         SELECT id, $2::bigint FROM vk_promo WHERE id = $1 AND shop_price > 0
+         ON CONFLICT DO NOTHING`,
+        [promoId, account]
     );
 }
 
@@ -358,6 +391,6 @@ async function closeAdmin(groupId, id) {
 }
 
 module.exports = {
-    PERCENT, BONUS_RATE, discountOf, normalizeCode, decide, preview, take, giveBack,
+    PERCENT, BONUS_RATE, discountOf, normalizeCode, decide, preview, canUse, take, giveBack,
     shopView, buyPersonal, buyListed, listAdmin, addAdmin, closeAdmin
 };

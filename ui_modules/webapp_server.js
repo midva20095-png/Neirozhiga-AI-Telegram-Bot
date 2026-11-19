@@ -251,9 +251,10 @@ function startWebApp() {
 
     app.post('/api/vk/pay', async (req, res) => {
         let promoId = 0;
+        let account = '';
         try {
             if (await refuseUpdate(res)) return;
-            const account = vkAccount(req);
+            account = vkAccount(req);
             if (!account) return res.status(401).json({ error: 'Откройте кабинет кнопкой из чата ВК.' });
             const pkg = catalog.getPackage(req.body && req.body.packageId);
             const email = String((req.body && req.body.email) || '').trim();
@@ -285,13 +286,13 @@ function startWebApp() {
                 back
             );
             if (!url) {
-                if (promoId) await promo.giveBack(promoId);
+                if (promoId) await promo.giveBack(promoId, account);
                 promoId = 0;
                 return res.status(502).json({ error: 'Оплата сейчас не открылась. Попробуйте ещё раз.' });
             }
             res.json({ url, pay: amount, price: pkg.price });
         } catch (e) {
-            if (promoId) await promo.giveBack(promoId);
+            if (promoId) await promo.giveBack(promoId, account);
             res.status(502).json({ error: 'Оплата сейчас не открылась. Попробуйте ещё раз.' });
         }
     });

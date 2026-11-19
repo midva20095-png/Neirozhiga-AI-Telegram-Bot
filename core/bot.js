@@ -13,6 +13,7 @@ const vk = require('./vk');
 const bridge = require('./bridge');
 const maintenance = require('./maintenance');
 const promo = require('./promo');
+const pay = require('./pay');
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 16 * 60 * 1000 });
 vk.setTelegramNotify((id, text) => bot.telegram.sendMessage(id, text));
@@ -491,37 +492,61 @@ async function startBot(app) {
     if (app) {
         app.get('/health', (req, res) => res.status(200).send('OK'));
         app.post('/yookassa-webhook', async (req, res) => {
+            const event = req.body || {};
+            if (event.event !== 'payment.succeeded') {
+                await db.note('pay', `ЮKassa: ${event.event || 'пустое событие'}`);
+                return res.status(200).send('OK');
+            }
+            const incomingId = String(event.object && event.object.id || '');
+            if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(incomingId)) {
+                await db.note('pay', 'ЮKassa: в уведомлении нет номера платежа');
+                return res.status(200).send('OK');
+            }
+            const shopId = process.env.YOOKASSA_SHOP_ID;
+            const secretKey = process.env.YOOKASSA_SECRET_KEY;
+            if (!shopId || !secretKey) {
+                await db.note('pay', 'ЮKassa: нет ключей, кредиты не начислены');
+                return res.status(200).send('OK');
+            }
+            let payment = null;
             try {
-                const event = req.body || {};
-                if (event.event !== 'payment.succeeded') {
-                    await db.note('pay', `ЮKassa: ${event.event || 'пустое событие'}`);
-                    return res.status(200).send('OK');
+                const response = await axios.get(`https://api.yookassa.ru/v3/payments/${incomingId}`, {
+                    auth: { username: shopId, password: secretKey },
+                    timeout: 15000
+                });
+                payment = response.data;
+            } catch (error) {
+                await db.note('pay', 'ЮKassa: не удалось проверить платёж у банка');
+                return res.status(500).send('retry');
+            }
+            const accepted = pay.acceptedPayment(payment);
+            if (!accepted) {
+                await db.note('pay', `ЮKassa: платёж ${incomingId} не подтверждён`);
+                return res.status(200).send('OK');
+            }
+            try {
+                const fresh = await db.claimPayment(accepted.id, accepted.userId, accepted.credits);
+                if (!fresh) return res.status(200).send('OK');
+                const newBalance = await db.updateBalance(accepted.userId, accepted.credits, 'Пополнение ЮKassa');
+                if (newBalance === null) {
+                    await db.releasePayment(accepted.id);
+                    await db.note('pay', `ЮKassa: платёж ${accepted.id} не начислен, повторю`);
+                    return res.status(500).send('retry');
                 }
-                const metadata = event.object?.metadata || {};
-                if (!metadata.userId || !metadata.credits) {
-                    await db.note('pay', 'ЮKassa: оплата прошла, но в платеже нет userId — кредиты бота не начислены');
-                    return res.status(200).send('OK');
-                }
-                const userId = metadata.userId;
-                const creditsToAdd = parseInt(metadata.credits, 10);
-                if (!Number.isFinite(creditsToAdd) || creditsToAdd <= 0) {
-                    await db.note('pay', 'ЮKassa: оплата прошла, сумма кредитов пустая');
-                    return res.status(200).send('OK');
-                }
-                const newBalance = await db.updateBalance(userId, creditsToAdd, 'Пополнение ЮKassa');
-                await db.note('pay', `ЮKassa: +${creditsToAdd} кр. пользователю ${userId}, баланс ${newBalance}`);
-                const paidText = `Оплата получена. Начислено ${creditsToAdd} кр. Баланс: ${newBalance} кр.`;
-                if (String(userId).startsWith('-')) {
-                    await vk.notify(userId, paidText, metadata.vkGroup || '');
+                await db.note('pay', `ЮKassa: +${accepted.credits} кр. пользователю ${accepted.userId}, баланс ${newBalance}`);
+                const paidText = `Оплата получена. Начислено ${accepted.credits} кр. Баланс: ${newBalance} кр.`;
+                const group = payment.metadata && payment.metadata.vkGroup;
+                if (String(accepted.userId).startsWith('-')) {
+                    await vk.notify(accepted.userId, paidText, group || '');
                 } else {
                     try {
                         await bot.telegram.sendMessage(
-                            userId,
-                            `🎉 *Оплата успешно получена!*\n\n➕ Начислено: *${creditsToAdd} кредитов*\n💳 Баланс: *${newBalance} кредитов*`,
+                            accepted.userId,
+                            `🎉 *Оплата успешно получена!*\n\n➕ Начислено: *${accepted.credits} кредитов*\n💳 Баланс: *${newBalance} кредитов*`,
                             { parse_mode: 'Markdown' }
                         );
                     } catch (e) {
-                        await db.note('pay', `ЮKassa: кредиты начислены, сообщение в чат не ушло (${userId})`);
+                        await db.note('pay', `ЮKassa: кредиты начислены, сообщение в чат не ушло (${accepted.userId})`);
                     }
                 }
                 res.status(200).send('OK');
@@ -1169,8 +1194,7 @@ async function startBot(app) {
             if (!emailRegex.test(text)) {
                 const code = promo.normalizeCode(text);
                 if (code && code === String(text || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '')) {
-                    const look = await promo.findCode(code);
-                    const shown = promo.preview(look, String(userId), pkgId);
+                    const shown = await promo.canUse(code, String(userId), pkgId);
                     if (!shown.ok) return ctx.reply(shown.error);
                     userAwaitingEmail.set(userId, { pkgId, code, pay: shown.pay });
                     return ctx.reply(`Промокод принят. К оплате ${shown.pay} ₽ вместо ${shown.full} ₽. Напишите почту для чека.`);
@@ -1205,7 +1229,7 @@ async function startBot(app) {
                         { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.url('🔗 Оплатить в ЮKassa', paymentUrl)]]) }
                     );
                 }
-                if (promoId) await promo.giveBack(promoId);
+                if (promoId) await promo.giveBack(promoId, userId);
                 userAwaitingEmail.set(userId, { pkgId: pkg.id, code: picked.code || '', pay: amount });
                 return ctx.reply('⚠️ Не удалось сформировать ссылку. Попробуйте позже.');
             }

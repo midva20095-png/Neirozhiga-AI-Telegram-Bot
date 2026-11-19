@@ -1496,8 +1496,7 @@ async function holdPayment(token, peerId, account, text, action, groupId) {
     if (!emailOk(email)) {
         const code = promo.normalizeCode(email);
         if (code.length >= 4 && code.length === email.replace(/[^A-Za-z0-9]/g, '').length) {
-            const look = await promo.findCode(code);
-            const shown = promo.preview(look, key, pending.pkgId);
+            const shown = await promo.canUse(code, key, pending.pkgId);
             if (!shown.ok) {
                 await sendText(token, peerId, shown.error, payLockKeyboard());
                 return true;
@@ -1541,7 +1540,7 @@ async function holdPayment(token, peerId, account, text, action, groupId) {
         url = null;
     }
     if (!url) {
-        if (promoId) await promo.giveBack(promoId);
+        if (promoId) await promo.giveBack(promoId, key);
         await sendText(token, peerId, 'Оплата не открылась. Напишите почту ещё раз или нажмите «Назад».', payLockKeyboard());
         return true;
     }

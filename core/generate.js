@@ -84,26 +84,42 @@ async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mim
             consumed = !slot.unlimited;
         }
 
-        const result = await plugin.processRequest({
-            prompt,
-            fileBuffer: fileBuffer || null,
-            fileBuffers: fileBuffers && fileBuffers.length > 1 ? fileBuffers : undefined,
-            mimeType: mimeType || 'image/jpeg',
-            mimeTypes,
-            modelKey: model.key,
-            exactPrompt: !!exactPrompt,
-            aspectRatio,
-            duration,
-            quality,
-            audioBuffer: audioBuffer || null,
-            audioMime: audioMime || 'audio/ogg',
-            spec: model
-        });
-
         const cost = Number.isFinite(Number(charge))
             ? Math.max(0, Math.round(Number(charge)))
             : catalog.quote(model, { duration, quality, seconds: audioSeconds });
-        const balance = await db.updateBalance(id, -cost, reason || `Генерация · ${model.name}`);
+        const why = reason || `Генерация · ${model.name}`;
+        let balance = null;
+        if (cost > 0) {
+            const debit = await db.debitBalance(id, cost, why);
+            if (!debit.ok) throw new GenError('Недостаточно кредитов. Пополните баланс.', 'no_credits');
+            balance = debit.balance;
+        }
+
+        let result;
+        try {
+            result = await plugin.processRequest({
+                prompt,
+                fileBuffer: fileBuffer || null,
+                fileBuffers: fileBuffers && fileBuffers.length > 1 ? fileBuffers : undefined,
+                mimeType: mimeType || 'image/jpeg',
+                mimeTypes,
+                modelKey: model.key,
+                exactPrompt: !!exactPrompt,
+                aspectRatio,
+                duration,
+                quality,
+                audioBuffer: audioBuffer || null,
+                audioMime: audioMime || 'audio/ogg',
+                spec: model
+            });
+        } catch (error) {
+            if (cost > 0) {
+                try { await db.updateBalance(id, cost, 'Возврат · генерация не вышла'); } catch (err) {}
+            }
+            throw error;
+        }
+
+        if (balance === null) balance = await db.updateBalance(id, 0, why);
         await db.recordGeneration(id, cost);
         if (Number(id) < 0 && String(groupId || '').replace(/\D/g, '')) {
             try {
