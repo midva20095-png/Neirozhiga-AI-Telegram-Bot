@@ -478,15 +478,13 @@ async function loadRate(){
     const paid = d.paid;
     el.innerHTML =
       '<div class="card"><h3>Рейтинг · '+esc(placeName())+'</h3>'+
-      '<p class="note">'+esc(d.week||'')+'</p>'+
-      '<p class="note">'+esc(d.rules||'')+' Лайки, комментарии и репосты берутся только с постов выбранного месяца: в ноябре — все посты ноября, в декабре — все посты декабря. Лайки записей прошлого года и более старых постов не считаются. Запрос боту считается отдельно за этот месяц.</p>'+
-      '<p class="note">Постов в расчёте: '+(Number(d.posts)||0)+'. В список входят лайки и комментарии людей на этих постах, включая ответы в ветках. Ответы самого сообщества не считаются. У «Точек и Линий» и «НейроЯги» списки разные. Приз получают только первые три места. Пост на стене выходит об этих трёх, когда приз начислен.</p>'+
+      '<p class="note">'+esc(d.week||'')+' · постов в расчёте: '+(Number(d.posts)||0)+'</p>'+
       '<div class="row"><button type="button" class="'+(ratePeriod==='current'?'':'ghost')+'" onclick="ratePeriod=\'current\';loadRate()">Этот месяц</button>'+
       '<button type="button" class="'+(ratePeriod==='previous'?'':'ghost')+'" onclick="ratePeriod=\'previous\';loadRate()">Прошлый месяц</button>'+
       '<button type="button" class="ghost" onclick="loadRate()">Обновить рейтинг</button></div>'+
       '<div class="row" style="margin-top:8px"><input id="prize1" type="number" placeholder="1 место, кредиты"><input id="prize2" type="number" placeholder="2 место, кредиты"><input id="prize3" type="number" placeholder="3 место, кредиты"></div>'+
       '<div class="row"><button type="button" onclick="payRate(false)">Начислить призы трём местам</button></div>'+
-      '<p id="paymsg" class="note">'+(paid ? ('Призы уже начислены '+paid.count+' людям, '+paid.total+' кр.') : 'Сумма в кредитах. Пустое место пропускается. Остальным по списку приз не начисляется.')+'</p>'+
+      '<p id="paymsg" class="note">'+(paid ? ('Призы уже начислены '+paid.count+' людям, '+paid.total+' кр.') : '')+'</p>'+
       '<table><tr><th></th><th>Подписчик</th><th>Баллы</th><th>Лайки</th><th>Коммент.</th><th>Репосты</th><th>Бот</th><th>Кредиты</th></tr>'+
       rows.map((row, i)=>'<tr><td>'+(i+1)+'</td><td>'+rateFace(row)+esc(row.name)+'</td><td class="ok">'+row.points+'</td><td>'+row.likes+'</td><td>'+row.comments+'</td><td>'+row.reposts+'</td><td>'+row.bot+'</td>'+
         '<td><div class="row" style="margin:0"><input id="cr'+esc(row.userId)+'" type="number" placeholder="100"><button onclick="grantRate(\''+esc(row.userId)+'\')">Начислить</button>'+
@@ -494,7 +492,7 @@ async function loadRate(){
       (rows.length?'':'<tr><td colspan="8" class="note">В этом списке пока нет активности.</td></tr>')+
       '</table></div>'+
       '<div class="card"><h3>Не в рейтинге</h3>'+
-      '<p class="note">Сюда убираются администраторы и те, кого не нужно показывать. Их нет в списке бота и они не получают бонус за места.</p>'+
+      '<p class="note">Эти люди скрыты из рейтинга и не получают приз за место.</p>'+
       '<div class="row"><input id="hideId" placeholder="Номер ВК"><button type="button" onclick="hideRate((document.getElementById(\'hideId\')||{}).value, true)">Исключить</button></div>'+
       '<table><tr><th>Человек</th><th></th></tr>'+
       (d.hidden||[]).map(row => '<tr><td>'+rateFace(row)+esc(row.name||row.userId)+'</td><td><button type="button" onclick="hideRate(\''+esc(row.userId)+'\', false)">Вернуть</button></td></tr>').join('')+
@@ -539,7 +537,6 @@ async function loadShop(){
     const orders = d.orders || [];
     el.innerHTML =
       '<div class="card"><h3>Магазин · '+esc(placeName())+'</h3>'+
-      '<p class="note">Товары этого сообщества. Человек платит бонусами закрытого месяца. Текущий рейтинг не уменьшается. Заявка на кредиты сама баланс не меняет: кредиты уходят только с кнопки «Начислить».</p>'+
       '<p class="note">Новых заявок: '+(Number(d.fresh)||0)+'.</p>'+
       '<label>Название</label><input id="shopTitle" placeholder="Урок, файл, мерч">'+
       '<label>Описание</label><input id="shopBody" placeholder="Что получит человек">'+
