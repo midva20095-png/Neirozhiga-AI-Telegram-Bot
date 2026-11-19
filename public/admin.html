@@ -528,6 +528,39 @@ async function payRate(again){
     ? ('Призы: '+d.count+' людям, '+d.total+' кр.'+(d.posted ? ' Пост на стене опубликован.' : ' Пост на стене не вышел.'))
     : (d.error||'Не получилось');
 }
+function promoCard(d){
+  const packs = d.packages || [];
+  const rows = d.promos || [];
+  const options = '<option value="">любой пакет</option>'+packs.map(item => '<option value="'+esc(item.id)+'">'+esc(item.title)+'</option>').join('');
+  return '<div class="card"><h3>Промокоды · 15%</h3>'+
+    '<label>Свой код</label><input id="promoCode" placeholder="Например SALE15">'+
+    '<div class="row"><input id="promoUses" type="number" placeholder="Сколько оплат" value="1"><input id="promoPrice" type="number" placeholder="Цена в бонусах"></div>'+
+    '<label>Пакет</label><select id="promoPack">'+options+'</select>'+
+    '<div class="row"><button type="button" onclick="savePromo()">Добавить промокод</button></div>'+
+    '<p id="promomsg" class="note"></p>'+
+    '<table><tr><th>Код</th><th>Пакет</th><th>Бонусы</th><th>Осталось</th><th></th></tr>'+
+    rows.map(row => '<tr><td>'+esc(row.code)+'</td><td>'+esc(row.packageId||'любой')+'</td><td>'+(row.price?row.price+' б.':'')+'</td><td>'+(row.status==='open'?row.usesLeft:'закрыт')+'</td><td>'+(row.status==='open'?'<button type="button" class="ghost" onclick="closePromo('+row.id+')">Закрыть</button>':'')+'</td></tr>').join('')+
+    (rows.length?'':'<tr><td colspan="5" class="note">Своих кодов пока нет.</td></tr>')+
+    '</table></div>';
+}
+async function savePromo(){
+  const msg = document.getElementById('promomsg');
+  const pack = document.getElementById('promoPack');
+  const d = await api('/api/admin/vk/promo', { method:'POST', body: JSON.stringify({
+    group: vkHome,
+    code: (document.getElementById('promoCode')||{}).value||'',
+    uses: (document.getElementById('promoUses')||{}).value||'',
+    price: (document.getElementById('promoPrice')||{}).value||'',
+    packageId: pack ? pack.value : ''
+  }) });
+  if (msg) msg.textContent = d.ok ? ('Код '+d.code+' добавлен.') : (d.error||'Не получилось');
+  if (d.ok) loadShop();
+}
+async function closePromo(id){
+  const d = await api('/api/admin/vk/promo', { method:'POST', body: JSON.stringify({ group: vkHome, action: 'off', id: id }) });
+  if (!d.ok) alert(d.error||'Не получилось');
+  loadShop();
+}
 async function loadShop(){
   const el = document.getElementById('section-shop');
   el.innerHTML = '<div class="card">Открываю магазин…</div>';
@@ -548,6 +581,7 @@ async function loadShop(){
       items.map(item => '<tr><td>'+(item.photo?'<img class="ava" src="'+esc(item.photo)+'" alt="">':'')+esc(item.title)+'<div class="note">'+esc(item.body||'')+'</div></td><td>'+item.price+' б.</td><td>'+(Number(item.stock)<0?'без лимита':item.stock)+'</td><td>'+(item.visible?'<button type="button" class="ghost" onclick="hideShopItem('+item.id+')">Скрыть</button>':'скрыт')+'</td></tr>').join('')+
       (items.length?'':'<tr><td colspan="4" class="note">Товаров пока нет.</td></tr>')+
       '</table></div>'+
+      promoCard(d)+
       '<div class="card"><h3>Заявки</h3>'+
       '<table><tr><th>Кто</th><th>Заказ</th><th>Статус</th><th></th></tr>'+
       orders.map(row => '<tr><td>'+rateFace(row)+esc(row.name||row.userId)+'</td><td>'+esc(row.title)+'<div class="note">'+(row.kind==='credit'?('заявка '+row.credits+' кр. за '+row.bonuses+' б.'):(row.bonuses+' б.'))+'</div></td><td>'+esc(row.status==='new'?'новая':row.status==='done'?'закрыта':'отменена')+'</td><td>'+

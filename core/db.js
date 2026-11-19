@@ -295,6 +295,30 @@ async function initDB() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS vk_shop_order_group_idx ON vk_shop_order (group_id, id DESC)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vk_promo (
+      id SERIAL PRIMARY KEY,
+      group_id BIGINT NOT NULL,
+      code TEXT NOT NULL UNIQUE,
+      owner_id BIGINT,
+      package_id TEXT NOT NULL DEFAULT '',
+      percent INTEGER NOT NULL DEFAULT 15,
+      uses_left INTEGER NOT NULL DEFAULT 1,
+      source TEXT NOT NULL DEFAULT 'admin',
+      shop_price INTEGER NOT NULL DEFAULT 0,
+      shop_stock INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS vk_promo_shop_owner ON vk_promo (owner_id) WHERE source = 'shop' AND owner_id IS NOT NULL`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vk_promo_grant (
+      code_id INTEGER NOT NULL,
+      user_id BIGINT NOT NULL,
+      PRIMARY KEY (code_id, user_id)
+    )
+  `);
   console.log('✅ Таблица users готова (PostgreSQL)');
 }
 

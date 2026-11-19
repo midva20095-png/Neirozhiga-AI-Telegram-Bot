@@ -9,6 +9,7 @@ const gen = require('./generate');
 const auth = require('./auth');
 const activity = require('./activity');
 const shop = require('./shop');
+const promo = require('./promo');
 const audit = require('./vk-audit');
 const club = require('./vk-club');
 const donut = require('./vk-donut');
@@ -1493,7 +1494,19 @@ async function holdPayment(token, peerId, account, text, action, groupId) {
     }
     const email = String(text || '').trim();
     if (!emailOk(email)) {
-        await sendText(token, peerId, 'Это не почта. Напишите адрес для чека или нажмите «Назад».', payLockKeyboard());
+        const code = promo.normalizeCode(email);
+        if (code.length >= 4 && code.length === email.replace(/[^A-Za-z0-9]/g, '').length) {
+            const look = await promo.findCode(code);
+            const shown = promo.preview(look, key, pending.pkgId);
+            if (!shown.ok) {
+                await sendText(token, peerId, shown.error, payLockKeyboard());
+                return true;
+            }
+            pendingPay.set(key, Object.assign({}, pending, { code, pay: shown.pay }));
+            await sendText(token, peerId, `Промокод принят. К оплате ${shown.pay} ₽ вместо ${shown.full} ₽. Напишите почту для чека.`, payLockKeyboard());
+            return true;
+        }
+        await sendText(token, peerId, 'Это не почта. Напишите адрес для чека или промокод. «Назад» возвращает меню.', payLockKeyboard());
         return true;
     }
     const pkg = catalog.getPackage(pending.pkgId);
@@ -1502,28 +1515,42 @@ async function holdPayment(token, peerId, account, text, action, groupId) {
         await sendText(token, peerId, 'Пакет больше недоступен. Нажмите «Пополнить».', mainMenu(peerId));
         return true;
     }
+    let amount = pkg.price;
+    let promoId = 0;
+    if (pending.code) {
+        const deal = await promo.take(pending.code, key, pkg.id);
+        if (!deal.ok) {
+            pendingPay.set(key, { stage: 'email', pkgId: pkg.id, groupId: String(pending.groupId || groupId || '').replace(/\D/g, '') });
+            await sendText(token, peerId, deal.error, payLockKeyboard());
+            return true;
+        }
+        amount = deal.pay;
+        promoId = deal.id;
+    }
     let url = null;
     try {
         const home = String(pending.groupId || groupId || '').replace(/\D/g, '');
         url = await createPayment(
-            pkg.price,
+            amount,
             `Покупка ${pkg.title}`,
             email,
-            { userId: key, credits: String(pkg.credits), vkGroup: home },
+            { userId: key, credits: String(pkg.credits), vkGroup: home, promo: promoId ? String(promoId) : '' },
             chatReturnUrl(home)
         );
     } catch (e) {
         url = null;
     }
     if (!url) {
+        if (promoId) await promo.giveBack(promoId);
         await sendText(token, peerId, 'Оплата не открылась. Напишите почту ещё раз или нажмите «Назад».', payLockKeyboard());
         return true;
     }
     pendingPay.set(key, { stage: 'link', pkgId: pkg.id, url, groupId: String(pending.groupId || groupId || '').replace(/\D/g, '') });
+    const sum = amount === pkg.price ? `${pkg.price} ₽` : `${amount} ₽ вместо ${pkg.price} ₽`;
     await sendText(
         token,
         peerId,
-        'Почта принята. Нажмите «Оплатить» — откроется страница банка.\n\nЕсли ВК спросит, подтвердите переход: это оплата. После оплаты кредиты придут в этот чат. «Назад» возвращает меню.',
+        `Почта принята. К оплате ${sum}. Нажмите «Оплатить» — откроется страница банка.\n\nЕсли ВК спросит, подтвердите переход: это оплата. После оплаты кредиты придут в этот чат. «Назад» возвращает меню.`,
         payLinkKeyboard(url)
     );
     return true;
@@ -1754,7 +1781,7 @@ async function reply(token, peerId, account, text, payload, groupId, photoUrls) 
         return sendText(
             token,
             peerId,
-            `Пакет «${pkg.title}» — ${pkg.price} ₽, ${pkg.credits} кредитов.\n\nНапишите почту для чека. Другие кнопки скрыты: можно отправить почту или нажать «Назад».`,
+            `Пакет «${pkg.title}» — ${pkg.price} ₽, ${pkg.credits} кредитов.\n\nЕсли есть промокод, напишите его. Если нет — сразу почту для чека. «Назад» возвращает меню.`,
             payLockKeyboard()
         );
     }
@@ -1933,6 +1960,7 @@ function shopKeyboard(items) {
     const rows = (items || []).slice(0, 6).map(item => [
         textButton(fitLabel(`${item.title} · ${item.price}`), { a: 'shop_buy', id: item.id }, 'primary')
     ]);
+    rows.push([textButton('Промокод 15%', { a: 'promo' }, 'primary')]);
     rows.push([textButton('На кредиты', { a: 'shop_credit' }, 'positive')]);
     rows.push([textButton('Назад', { a: 'pay_back' }, 'secondary')]);
     return asBoard(rows);
@@ -2004,6 +2032,47 @@ async function holdShop(token, peerId, account, text, action, payload, groupId) 
             ? `Заказ принят: ${result.title}. Списано ${result.bonuses} б. Его видно в админке.`
             : (result.error || 'Заказ не оформился.');
         await sendText(token, peerId, line, ratingKeyboard());
+        return true;
+    }
+    if (action === 'promo' || action === 'promo_pkg' || action === 'promo_buy') {
+        pendingShop.delete(key);
+        if (action === 'promo_pkg') {
+            const result = await promo.buyPersonal(account, groupId, payload && payload.id);
+            const line = result.ok
+                ? `Промокод ${result.code}. Пакет «${result.title}». К оплате ${result.pay} ₽. Напишите код, когда будете пополнять кредиты.${result.already ? '' : ` Списано ${result.bonuses} б.`}`
+                : (result.error || 'Промокод не оформился.');
+            await sendText(token, peerId, line, ratingKeyboard());
+            return true;
+        }
+        if (action === 'promo_buy') {
+            const result = await promo.buyListed(account, groupId, payload && payload.id);
+            const line = result.ok
+                ? `Промокод ${result.code}. Напишите его при оплате пакета.${result.already ? '' : ` Списано ${result.bonuses} б.`}`
+                : (result.error || 'Промокод не оформился.');
+            await sendText(token, peerId, line, ratingKeyboard());
+            return true;
+        }
+        let view = { mine: null, offers: [], sale: [], bought: [] };
+        try { view = await promo.shopView(account, groupId); } catch (error) {}
+        if (view.mine && view.mine.status === 'open' && view.mine.usesLeft > 0) {
+            await sendText(token, peerId, `Ваш промокод ${view.mine.code}. Пакет «${view.mine.title}». Напишите его при оплате кредитов.`, ratingKeyboard());
+            return true;
+        }
+        if (view.mine) {
+            await sendText(token, peerId, 'Промокод из магазина уже использован.', ratingKeyboard());
+            return true;
+        }
+        const lines = ['Промокод 15% на один пакет. Из магазина он выдаётся один раз.'];
+        (view.bought || []).forEach(item => lines.push(`${item.code} — ${item.title}${item.status === 'open' ? '' : ', уже использован'}`));
+        const rows = (view.offers || []).slice(0, 4).map(item => [
+            textButton(fitLabel(`${item.credits} кр · ${item.bonuses} б.`), { a: 'promo_pkg', id: item.packageId }, 'primary')
+        ]);
+        (view.sale || []).slice(0, 3).forEach(item => {
+            lines.push(`${item.title} — ${item.price} б.`);
+            rows.push([textButton(fitLabel(`Код · ${item.price} б.`), { a: 'promo_buy', id: item.id }, 'positive')]);
+        });
+        rows.push([textButton('Назад', { a: 'pay_back' }, 'secondary')]);
+        await sendText(token, peerId, lines.join('\n').slice(0, 3500), asBoard(rows));
         return true;
     }
     if (action === 'shop_credit') {

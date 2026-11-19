@@ -932,7 +932,8 @@ function viewTop(){
   const head = paid+'<div class="card"><div class="now">Текущий баланс</div><div id="topbal" style="font-size:28px;font-weight:800">'+((me&&me.balance)||0)+' кр</div></div>';
   if (isVk()) {
     const mine = String(userId||'').replace(/^-/, '');
-    const mail = '<label class="flabel" for="paymail">Почта для чека</label><input id="paymail" type="email" inputmode="email" autocomplete="email" placeholder="name@mail.ru">';
+    const mail = '<label class="flabel" for="paymail">Почта для чека</label><input id="paymail" type="email" inputmode="email" autocomplete="email" placeholder="name@mail.ru">'+
+      '<input id="paycode" autocomplete="off" placeholder="Промокод, если есть">';
     const packBlock = packs.length
       ? '<div class="groupttl">Пакеты</div><div class="card">'+mail+packs.map(p=>'<div class="pack"><div><div class="name">'+esc(p.title)+'</div><div class="meta">'+p.credits+' кредитов</div></div><button data-pkg="'+esc(p.id)+'">'+p.price+' ₽</button></div>').join('')+'<p class="hint">Откроется страница банка. Кредиты придут в чат этого сообщества.</p></div>'
       : '';
@@ -1442,7 +1443,8 @@ function buy(pkgId){
   if (isVk()) {
     const email = ((document.getElementById('paymail')||{}).value||'').trim();
     if (!email) { alert('Укажите почту для чека'); return; }
-    fetch('/api/vk/pay', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tk: token, packageId: pkgId, email, group: vkGroupId()})})
+    const code = ((document.getElementById('paycode')||{}).value||'').trim();
+    fetch('/api/vk/pay', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({tk: token, packageId: pkgId, email, code, group: vkGroupId()})})
       .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, d:d}; }); })
       .then(function(x){
         if (!x.ok || !x.d.url) { alert((x.d && x.d.error) || 'Оплата не открылась'); return; }
@@ -1587,10 +1589,23 @@ function renderShop(d){
     const head = index === 0 || row.at !== rows[index - 1].at ? '<div class="groupttl">'+esc(row.at)+'</div>' : '';
     return head+'<div class="item"><span>'+row.place+'. '+esc(row.name)+'</span><b>'+row.points+' б.</b></div>';
   }).join('') || '<p class="empty">Прошлых месяцев в списке пока нет.</p>';
+  const promos = d.promos || {};
+  const mine = promos.mine;
+  const offers = mine ? '' : (promos.offers||[]).map(function(item){
+    return '<div class="pack"><div style="flex:1"><b>Промокод 15%</b><div class="meta">'+esc(item.title)+' · к оплате '+item.pay+' ₽</div></div><button type="button" data-promo="'+esc(item.packageId)+'">'+item.bonuses+' б.</button></div>';
+  }).join('');
+  const sale = (promos.sale||[]).map(function(item){
+    return '<div class="pack"><div style="flex:1"><b>Промокод 15%</b><div class="meta">'+esc(item.title)+'</div></div><button type="button" data-promo-buy="'+Number(item.id)+'">'+item.price+' б.</button></div>';
+  }).join('');
+  const bought = (promos.bought||[]).map(function(item){
+    return '<p class="now">'+esc(item.code)+' · '+esc(item.title)+(item.status==='open'?'':' · использован')+'</p>';
+  }).join('');
+  const own = mine ? '<p class="now">'+esc(mine.code)+' · '+esc(mine.title)+(mine.status==='open' && mine.usesLeft>0?'':' · использован')+'</p>' : '';
   return '<h3 style="margin:0 0 6px">Магазин</h3>'+
     '<div class="now">Бонусы: <b>'+(Number(d.bonuses)||0)+'</b>. Это баллы закрытых месяцев. Текущий рейтинг не тратится.</div>'+
     '<p class="now">10 бонусов = 1 кредит. Заявка ждёт подтверждения, само начисление не происходит.</p>'+
     (shopNote ? '<p class="now">'+esc(shopNote)+'</p>' : '')+
+    own+bought+offers+sale+
     goods+
     '<div class="pack"><input id="shop-amount" type="number" min="10" step="10" placeholder="Сколько бонусов" style="flex:1;background:#1c1233;border:1px solid var(--line);border-radius:10px;padding:8px"><button type="button" id="shop-credit">На кредиты</button></div>'+
     '<h3 style="margin:16px 0 6px">Ученики</h3>'+honor;
@@ -1598,6 +1613,12 @@ function renderShop(d){
 function bindShop(){
   document.querySelectorAll('[data-buy]').forEach(function(button){
     button.onclick = function(){ buyShop(button.dataset.buy); };
+  });
+  document.querySelectorAll('[data-promo]').forEach(function(button){
+    button.onclick = function(){ buyPromo(button.dataset.promo); };
+  });
+  document.querySelectorAll('[data-promo-buy]').forEach(function(button){
+    button.onclick = function(){ buyListedPromo(button.dataset.promoBuy); };
   });
   const credit = document.getElementById('shop-credit');
   if (credit) credit.onclick = askShopCredits;
@@ -1618,6 +1639,24 @@ async function loadShop(){
     const live = document.getElementById('shopbox');
     if (live) live.innerHTML = '<p class="err">'+esc(e.message)+'</p>';
   }
+}
+async function buyPromo(packageId){
+  shopNote = 'Оформляю промокод…';
+  try {
+    const r = await fetch('/api/shop/promo', { method:'POST', headers: authHeaders(), body: JSON.stringify({ group: vkGroupId(), packageId: packageId }) });
+    const d = await r.json();
+    shopNote = d.ok ? ('Промокод '+(d.code||'')+'. Напишите его при оплате пакета.'+(d.bonuses?(' Списано '+d.bonuses+' б.'):'')) : (d.error || 'Промокод не оформился.');
+  } catch (e) { shopNote = e.message || 'Промокод не оформился.'; }
+  loadShop();
+}
+async function buyListedPromo(id){
+  shopNote = 'Оформляю промокод…';
+  try {
+    const r = await fetch('/api/shop/promo-buy', { method:'POST', headers: authHeaders(), body: JSON.stringify({ group: vkGroupId(), id: Number(id) }) });
+    const d = await r.json();
+    shopNote = d.ok ? ('Промокод '+(d.code||'')+'. Напишите его при оплате пакета.'+(d.bonuses?(' Списано '+d.bonuses+' б.'):'')) : (d.error || 'Промокод не оформился.');
+  } catch (e) { shopNote = e.message || 'Промокод не оформился.'; }
+  loadShop();
 }
 async function buyShop(id){
   shopNote = 'Оформляю…';

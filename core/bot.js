@@ -12,6 +12,7 @@ const templatesSrc = require('./templates');
 const vk = require('./vk');
 const bridge = require('./bridge');
 const maintenance = require('./maintenance');
+const promo = require('./promo');
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 16 * 60 * 1000 });
 vk.setTelegramNotify((id, text) => bot.telegram.sendMessage(id, text));
@@ -916,9 +917,9 @@ async function startBot(app) {
         const pkg = catalog.getPackage(ctx.match[1]);
         if (!pkg) return ctx.answerCbQuery('⚠️ Пакет не найден');
         await ctx.answerCbQuery();
-        userAwaitingEmail.set(ctx.from.id, pkg.id);
+        userAwaitingEmail.set(ctx.from.id, { pkgId: pkg.id });
         await ctx.reply(
-            `✉ Вы выбрали: *${pkg.title}* (${pkg.price} ₽).\n\nВведите *Email* для электронного чека:`,
+            `✉ Вы выбрали: *${pkg.title}* (${pkg.price} ₽).\n\nЕсли есть промокод, напишите его. Если нет — сразу почту для чека.`,
             { parse_mode: 'Markdown' }
         );
     });
@@ -1163,18 +1164,49 @@ async function startBot(app) {
 
         if (userAwaitingEmail.has(userId)) {
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            const waiting = userAwaitingEmail.get(userId);
+            const pkgId = waiting && typeof waiting === 'object' ? waiting.pkgId : waiting;
+            if (!emailRegex.test(text)) {
+                const code = promo.normalizeCode(text);
+                if (code && code === String(text || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '')) {
+                    const look = await promo.findCode(code);
+                    const shown = promo.preview(look, String(userId), pkgId);
+                    if (!shown.ok) return ctx.reply(shown.error);
+                    userAwaitingEmail.set(userId, { pkgId, code, pay: shown.pay });
+                    return ctx.reply(`Промокод принят. К оплате ${shown.pay} ₽ вместо ${shown.full} ₽. Напишите почту для чека.`);
+                }
+            }
             if (emailRegex.test(text)) {
-                const pkg = catalog.getPackage(userAwaitingEmail.get(userId));
+                const pkg = catalog.getPackage(pkgId);
+                const picked = waiting && typeof waiting === 'object' ? waiting : {};
                 userAwaitingEmail.delete(userId);
                 if (!pkg) return ctx.reply('⚠️ Пакет не найден, выберите заново.');
+                let amount = pkg.price;
+                let promoId = 0;
+                if (picked.code) {
+                    const deal = await promo.take(picked.code, userId, pkg.id);
+                    if (!deal.ok) {
+                        userAwaitingEmail.set(userId, { pkgId: pkg.id });
+                        return ctx.reply(deal.error);
+                    }
+                    amount = deal.pay;
+                    promoId = deal.id;
+                }
                 await ctx.reply(`⏳ Генерирую ссылку на оплату для ${text}...`);
-                const paymentUrl = await createYookassaPayment(pkg.price, `Покупка ${pkg.title}`, text, { userId: String(userId), credits: String(pkg.credits) });
+                const paymentUrl = await createYookassaPayment(amount, `Покупка ${pkg.title}`, text, {
+                    userId: String(userId),
+                    credits: String(pkg.credits),
+                    promo: promoId ? String(promoId) : ''
+                });
                 if (paymentUrl) {
+                    const sum = amount === pkg.price ? `${pkg.price} ₽` : `${amount} ₽ вместо ${pkg.price} ₽`;
                     return ctx.reply(
-                        `💳 Ссылка на оплату готова!\n\nЧек придёт на *${text}*.\nНажмите кнопку ниже:`,
+                        `💳 Ссылка на оплату готова! ${sum}\n\nЧек придёт на *${text}*.\nНажмите кнопку ниже:`,
                         { parse_mode: 'Markdown', ...Markup.inlineKeyboard([[Markup.button.url('🔗 Оплатить в ЮKassa', paymentUrl)]]) }
                     );
                 }
+                if (promoId) await promo.giveBack(promoId);
+                userAwaitingEmail.set(userId, { pkgId: pkg.id, code: picked.code || '', pay: amount });
                 return ctx.reply('⚠️ Не удалось сформировать ссылку. Попробуйте позже.');
             }
             userAwaitingEmail.delete(userId);

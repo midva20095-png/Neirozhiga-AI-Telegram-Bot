@@ -14,6 +14,7 @@ const widget = require('../core/vk-widget');
 const bridge = require('../core/bridge');
 const activity = require('../core/activity');
 const shop = require('../core/shop');
+const promo = require('../core/promo');
 const maintenance = require('../core/maintenance');
 const saveWork = require('../public/save-work');
 // Определяет пользователя из initData Telegram или из подписанной ссылки.
@@ -249,6 +250,7 @@ function startWebApp() {
     });
 
     app.post('/api/vk/pay', async (req, res) => {
+        let promoId = 0;
         try {
             if (await refuseUpdate(res)) return;
             const account = vkAccount(req);
@@ -267,16 +269,29 @@ function startWebApp() {
                 groupId,
                 paid: true
             });
+            const code = promo.normalizeCode(req.body && req.body.code);
+            let amount = pkg.price;
+            if (code) {
+                const deal = await promo.take(code, account, pkg.id);
+                if (!deal.ok) return res.status(400).json({ error: deal.error });
+                amount = deal.pay;
+                promoId = deal.id;
+            }
             const url = await vk.createPayment(
-                pkg.price,
+                amount,
                 `Покупка ${pkg.title}`,
                 email,
-                { userId: String(account), credits: String(pkg.credits), vkGroup: groupId },
+                { userId: String(account), credits: String(pkg.credits), vkGroup: groupId, promo: promoId ? String(promoId) : '' },
                 back
             );
-            if (!url) return res.status(502).json({ error: 'Оплата сейчас не открылась. Попробуйте ещё раз.' });
-            res.json({ url });
+            if (!url) {
+                if (promoId) await promo.giveBack(promoId);
+                promoId = 0;
+                return res.status(502).json({ error: 'Оплата сейчас не открылась. Попробуйте ещё раз.' });
+            }
+            res.json({ url, pay: amount, price: pkg.price });
         } catch (e) {
+            if (promoId) await promo.giveBack(promoId);
             res.status(502).json({ error: 'Оплата сейчас не открылась. Попробуйте ещё раз.' });
         }
     });
@@ -409,12 +424,13 @@ function startWebApp() {
             const group = knownGroup(req.query.group);
             if (!group) return res.status(400).json({ error: 'Нет сообщества' });
             const current = activity.monthRange(new Date());
-            const [bonuses, items, honor] = await Promise.all([
+            const [bonuses, items, honor, promos] = await Promise.all([
                 shop.bonusBalance(req.userId, group, current.start),
                 shop.listItems(group, true),
-                shop.listHonor(group)
+                shop.listHonor(group),
+                promo.shopView(req.userId, group)
             ]);
-            res.json({ vk: true, bonuses, rate: activity.CREDIT_RATE, items, honor });
+            res.json({ vk: true, bonuses, rate: activity.CREDIT_RATE, items, honor, promos });
         } catch (e) {
             res.status(500).json({ error: 'Не удалось открыть магазин.' });
         }
@@ -441,6 +457,30 @@ function startWebApp() {
             res.json(await shop.askCredits(req.userId, group, body.bonuses));
         } catch (e) {
             res.status(500).json({ ok: false, error: 'Заявка не оформилась.' });
+        }
+    });
+
+    app.post('/api/shop/promo', requireUser, async (req, res) => {
+        try {
+            if (Number(req.userId) >= 0) return res.status(400).json({ ok: false, error: 'Магазин открыт во ВКонтакте.' });
+            const body = req.body || {};
+            const group = knownGroup(body.group);
+            if (!group) return res.status(400).json({ ok: false, error: 'Нет сообщества' });
+            res.json(await promo.buyPersonal(req.userId, group, body.packageId));
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Промокод не оформился.' });
+        }
+    });
+
+    app.post('/api/shop/promo-buy', requireUser, async (req, res) => {
+        try {
+            if (Number(req.userId) >= 0) return res.status(400).json({ ok: false, error: 'Магазин открыт во ВКонтакте.' });
+            const body = req.body || {};
+            const group = knownGroup(body.group);
+            if (!group) return res.status(400).json({ ok: false, error: 'Нет сообщества' });
+            res.json(await promo.buyListed(req.userId, group, body.id));
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Промокод не оформился.' });
         }
     });
 
@@ -978,7 +1018,10 @@ function startWebApp() {
             const orders = await shop.listOrders(group);
             const faces = await vk.attachFaces(orders.map(row => ({ user_id: row.userId })));
             const named = new Map(faces.map(row => [String(row.userId), row]));
+            const promos = await promo.listAdmin(group);
             res.json({
+                packages: catalog.listPackages().map(item => ({ id: item.id, title: item.title, price: item.price, credits: item.credits })),
+                promos,
                 items,
                 orders: orders.map(row => {
                     const face = named.get(String(row.userId)) || {};
@@ -1033,6 +1076,18 @@ function startWebApp() {
             res.json({ ok: false, error: 'Неизвестное действие.' });
         } catch (e) {
             res.status(500).json({ ok: false, error: 'Не удалось обработать заявку.' });
+        }
+    });
+
+    app.post('/api/admin/vk/promo', requireAdmin, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const group = vk.communityId(body.group);
+            if (!group) return res.status(400).json({ ok: false, error: 'Нет сообщества' });
+            if (body.action === 'off') return res.json(await promo.closeAdmin(group, body.id));
+            res.json(await promo.addAdmin(group, body));
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Код не сохранился.' });
         }
     });
 
