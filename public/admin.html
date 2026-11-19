@@ -151,10 +151,12 @@ function tgInit(){ try{ return (window.Telegram&&window.Telegram.WebApp&&window.
 
 async function api(path, opts){
   opts = Object.assign({}, opts||{});
+  const wait = Number(opts.timeout) || 12000;
+  delete opts.timeout;
   opts.headers = Object.assign({'Content-Type':'application/json'}, opts.headers||{});
   if (token) opts.headers['Authorization'] = 'Bearer '+token;
   const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
-  const timer = ctrl ? setTimeout(function(){ ctrl.abort(); }, 12000) : 0;
+  const timer = ctrl ? setTimeout(function(){ ctrl.abort(); }, wait) : 0;
   if (ctrl) opts.signal = ctrl.signal;
   let r;
   try { r = await fetch(path, opts); }
@@ -469,7 +471,7 @@ async function loadRate(){
   const el = document.getElementById('section-rate');
   el.innerHTML = '<div class="card">Считаю баллы…</div>';
   try {
-    const d = await api('/api/admin/vk/rating?group='+encodeURIComponent(vkHome)+'&period='+encodeURIComponent(ratePeriod));
+    const d = await api('/api/admin/vk/rating?group='+encodeURIComponent(vkHome)+'&period='+encodeURIComponent(ratePeriod), { timeout: 90000 });
     const rows = d.rows || [];
     const paid = d.paid;
     el.innerHTML =

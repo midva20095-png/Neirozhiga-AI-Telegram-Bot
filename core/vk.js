@@ -661,12 +661,15 @@ async function loadMonthPosts(token, groupId, range) {
     return storeMonthPosts(groupId, range, activity.postsInRange(collected, range.start, range.end), true);
 }
 
-async function monthActivity(groupId, range, limit) {
+async function monthActivity(groupId, range, limit, options) {
     const id = String(groupId || '').replace(/\D/g, '');
     const item = communityList().find(entry => entry.id === id);
     let posts = cachedMonthPosts(id, range);
     if (item && item.token) {
         try { posts = await loadMonthPosts(item.token, id, range); } catch (error) {}
+    }
+    if (options && options.sync && item && item.token && posts.length) {
+        try { await scanCommunityActivity(item.token, id); } catch (error) {}
     }
     const hidden = await ratingHidden(id);
     const rows = activity.withoutHidden(
@@ -726,25 +729,51 @@ async function awardReaction(groupId, kind, objectKey, vkId) {
     } catch (e) {}
 }
 
-async function scanCommunityActivity(token, groupId) {
+const reactionFlight = new Map();
+
+async function listReactionIds(token, owner, postId, filter) {
+    const ids = [];
+    const seen = new Set();
+    let offset = 0;
+    for (let page = 0; page < 3; page++) {
+        await pause(80);
+        let pack;
+        try {
+            pack = await call(token, 'likes.getList', {
+                type: 'post',
+                owner_id: String(owner),
+                item_id: String(postId),
+                count: '1000',
+                offset: String(offset),
+                filter
+            });
+        } catch (error) {
+            break;
+        }
+        const items = (pack && pack.items) || [];
+        if (!items.length) break;
+        for (const item of items) {
+            const id = Number(item && item.id ? item.id : item);
+            if (!Number.isInteger(id) || id <= 0 || seen.has(id)) continue;
+            seen.add(id);
+            ids.push(id);
+        }
+        offset += items.length;
+        const count = Number(pack && pack.count) || 0;
+        if (items.length < 1000 || (count && offset >= count)) break;
+    }
+    return ids;
+}
+
+async function scanCommunityActivityNow(token, groupId) {
     const owner = -Number(String(groupId || '').replace(/\D/g, ''));
     if (!owner) return;
     const range = activity.monthRange(new Date());
     let posts = [];
     try { posts = await loadMonthPosts(token, groupId, range); } catch (error) { return; }
     for (const post of posts) {
-        await pause(280);
-        let likers = [];
-        try {
-            const likes = await call(token, 'likes.getList', {
-                type: 'post', owner_id: String(owner), item_id: String(post.id), count: '100', filter: 'likes'
-            });
-            likers = (likes && likes.items) || [];
-        } catch (e) {}
-        const likeKey = `${groupId}:like:${post.id}`;
-        const likePick = activity.freshIds(reactionSeen.get(likeKey), likers);
-        reactionSeen.set(likeKey, likePick.seen);
-        for (const id of likePick.fresh) await awardReaction(groupId, 'like', `post:${post.id}`, id);
+        const likers = await listReactionIds(token, owner, post.id, 'likes');
+        for (const id of likers) await awardReaction(groupId, 'like', `post:${post.id}`, id);
 
         let comments = [];
         try { comments = await listPostComments(token, owner, post.id); } catch (e) {}
@@ -754,19 +783,18 @@ async function scanCommunityActivity(token, groupId) {
             await awardReaction(groupId, 'comment', `comment:${post.id}:${comment.id}`, fromId);
         }
 
-        await pause(280);
-        let copies = [];
-        try {
-            const reposts = await call(token, 'likes.getList', {
-                type: 'post', owner_id: String(owner), item_id: String(post.id), count: '100', filter: 'copies'
-            });
-            copies = (reposts && reposts.items) || [];
-        } catch (e) {}
-        const copyKey = `${groupId}:repost:${post.id}`;
-        const copyPick = activity.freshIds(reactionSeen.get(copyKey), copies);
-        reactionSeen.set(copyKey, copyPick.seen);
-        for (const id of copyPick.fresh) await awardReaction(groupId, 'repost', `repost:${post.id}:${id}`, id);
+        const copies = await listReactionIds(token, owner, post.id, 'copies');
+        for (const id of copies) await awardReaction(groupId, 'repost', `repost:${post.id}:${id}`, id);
     }
+}
+
+async function scanCommunityActivity(token, groupId) {
+    const key = String(groupId || '').replace(/\D/g, '');
+    if (!key) return;
+    if (reactionFlight.has(key)) return reactionFlight.get(key);
+    const job = scanCommunityActivityNow(token, groupId).finally(() => reactionFlight.delete(key));
+    reactionFlight.set(key, job);
+    return job;
 }
 
 function keepComment(list, seen, comment) {
@@ -781,7 +809,7 @@ async function listPostComments(token, owner, postId) {
     const seen = new Set();
     let offset = 0;
     for (let page = 0; page < 6; page++) {
-        await pause(220);
+        await pause(80);
         let pack;
         try {
             pack = await call(token, 'wall.getComments', {
@@ -803,7 +831,7 @@ async function listPostComments(token, owner, postId) {
             replies.forEach(reply => keepComment(list, seen, reply));
             const total = Number(thread && thread.count) || 0;
             if (comment && comment.id && total > replies.length) {
-                await pause(220);
+                await pause(80);
                 try {
                     const deep = await call(token, 'wall.getComments', {
                         owner_id: String(owner),
@@ -1755,7 +1783,7 @@ async function sendRating(token, peerId, account, groupId) {
     const range = activity.monthRange(new Date());
     let rows = [];
     try {
-        rows = await attachFaces((await monthActivity(groupId, range)).rows);
+        rows = await attachFaces((await monthActivity(groupId, range, 50, { sync: true })).rows);
     } catch (error) {}
     await sendText(token, peerId, activity.formatRating(rows, account, range));
 }

@@ -379,7 +379,7 @@ function startWebApp() {
             if (!userId && !group) return res.status(401).json({ error: 'auth_required' });
             const range = activity.monthRange(new Date());
             if (userId && Number(userId) >= 0) return res.json({ vk: false, week: range.label, rows: [], mine: null });
-            const pack = await vk.monthActivity(group, range);
+            const pack = await vk.monthActivity(group, range, 50, { sync: true });
             const rows = await vk.attachFaces(pack.rows);
             const place = userId ? rows.findIndex(row => String(row.userId) === String(userId)) : -1;
             res.json({
@@ -844,7 +844,7 @@ function startWebApp() {
             const now = new Date();
             const range = req.query.period === 'previous' ? activity.previousMonth(now) : activity.monthRange(now);
             const group = vk.communityId(req.query.group);
-            const pack = await vk.monthActivity(group, range, 200);
+            const pack = await vk.monthActivity(group, range, 200, { sync: req.query.period !== 'previous' });
             const rows = await vk.attachFaces(pack.rows);
             const hidden = await vk.attachFaces((pack.hidden || []).map(id => ({ user_id: id })));
             const key = `vk_rate_bonus_${group}_${range.start.toISOString().slice(0, 10)}`;

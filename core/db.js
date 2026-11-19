@@ -509,7 +509,7 @@ async function listWeekActivity(since, groupId, until, limit, postIds) {
   if (Array.isArray(postIds)) {
     const ids = [...new Set(postIds.map(id => String(Math.round(Number(id) || 0))).filter(id => id !== '0'))];
     params.push(ids);
-    wallSql = ` AND (a.kind = 'bot' OR substring(a.object_key from '^(?:post|comment|repost):([0-9]+)') = ANY($${params.length}::text[]))`;
+    wallSql = ` AND (a.kind = 'bot' OR split_part(a.object_key, ':', 2) = ANY($${params.length}::text[]))`;
   }
   params.push(cap);
   const res = await pool.query(
