@@ -13,6 +13,7 @@ const vk = require('../core/vk');
 const widget = require('../core/vk-widget');
 const bridge = require('../core/bridge');
 const activity = require('../core/activity');
+const shop = require('../core/shop');
 const maintenance = require('../core/maintenance');
 const saveWork = require('../public/save-work');
 // Определяет пользователя из initData Telegram или из подписанной ссылки.
@@ -894,24 +895,96 @@ function startWebApp() {
                 });
             }
             const rows = await vk.attachFaces((await vk.monthActivity(group, range, 200)).rows);
-            const grants = activity.bonusGrants(rows, body.places, body.rest);
-            if (!grants.length) return res.json({ ok: false, error: 'Некому начислять: укажите сумму и проверьте список.' });
+            const places = (Array.isArray(body.places) ? body.places : []).slice(0, 3);
+            const grants = activity.bonusGrants(rows, places, 0).filter(grant => grant.place <= 3);
+            if (!grants.length) return res.json({ ok: false, error: 'Укажите сумму для первых трёх мест.' });
             let count = 0;
             let total = 0;
+            const winners = [];
             for (const grant of grants) {
                 const balance = await db.updateBalance(grant.userId, grant.amount, `Рейтинг · ${range.label} · место ${grant.place}`);
                 if (balance === null) continue;
                 count += 1;
                 total += grant.amount;
+                const row = rows.find(item => String(item.userId) === String(grant.userId));
+                winners.push({ name: row && row.name || 'Ученик', points: row && row.points || 0, amount: grant.amount });
                 try {
-                    await tellClient(grant.userId, `Бонус за рейтинг: ${grant.amount} кредитов.\n${range.label}, место ${grant.place}.\nБаланс: ${balance} кр.`);
+                    await tellClient(grant.userId, `Приз рейтинга: ${grant.amount} кредитов.\n${range.label}, место ${grant.place}.\nБаланс: ${balance} кр.`);
                 } catch (e) {}
             }
             const paid = { at: new Date().toISOString(), count, total, label: range.label };
             await db.setSetting(key, paid);
-            res.json({ ok: count > 0, count, total, label: range.label, error: count ? '' : 'Не получилось начислить' });
+            let posted = false;
+            try { posted = await vk.publishPrize(group, range, winners); } catch (e) { posted = false; }
+            res.json({ ok: count > 0, count, total, label: range.label, posted, error: count ? '' : 'Не получилось начислить' });
         } catch (e) {
             res.status(500).json({ ok: false, error: 'Не удалось начислить бонус.' });
+        }
+    });
+
+    app.get('/api/admin/vk/shop', requireAdmin, async (req, res) => {
+        try {
+            const group = vk.communityId(req.query.group);
+            if (!group) return res.status(400).json({ error: 'Нет сообщества' });
+            const items = await shop.listItems(group, false);
+            const orders = await shop.listOrders(group);
+            const faces = await vk.attachFaces(orders.map(row => ({ user_id: row.userId })));
+            const named = new Map(faces.map(row => [String(row.userId), row]));
+            res.json({
+                items,
+                orders: orders.map(row => {
+                    const face = named.get(String(row.userId)) || {};
+                    return Object.assign({}, row, { name: face.name || row.userId, photo: face.photo || '' });
+                }),
+                fresh: orders.filter(row => row.status === 'new').length
+            });
+        } catch (e) {
+            res.status(500).json({ error: 'Не удалось открыть магазин.' });
+        }
+    });
+
+    app.post('/api/admin/vk/shop-item', requireAdmin, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const group = vk.communityId(body.group);
+            if (!group) return res.status(400).json({ ok: false, error: 'Нет сообщества' });
+            const saved = await shop.saveItem(group, body);
+            res.json(saved);
+        } catch (e) {
+            res.status(400).json({ ok: false, error: e && e.code === 'photo' ? e.message : 'Не удалось сохранить товар.' });
+        }
+    });
+
+    app.post('/api/admin/vk/shop-order', requireAdmin, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const group = vk.communityId(body.group);
+            const action = String(body.action || '');
+            if (!group) return res.status(400).json({ ok: false, error: 'Нет сообщества' });
+            if (action === 'cancel') return res.json(await shop.cancelOrder(group, body.id));
+            if (action === 'done') {
+                const result = await shop.finishOrder(group, body.id);
+                if (result.ok) {
+                    try { await tellClient(result.order.user_id, `Заказ магазина выполнен: ${result.order.title}.`); } catch (e) {}
+                }
+                return res.json(result);
+            }
+            if (action === 'credit') {
+                const taken = await shop.takeCreditOrder(group, body.id);
+                if (!taken.ok) return res.json(taken);
+                const balance = await db.updateBalance(taken.order.userId, taken.order.credits, `Магазин · ${taken.order.credits} кр. за ${taken.order.bonuses} б.`);
+                if (balance === null) {
+                    await shop.reopenOrder(taken.order.id);
+                    return res.json({ ok: false, error: 'Кредиты не начислились, заявка осталась открытой.' });
+                }
+                try {
+                    await tellClient(taken.order.userId, `Обмен бонусов: ${taken.order.credits} кредитов.\nБаланс: ${balance} кр.`);
+                } catch (e) {}
+                return res.json({ ok: true, credits: taken.order.credits, balance });
+            }
+            res.json({ ok: false, error: 'Неизвестное действие.' });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Не удалось обработать заявку.' });
         }
     });
 

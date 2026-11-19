@@ -167,13 +167,25 @@ test('итог недели публикуется в понедельник у�
     const prev = activity.previousWeek(monday);
     assert.equal(prev.start.toISOString(), '2026-11-08T21:00:00.000Z');
     assert.equal(prev.end.toISOString(), '2026-11-15T21:00:00.000Z');
-    const text = activity.wallSummary([
-        { name: 'Анна', points: 8, likes: 1, comments: 1, reposts: 0, bot: 1 }
+    const text = activity.prizePost([
+        { name: 'Анна', points: 30, amount: 100 },
+        { name: 'Борис', points: 20, amount: 50 },
+        { name: 'Вера', points: 10, amount: 30 },
+        { name: 'Глеб', points: 5, amount: 0 }
     ], prev);
-    assert.match(text, /Анна — 8 б\./);
+    assert.match(text, /1\. Анна — 30 б\., приз 100 кр\./);
+    assert.match(text, /3\. Вера — 10 б\./);
+    assert.doesNotMatch(text, /Глеб/);
     assert.match(text, /Новый месяц уже начался/);
     assert.doesNotMatch(text, /Ваши баллы|access_token|vk1\.a\./);
-    assert.match(activity.wallSummary([], prev), /В прошлом месяце баллов не было/);
+    assert.match(activity.prizePost([], prev), /приз никому не начислен/);
+    assert.deepEqual(activity.quoteCredits(25), { credits: 2, spend: 20, left: 5 });
+    assert.equal(activity.quoteCredits(9).credits, 0);
+    assert.deepEqual(activity.planSpend([{ month: '2026-10-01', points: 12, spent: 10 }, { month: '2026-11-01', points: 30, spent: 0 }], 20), [
+        { month: '2026-10-01', amount: 2 },
+        { month: '2026-11-01', amount: 18 }
+    ]);
+    assert.equal(activity.planSpend([{ month: '2026-11-01', points: 5, spent: 0 }], 10), null);
     const own = activity.readWallComment({
         type: 'wall_reply_new',
         object: { from_id: -230706467, id: 3, post_id: 9, text: '#как сделать обложку?', owner_id: -230706467 }

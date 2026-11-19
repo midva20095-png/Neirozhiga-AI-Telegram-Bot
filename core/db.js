@@ -245,6 +245,56 @@ async function initDB() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS vk_lesson_memory_idx ON vk_lesson_memory (group_id, post_id, user_id, id DESC)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vk_bonus (
+      user_id BIGINT NOT NULL,
+      group_id BIGINT NOT NULL,
+      month DATE NOT NULL,
+      points INTEGER NOT NULL,
+      spent INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_id, group_id, month)
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vk_honor (
+      group_id BIGINT NOT NULL,
+      month DATE NOT NULL,
+      place INTEGER NOT NULL,
+      user_id BIGINT NOT NULL,
+      name TEXT NOT NULL,
+      points INTEGER NOT NULL,
+      PRIMARY KEY (group_id, month, place)
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vk_shop_item (
+      id SERIAL PRIMARY KEY,
+      group_id BIGINT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      price INTEGER NOT NULL,
+      stock INTEGER NOT NULL DEFAULT -1,
+      photo TEXT NOT NULL DEFAULT '',
+      visible BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vk_shop_order (
+      id SERIAL PRIMARY KEY,
+      group_id BIGINT NOT NULL,
+      user_id BIGINT NOT NULL,
+      item_id INTEGER,
+      title TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      bonuses INTEGER NOT NULL,
+      credits INTEGER NOT NULL DEFAULT 0,
+      takes JSONB NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'new',
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS vk_shop_order_group_idx ON vk_shop_order (group_id, id DESC)`);
   console.log('✅ Таблица users готова (PostgreSQL)');
 }
 

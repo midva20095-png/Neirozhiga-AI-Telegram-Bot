@@ -8,6 +8,7 @@ const catalog = require('./catalog');
 const gen = require('./generate');
 const auth = require('./auth');
 const activity = require('./activity');
+const shop = require('./shop');
 const audit = require('./vk-audit');
 const club = require('./vk-club');
 const donut = require('./vk-donut');
@@ -159,6 +160,8 @@ function menuAction(text, payload) {
     if (value === 'справка/рейтинг' || value === 'справка / рейтинг') return 'more';
     if (value === 'справка' || value === 'помощь') return 'help';
     if (value === 'рейтинг') return 'rate';
+    if (value === 'магазин') return 'shop';
+    if (value === 'ученики') return 'honor';
     if (value === 'аудит') return 'audit';
     if (value === 'клуб') return 'club';
     if (value === 'бот ии') return 'models';
@@ -258,6 +261,7 @@ function mainMenu(peerId, groupId) {
 }
 
 const pendingPay = new Map();
+const pendingShop = new Map();
 const pendingMove = new Map();
 const pendingJob = new Map();
 const pendingAudit = new Set();
@@ -1622,6 +1626,7 @@ async function goBack(token, peerId, account, groupId) {
         return sendText(token, peerId, 'Напишите номер или @имя в Telegram. «Назад» возвращает меню.', payLockKeyboard());
     }
     pendingMove.delete(key);
+    pendingShop.delete(key);
     await rememberDialog(account, '');
     return sendText(token, peerId, 'Вы в меню.', mainMenu(peerId, groupId));
 }
@@ -1718,6 +1723,7 @@ async function reply(token, peerId, account, text, payload, groupId, photoUrls) 
         pendingPay.delete(String(account));
         pendingMove.delete(String(account));
         pendingJob.delete(String(account));
+        pendingShop.delete(String(account));
         await rememberDialog(account, '');
         try { await db.clearDonutSurvey(account, groupId); } catch (error) {}
         return sendText(token, peerId, 'Запрос отменён.', mainMenu(peerId, groupId));
@@ -1768,6 +1774,7 @@ async function reply(token, peerId, account, text, payload, groupId, photoUrls) 
     }
     if (await holdPayment(token, peerId, account, text, action, groupId)) return;
     if (await holdMove(token, peerId, account, text, action)) return;
+    if (await holdShop(token, peerId, account, text, action, payload, groupId)) return;
     if (action === 'audit') {
         pendingJob.delete(String(account));
         pendingPay.delete(String(account));
@@ -1912,7 +1919,116 @@ async function sendRating(token, peerId, account, groupId) {
     try {
         rows = await attachFaces((await monthActivity(groupId, range, 50, { sync: true })).rows);
     } catch (error) {}
-    await sendText(token, peerId, activity.formatRating(rows, account, range));
+    await sendText(token, peerId, activity.formatRating(rows, account, range), ratingKeyboard());
+}
+
+function ratingKeyboard() {
+    return asBoard([
+        [textButton('Магазин', { a: 'shop' }, 'primary'), textButton('Ученики', { a: 'honor' }, 'secondary')],
+        [textButton('Назад', { a: 'pay_back' }, 'secondary')]
+    ]);
+}
+
+function shopKeyboard(items) {
+    const rows = (items || []).slice(0, 6).map(item => [
+        textButton(fitLabel(`${item.title} · ${item.price}`), { a: 'shop_buy', id: item.id }, 'primary')
+    ]);
+    rows.push([textButton('На кредиты', { a: 'shop_credit' }, 'positive')]);
+    rows.push([textButton('Назад', { a: 'pay_back' }, 'secondary')]);
+    return asBoard(rows);
+}
+
+async function sealPreviousMonth(groupId) {
+    const range = activity.previousMonth(new Date());
+    const rows = await attachFaces((await monthActivity(groupId, range, 200)).rows);
+    return shop.closeMonth(groupId, range, rows);
+}
+
+async function sendShop(token, peerId, account, groupId) {
+    try { await sealPreviousMonth(groupId); } catch (error) {}
+    const current = activity.monthRange(new Date());
+    let free = 0;
+    let items = [];
+    try {
+        free = await shop.bonusBalance(account, groupId, current.start);
+        items = await shop.listItems(groupId, true);
+    } catch (error) {}
+    const lines = [
+        `Магазин · ${communityTitle(groupId)}`,
+        `Бонусы: ${free}. Это баллы закрытых месяцев. Текущий рейтинг здесь не тратится.`,
+        '10 бонусов = 1 кредит. Заявка ждёт подтверждения, бот сам кредиты не добавляет.',
+        ''
+    ];
+    if (!items.length) lines.push('Товаров пока нет. Можно оставить заявку на кредиты.');
+    items.slice(0, 6).forEach(item => {
+        const left = Number(item.stock) < 0 ? '' : `, осталось ${item.stock}`;
+        lines.push(`${item.title} — ${item.price} б.${left}`);
+        if (item.body) lines.push(String(item.body).slice(0, 180));
+    });
+    await sendText(token, peerId, lines.join('\n').slice(0, 3500), shopKeyboard(items));
+}
+
+async function sendHonor(token, peerId, groupId) {
+    let rows = [];
+    try { await sealPreviousMonth(groupId); } catch (error) {}
+    try { rows = await shop.listHonor(groupId); } catch (error) {}
+    const lines = [`Ученики · ${communityTitle(groupId)}`, 'Первые десять мест закрытых месяцев.', ''];
+    if (!rows.length) lines.push('Прошлых месяцев в списке пока нет.');
+    let month = '';
+    rows.forEach(row => {
+        if (row.at !== month) {
+            month = row.at;
+            lines.push(month);
+        }
+        lines.push(`${row.place}. ${row.name} — ${row.points} б.`);
+    });
+    await sendText(token, peerId, lines.join('\n').slice(0, 3500), ratingKeyboard());
+}
+
+async function holdShop(token, peerId, account, text, action, payload, groupId) {
+    const key = String(account);
+    if (action === 'shop') {
+        pendingShop.delete(key);
+        await sendShop(token, peerId, account, groupId);
+        return true;
+    }
+    if (action === 'honor') {
+        pendingShop.delete(key);
+        await sendHonor(token, peerId, groupId);
+        return true;
+    }
+    if (action === 'shop_buy') {
+        pendingShop.delete(key);
+        const result = await shop.buyItem(account, groupId, payload && payload.id);
+        const line = result.ok
+            ? `Заказ принят: ${result.title}. Списано ${result.bonuses} б. Его видно в админке.`
+            : (result.error || 'Заказ не оформился.');
+        await sendText(token, peerId, line, ratingKeyboard());
+        return true;
+    }
+    if (action === 'shop_credit') {
+        pendingShop.set(key, { groupId: String(groupId || '').replace(/\D/g, '') });
+        await sendText(token, peerId, 'Напишите, сколько бонусов обменять. 10 бонусов = 1 кредит. «Назад» возвращает меню.', payLockKeyboard());
+        return true;
+    }
+    const pending = pendingShop.get(key);
+    if (!pending) return false;
+    if (action) {
+        pendingShop.delete(key);
+        return false;
+    }
+    const amount = Math.round(Number(String(text || '').replace(/\s/g, '')));
+    if (!amount) {
+        await sendText(token, peerId, 'Напишите целое число бонусов или нажмите «Назад».', payLockKeyboard());
+        return true;
+    }
+    const result = await shop.askCredits(account, pending.groupId || groupId, amount);
+    pendingShop.delete(key);
+    const line = result.ok
+        ? `Заявка на ${result.credits} кр. принята. Списано ${result.spend} б. Осталось без списания: ${result.left}. Кредиты придут после подтверждения.`
+        : (result.error || 'Заявка не оформилась.');
+    await sendText(token, peerId, line, ratingKeyboard());
+    return true;
 }
 
 const wallDone = new Set();
@@ -2390,20 +2506,35 @@ async function publishWeeklyRatings(now) {
                 continue;
             }
             const rows = await attachFaces((await monthActivity(item.id, prev)).rows);
-            await call(item.token, 'wall.post', {
-                owner_id: String(-Number(item.id)),
-                from_group: '1',
-                message: activity.wallSummary(rows, prev)
-            });
+            if (!rows.length) continue;
+            await shop.closeMonth(item.id, prev, rows);
             await wallFinish(key);
-            db.note('sys', `ВК ${item.id}: итог месяца на стене`).catch(() => {});
+            db.note('sys', `ВК ${item.id}: месяц закрыт, бонусы и десятка учеников сохранены`).catch(() => {});
         } catch (error) {
             if (ratingWarned.has(key)) continue;
             ratingWarned.add(key);
             const code = Number(error && error.code);
-            console.error(`ВК ${item.id}: итог месяца не опубликован${code ? ` (${code})` : ''}.`);
+            console.error(`ВК ${item.id}: месяц не закрылся${code ? ` (${code})` : ''}.`);
         }
     }
+}
+
+async function publishPrize(groupId, range, winners) {
+    const id = String(groupId || '').replace(/\D/g, '');
+    const item = communityList().find(entry => entry.id === id);
+    const list = (Array.isArray(winners) ? winners : []).filter(row => row && row.name).slice(0, 3);
+    if (!item || !item.token || !list.length || !range || !(range.start instanceof Date)) return false;
+    const key = `vk_prize_${id}_${range.start.toISOString().slice(0, 10)}`;
+    const saved = await db.getSettings([key]);
+    if (saved && saved[key]) return false;
+    await call(item.token, 'wall.post', {
+        owner_id: String(-Number(id)),
+        from_group: '1',
+        message: activity.prizePost(list, range)
+    });
+    await db.setSetting(key, { at: new Date().toISOString(), count: list.length });
+    db.note('sys', `ВК ${id}: пост о призах месяца`).catch(() => {});
+    return true;
 }
 
 function watchWeeklyRating() {
@@ -2908,5 +3039,5 @@ async function ensureCommunityWidget(groupId) {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, monthActivity, setRatingHidden, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, monthActivity, setRatingHidden, publishPrize, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos
 };

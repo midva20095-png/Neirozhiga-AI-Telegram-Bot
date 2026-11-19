@@ -249,7 +249,8 @@ function formatRating(rows, meId, range) {
         `Рейтинг · ${range.label}`,
         rulesText(),
         'Лайк, комментарий и репост считаются только на постах этого месяца. Записи прошлых месяцев не входят.',
-        'В первый день месяца баллы начинаются заново. Кредиты по этому списку начисляет администратор.',
+        'В первый день месяца баллы начинаются заново. Приз получают первые три места.',
+        'После закрытия месяца баллы становятся бонусами магазина. Текущий месяц в магазине не тратится.',
         ''
     ];
     if (!rows.length) {
@@ -268,24 +269,59 @@ function formatRating(rows, meId, range) {
     return lines.join('\n').slice(0, 3500);
 }
 
-function wallSummary(rows, range) {
+function prizePost(rows, range) {
     const lines = [
-        `Итог месяца · ${range.label}`,
-        rulesText(),
-        'В зачёт вошли только посты этого месяца: лайки, комментарии и репосты на них.',
-        'Кредиты по этому списку начисляет администратор.',
-        'Новый месяц уже начался, баллы считаются заново.',
+        `Призы месяца · ${range.label}`,
+        'Приз получают первые три места.',
         ''
     ];
-    const list = Array.isArray(rows) ? rows : [];
+    const list = (Array.isArray(rows) ? rows : []).slice(0, 3);
     if (!list.length) {
-        lines.push('В прошлом месяце баллов не было.');
+        lines.push('В этом месяце приз никому не начислен.');
     } else {
-        list.slice(0, 10).forEach((row, index) => {
-            lines.push(`${index + 1}. ${row.name} — ${row.points} б. (лайки ${row.likes}, комментарии ${row.comments}, репосты ${row.reposts}, бот ${row.bot})`);
+        list.forEach((row, index) => {
+            const prize = Number(row.amount) > 0 ? `, приз ${Math.round(Number(row.amount))} кр.` : '';
+            lines.push(`${index + 1}. ${row.name} — ${Math.round(Number(row.points) || 0)} б.${prize}`);
         });
     }
+    if (range && range.end instanceof Date && range.end.getTime() <= Date.now()) {
+        lines.push('');
+        lines.push('Новый месяц уже начался, баллы считаются заново.');
+    }
     return lines.join('\n').slice(0, 3500);
+}
+
+function wallSummary(rows, range) {
+    return prizePost(rows, range);
+}
+
+const CREDIT_RATE = 10;
+
+function quoteCredits(bonuses) {
+    const asked = Math.max(0, Math.round(Number(bonuses) || 0));
+    const credits = Math.floor(asked / CREDIT_RATE);
+    const spend = credits * CREDIT_RATE;
+    return { credits, spend, left: asked - spend };
+}
+
+function monthKey(value) {
+    if (value instanceof Date) return value.toISOString().slice(0, 10);
+    return String(value || '').slice(0, 10);
+}
+
+function planSpend(lots, amount) {
+    let need = Math.round(Number(amount) || 0);
+    if (need <= 0) return [];
+    const takes = [];
+    for (const lot of lots || []) {
+        const free = Math.max(0, Math.round(Number(lot.points) || 0) - Math.round(Number(lot.spent) || 0));
+        if (free <= 0) continue;
+        const take = Math.min(free, need);
+        takes.push({ month: monthKey(lot.month), amount: take });
+        need -= take;
+        if (need === 0) return takes;
+    }
+    return null;
 }
 
 function mergeRating(botRows, wallRows) {
@@ -348,5 +384,6 @@ module.exports = {
     POINTS, rulesText, postIdFromKey, postsInRange, weekRange, previousWeek, shouldPublishWeek,
     monthRange, previousMonth, shouldPublishMonth, bonusGrants,
     parseCommunityActivity, readWallComment, wallCommentIssue, readWallPost,
-    faceOf, present, formatRating, wallSummary, mergeRating, ratingAccount, withoutHidden, freshIds
+    faceOf, present, formatRating, prizePost, wallSummary, mergeRating, ratingAccount, withoutHidden, freshIds,
+    CREDIT_RATE, quoteCredits, planSpend
 };

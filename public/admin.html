@@ -117,6 +117,7 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
   <div id="section-home"></div>
   <div id="section-stats"></div>
   <div id="section-rate"></div>
+  <div id="section-shop"></div>
   <div id="section-donut"></div>
   <div id="section-users"></div>
   <div id="section-tpl"></div>
@@ -298,7 +299,7 @@ function openCabinet(tab){
 }
 
 function currentTabs(){
-  if (inCommunity()) return [['home','Обзор'],['rate','Рейтинг'],['donut','Донат'],['users','Клиенты'],['tickets','Поддержка']];
+  if (inCommunity()) return [['home','Обзор'],['rate','Рейтинг'],['shop','Магазин'],['donut','Донат'],['users','Клиенты'],['tickets','Поддержка']];
   return TABS.slice();
 }
 function rateFace(row){
@@ -312,7 +313,7 @@ function renderTabs(){
 function go(k){
   cur=k;
   renderTabs();
-  ['home','stats','rate','donut','users','tpl','models','journal','packages','tickets','broadcast','settings'].forEach(t=>{
+  ['home','stats','rate','shop','donut','users','tpl','models','journal','packages','tickets','broadcast','settings'].forEach(t=>{
     const node = document.getElementById('section-'+t);
     if (node) node.style.display = t===k ? 'block' : 'none';
   });
@@ -338,6 +339,7 @@ async function loadSection(k){
     if (k==='home') return await loadHome();
     if (k==='stats') return await loadStats();
     if (k==='rate') return await loadRate();
+    if (k==='shop') return await loadShop();
     if (k==='donut') return await loadDonut();
     if (k==='users') return await loadUsers('');
     if (k==='tpl') return await loadTpl();
@@ -478,13 +480,13 @@ async function loadRate(){
       '<div class="card"><h3>Рейтинг · '+esc(placeName())+'</h3>'+
       '<p class="note">'+esc(d.week||'')+'</p>'+
       '<p class="note">'+esc(d.rules||'')+' Лайки, комментарии и репосты берутся только с постов выбранного месяца: в ноябре — все посты ноября, в декабре — все посты декабря. Лайки записей прошлого года и более старых постов не считаются. Запрос боту считается отдельно за этот месяц.</p>'+
-      '<p class="note">Постов в расчёте: '+(Number(d.posts)||0)+'. В список входят лайки и комментарии людей на этих постах, включая ответы в ветках. Ответы самого сообщества не считаются. У «Точек и Линий» и «НейроЯги» списки разные.</p>'+
+      '<p class="note">Постов в расчёте: '+(Number(d.posts)||0)+'. В список входят лайки и комментарии людей на этих постах, включая ответы в ветках. Ответы самого сообщества не считаются. У «Точек и Линий» и «НейроЯги» списки разные. Приз получают только первые три места. Пост на стене выходит об этих трёх, когда приз начислен.</p>'+
       '<div class="row"><button type="button" class="'+(ratePeriod==='current'?'':'ghost')+'" onclick="ratePeriod=\'current\';loadRate()">Этот месяц</button>'+
       '<button type="button" class="'+(ratePeriod==='previous'?'':'ghost')+'" onclick="ratePeriod=\'previous\';loadRate()">Прошлый месяц</button>'+
       '<button type="button" class="ghost" onclick="loadRate()">Обновить рейтинг</button></div>'+
-      '<div class="row" style="margin-top:8px"><input id="prize1" type="number" placeholder="1 место"><input id="prize2" type="number" placeholder="2 место"><input id="prize3" type="number" placeholder="3 место"><input id="prizeRest" type="number" placeholder="Остальным"></div>'+
-      '<div class="row"><button type="button" onclick="payRate(false)">Начислить всем из списка</button></div>'+
-      '<p id="paymsg" class="note">'+(paid ? ('Уже начислено '+paid.count+' людям, '+paid.total+' кр.') : 'Пустое место берёт сумму «Остальным». Если заполнен только этот столбец, её получают все.')+'</p>'+
+      '<div class="row" style="margin-top:8px"><input id="prize1" type="number" placeholder="1 место, кредиты"><input id="prize2" type="number" placeholder="2 место, кредиты"><input id="prize3" type="number" placeholder="3 место, кредиты"></div>'+
+      '<div class="row"><button type="button" onclick="payRate(false)">Начислить призы трём местам</button></div>'+
+      '<p id="paymsg" class="note">'+(paid ? ('Призы уже начислены '+paid.count+' людям, '+paid.total+' кр.') : 'Сумма в кредитах. Пустое место пропускается. Остальным по списку приз не начисляется.')+'</p>'+
       '<table><tr><th></th><th>Подписчик</th><th>Баллы</th><th>Лайки</th><th>Коммент.</th><th>Репосты</th><th>Бот</th><th>Кредиты</th></tr>'+
       rows.map((row, i)=>'<tr><td>'+(i+1)+'</td><td>'+rateFace(row)+esc(row.name)+'</td><td class="ok">'+row.points+'</td><td>'+row.likes+'</td><td>'+row.comments+'</td><td>'+row.reposts+'</td><td>'+row.bot+'</td>'+
         '<td><div class="row" style="margin:0"><input id="cr'+esc(row.userId)+'" type="number" placeholder="100"><button onclick="grantRate(\''+esc(row.userId)+'\')">Начислить</button>'+
@@ -510,23 +512,103 @@ function ratePrizes(){
   let last = -1;
   raw.forEach((value, index) => { if (value) last = index; });
   const places = raw.slice(0, last + 1).map(value => value ? Math.round(Number(value)) : 0);
-  const restNode = document.getElementById('prizeRest');
-  const rest = restNode ? Math.round(Number(restNode.value) || 0) : 0;
-  return { places, rest };
+  return { places };
 }
 async function payRate(again){
   const msg = document.getElementById('paymsg');
   const prize = ratePrizes();
-  if (!prize.places.some(value => value > 0) && !(prize.rest > 0)) {
-    if (msg) msg.textContent = 'Укажите сумму: местам или всем остальным.';
+  if (!prize.places.some(value => value > 0)) {
+    if (msg) msg.textContent = 'Укажите кредиты для первого, второго или третьего места.';
     return;
   }
-  if (!again && !confirm('Начислить бонус всем из этого списка?')) return;
+  if (!again && !confirm('Начислить призы только первым трём местам и опубликовать пост о них?')) return;
   const d = await api('/api/admin/vk/rating-bonus', { method:'POST', body: JSON.stringify({
-    group: vkHome, period: ratePeriod, places: prize.places, rest: prize.rest, again: !!again
+    group: vkHome, period: ratePeriod, places: prize.places, again: !!again
   }) });
-  if (d.already && confirm('За этот месяц бонус уже начислен. Начислить ещё раз?')) return payRate(true);
-  if (msg) msg.textContent = d.ok ? ('Начислено '+d.count+' людям, '+d.total+' кр.') : (d.error||'Не получилось');
+  if (d.already && confirm('За этот месяц призы уже начислены. Начислить ещё раз?')) return payRate(true);
+  if (msg) msg.textContent = d.ok
+    ? ('Призы: '+d.count+' людям, '+d.total+' кр.'+(d.posted ? ' Пост на стене опубликован.' : ' Пост на стене не вышел.'))
+    : (d.error||'Не получилось');
+}
+async function loadShop(){
+  const el = document.getElementById('section-shop');
+  el.innerHTML = '<div class="card">Открываю магазин…</div>';
+  try {
+    const d = await api('/api/admin/vk/shop?group='+encodeURIComponent(vkHome));
+    const items = d.items || [];
+    const orders = d.orders || [];
+    el.innerHTML =
+      '<div class="card"><h3>Магазин · '+esc(placeName())+'</h3>'+
+      '<p class="note">Товары этого сообщества. Человек платит бонусами закрытого месяца. Текущий рейтинг не уменьшается. Заявка на кредиты сама баланс не меняет: кредиты уходят только с кнопки «Начислить».</p>'+
+      '<p class="note">Новых заявок: '+(Number(d.fresh)||0)+'.</p>'+
+      '<label>Название</label><input id="shopTitle" placeholder="Урок, файл, мерч">'+
+      '<label>Описание</label><input id="shopBody" placeholder="Что получит человек">'+
+      '<div class="row"><input id="shopPrice" type="number" placeholder="Цена, бонусы"><input id="shopStock" type="number" placeholder="Штук, пусто = без лимита"></div>'+
+      '<label class="filebtn">Картинка товара<input id="shopPhoto" type="file" accept="image/jpeg,image/png,image/webp"></label>'+
+      '<div class="row"><button type="button" onclick="saveShopItem()">Добавить товар</button></div>'+
+      '<p id="shopmsg" class="note"></p>'+
+      '<table><tr><th>Товар</th><th>Цена</th><th>Штук</th><th></th></tr>'+
+      items.map(item => '<tr><td>'+(item.photo?'<img class="ava" src="'+esc(item.photo)+'" alt="">':'')+esc(item.title)+'<div class="note">'+esc(item.body||'')+'</div></td><td>'+item.price+' б.</td><td>'+(Number(item.stock)<0?'без лимита':item.stock)+'</td><td>'+(item.visible?'<button type="button" class="ghost" onclick="hideShopItem('+item.id+')">Скрыть</button>':'скрыт')+'</td></tr>').join('')+
+      (items.length?'':'<tr><td colspan="4" class="note">Товаров пока нет.</td></tr>')+
+      '</table></div>'+
+      '<div class="card"><h3>Заявки</h3>'+
+      '<table><tr><th>Кто</th><th>Заказ</th><th>Статус</th><th></th></tr>'+
+      orders.map(row => '<tr><td>'+rateFace(row)+esc(row.name||row.userId)+'</td><td>'+esc(row.title)+'<div class="note">'+(row.kind==='credit'?('заявка '+row.credits+' кр. за '+row.bonuses+' б.'):(row.bonuses+' б.'))+'</div></td><td>'+esc(row.status==='new'?'новая':row.status==='done'?'закрыта':'отменена')+'</td><td>'+
+        (row.status==='new'?(row.kind==='credit'
+          ? '<button type="button" onclick="shopOrder('+row.id+',\'credit\')">Начислить</button>'
+          : '<button type="button" onclick="shopOrder('+row.id+',\'done\')">Выдать</button>')+'<button type="button" class="ghost" onclick="shopOrder('+row.id+',\'cancel\')">Отмена</button>':'')+
+      '</td></tr>').join('')+
+      (orders.length?'':'<tr><td colspan="4" class="note">Заявок пока нет.</td></tr>')+
+      '</table></div>';
+  } catch (e) {
+    el.innerHTML = '<div class="card bad">'+esc(e.message)+'</div>';
+  }
+}
+function shopPayload(extra){
+  return Object.assign({ group: vkHome }, extra || {});
+}
+async function saveShopItem(){
+  const msg = document.getElementById('shopmsg');
+  const file = document.getElementById('shopPhoto');
+  let photo = '';
+  try {
+    const picked = file && file.files && file.files[0];
+    if (picked) {
+      if (picked.size > 400000) throw new Error('Картинка больше 400 КБ.');
+      photo = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Картинка не прочиталась.'));
+        reader.readAsDataURL(picked);
+      });
+    }
+    const d = await api('/api/admin/vk/shop-item', { method:'POST', body: JSON.stringify(shopPayload({
+      title: (document.getElementById('shopTitle')||{}).value || '',
+      body: (document.getElementById('shopBody')||{}).value || '',
+      price: (document.getElementById('shopPrice')||{}).value || '',
+      stock: (document.getElementById('shopStock')||{}).value || ''
+    , photo })) });
+    if (!d.ok) throw new Error(d.error || 'Не получилось');
+    loadShop();
+  } catch (e) {
+    if (msg) msg.textContent = e.message || 'Не получилось';
+  }
+}
+async function hideShopItem(id){
+  const items = await api('/api/admin/vk/shop?group='+encodeURIComponent(vkHome));
+  const item = (items.items || []).find(row => Number(row.id) === Number(id));
+  if (!item) return;
+  await api('/api/admin/vk/shop-item', { method:'POST', body: JSON.stringify(shopPayload({
+    id: item.id, title: item.title, body: item.body, price: item.price, stock: item.stock, photo: item.photo, visible: false
+  })) });
+  loadShop();
+}
+async function shopOrder(id, action){
+  if (action === 'credit' && !confirm('Начислить кредиты по этой заявке?')) return;
+  if (action === 'cancel' && !confirm('Отменить заявку и вернуть бонусы?')) return;
+  const d = await api('/api/admin/vk/shop-order', { method:'POST', body: JSON.stringify(shopPayload({ id, action })) });
+  if (!d.ok) alert(d.error || 'Не получилось');
+  loadShop();
 }
 async function hideRate(id, hide){
   const num = String(id||'').replace(/\D/g, '');
