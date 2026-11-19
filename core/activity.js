@@ -6,6 +6,27 @@ const POINTS = { like: 3, comment: 6, repost: 10, bot: 1 };
 function rulesText() {
     return `Лайк — ${POINTS.like}. Комментарий — ${POINTS.comment}. Репост — ${POINTS.repost}. Запрос боту — ${POINTS.bot}.`;
 }
+
+function postIdFromKey(objectKey) {
+    const match = /^(?:post|comment|repost):(\d+)/.exec(String(objectKey || ''));
+    return match ? Number(match[1]) : 0;
+}
+
+function postsInRange(posts, start, end) {
+    const from = start instanceof Date ? Math.floor(start.getTime() / 1000) : 0;
+    const to = end instanceof Date ? Math.floor(end.getTime() / 1000) : 0;
+    const list = [];
+    const seen = new Set();
+    for (const post of posts || []) {
+        const id = Number(post && post.id);
+        const date = Number(post && post.date);
+        if (!Number.isInteger(id) || id <= 0 || seen.has(id)) continue;
+        if (!Number.isInteger(date) || date < from || date >= to) continue;
+        seen.add(id);
+        list.push({ id, date });
+    }
+    return list;
+}
 const MOSCOW = 3 * 60 * 60 * 1000;
 
 function weekRange(now) {
@@ -224,7 +245,7 @@ function formatRating(rows, meId, range) {
     const lines = [
         `Рейтинг · ${range.label}`,
         rulesText(),
-        'Лайк, комментарий и репост приводят людей, поэтому баллов больше, чем за запрос боту.',
+        'Лайк, комментарий и репост считаются только на постах этого месяца. Записи прошлых месяцев не входят.',
         'В первый день месяца баллы начинаются заново. Кредиты по этому списку начисляет администратор.',
         ''
     ];
@@ -248,6 +269,7 @@ function wallSummary(rows, range) {
     const lines = [
         `Итог месяца · ${range.label}`,
         rulesText(),
+        'В зачёт вошли только посты этого месяца: лайки, комментарии и репосты на них.',
         'Кредиты по этому списку начисляет администратор.',
         'Новый месяц уже начался, баллы считаются заново.',
         ''
@@ -277,7 +299,7 @@ function freshIds(seen, ids) {
 }
 
 module.exports = {
-    POINTS, rulesText, weekRange, previousWeek, shouldPublishWeek,
+    POINTS, rulesText, postIdFromKey, postsInRange, weekRange, previousWeek, shouldPublishWeek,
     monthRange, previousMonth, shouldPublishMonth, bonusGrants,
     parseCommunityActivity, readWallComment, wallCommentIssue, readWallPost,
     faceOf, present, formatRating, wallSummary, freshIds

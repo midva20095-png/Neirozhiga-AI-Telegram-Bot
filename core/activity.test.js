@@ -4,6 +4,23 @@ const activity = require('./activity');
 
 const GROUP = '230706467';
 
+test('в месяц входят только посты этого месяца', () => {
+    const november = activity.monthRange(new Date('2026-11-16T12:00:00.000Z'));
+    const novemberPost = Math.floor(new Date('2026-11-02T09:00:00.000Z').getTime() / 1000);
+    const octoberPost = Math.floor(new Date('2026-10-15T09:00:00.000Z').getTime() / 1000);
+    const posts = activity.postsInRange([
+        { id: 11, date: novemberPost },
+        { id: 4, date: octoberPost },
+        { id: 11, date: novemberPost },
+        { id: 0, date: novemberPost }
+    ], november.start, november.end);
+    assert.deepEqual(posts, [{ id: 11, date: novemberPost }]);
+    assert.equal(activity.postIdFromKey('post:11'), 11);
+    assert.equal(activity.postIdFromKey('comment:11:3'), 11);
+    assert.equal(activity.postIdFromKey('repost:11:8'), 11);
+    assert.equal(activity.postIdFromKey('bot:1'), 0);
+});
+
 test('месяц начинается первого числа по Москве и бонус считается по местам', () => {
     const november = activity.monthRange(new Date('2026-11-16T12:00:00.000Z'));
     assert.equal(november.start.toISOString(), '2026-10-31T21:00:00.000Z');

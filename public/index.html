@@ -1561,7 +1561,7 @@ function renderRating(d){
   const rules = d.rules || {};
   return '<h3 style="margin:0 0 6px">Рейтинг</h3><div class="now">'+esc(d.week||'')+'</div>'+
     '<div class="rules"><span>лайк '+(rules.like||0)+'</span><span>комментарий '+(rules.comment||0)+'</span><span>репост '+(rules.repost||0)+'</span><span>запрос боту '+(rules.bot||0)+'</span></div>'+
-    '<p class="now">Лайк, комментарий и репост приводят людей, поэтому баллов больше, чем за запрос боту. Первого числа список начинается заново.</p>'+
+    '<p class="now">Лайк, комментарий и репост считаются только на постах этого месяца. Старые записи не входят. Первого числа список начинается заново.</p>'+
     own+(list||'<p class="empty">В этом месяце пока тихо. Лайкайте записи, комментируйте, делайте репосты и пишите боту.</p>');
 }
 async function loadRating(){

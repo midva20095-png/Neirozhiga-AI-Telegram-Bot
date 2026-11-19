@@ -599,6 +599,89 @@ async function enableActivity(token, groupId) {
 
 const reactionSeen = new Map();
 const reactionScanning = new Set();
+const monthPostCache = new Map();
+
+function monthCacheKey(groupId, range) {
+    return `${String(groupId || '').replace(/\D/g, '')}:${range.start.toISOString()}`;
+}
+
+function cachedMonthPosts(groupId, range) {
+    const saved = monthPostCache.get(monthCacheKey(groupId, range));
+    return saved && Array.isArray(saved.posts) ? saved.posts : [];
+}
+
+function storeMonthPosts(groupId, range, posts, ready) {
+    const key = monthCacheKey(groupId, range);
+    const prev = cachedMonthPosts(groupId, range);
+    const map = new Map(prev.map(item => [item.id, item]));
+    for (const post of posts || []) {
+        if (post && post.id) map.set(post.id, post);
+    }
+    const next = [...map.values()];
+    monthPostCache.set(key, { ready: ready || monthPostsReady(groupId, range), posts: next });
+    return next;
+}
+
+function monthPostsReady(groupId, range) {
+    const saved = monthPostCache.get(monthCacheKey(groupId, range));
+    return !!(saved && saved.ready);
+}
+
+function monthHasPost(groupId, range, postId) {
+    const id = Number(postId);
+    return cachedMonthPosts(groupId, range).some(item => item.id === id);
+}
+
+async function loadMonthPosts(token, groupId, range) {
+    const owner = String(-Number(String(groupId || '').replace(/\D/g, '')));
+    const start = Math.floor(range.start.getTime() / 1000);
+    const collected = [];
+    let offset = 0;
+    for (let page = 0; page < 4; page++) {
+        const params = { owner_id: owner, count: '100', offset: String(offset), filter: 'owner' };
+        let wall;
+        try {
+            wall = await call(token, 'wall.get', params);
+        } catch (error) {
+            if (page > 0 || Number(error && error.code) !== 100) break;
+            delete params.filter;
+            try { wall = await call(token, 'wall.get', params); } catch (e) { break; }
+        }
+        const items = (wall && wall.items) || [];
+        if (!items.length) break;
+        collected.push(...items);
+        offset += items.length;
+        const dated = items.filter(item => !Number(item && item.is_pinned));
+        const oldest = dated.reduce((min, item) => {
+            const date = Number(item && item.date) || 0;
+            return date && date < min ? date : min;
+        }, Number.MAX_SAFE_INTEGER);
+        if (oldest < start || items.length < 100) break;
+    }
+    return storeMonthPosts(groupId, range, activity.postsInRange(collected, range.start, range.end), true);
+}
+
+async function monthActivity(groupId, range, limit) {
+    const id = String(groupId || '').replace(/\D/g, '');
+    const item = communityList().find(entry => entry.id === id);
+    let posts = cachedMonthPosts(id, range);
+    if (item && item.token) {
+        try { posts = await loadMonthPosts(item.token, id, range); } catch (error) {}
+    }
+    const rows = await db.listWeekActivity(range.start, id, range.end, limit, posts.map(post => post.id));
+    return { posts, rows };
+}
+
+function rememberLivePost(update, groupId) {
+    const post = activity.readWallPost(update, groupId);
+    if (!post) return;
+    const obj = (update && update.object) || {};
+    const body = obj.post && typeof obj.post === 'object' ? obj.post : obj;
+    const date = Number(body.date || obj.date) || Math.floor(Date.now() / 1000);
+    const range = activity.monthRange(new Date());
+    const posts = activity.postsInRange([{ id: post.postId, date }], range.start, range.end);
+    if (posts.length) storeMonthPosts(groupId, range, posts, monthPostsReady(groupId, range));
+}
 
 function pause(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -616,16 +699,9 @@ async function awardReaction(groupId, kind, objectKey, vkId) {
 async function scanCommunityActivity(token, groupId) {
     const owner = -Number(String(groupId || '').replace(/\D/g, ''));
     if (!owner) return;
-    let wall;
-    try {
-        wall = await call(token, 'wall.get', { owner_id: String(owner), count: '15', filter: 'owner' });
-    } catch (error) {
-        if (Number(error && error.code) !== 100) return;
-        try {
-            wall = await call(token, 'wall.get', { owner_id: String(owner), count: '15' });
-        } catch (e) { return; }
-    }
-    const posts = (wall && wall.items) || [];
+    const range = activity.monthRange(new Date());
+    let posts = [];
+    try { posts = await loadMonthPosts(token, groupId, range); } catch (error) { return; }
     const started = scanCommunityActivity.started || (scanCommunityActivity.started = Math.floor(Date.now() / 1000) - 30);
     for (const post of posts) {
         await pause(280);
@@ -1548,6 +1624,15 @@ async function handleEvent(token, event, groupId) {
 async function noteActivity(update, groupId) {
     const hit = activity.parseCommunityActivity(update, groupId);
     if (!hit) return;
+    const postId = activity.postIdFromKey(hit.objectKey);
+    const range = activity.monthRange(new Date());
+    if (!monthPostsReady(groupId, range)) {
+        const item = communityList().find(entry => entry.id === String(groupId || '').replace(/\D/g, ''));
+        if (item && item.token) {
+            try { await loadMonthPosts(item.token, groupId, range); } catch (error) {}
+        }
+    }
+    if (!postId || !monthHasPost(groupId, range, postId)) return;
     const account = accountId(hit.vkId);
     if (!account) return;
     if (hit.remove) {
@@ -1600,7 +1685,7 @@ async function sendRating(token, peerId, account, groupId) {
     const range = activity.monthRange(new Date());
     let rows = [];
     try {
-        rows = await attachFaces(await db.listWeekActivity(range.start, groupId, range.end));
+        rows = await attachFaces((await monthActivity(groupId, range)).rows);
     } catch (error) {}
     await sendText(token, peerId, activity.formatRating(rows, account, range));
 }
@@ -2079,7 +2164,7 @@ async function publishWeeklyRatings(now) {
                 wallDone.add(key);
                 continue;
             }
-            const rows = await attachFaces(await db.listWeekActivity(prev.start, item.id, prev.end));
+            const rows = await attachFaces((await monthActivity(item.id, prev)).rows);
             await call(item.token, 'wall.post', {
                 owner_id: String(-Number(item.id)),
                 from_group: '1',
@@ -2252,7 +2337,7 @@ async function communityDonut(groupId) {
     let weekPeople = 0;
     let weekPoints = 0;
     try {
-        const rows = await db.listWeekActivity(range.start, id, range.end);
+        const rows = (await monthActivity(id, range)).rows;
         weekPeople = rows.length;
         weekPoints = rows.reduce((sum, row) => sum + (Number(row.points) || 0), 0);
     } catch (error) {}
@@ -2263,6 +2348,7 @@ async function communityDonut(groupId) {
 }
 
 async function handleUpdate(token, update, groupId) {
+    try { rememberLivePost(update, groupId); } catch (error) {}
     try { await noteActivity(update, groupId); } catch (error) {}
     try { await handleCommunityWall(token, update, groupId); } catch (error) {}
     try { await handleDonutJoin(token, update, groupId); } catch (error) {}
@@ -2597,5 +2683,5 @@ async function ensureCommunityWidget(groupId) {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, monthActivity, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos
 };

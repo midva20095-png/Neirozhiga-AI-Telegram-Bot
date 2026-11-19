@@ -492,7 +492,7 @@ async function saveVkProfiles(rows) {
   }
 }
 
-async function listWeekActivity(since, groupId, until, limit) {
+async function listWeekActivity(since, groupId, until, limit, postIds) {
   const weights = require('./activity').POINTS;
   const like = Math.max(0, Math.round(Number(weights.like) || 0));
   const comment = Math.max(0, Math.round(Number(weights.comment) || 0));
@@ -504,6 +504,12 @@ async function listWeekActivity(since, groupId, until, limit) {
   if (until) {
     params.push(until);
     untilSql = ` AND a.created_at < $${params.length}`;
+  }
+  let wallSql = '';
+  if (Array.isArray(postIds)) {
+    const ids = [...new Set(postIds.map(id => String(Math.round(Number(id) || 0))).filter(id => id !== '0'))];
+    params.push(ids);
+    wallSql = ` AND (a.kind = 'bot' OR substring(a.object_key from '^(?:post|comment|repost):([0-9]+)') = ANY($${params.length}::text[]))`;
   }
   params.push(cap);
   const res = await pool.query(
@@ -519,7 +525,7 @@ async function listWeekActivity(since, groupId, until, limit) {
             COUNT(*) FILTER (WHERE a.kind = 'bot')::int AS bot
      FROM vk_activity a
      LEFT JOIN users u ON u.user_id = a.user_id
-     WHERE a.created_at >= $1 AND a.group_id = $6${untilSql}
+     WHERE a.created_at >= $1 AND a.group_id = $6${untilSql}${wallSql}
      GROUP BY a.user_id, u.username
      ORDER BY points DESC, a.user_id
      LIMIT $${params.length}`,

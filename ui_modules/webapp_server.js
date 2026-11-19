@@ -379,7 +379,8 @@ function startWebApp() {
             if (!userId && !group) return res.status(401).json({ error: 'auth_required' });
             const range = activity.monthRange(new Date());
             if (userId && Number(userId) >= 0) return res.json({ vk: false, week: range.label, rows: [], mine: null });
-            const rows = await vk.attachFaces(await db.listWeekActivity(range.start, group, range.end));
+            const pack = await vk.monthActivity(group, range);
+            const rows = await vk.attachFaces(pack.rows);
             const place = userId ? rows.findIndex(row => String(row.userId) === String(userId)) : -1;
             res.json({
                 vk: true,
@@ -843,7 +844,8 @@ function startWebApp() {
             const now = new Date();
             const range = req.query.period === 'previous' ? activity.previousMonth(now) : activity.monthRange(now);
             const group = vk.communityId(req.query.group);
-            const rows = await vk.attachFaces(await db.listWeekActivity(range.start, group, range.end, 200));
+            const pack = await vk.monthActivity(group, range, 200);
+            const rows = await vk.attachFaces(pack.rows);
             const key = `vk_rate_bonus_${group}_${range.start.toISOString().slice(0, 10)}`;
             const saved = await db.getSettings([key]);
             res.json({
@@ -851,6 +853,7 @@ function startWebApp() {
                 period: req.query.period === 'previous' ? 'previous' : 'current',
                 rules: activity.rulesText(),
                 points: activity.POINTS,
+                posts: pack.posts.length,
                 rows,
                 paid: saved[key] || null
             });
@@ -876,7 +879,7 @@ function startWebApp() {
                     error: 'За этот месяц бонус уже начислен.'
                 });
             }
-            const rows = await vk.attachFaces(await db.listWeekActivity(range.start, group, range.end, 200));
+            const rows = await vk.attachFaces((await vk.monthActivity(group, range, 200)).rows);
             const grants = activity.bonusGrants(rows, body.places, body.rest);
             if (!grants.length) return res.json({ ok: false, error: 'Некому начислять: укажите сумму и проверьте список.' });
             let count = 0;
