@@ -241,6 +241,7 @@ input,select{width:100%;border-radius:14px;border:1px solid var(--line);backgrou
   <button data-t="top"><span class="ic">💳</span>Баланс</button>
   <button data-t="help"><span class="ic">💬</span>Помощь</button>
   <button data-t="rate" id="tabrate" style="display:none"><span class="ic">🏆</span>Рейтинг</button>
+  <button data-t="shop" id="tabshop" style="display:none"><span class="ic">🎁</span>Магазин</button>
 </div>
 <script src="/save-work.js"></script>
 <script>
@@ -253,6 +254,7 @@ const TMARK = {image:'🪄', fix:'✨', chat:'✍️', video:'🎬', audio:'🎙
 let pickedQuality=null, pickedDuration=null, pickedAspect=null;
 const widgetPics = { chat: '', rate: '', site: '' };
 let showSetup = false;
+let shopNote = '';
 
 function tg(){ return window.Telegram && window.Telegram.WebApp; }
 function nyPost(msg){
@@ -519,12 +521,14 @@ async function load(){
   if (pendingPkg) tab = 'top';
   document.getElementById('bal').textContent = (me.balance||0)+' кр';
   const rateTab = document.getElementById('tabrate');
+  const shopTab = document.getElementById('tabshop');
   const menuTab = document.getElementById('tabmenu');
   if (rateTab) rateTab.style.display = isVk() ? '' : 'none';
+  if (shopTab) shopTab.style.display = isVk() ? '' : 'none';
   if (menuTab) menuTab.style.display = isVk() ? '' : 'none';
   const bots = document.querySelector('.bots');
   if (bots) bots.style.display = isVk() ? 'none' : '';
-  if (!isVk() && (tab==='rate' || tab==='menu')) tab = 'gen';
+  if (!isVk() && (tab==='rate' || tab==='shop' || tab==='menu')) tab = 'gen';
   if (isVk() && wantMenu) tab = 'menu';
   if (window.__vkGoal === 'rate') tab = 'rate';
   if (window.__vkGoal === 'help') tab = 'help';
@@ -578,6 +582,7 @@ function draw(){
   else if (tab==='hist') box.innerHTML = viewHist();
   else if (tab==='top') box.innerHTML = viewTop();
   else if (tab==='rate') { box.innerHTML = '<div class="card" id="ratebox"><p>Считаю баллы…</p></div>'; loadRating(); }
+  else if (tab==='shop') { box.innerHTML = '<div class="card" id="shopbox"><p>Открываю магазин…</p></div>'; loadShop(); }
   else box.innerHTML = viewHelp();
   bind();
 }
@@ -736,6 +741,7 @@ function viewMenu(){
       '<button class="btn" id="door-pin" type="button">Поставить на страницу</button></div>'
     : '';
   return '<div class="card"><div class="now">НейроЯга</div><div class="banners">'+cards+'</div>'+
+    '<button type="button" id="door-shop" class="btn">Магазин бонусов</button>'+
     '<button type="button" id="door-sub" class="sub'+(mail?' on':'')+'">'+(mail?'Вы подписаны':'Подписаться')+'</button>'+
     gear+setup+'<p id="submsg" class="hint"></p></div>';
 }
@@ -1068,6 +1074,8 @@ function bind(){
   if (chat) chat.onclick = function(){ const url = chatLink(); if (url) openOut(url); };
   const rate = document.getElementById('door-rate');
   if (rate) rate.onclick = function(){ tab = 'rate'; wantMenu = false; draw(); };
+  const shopDoor = document.getElementById('door-shop');
+  if (shopDoor) shopDoor.onclick = function(){ tab = 'shop'; wantMenu = false; draw(); };
   const site = document.getElementById('door-site');
   if (site) site.onclick = function(){ openOut((cfg && cfg.site_url) || 'https://babayagaland.ru'); };
   const sub = document.getElementById('door-sub');
@@ -1561,8 +1569,76 @@ function renderRating(d){
   const rules = d.rules || {};
   return '<h3 style="margin:0 0 6px">Рейтинг</h3><div class="now">'+esc(d.week||'')+'</div>'+
     '<div class="rules"><span>лайк '+(rules.like||0)+'</span><span>комментарий '+(rules.comment||0)+'</span><span>репост '+(rules.repost||0)+'</span><span>запрос боту '+(rules.bot||0)+'</span></div>'+
-    '<p class="now">Лайк, комментарий и репост считаются только на постах этого месяца. Старые записи не входят. Первого числа список начинается заново.</p>'+
+    '<p class="now">Лайк, комментарий и репост считаются только на постах этого месяца. Старые записи не входят. Первого числа список начинается заново. Приз получают первые три места.</p>'+
+    '<button class="btn" type="button" id="rate-shop">Магазин бонусов</button>'+
     own+(list||'<p class="empty">В этом месяце пока тихо. Лайкайте записи, комментируйте, делайте репосты и пишите боту.</p>');
+}
+function renderShop(d){
+  const items = d.items || [];
+  const goods = items.map(function(item){
+    const photo = safeSrc(item.photo);
+    const left = Number(item.stock) < 0 ? '' : '<div class="meta">осталось '+item.stock+'</div>';
+    return '<div class="pack">'+(photo ? '<img alt="" src="'+esc(photo)+'" style="width:54px;height:54px;border-radius:12px;object-fit:cover">' : '')+
+      '<div style="flex:1"><b>'+esc(item.title)+'</b><div class="meta">'+esc(item.body||'')+'</div>'+left+'<div class="meta">'+item.price+' бонусов</div></div>'+
+      '<button type="button" data-buy="'+Number(item.id)+'">Взять</button></div>';
+  }).join('') || '<p class="empty">Товаров пока нет. Можно оставить заявку на кредиты.</p>';
+  const rows = d.honor || [];
+  const honor = rows.map(function(row, index){
+    const head = index === 0 || row.at !== rows[index - 1].at ? '<div class="groupttl">'+esc(row.at)+'</div>' : '';
+    return head+'<div class="item"><span>'+row.place+'. '+esc(row.name)+'</span><b>'+row.points+' б.</b></div>';
+  }).join('') || '<p class="empty">Прошлых месяцев в списке пока нет.</p>';
+  return '<h3 style="margin:0 0 6px">Магазин</h3>'+
+    '<div class="now">Бонусы: <b>'+(Number(d.bonuses)||0)+'</b>. Это баллы закрытых месяцев. Текущий рейтинг не тратится.</div>'+
+    '<p class="now">10 бонусов = 1 кредит. Заявка ждёт подтверждения, само начисление не происходит.</p>'+
+    (shopNote ? '<p class="now">'+esc(shopNote)+'</p>' : '')+
+    goods+
+    '<div class="pack"><input id="shop-amount" type="number" min="10" step="10" placeholder="Сколько бонусов" style="flex:1;background:#1c1233;border:1px solid var(--line);border-radius:10px;padding:8px"><button type="button" id="shop-credit">На кредиты</button></div>'+
+    '<h3 style="margin:16px 0 6px">Ученики</h3>'+honor;
+}
+function bindShop(){
+  document.querySelectorAll('[data-buy]').forEach(function(button){
+    button.onclick = function(){ buyShop(button.dataset.buy); };
+  });
+  const credit = document.getElementById('shop-credit');
+  if (credit) credit.onclick = askShopCredits;
+  const fromRate = document.getElementById('rate-shop');
+  if (fromRate) fromRate.onclick = function(){ tab = 'shop'; wantMenu = false; draw(); };
+}
+async function loadShop(){
+  const box = document.getElementById('shopbox');
+  if (!box) return;
+  try {
+    const r = await fetch('/api/shop?group='+encodeURIComponent(vkGroupId()), { headers: authHeaders() });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Не удалось открыть магазин');
+    const live = document.getElementById('shopbox');
+    if (live) live.innerHTML = renderShop(d);
+    bindShop();
+  } catch (e) {
+    const live = document.getElementById('shopbox');
+    if (live) live.innerHTML = '<p class="err">'+esc(e.message)+'</p>';
+  }
+}
+async function buyShop(id){
+  shopNote = 'Оформляю…';
+  try {
+    const r = await fetch('/api/shop/buy', { method:'POST', headers: authHeaders(), body: JSON.stringify({ group: vkGroupId(), itemId: Number(id) }) });
+    const d = await r.json();
+    shopNote = d.ok ? ('Заказ принят: '+(d.title||'товар')+'. Списано '+(d.bonuses||0)+' б.') : (d.error || 'Заказ не оформился.');
+  } catch (e) { shopNote = e.message || 'Заказ не оформился.'; }
+  loadShop();
+}
+async function askShopCredits(){
+  const input = document.getElementById('shop-amount');
+  const amount = Math.round(Number(input && input.value));
+  if (!amount) { shopNote = 'Напишите, сколько бонусов обменять.'; loadShop(); return; }
+  shopNote = 'Отправляю заявку…';
+  try {
+    const r = await fetch('/api/shop/credits', { method:'POST', headers: authHeaders(), body: JSON.stringify({ group: vkGroupId(), bonuses: amount }) });
+    const d = await r.json();
+    shopNote = d.ok ? ('Заявка на '+(d.credits||0)+' кр. принята. Списано '+(d.spend||0)+' б.') : (d.error || 'Заявка не оформилась.');
+  } catch (e) { shopNote = e.message || 'Заявка не оформилась.'; }
+  loadShop();
 }
 async function loadRating(){
   const box = document.getElementById('ratebox');
@@ -1573,6 +1649,7 @@ async function loadRating(){
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Не удалось открыть рейтинг');
     if (document.getElementById('ratebox')) document.getElementById('ratebox').innerHTML = renderRating(d);
+    bindShop();
   } catch (e) {
     const live = document.getElementById('ratebox');
     if (live) live.innerHTML = '<p class="err">'+esc(e.message)+'</p>';

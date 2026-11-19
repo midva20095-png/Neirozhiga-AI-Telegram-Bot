@@ -396,6 +396,54 @@ function startWebApp() {
         }
     });
 
+    function knownGroup(value) {
+        const asked = String(value || '').replace(/\D/g, '');
+        if (asked && vk.communityList().some(item => item.id === asked)) return asked;
+        const fallback = vk.communityId('');
+        return vk.communityList().some(item => item.id === fallback) ? fallback : '';
+    }
+
+    app.get('/api/shop', requireUser, async (req, res) => {
+        try {
+            if (Number(req.userId) >= 0) return res.json({ vk: false, bonuses: 0, items: [], honor: [] });
+            const group = knownGroup(req.query.group);
+            if (!group) return res.status(400).json({ error: 'Нет сообщества' });
+            const current = activity.monthRange(new Date());
+            const [bonuses, items, honor] = await Promise.all([
+                shop.bonusBalance(req.userId, group, current.start),
+                shop.listItems(group, true),
+                shop.listHonor(group)
+            ]);
+            res.json({ vk: true, bonuses, rate: activity.CREDIT_RATE, items, honor });
+        } catch (e) {
+            res.status(500).json({ error: 'Не удалось открыть магазин.' });
+        }
+    });
+
+    app.post('/api/shop/buy', requireUser, async (req, res) => {
+        try {
+            if (Number(req.userId) >= 0) return res.status(400).json({ ok: false, error: 'Магазин открыт во ВКонтакте.' });
+            const body = req.body || {};
+            const group = knownGroup(body.group);
+            if (!group) return res.status(400).json({ ok: false, error: 'Нет сообщества' });
+            res.json(await shop.buyItem(req.userId, group, body.itemId));
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Заказ не оформился.' });
+        }
+    });
+
+    app.post('/api/shop/credits', requireUser, async (req, res) => {
+        try {
+            if (Number(req.userId) >= 0) return res.status(400).json({ ok: false, error: 'Магазин открыт во ВКонтакте.' });
+            const body = req.body || {};
+            const group = knownGroup(body.group);
+            if (!group) return res.status(400).json({ ok: false, error: 'Нет сообщества' });
+            res.json(await shop.askCredits(req.userId, group, body.bonuses));
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Заявка не оформилась.' });
+        }
+    });
+
     app.get('/api/me', requireUser, async (req, res) => {
         try {
             if (!(await requireChannel(req, res))) return;
