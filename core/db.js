@@ -503,13 +503,17 @@ async function listWeekActivity(since, groupId, until, limit, postIds) {
   let untilSql = '';
   if (until) {
     params.push(until);
-    untilSql = ` AND a.created_at < $${params.length}`;
+    untilSql = `a.created_at < $${params.length}`;
   }
-  let wallSql = '';
-  if (Array.isArray(postIds)) {
+  const botWhen = [`a.kind = 'bot'`, 'a.created_at >= $1', untilSql].filter(Boolean).join(' AND ');
+  const timeWhen = ['a.created_at >= $1', untilSql].filter(Boolean).join(' AND ');
+  let where = `a.group_id = $6 AND ${timeWhen}`;
+  if (postIds === 'bot') {
+    where = `a.group_id = $6 AND ${botWhen}`;
+  } else if (Array.isArray(postIds)) {
     const ids = [...new Set(postIds.map(id => String(Math.round(Number(id) || 0))).filter(id => id !== '0'))];
     params.push(ids);
-    wallSql = ` AND (a.kind = 'bot' OR split_part(a.object_key, ':', 2) = ANY($${params.length}::text[]))`;
+    where = `a.group_id = $6 AND ((${botWhen}) OR (a.kind <> 'bot' AND split_part(a.object_key, ':', 2) = ANY($${params.length}::text[])))`;
   }
   params.push(cap);
   const res = await pool.query(
@@ -525,7 +529,7 @@ async function listWeekActivity(since, groupId, until, limit, postIds) {
             COUNT(*) FILTER (WHERE a.kind = 'bot')::int AS bot
      FROM vk_activity a
      LEFT JOIN users u ON u.user_id = a.user_id
-     WHERE a.created_at >= $1 AND a.group_id = $6${untilSql}${wallSql}
+     WHERE ${where}
      GROUP BY a.user_id, u.username
      ORDER BY points DESC, a.user_id
      LIMIT $${params.length}`,

@@ -288,6 +288,39 @@ function wallSummary(rows, range) {
     return lines.join('\n').slice(0, 3500);
 }
 
+function mergeRating(botRows, wallRows) {
+    const map = new Map();
+    function slot(id, username) {
+        const key = String(id || '');
+        if (!key) return null;
+        if (!map.has(key)) {
+            map.set(key, { user_id: key, username: username || '', likes: 0, comments: 0, reposts: 0, bot: 0, points: 0 });
+        }
+        const row = map.get(key);
+        if (username && !row.username) row.username = username;
+        return row;
+    }
+    for (const row of botRows || []) {
+        const item = slot(row.user_id || row.userId, row.username);
+        if (!item) continue;
+        item.bot += Number(row.bot) || 0;
+    }
+    for (const row of wallRows || []) {
+        const item = slot(row.user_id || row.userId, row.username);
+        if (!item) continue;
+        item.likes += Number(row.likes) || 0;
+        item.comments += Number(row.comments) || 0;
+        item.reposts += Number(row.reposts) || 0;
+    }
+    const list = [];
+    for (const item of map.values()) {
+        item.points = item.likes * POINTS.like + item.comments * POINTS.comment + item.reposts * POINTS.repost + item.bot * POINTS.bot;
+        if (item.points > 0) list.push(item);
+    }
+    list.sort((a, b) => b.points - a.points || String(a.user_id).localeCompare(String(b.user_id)));
+    return list;
+}
+
 function ratingAccount(value) {
     const n = Math.abs(Number(String(value || '').replace(/[^\d]/g, '')));
     return n ? String(-n) : '';
@@ -315,5 +348,5 @@ module.exports = {
     POINTS, rulesText, postIdFromKey, postsInRange, weekRange, previousWeek, shouldPublishWeek,
     monthRange, previousMonth, shouldPublishMonth, bonusGrants,
     parseCommunityActivity, readWallComment, wallCommentIssue, readWallPost,
-    faceOf, present, formatRating, wallSummary, ratingAccount, withoutHidden, freshIds
+    faceOf, present, formatRating, wallSummary, mergeRating, ratingAccount, withoutHidden, freshIds
 };

@@ -632,7 +632,7 @@ function monthHasPost(groupId, range, postId) {
     return cachedMonthPosts(groupId, range).some(item => item.id === id);
 }
 
-async function loadMonthPosts(token, groupId, range) {
+async function fetchMonthPosts(token, groupId, range) {
     const owner = String(-Number(String(groupId || '').replace(/\D/g, '')));
     const start = Math.floor(range.start.getTime() / 1000);
     const collected = [];
@@ -658,7 +658,21 @@ async function loadMonthPosts(token, groupId, range) {
         }, Number.MAX_SAFE_INTEGER);
         if (oldest < start || items.length < 100) break;
     }
-    return storeMonthPosts(groupId, range, activity.postsInRange(collected, range.start, range.end), true);
+    return activity.postsInRange(collected, range.start, range.end);
+}
+
+async function loadMonthPosts(token, groupId, range) {
+    let found = [];
+    for (const item of readTokens(token)) {
+        try {
+            const posts = await fetchMonthPosts(item, groupId, range);
+            if (posts.length) {
+                found = posts;
+                break;
+            }
+        } catch (error) {}
+    }
+    return storeMonthPosts(groupId, range, found, true);
 }
 
 async function monthActivity(groupId, range, limit, options) {
@@ -668,15 +682,16 @@ async function monthActivity(groupId, range, limit, options) {
     if (item && item.token) {
         try { posts = await loadMonthPosts(item.token, id, range); } catch (error) {}
     }
+    let wall = null;
     if (options && options.sync && item && item.token && posts.length) {
-        try { await scanCommunityActivity(item.token, id); } catch (error) {}
+        try { wall = await scanCommunityActivity(item.token, id); } catch (error) { wall = null; }
     }
     const hidden = await ratingHidden(id);
-    const rows = activity.withoutHidden(
-        await db.listWeekActivity(range.start, id, range.end, limit, posts.map(post => post.id)),
-        hidden
-    );
-    return { posts, rows, hidden };
+    const cap = Math.min(200, Math.max(1, Math.round(Number(limit) || 50)));
+    const source = Array.isArray(wall)
+        ? activity.mergeRating(await db.listWeekActivity(range.start, id, range.end, limit, 'bot'), wall)
+        : await db.listWeekActivity(range.start, id, range.end, limit, posts.map(post => post.id));
+    return { posts, rows: activity.withoutHidden(source, hidden).slice(0, cap), hidden };
 }
 
 function ratingHideKey(groupId) {
@@ -780,11 +795,12 @@ async function listReactionIds(token, owner, postId, filter) {
     const ids = [];
     const seen = new Set();
     let offset = 0;
+    let ok = false;
     for (let page = 0; page < 3; page++) {
         await pause(80);
         let pack;
         try {
-            pack = await callRetry(token, 'likes.getList', {
+            pack = await callReadable(readTokens(token), 'likes.getList', {
                 type: 'post',
                 owner_id: String(owner),
                 item_id: String(postId),
@@ -792,6 +808,7 @@ async function listReactionIds(token, owner, postId, filter) {
                 offset: String(offset),
                 filter
             });
+            ok = true;
         } catch (error) {
             break;
         }
@@ -807,35 +824,58 @@ async function listReactionIds(token, owner, postId, filter) {
         const count = Number(pack && pack.count) || 0;
         if (items.length < 1000 || (count && offset >= count)) break;
     }
-    return ids;
+    return { ids, ok };
 }
 
 async function scanCommunityActivityNow(token, groupId) {
     const owner = -Number(String(groupId || '').replace(/\D/g, ''));
-    if (!owner) return;
+    if (!owner) return null;
     const range = activity.monthRange(new Date());
     let posts = [];
-    try { posts = await loadMonthPosts(token, groupId, range); } catch (error) { return; }
+    try { posts = await loadMonthPosts(token, groupId, range); } catch (error) { return null; }
+    if (!posts.length) return null;
+    const score = new Map();
     const humans = new Set();
     let humanComments = 0;
+    let sawWall = false;
+    function bump(vkId, field) {
+        const id = Number(vkId);
+        if (!Number.isInteger(id) || id <= 0) return;
+        const account = accountId(id);
+        if (!account) return;
+        const key = String(account);
+        if (!score.has(key)) score.set(key, { user_id: key, username: '', likes: 0, comments: 0, reposts: 0, bot: 0 });
+        score.get(key)[field] += 1;
+    }
     for (const post of posts) {
         const likers = await listReactionIds(token, owner, post.id, 'likes');
-        for (const id of likers) await awardReaction(groupId, 'like', `post:${post.id}`, id);
+        if (likers.ok) sawWall = true;
+        for (const id of likers.ids) {
+            bump(id, 'likes');
+            await awardReaction(groupId, 'like', `post:${post.id}`, id);
+        }
 
         let comments = [];
-        try { comments = await listPostComments(token, owner, post.id); } catch (e) {}
+        try { comments = await listPostComments(token, owner, post.id); } catch (e) { comments = []; }
         for (const comment of comments) {
             const fromId = Number(comment && (comment.from_id || comment.user_id));
             if (!Number.isInteger(fromId) || fromId <= 0 || !comment.id) continue;
             humanComments += 1;
             humans.add(fromId);
+            sawWall = true;
+            bump(fromId, 'comments');
             await awardReaction(groupId, 'comment', `comment:${post.id}:${comment.id}`, fromId);
         }
 
         const copies = await listReactionIds(token, owner, post.id, 'copies');
-        for (const id of copies) await awardReaction(groupId, 'repost', `repost:${post.id}:${id}`, id);
+        if (copies.ok) sawWall = true;
+        for (const id of copies.ids) {
+            bump(id, 'reposts');
+            await awardReaction(groupId, 'repost', `repost:${post.id}:${id}`, id);
+        }
     }
-    console.log(`ВК ${groupId}: рейтинг месяца, постов ${posts.length}, комментарии людей ${humanComments}, человек ${humans.size}.`);
+    console.log(`ВК ${groupId}: рейтинг месяца, постов ${posts.length}, комментарии людей ${humanComments}, человек ${humans.size}, в зачёте ${score.size}.`);
+    return sawWall ? [...score.values()] : null;
 }
 
 async function scanCommunityActivity(token, groupId) {

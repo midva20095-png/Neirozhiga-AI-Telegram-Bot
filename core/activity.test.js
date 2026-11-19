@@ -4,6 +4,19 @@ const activity = require('./activity');
 
 const GROUP = '230706467';
 
+test('рейтинг складывает лайки и комментарии со стены с баллами бота', () => {
+    const rows = activity.mergeRating(
+        [{ user_id: '-5', username: 'Аня', bot: 2 }],
+        [{ user_id: '-5', likes: 1, comments: 1, reposts: 0 }, { user_id: '-8', likes: 0, comments: 2, reposts: 0 }]
+    );
+    assert.equal(rows[0].user_id, '-8');
+    assert.equal(rows[0].points, 12);
+    assert.equal(rows[1].likes, 1);
+    assert.equal(rows[1].comments, 1);
+    assert.equal(rows[1].bot, 2);
+    assert.equal(rows[1].points, 3 + 6 + 2);
+});
+
 test('в месяц входят только посты этого месяца', () => {
     const november = activity.monthRange(new Date('2026-11-16T12:00:00.000Z'));
     const novemberPost = Math.floor(new Date('2026-11-02T09:00:00.000Z').getTime() / 1000);
