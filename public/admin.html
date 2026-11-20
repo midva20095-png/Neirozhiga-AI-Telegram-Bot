@@ -440,7 +440,7 @@ async function loadAssist(){
     (dons.length ? dons.map(item => {
       const list = item.communities || [];
       const groups = list.length ? list.map(group =>
-        '<div class="note">'+esc(group.title)+' · '+esc(group.groupId)+' · ключ '+esc(group.token || 'скрыт')+' · '+esc(group.syncLabel)+(group.error ? ' · '+esc(group.error) : '')+
+        '<div class="note">'+esc(group.title)+' · '+esc(group.groupId)+' · ключ '+esc(group.token || 'скрыт')+' · '+esc(group.syncLabel)+(group.desk ? ' · '+esc(group.desk) : '')+(group.error ? ' · '+esc(group.error) : '')+
         '<div class="row"><button type="button" class="ghost" onclick="dropAssist(\''+esc(group.groupId)+'\')">Отключить сообщество</button></div></div>'
       ).join('') : '<p class="note">Сообщество ещё не подключено.</p>';
       return '<div class="stat" style="margin-top:8px"><div class="n" style="font-size:16px">'+esc(item.name)+'</div>'+

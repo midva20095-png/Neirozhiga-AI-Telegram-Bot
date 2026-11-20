@@ -344,6 +344,16 @@ function startWebApp() {
         }
     });
 
+    app.post('/api/vk/assistant/reply', requireUser, async (req, res) => {
+        try {
+            const saved = await assistant.saveDesk(req.userId, req.body || {});
+            res.json(saved);
+        } catch (e) {
+            const message = e && e.public ? e.message : 'Ответы не сохранились.';
+            res.status(400).json({ ok: false, error: message });
+        }
+    });
+
     app.post('/api/vk/assistant/community/remove', requireUser, async (req, res) => {
         try {
             const userId = assistant.vkId(req.userId);

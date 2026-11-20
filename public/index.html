@@ -208,9 +208,14 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .sub{width:100%;margin-top:10px;min-height:52px;border:0;border-radius:16px;background:#1c1233;color:#fff;font-weight:800}
 .sub.on{background:linear-gradient(135deg,#b366ff,#ff2d95)}
 .setup{margin-top:14px}
-input,select{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1233;padding:12px;outline:none;margin-top:8px}
+input,select,textarea{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1233;padding:12px;outline:none;margin-top:8px;color:inherit;font:inherit}
 #genmodel{font-size:16px;margin:0 0 10px}
 .flabel{display:block;margin-top:12px;font-weight:800;font-size:13px}
+.stepsbox{margin-top:10px}
+.stepsbox summary{font-weight:800;cursor:pointer}
+.steps{margin:8px 0 0;padding-left:18px}
+.steps li{margin:8px 0;line-height:1.35}
+.brow{margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:14px;background:#140c24}
 .cover{display:block;width:100%;height:196px;object-fit:cover;object-position:center 20%;border-radius:18px;margin:0 0 12px;background:#140c24}
 body.vkapp .cover{display:none}
 #tabmenu,#tabrate,#tabshop,#tabcab{display:none}
@@ -779,6 +784,44 @@ function viewMenu(){
     '<button type="button" id="door-sub" class="sub'+(mail?' on':'')+'">'+(mail?'Вы подписаны':'Подписаться')+'</button>'+
     gear+setup+'<p id="submsg" class="hint"></p></div>';
 }
+function assistGuide(){
+  return '<details class="stepsbox" open>'+
+    '<summary>Как подключить сообщество</summary>'+
+    '<ol class="steps">'+
+    '<li>Откройте своё сообщество во ВКонтакте. Подключить его можете вы, если вы администратор этого сообщества.</li>'+
+    '<li>Управление → Настройки → Сообщения. Включите сообщения сообщества.</li>'+
+    '<li>Управление → Работа с API → Long Poll API. Включите Long Poll, поставьте версию 5.199 и отметьте событие «Входящее сообщение».</li>'+
+    '<li>На этой же странице нажмите «Создать ключ». В правах отметьте «Сообщения». Ключ показывается один раз: скопируйте его сразу.</li>'+
+    '<li>Номер сообщества — цифры в адресе. У страницы vk.com/club1234567 номер 1234567. Тот же номер есть в Управление → Настройки.</li>'+
+    '<li>Вставьте номер и ключ в поля ниже и нажмите «Подключить».</li>'+
+    '<li>Напишите фразу, которой помощник встречает покупателя, и добавьте кнопки. Кнопка-ссылка открывает вашу страницу. Кнопка-ответ присылает текст, который вы напишете: доставка, цена, адрес, как оформить заказ.</li>'+
+    '</ol>'+
+    '<p class="hint">Ключ нужен, чтобы помощник отвечал покупателям в этом сообществе. В кабинете он повторно не показывается и другим людям не виден. Пока действует донат НейроЯги, помощник отвечает. Когда срок закончится, он замолчит только в вашем сообществе.</p>'+
+    '</details>';
+}
+function assistButtonHtml(button){
+  const kind = button && button.text ? 'text' : 'link';
+  const value = kind === 'link' ? ((button && button.link) || '') : (button.text || '');
+  return '<div class="brow" data-brow>'+
+    '<label class="flabel">Надпись на кнопке</label><input data-blabel maxlength="40" placeholder="Например: Каталог" value="'+esc(button && button.label || '')+'">'+
+    '<label class="flabel">Что делает кнопка</label><select data-bkind>'+
+    '<option value="link"'+(kind==='link'?' selected':'')+'>Открывает ссылку</option>'+
+    '<option value="text"'+(kind==='text'?' selected':'')+'>Присылает ответ</option></select>'+
+    '<label class="flabel" data-bcap>'+(kind==='link'?'Ссылка https':'Текст ответа')+'</label>'+
+    '<input data-bvalue placeholder="'+(kind==='link'?'https://vk.com/...':'Например: доставка по городу в день заказа')+'" value="'+esc(value)+'">'+
+    '<button class="btn ghost" type="button" data-bdel style="margin-top:8px">Убрать кнопку</button></div>';
+}
+function assistDesk(reply){
+  const buttons = (reply && reply.buttons) || [];
+  return '<div class="desk"><p class="now">Что увидит покупатель</p>'+
+    '<p class="hint">Покупатель пишет в сообщения сообщества. Помощник отвечает вашей фразой и показывает кнопки. Кнопка-ответ присылает ваш текст. Кнопка-ссылка открывает страницу. Если фразу не заполнить, помощник скажет: «Здравствуйте. Напишите, что вас интересует.»</p>'+
+    '<label class="flabel" for="assistGreeting">Фраза покупателю</label>'+
+    '<textarea id="assistGreeting" maxlength="900" rows="4" placeholder="Здравствуйте. Чем могу помочь?">'+esc(reply && reply.greeting || '')+'</textarea>'+
+    '<div id="assistButtons">'+buttons.map(assistButtonHtml).join('')+'</div>'+
+    (buttons.length < 6 ? '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>' : '')+
+    '<button class="btn" id="assistDesk" type="button" style="margin-top:12px">Сохранить ответы</button>'+
+    '<p id="deskmsg" class="hint"></p></div>';
+}
 async function loadAssist(){
   const box = document.getElementById('assistbox');
   if (!box) return;
@@ -802,7 +845,7 @@ async function loadAssist(){
     return;
   }
   if (!data.active) {
-    box.innerHTML = '<div class="card"><div class="kicker">Моё сообщество</div><p class="now">Донат не продлён, помощник в вашем сообществе выключен. После оплаты он снова ответит покупателям.</p>'+
+    box.innerHTML = '<div class="card"><div class="kicker">Моё сообщество</div><p class="now">Донат не продлён, помощник в вашем сообществе молчит. После оплаты он снова ответит покупателям.</p>'+
       '<a class="btn" href="'+esc(data.join)+'" target="_blank" rel="noopener">Продлить донат</a></div>';
     bind();
     return;
@@ -810,13 +853,15 @@ async function loadAssist(){
   const community = data.community;
   const status = community
     ? '<p class="now">Подключено: '+esc(community.title || ('сообщество '+community.groupId))+' · '+esc(community.groupId)+(community.error ? '. '+esc(community.error) : '')+'</p>'
-    : '<p class="now">Пока помощник нигде не отвечает. Укажите номер своего сообщества и ключ из его настроек.</p>';
-  box.innerHTML = '<div class="card"><div class="kicker">Моё сообщество</div>'+status+
-    '<label class="flabel" for="assistGroup">Номер сообщества</label><input id="assistGroup" inputmode="numeric" placeholder="Например 214554778" value="'+esc(community ? community.groupId : '')+'">'+
-    '<label class="flabel" for="assistToken">Ключ сообщества</label><input id="assistToken" type="password" placeholder="Ключ из настроек сообщества">'+
+    : '<p class="now">Помощник пока нигде не отвечает. Подключите своё сообщество по шагам ниже.</p>';
+  box.innerHTML = '<div class="card"><div class="kicker">Моё сообщество</div>'+status+assistGuide()+
+    '<label class="flabel" for="assistGroup">Номер сообщества</label><input id="assistGroup" inputmode="numeric" placeholder="Например 1234567" value="'+esc(community ? community.groupId : '')+'">'+
+    '<label class="flabel" for="assistToken">Ключ сообщества</label><input id="assistToken" type="password" placeholder="Ключ из настроек сообщества" autocomplete="off">'+
     '<button class="btn" id="assistSave" type="button" style="margin-top:12px">Подключить</button>'+
     (community ? '<button class="btn ghost" id="assistDrop" type="button" style="margin-top:8px">Отключить</button>' : '')+
-    '<p id="assistmsg" class="hint"></p></div>';
+    '<p id="assistmsg" class="hint"></p>'+
+    (community ? assistDesk(community.reply) : '<p class="hint">После подключения здесь можно задать фразу и кнопки для покупателей.</p>')+
+    '</div>';
   bind();
 }
 async function saveAssist(){
@@ -836,6 +881,58 @@ async function saveAssist(){
     if (!response.ok || !data.ok) throw new Error(data.error || 'Сообщество не подключилось');
     if (msg) msg.textContent = 'Сообщество подключено.';
     loadAssist();
+  } catch (error) {
+    if (msg) msg.textContent = error.message;
+    if (button) button.disabled = false;
+  }
+}
+function assistKind(select){
+  const row = select.closest('[data-brow]');
+  if (!row) return;
+  const cap = row.querySelector('[data-bcap]');
+  const field = row.querySelector('[data-bvalue]');
+  if (select.value === 'link') {
+    if (cap) cap.textContent = 'Ссылка https';
+    if (field) field.placeholder = 'https://vk.com/...';
+  } else {
+    if (cap) cap.textContent = 'Текст ответа';
+    if (field) field.placeholder = 'Например: доставка по городу в день заказа';
+  }
+}
+function addAssistButton(){
+  const list = document.getElementById('assistButtons');
+  if (!list || list.querySelectorAll('[data-brow]').length >= 6) return;
+  list.insertAdjacentHTML('beforeend', assistButtonHtml({ label: '', link: '' }));
+  const add = document.getElementById('assistAdd');
+  if (add && list.querySelectorAll('[data-brow]').length >= 6) add.remove();
+  bind();
+}
+async function saveDesk(){
+  const msg = document.getElementById('deskmsg');
+  const button = document.getElementById('assistDesk');
+  const greeting = (document.getElementById('assistGreeting') || {}).value || '';
+  const buttons = [];
+  document.querySelectorAll('[data-brow]').forEach(function(row){
+    const label = (row.querySelector('[data-blabel]') || {}).value || '';
+    const kind = (row.querySelector('[data-bkind]') || {}).value || 'link';
+    const value = (row.querySelector('[data-bvalue]') || {}).value || '';
+    if (!String(label).trim() && !String(value).trim()) return;
+    const item = { label: label };
+    item[kind === 'text' ? 'text' : 'link'] = value;
+    buttons.push(item);
+  });
+  if (button) button.disabled = true;
+  if (msg) msg.textContent = 'Сохраняю ответы…';
+  try {
+    const response = await fetch('/api/vk/assistant/reply', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ greeting: greeting, buttons: buttons })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Ответы не сохранились');
+    if (msg) msg.textContent = data.pending ? 'Ответы сохранены. Покупатели увидят их, когда помощник будет на связи.' : 'Ответы сохранены. Покупатель увидит эту фразу и кнопки.';
+    if (button) button.disabled = false;
   } catch (error) {
     if (msg) msg.textContent = error.message;
     if (button) button.disabled = false;
@@ -1211,6 +1308,24 @@ function bind(){
   if (assistSave) assistSave.onclick = saveAssist;
   const assistDrop = document.getElementById('assistDrop');
   if (assistDrop) assistDrop.onclick = dropAssist;
+  const assistDeskButton = document.getElementById('assistDesk');
+  if (assistDeskButton) assistDeskButton.onclick = saveDesk;
+  const assistAdd = document.getElementById('assistAdd');
+  if (assistAdd) assistAdd.onclick = addAssistButton;
+  document.querySelectorAll('[data-bkind]').forEach(function(select){
+    select.onchange = function(){ assistKind(select); };
+  });
+  document.querySelectorAll('[data-bdel]').forEach(function(button){
+    button.onclick = function(){
+      const row = button.closest('[data-brow]');
+      if (row) row.remove();
+      const list = document.getElementById('assistButtons');
+      if (list && !document.getElementById('assistAdd') && list.querySelectorAll('[data-brow]').length < 6) {
+        list.insertAdjacentHTML('afterend', '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>');
+      }
+      bind();
+    };
+  });
   const cabBack = document.getElementById('cab-back');
   if (cabBack) cabBack.onclick = function(){ tab = 'cab'; draw(); };
   const site = document.getElementById('door-site');

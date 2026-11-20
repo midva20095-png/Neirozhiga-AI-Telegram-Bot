@@ -22,6 +22,79 @@ function maskToken(token) {
     return `···${value.slice(-4)}`;
 }
 
+function cleanReply(input) {
+    if (input == null) return { greeting: '', buttons: [] };
+    if (typeof input !== 'object' || Array.isArray(input)) return null;
+    if (input.greeting != null && typeof input.greeting !== 'string') return null;
+    if (input.buttons != null && !Array.isArray(input.buttons)) return null;
+    const greeting = cleanBody(input.greeting, 900, true);
+    if (greeting === null) return null;
+    const source = Array.isArray(input.buttons) ? input.buttons : [];
+    if (source.length > 6) return null;
+    const buttons = [];
+    const seen = new Set();
+    for (const item of source) {
+        const button = cleanButton(item);
+        if (!button || seen.has(button.label)) return null;
+        seen.add(button.label);
+        buttons.push(button);
+    }
+    return { greeting, buttons };
+}
+
+function cleanButton(item) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+    const label = String(item.label || '').replace(/\s+/g, ' ').trim();
+    if (!label || label.length > 40) return null;
+    const hasLink = item.link != null && item.link !== '';
+    const hasText = item.text != null && item.text !== '';
+    if (hasLink === hasText) return null;
+    if (hasLink) {
+        const link = httpsLink(item.link);
+        if (!link) return null;
+        return { label, link };
+    }
+    const text = cleanBody(item.text, 900, false);
+    if (!text) return null;
+    return { label, text };
+}
+
+function cleanBody(value, limit, allowEmpty) {
+    if (value == null || value === '') return allowEmpty ? '' : null;
+    if (typeof value !== 'string') return null;
+    const text = value.replace(/\r\n/g, '\n').trim();
+    if (!text) return allowEmpty ? '' : null;
+    if (text.length > limit) return null;
+    return text;
+}
+
+function httpsLink(value) {
+    if (typeof value !== 'string') return '';
+    const link = value.trim();
+    if (!link || link.length > 300 || /\s/.test(link)) return '';
+    let url;
+    try {
+        url = new URL(link);
+    } catch (error) {
+        return '';
+    }
+    if (url.protocol !== 'https:' || url.username || url.password) return '';
+    return link;
+}
+
+function publicSyncError(value) {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    if (/второй бот|секрет|адрес второго/i.test(text)) return 'Помощник ещё не на связи. Данные уже сохранены.';
+    return text.slice(0, 180);
+}
+
+function publicError(message) {
+    const error = new Error(message);
+    error.public = true;
+    return error;
+}
+
 function assistantConfig(env) {
     const source = env || process.env;
     const url = String(source.ASSISTANT_URL || '').trim().replace(/\/$/, '');
@@ -88,7 +161,8 @@ function communityCard(row) {
         groupId: String(row.group_id),
         title: row.title || '',
         sync: row.sync_state || '',
-        error: row.sync_error || ''
+        error: publicSyncError(row.sync_error),
+        reply: cleanReply(row.reply) || { greeting: '', buttons: [] }
     };
 }
 
@@ -112,11 +186,13 @@ async function tellAccess(userId, active, fetchImpl) {
 }
 
 async function tellCommunity(row, fetchImpl) {
+    const reply = cleanReply(row.reply) || { greeting: '', buttons: [] };
     return postAssistant('/community', {
         userId: Number(row.owner_id),
         groupId: Number(row.group_id),
         token: row.token,
-        title: row.title || ''
+        title: row.title || '',
+        reply
     }, fetchImpl);
 }
 
@@ -172,6 +248,8 @@ async function connectCommunity(account, groupId, token, title, fetchImpl) {
         throw error;
     }
     const previous = await db.listAssistantCommunities(ownerId);
+    const kept = previous.find(item => String(item.group_id) === communityId);
+    const reply = cleanReply(kept && kept.reply) || { greeting: '', buttons: [] };
     for (const old of previous) {
         if (String(old.group_id) === communityId) continue;
         await postAssistant('/community/remove', { userId: ownerId, groupId: Number(old.group_id) }, fetchImpl);
@@ -181,7 +259,8 @@ async function connectCommunity(account, groupId, token, title, fetchImpl) {
         userId: ownerId,
         groupId: Number(communityId),
         token: key,
-        title: title || ''
+        title: title || '',
+        reply
     }, fetchImpl);
     const access = await tellAccess(ownerId, true, fetchImpl);
     const syncError = [pushed.error, access.error].filter(Boolean).join(' ');
@@ -194,6 +273,32 @@ async function connectCommunity(account, groupId, token, title, fetchImpl) {
         syncError
     });
     return { ok: true, community: communityCard(Object.assign({}, saved, { sync_state: saved && saved.sync_state, sync_error: saved && saved.sync_error })) };
+}
+
+async function saveDesk(account, input, fetchImpl) {
+    const ownerId = vkId(account);
+    if (!ownerId) throw publicError('Раздел открыт из ВК.');
+    const don = await db.getAssistantDon(ownerId);
+    if (!don || !don.active) throw publicError('Настроить ответы может дон НейроЯги с живой подпиской.');
+    const reply = cleanReply(input);
+    if (!reply) throw publicError('У кнопки нужна надпись и либо ссылка https, либо текст ответа. Кнопок не больше шести.');
+    const rows = await db.listAssistantCommunities(ownerId);
+    const row = rows[0];
+    if (!row) throw publicError('Сначала подключите сообщество.');
+    const pushed = await postAssistant('/community/reply', {
+        userId: ownerId,
+        groupId: Number(row.group_id),
+        greeting: reply.greeting,
+        buttons: reply.buttons
+    }, fetchImpl);
+    const saved = await db.saveAssistantReply(row.group_id, ownerId, reply);
+    await db.markAssistantCommunity(row.group_id, pushed.ok ? 'on' : 'fail', pushed.ok ? '' : 'Ответы сохранены и ждут передачи.');
+    return {
+        ok: true,
+        reply,
+        pending: !pushed.ok,
+        community: communityCard(Object.assign({}, saved || row, { reply, sync_state: pushed.ok ? 'on' : 'fail' }))
+    };
 }
 
 async function disconnectCommunity(account, groupId, fetchImpl) {
@@ -212,6 +317,13 @@ async function adminDrop(groupId, fetchImpl) {
     const row = rows.find(item => String(item.group_id) === String(groupId || '').replace(/\D/g, ''));
     if (!row) return { ok: false, error: 'Сообщество не найдено.' };
     return disconnectCommunity(row.owner_id, row.group_id, fetchImpl);
+}
+
+function deskLabel(reply) {
+    const clean = cleanReply(reply) || { greeting: '', buttons: [] };
+    const phrase = clean.greeting ? clean.greeting.replace(/\s+/g, ' ').slice(0, 80) : 'фраза по умолчанию';
+    const labels = clean.buttons.map(item => item.label).join(', ');
+    return `${phrase} · ${labels ? `кнопки: ${labels}` : 'кнопок нет'}`;
 }
 
 function syncLabel(state) {
@@ -240,6 +352,7 @@ async function adminList(fetchImpl) {
                 token: maskToken(item.token),
                 sync: item.sync_state || '',
                 syncLabel: syncLabel(item.sync_state),
+                desk: deskLabel(item.reply),
                 error: item.sync_error || '',
                 updatedAt: item.updated_at
             }))
@@ -252,6 +365,7 @@ module.exports = {
     vkId,
     accessChange,
     maskToken,
+    cleanReply,
     assistantConfig,
     planLive,
     postAssistant,
@@ -260,6 +374,7 @@ module.exports = {
     applyEvent,
     registerLive,
     connectCommunity,
+    saveDesk,
     disconnectCommunity,
     adminDrop,
     adminList,

@@ -254,6 +254,7 @@ async function initDB() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS vk_assistant_community_owner_idx ON vk_assistant_community (owner_id)`);
+  await pool.query(`ALTER TABLE vk_assistant_community ADD COLUMN IF NOT EXISTS reply JSONB NOT NULL DEFAULT '{}'::jsonb`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS vk_lesson_memory (
       id SERIAL PRIMARY KEY,
@@ -461,12 +462,12 @@ async function listAssistantCommunities(ownerId) {
   const id = ownerId == null ? 0 : assistantPerson(ownerId);
   const res = id
     ? await pool.query(
-      `SELECT group_id, owner_id, title, token, sync_state, sync_error, updated_at
+      `SELECT group_id, owner_id, title, token, sync_state, sync_error, reply, updated_at
        FROM vk_assistant_community WHERE owner_id = $1 ORDER BY updated_at DESC`,
       [id]
     )
     : await pool.query(
-      `SELECT group_id, owner_id, title, token, sync_state, sync_error, updated_at
+      `SELECT group_id, owner_id, title, token, sync_state, sync_error, reply, updated_at
        FROM vk_assistant_community ORDER BY updated_at DESC`
     );
   return res.rows;
@@ -487,7 +488,7 @@ async function saveAssistantCommunity(row) {
        sync_state = EXCLUDED.sync_state,
        sync_error = EXCLUDED.sync_error,
        updated_at = NOW()
-     RETURNING group_id, owner_id, title, sync_state, sync_error, updated_at`,
+     RETURNING group_id, owner_id, title, sync_state, sync_error, reply, updated_at`,
     [
       groupId,
       ownerId,
@@ -496,6 +497,20 @@ async function saveAssistantCommunity(row) {
       String(row.syncState || '').slice(0, 20),
       String(row.syncError || '').slice(0, 240)
     ]
+  );
+  return res.rows[0] || null;
+}
+
+async function saveAssistantReply(groupId, ownerId, reply) {
+  const id = String(groupId || '').replace(/\D/g, '');
+  const owner = assistantPerson(ownerId);
+  if (!id || !owner || !reply) return null;
+  const res = await pool.query(
+    `UPDATE vk_assistant_community
+     SET reply = $3::jsonb, updated_at = NOW()
+     WHERE group_id = $1 AND owner_id = $2
+     RETURNING group_id, owner_id, title, sync_state, sync_error, reply, updated_at`,
+    [id, owner, JSON.stringify(reply)]
   );
   return res.rows[0] || null;
 }
@@ -1386,6 +1401,7 @@ module.exports = {
   upsertAssistantDon,
   listAssistantCommunities,
   saveAssistantCommunity,
+  saveAssistantReply,
   markAssistantCommunity,
   markAssistantOwner,
   deleteAssistantCommunity,

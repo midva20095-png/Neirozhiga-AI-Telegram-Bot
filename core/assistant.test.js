@@ -40,6 +40,22 @@ test('команда второму боту уходит с секретом и
     assert.equal(missing.ok, false);
 });
 
+test('фраза дона принимает ссылку и ответ и отбрасывает кривую кнопку', () => {
+    const reply = assistant.cleanReply({
+        greeting: '  Здравствуйте.  ',
+        buttons: [
+            { label: 'Каталог', link: 'https://vk.com/market-1' },
+            { label: 'Доставка', text: 'Привезём сегодня.' }
+        ]
+    });
+    assert.equal(reply.greeting, 'Здравствуйте.');
+    assert.equal(reply.buttons[0].link, 'https://vk.com/market-1');
+    assert.equal(reply.buttons[1].text, 'Привезём сегодня.');
+    assert.equal(assistant.cleanReply({ buttons: [{ label: 'Сайт', link: 'http://example.com' }] }), null);
+    assert.equal(assistant.cleanReply({ buttons: [{ label: 'Два', link: 'https://vk.com/a', text: 'и текст' }] }), null);
+    assert.equal(JSON.stringify(reply).includes('secret'), false);
+});
+
 test('без адреса второго бота здоровье показывает, что он не подключён', async () => {
     const health = await assistant.readHealth(async () => { throw new Error('нет сети'); }, {});
     assert.equal(health.configured, false);
