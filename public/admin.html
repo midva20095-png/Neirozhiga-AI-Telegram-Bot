@@ -21,6 +21,8 @@ button{cursor:pointer;border:0;border-radius:12px;padding:10px 14px;font-weight:
 .topiclist{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .topiclist button{flex:0 0 auto;min-width:0;border-radius:999px;padding:8px 12px;background:#1c1233;border:1px solid var(--line);color:var(--text)}
 .topiclist button.on{background:linear-gradient(135deg,#b366ff,#ff2d95);border-color:transparent;color:#fff}
+.topicgroup{margin-top:10px}
+.topicgroup .kicker{font-size:12px;color:var(--mut);font-weight:700}
 .topicadd{display:flex;gap:8px;align-items:center;margin-top:8px}
 .topicadd input{flex:1;min-width:0;margin:0}
 .topicadd button{flex:0 0 auto;min-width:0}
@@ -810,6 +812,15 @@ async function sendPm(id){
 
 /* ---- Шаблоны ---- */
 const TCATS = [['image','Картинки'],['fix','Улучшение фото'],['chat','Текст'],['video','Видео'],['audio','Голос']];
+const TOPIC_GROUPS = [
+  ['Люди', ['Портрет', 'Семья', 'Дети', 'Пара', 'Свадьба', 'Бизнес-фото']],
+  ['Праздники', ['День рождения', 'Новый год', '8 марта', '23 февраля', 'Праздник']],
+  ['Стиль', ['Неон', 'Ретро', 'Кино', 'Аниме', 'Фэнтези', 'Студия']],
+  ['Дело', ['Кондитер', 'Еда', 'Красота', 'Мода', 'Реклама', 'Товар', 'Интерьер']],
+  ['Сезон', ['Весна', 'Лето', 'Осень', 'Зима']],
+  ['Формат', ['Аватар', 'Обложка', 'Открытка', 'Сторис', 'Коллаж']],
+  ['Ещё', ['Природа', 'Животные', 'Путешествия', 'Спорт']]
+];
 function splitTopics(value){
   const seen = {};
   const out = [];
@@ -828,6 +839,44 @@ function knownTopics(){
     if (!out.some(item => item.toLowerCase() === name.toLowerCase())) out.push(name);
   }));
   return out.sort(function(a, b){ return a.localeCompare(b, 'ru'); });
+}
+function presetTopics(){
+  const out = [];
+  TOPIC_GROUPS.forEach(group => group[1].forEach(name => {
+    if (!out.some(item => item.toLowerCase() === name.toLowerCase())) out.push(name);
+  }));
+  return out;
+}
+function customTopics(selected){
+  const preset = {};
+  presetTopics().forEach(name => { preset[name.toLowerCase()] = 1; });
+  const out = [];
+  function add(name){
+    const key = name.toLowerCase();
+    if (preset[key] || out.some(item => item.toLowerCase() === key)) return;
+    out.push(name);
+  }
+  Object.keys(selected || {}).forEach(key => add(selected[key]));
+  knownTopics().forEach(add);
+  return out.sort(function(a, b){ return a.localeCompare(b, 'ru'); });
+}
+function topicButton(name, selected){
+  const on = !!(selected && selected[name.toLowerCase()]);
+  return '<button type="button" class="'+(on?'on':'')+'" data-addtopic="'+esc(name)+'">'+esc(name)+'</button>';
+}
+function topicGroupsHtml(selected, withCount){
+  const groups = TOPIC_GROUPS.map(group => [group[0], group[1].slice()]);
+  const custom = customTopics(selected);
+  if (custom.length) groups.push(['Свои', custom]);
+  return groups.map(group => {
+    return '<div class="topicgroup"><div class="kicker">'+esc(group[0])+'</div><div class="topiclist">'+
+      group[1].map(name => {
+        const count = templates.filter(t => splitTopics(t.topics).some(item => item.toLowerCase() === name.toLowerCase())).length;
+        if (withCount) return '<button type="button" class="'+(count?'on':'')+'" disabled>'+esc(name)+' · '+count+'</button>';
+        return topicButton(name, selected);
+      }).join('')+
+      '</div></div>';
+  }).join('');
 }
 function selectedTopics(){
   const input = document.getElementById('ttopics');
@@ -857,27 +906,14 @@ function addTopic(){
   writeTopics(list);
 }
 function topicCatalog(){
-  const names = knownTopics();
-  if (!names.length) return '<p class="note">Пока нет ни одной категории. Добавьте её в шаблоне выше и сохраните.</p>';
-  return '<div class="topiclist">'+names.map(name => {
-    const count = templates.filter(t => splitTopics(t.topics).some(item => item.toLowerCase() === name.toLowerCase())).length;
-    return '<button type="button" class="on" disabled>'+esc(name)+' · '+count+'</button>';
-  }).join('')+'</div>';
+  return topicGroupsHtml(null, true);
 }
 function paintTopics(){
   const box = document.getElementById('topiclist');
   if (!box) return;
   const selected = {};
   selectedTopics().forEach(name => { selected[name.toLowerCase()] = name; });
-  const names = knownTopics();
-  Object.keys(selected).forEach(key => {
-    if (!names.some(name => name.toLowerCase() === key)) names.push(selected[key]);
-  });
-  names.sort(function(a, b){ return a.localeCompare(b, 'ru'); });
-  box.innerHTML = names.length ? names.map(name => {
-    const on = !!selected[name.toLowerCase()];
-    return '<button type="button" class="'+(on?'on':'')+'" data-addtopic="'+esc(name)+'">'+esc(name)+'</button>';
-  }).join('') : '<p class="note">Категорий пока нет. Напишите название и нажмите «Добавить».</p>';
+  box.innerHTML = topicGroupsHtml(selected, false);
   box.querySelectorAll('[data-addtopic]').forEach(btn => { btn.onclick = () => toggleTopic(btn.dataset.addtopic); });
 }
 function fileToJpeg(file, max, quality){
@@ -990,9 +1026,9 @@ async function loadTpl(){
     '<label>Тип результата</label><select id="tc">'+TCATS.map(c=>'<option value="'+c[0]+'"'+((editing?editing.category:'image')===c[0]?' selected':'')+'>'+c[1]+'</option>').join('')+'</select>'+
     '<p class="note">«Видео» и «Голос» говорят кабинету, чем закончится шаблон. Для видео выберите видеомодель.</p>'+
     '<label>Категории</label><input id="ttopics" type="hidden" value="'+esc(editing&&editing.topics?editing.topics:'')+'">'+
-    '<div class="topiclist" id="topiclist"></div>'+
-    '<div class="topicadd"><input id="tnewtopic" placeholder="Новая категория"><button type="button" id="taddtopic">Добавить</button></div>'+
-    '<p class="note">Нажмите категорию, чтобы повесить её на этот шаблон. «Добавить» создаёт новую: их может быть сколько угодно, не только три. Категория видна в кабинете после сохранения шаблона.</p>'+
+    '<div id="topiclist"></div>'+
+    '<div class="topicadd"><input id="tnewtopic" placeholder="Своя категория, если её нет в списке"><button type="button" id="taddtopic">Добавить</button></div>'+
+    '<p class="note">Нажмите готовую категорию, чтобы повесить её на этот шаблон. Своё название нужно только если его нет выше. В кабинете категория появляется после сохранения.</p>'+
     '<label>3. Что должна сделать нейросеть. Человек это не видит</label><textarea id="tp" placeholder="Опишите стиль, свет и что оставить от фото человека. Ответы полей пишите как {имя}">'+esc(editing?editing.prompt:'')+'</textarea>'+
     '<label>Поля для ответов человека. Пусто — одно своё фото</label><textarea id="tfields" placeholder="фото | Ваше фото | до 3&#10;текст | имя | Как вас зовут?&#10;выбор | стиль | Стиль | Неон; Плёнка&#10;дата | дата | Дата рождения | необязательно&#10;число | возраст | Сколько лет?">'+esc(editing&&editing.fields?editing.fields:'')+'</textarea>'+
     '<p class="note">Каждая строка — одно поле: фото, текст, выбор, дата или число. В тексте запроса {имя} заменится ответом человека. Несколько фото уходят в модель вместе, текст запроса не переписывается.</p>'+
