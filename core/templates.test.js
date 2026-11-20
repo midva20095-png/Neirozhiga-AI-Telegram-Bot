@@ -59,6 +59,8 @@ test('категории шаблона приходят в кабинет сп�
     assert.deepEqual(templates.toPublic(item).cats, ['Портреты', 'Семья']);
     assert.equal(Object.prototype.hasOwnProperty.call(templates.toPublic(item), 'prompt'), false);
     assert.deepEqual(templates.fromDb(row('nano-banana')).cats, []);
+    const many = templates.fromDb(row('nano-banana', { topics: 'Осень, Зима, Весна, Лето, Праздник' }));
+    assert.deepEqual(many.cats, ['Осень', 'Зима', 'Весна', 'Лето', 'Праздник']);
 });
 
 test('текст запроса не уходит в кабинет', () => {

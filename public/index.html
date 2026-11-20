@@ -169,11 +169,11 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .chips button.on{border-color:#b366ff;color:#fff}
 .back{position:relative;z-index:2;border:0;background:transparent;color:var(--mut);font-weight:800;padding:0 0 8px;min-height:36px}
 .gallery{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.tkinds{display:flex;gap:8px;margin:0 0 10px}
-.tkinds button{flex:1;padding:8px 0;border-radius:20px;border:1px solid #3a2a66;background:#120a24;color:var(--mut);font-weight:800;font-size:13px}
+.tkinds{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+.tkinds button{flex:0 1 auto;padding:8px 14px;border-radius:20px;border:1px solid #3a2a66;background:#120a24;color:var(--mut);font-weight:800;font-size:13px}
 .tkinds button.on{color:#fff;border-color:#22e1ff;background:linear-gradient(135deg,#1b0d3d,#2a0f5e);box-shadow:0 0 14px #22e1ff66}
-.tcats{display:flex;gap:8px;overflow-x:auto;padding:2px 0 12px;scrollbar-width:none}
-.tcats button{flex:0 0 auto;border:1px solid #3a2a66;background:#120a24;color:var(--mut);border-radius:20px;padding:8px 14px;font-weight:700;font-size:13px;white-space:nowrap}
+.tcats{display:flex;flex-wrap:wrap;gap:8px;padding:2px 0 12px}
+.tcats button{flex:0 1 auto;max-width:100%;border:1px solid #3a2a66;background:#120a24;color:var(--mut);border-radius:20px;padding:8px 14px;font-weight:700;font-size:13px;text-align:left}
 .tcats button.on{color:#fff;border-color:#ff3fd0;background:linear-gradient(135deg,#2a0f5e,#4a0f6e);box-shadow:0 0 12px #ff3fd066}
 .tsearch{border-radius:14px;margin:0 0 10px;padding:12px 14px;border:1px solid #3a2a66;background:#160b2c}
 .tgallery{display:grid;grid-template-columns:1fr 1fr;gap:11px}
@@ -215,12 +215,12 @@ input,select{width:100%;border-radius:14px;border:1px solid var(--line);backgrou
 body.vkapp .cover{display:none}
 #tabmenu,#tabrate,#tabshop,#tabcab{display:none}
 body.vkapp #tabs button[data-t="models"],
-body.vkapp #tabs button[data-t="tpl"],
 body.vkapp #tabs button[data-t="hist"],
 body.vkapp #tabs button[data-t="top"],
 body.vkapp #tabs button[data-t="help"],
 body.vkapp #tabmenu{display:none}
 body.vkapp #tabs button[data-t="gen"],
+body.vkapp #tabs button[data-t="tpl"],
 body.vkapp #tabrate,
 body.vkapp #tabshop,
 body.vkapp #tabcab{display:flex}
@@ -615,7 +615,7 @@ function draw(){
   else if (tab==='rate') { box.innerHTML = '<div id="ratebox"><div class="card"><p>Считаю баллы…</p></div></div>'; loadRating(); }
   else if (tab==='shop') { box.innerHTML = '<div id="shopbox"><div class="card"><p>Открываю магазин…</p></div></div>'; loadShop(); }
   else box.innerHTML = viewHelp();
-  if (inVkApp() && tab !== 'gen' && tab !== 'rate' && tab !== 'shop' && tab !== 'cab') {
+  if (inVkApp() && tab !== 'gen' && tab !== 'tpl' && tab !== 'rate' && tab !== 'shop' && tab !== 'cab') {
     box.insertAdjacentHTML('afterbegin', '<button type="button" class="back" id="cab-back">Кабинет</button>');
   }
   bind();
@@ -874,7 +874,7 @@ function viewTpl(){
   if (have.fix) kinds.push(['fix','Улучшение']);
   const topicHave = {};
   templates.forEach(t=>tplTopics(t).forEach(c=>{ topicHave[c] = 1; }));
-  const topics = Object.keys(topicHave);
+  const topics = Object.keys(topicHave).sort(function(a, b){ return a.localeCompare(b, 'ru'); });
   const list = templates.filter(t=>{
     const cat = t.category || 'image';
     if (tplKind === 'image' && cat !== 'image' && cat !== 'fix') return false;
@@ -886,7 +886,7 @@ function viewTpl(){
   const kindRow = '<div class="tkinds">'+kinds.map(function(pair){
     return '<button type="button" data-tkind="'+pair[0]+'" class="'+(tplKind===pair[0]?'on':'')+'">'+pair[1]+'</button>';
   }).join('')+'</div>';
-  const topicRow = topics.length ? '<div class="tcats"><button type="button" data-ttopic="" class="'+(tplTopic?'':'on')+'">Все темы</button>'+
+  const topicRow = topics.length ? '<div class="kicker">Категории</div><div class="tcats"><button type="button" data-ttopic="" class="'+(tplTopic?'':'on')+'">Все</button>'+
     topics.map(c=>'<button type="button" data-ttopic="'+esc(c)+'" class="'+(tplTopic===c?'on':'')+'">'+esc(c)+'</button>').join('')+'</div>' : '';
   const kindName = tplKind === 'video' ? 'видео' : tplKind === 'image' ? 'картинки' : tplKind === 'chat' ? 'текст' : tplKind === 'audio' ? 'голос' : tplKind === 'fix' ? 'улучшение' : 'все';
   const cards = list.length ? list.map(t=>{

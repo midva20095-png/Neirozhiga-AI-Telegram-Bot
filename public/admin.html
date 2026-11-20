@@ -18,6 +18,12 @@ textarea{min-height:90px;resize:vertical}
 label{display:block;font-size:12px;color:var(--mut);margin:8px 0 4px}
 button{cursor:pointer;border:0;border-radius:12px;padding:10px 14px;font-weight:800;background:linear-gradient(135deg,#b366ff,#ff2d95);color:#fff}
 .ghost{background:transparent;border:1px solid var(--line)}
+.topiclist{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.topiclist button{flex:0 0 auto;min-width:0;border-radius:999px;padding:8px 12px;background:#1c1233;border:1px solid var(--line);color:var(--text)}
+.topiclist button.on{background:linear-gradient(135deg,#b366ff,#ff2d95);border-color:transparent;color:#fff}
+.topicadd{display:flex;gap:8px;align-items:center;margin-top:8px}
+.topicadd input{flex:1;min-width:0;margin:0}
+.topicadd button{flex:0 0 auto;min-width:0}
 .danger{background:transparent;border:1px solid rgba(255,80,120,.5);color:#ffb3c7}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
 .row>*{flex:1;min-width:120px}
@@ -804,24 +810,75 @@ async function sendPm(id){
 
 /* ---- Шаблоны ---- */
 const TCATS = [['image','Картинки'],['fix','Улучшение фото'],['chat','Текст'],['video','Видео'],['audio','Голос']];
-function knownTopics(){
+function splitTopics(value){
   const seen = {};
   const out = [];
-  templates.forEach(t => String(t.topics||'').split(/[,;]/).forEach(part => {
-    const name = part.trim();
+  String(value || '').split(/[,;|]/).forEach(part => {
+    const name = part.trim().replace(/\s+/g, ' ').slice(0, 40);
     const key = name.toLowerCase();
-    if (!name || seen[key]) return;
+    if (!name || seen[key] || out.length >= 40) return;
     seen[key] = 1;
     out.push(name);
-  }));
+  });
   return out;
 }
-function toggleTopic(name){
+function knownTopics(){
+  const out = [];
+  templates.forEach(t => splitTopics(t.topics).forEach(name => {
+    if (!out.some(item => item.toLowerCase() === name.toLowerCase())) out.push(name);
+  }));
+  return out.sort(function(a, b){ return a.localeCompare(b, 'ru'); });
+}
+function selectedTopics(){
   const input = document.getElementById('ttopics');
-  if (!input || !name) return;
-  const list = input.value.split(/[,;]/).map(s => s.trim()).filter(Boolean);
-  const has = list.some(s => s.toLowerCase() === name.toLowerCase());
-  input.value = (has ? list.filter(s => s.toLowerCase() !== name.toLowerCase()) : list.concat([name])).join(', ');
+  return splitTopics(input ? input.value : '');
+}
+function writeTopics(list){
+  const input = document.getElementById('ttopics');
+  if (input) input.value = splitTopics(list.join(', ')).join(', ');
+  paintTopics();
+}
+function toggleTopic(name){
+  const clean = splitTopics(name)[0];
+  if (!clean) return;
+  const list = selectedTopics();
+  const has = list.some(item => item.toLowerCase() === clean.toLowerCase());
+  writeTopics(has ? list.filter(item => item.toLowerCase() !== clean.toLowerCase()) : list.concat([clean]));
+}
+function addTopic(){
+  const field = document.getElementById('tnewtopic');
+  const fresh = splitTopics(field ? field.value : '');
+  if (!fresh.length) return;
+  const list = selectedTopics();
+  fresh.forEach(name => {
+    if (!list.some(item => item.toLowerCase() === name.toLowerCase())) list.push(name);
+  });
+  if (field) field.value = '';
+  writeTopics(list);
+}
+function topicCatalog(){
+  const names = knownTopics();
+  if (!names.length) return '<p class="note">Пока нет ни одной категории. Добавьте её в шаблоне выше и сохраните.</p>';
+  return '<div class="topiclist">'+names.map(name => {
+    const count = templates.filter(t => splitTopics(t.topics).some(item => item.toLowerCase() === name.toLowerCase())).length;
+    return '<button type="button" class="on" disabled>'+esc(name)+' · '+count+'</button>';
+  }).join('')+'</div>';
+}
+function paintTopics(){
+  const box = document.getElementById('topiclist');
+  if (!box) return;
+  const selected = {};
+  selectedTopics().forEach(name => { selected[name.toLowerCase()] = name; });
+  const names = knownTopics();
+  Object.keys(selected).forEach(key => {
+    if (!names.some(name => name.toLowerCase() === key)) names.push(selected[key]);
+  });
+  names.sort(function(a, b){ return a.localeCompare(b, 'ru'); });
+  box.innerHTML = names.length ? names.map(name => {
+    const on = !!selected[name.toLowerCase()];
+    return '<button type="button" class="'+(on?'on':'')+'" data-addtopic="'+esc(name)+'">'+esc(name)+'</button>';
+  }).join('') : '<p class="note">Категорий пока нет. Напишите название и нажмите «Добавить».</p>';
+  box.querySelectorAll('[data-addtopic]').forEach(btn => { btn.onclick = () => toggleTopic(btn.dataset.addtopic); });
 }
 function fileToJpeg(file, max, quality){
   return new Promise((resolve,reject)=>{
@@ -932,9 +989,10 @@ async function loadTpl(){
     '<label>2. Название</label><input id="tt" placeholder="Например: Портрет в неоне" value="'+esc(editing?editing.title:'')+'">'+
     '<label>Тип результата</label><select id="tc">'+TCATS.map(c=>'<option value="'+c[0]+'"'+((editing?editing.category:'image')===c[0]?' selected':'')+'>'+c[1]+'</option>').join('')+'</select>'+
     '<p class="note">«Видео» и «Голос» говорят кабинету, чем закончится шаблон. Для видео выберите видеомодель.</p>'+
-    '<label>Категории. Через запятую, как темы в кабинете</label><input id="ttopics" placeholder="Портреты, День рождения, Знаки зодиака" value="'+esc(editing&&editing.topics?editing.topics:'')+'">'+
-    (knownTopics().length ? '<div class="row" style="flex-wrap:wrap;margin-top:8px">'+knownTopics().map(name=>'<button type="button" class="ghost" data-addtopic="'+esc(name)+'">'+esc(name)+'</button>').join('')+'</div>' : '')+
-    '<p class="note">Нажатие на готовую тему добавляет её или убирает. Один шаблон может быть в нескольких категориях. Пустое поле не прячет шаблон: он остаётся во «Все темы».</p>'+
+    '<label>Категории</label><input id="ttopics" type="hidden" value="'+esc(editing&&editing.topics?editing.topics:'')+'">'+
+    '<div class="topiclist" id="topiclist"></div>'+
+    '<div class="topicadd"><input id="tnewtopic" placeholder="Новая категория"><button type="button" id="taddtopic">Добавить</button></div>'+
+    '<p class="note">Нажмите категорию, чтобы повесить её на этот шаблон. «Добавить» создаёт новую: их может быть сколько угодно, не только три. Категория видна в кабинете после сохранения шаблона.</p>'+
     '<label>3. Что должна сделать нейросеть. Человек это не видит</label><textarea id="tp" placeholder="Опишите стиль, свет и что оставить от фото человека. Ответы полей пишите как {имя}">'+esc(editing?editing.prompt:'')+'</textarea>'+
     '<label>Поля для ответов человека. Пусто — одно своё фото</label><textarea id="tfields" placeholder="фото | Ваше фото | до 3&#10;текст | имя | Как вас зовут?&#10;выбор | стиль | Стиль | Неон; Плёнка&#10;дата | дата | Дата рождения | необязательно&#10;число | возраст | Сколько лет?">'+esc(editing&&editing.fields?editing.fields:'')+'</textarea>'+
     '<p class="note">Каждая строка — одно поле: фото, текст, выбор, дата или число. В тексте запроса {имя} заменится ответом человека. Несколько фото уходят в модель вместе, текст запроса не переписывается.</p>'+
@@ -957,6 +1015,7 @@ async function loadTpl(){
     '</details>'+
     '<div class="row" style="margin-top:12px"><button onclick="saveTpl()">'+(editing?'Сохранить изменения':'Добавить шаблон в кабинет')+'</button>'+
     (editing?'<button class="ghost" type="button" onclick="newTpl()">Отмена</button>':'')+'</div></div>'+
+    '<div class="card"><h3>Категории</h3>'+topicCatalog()+'</div>'+
     '<div class="card"><h3>Шаблоны · '+placeName()+'</h3><p class="note">'+templates.length+' в этом входе. «Оба чата» видны и в Telegram, и во ВК. Скрытые в кабинет не попадают.</p>'+
     (templates.length ? '<div class="agallery">'+templates.map(t=>{
       const src = safeImg(t.image);
@@ -977,7 +1036,11 @@ async function loadTpl(){
     '</div>';
   const file = document.getElementById('tfile');
   if (file) file.onchange = () => onTplPhoto(file);
-  document.querySelectorAll('[data-addtopic]').forEach(btn => { btn.onclick = () => toggleTopic(btn.dataset.addtopic); });
+  paintTopics();
+  const addTopicBtn = document.getElementById('taddtopic');
+  const newTopic = document.getElementById('tnewtopic');
+  if (addTopicBtn) addTopicBtn.onclick = addTopic;
+  if (newTopic) newTopic.onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); addTopic(); } };
   const tm = document.getElementById('tm');
   const tcost = document.getElementById('tcost');
   function applyModePrice(force){

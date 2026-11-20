@@ -27,7 +27,7 @@ function topicList(value) {
     splitList(value).forEach(name => {
         const clean = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 40);
         const key = clean.toLowerCase();
-        if (!clean || seen.has(key) || out.length >= 12) return;
+        if (!clean || seen.has(key) || out.length >= 40) return;
         seen.add(key);
         out.push(clean);
     });

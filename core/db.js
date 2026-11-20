@@ -65,6 +65,7 @@ async function initDB() {
   await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS audience TEXT DEFAULT 'all'`);
   await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS fields TEXT`);
   await pool.query(`ALTER TABLE templates ADD COLUMN IF NOT EXISTS topics TEXT`);
+  await pool.query(`ALTER TABLE templates ALTER COLUMN topics TYPE TEXT`);
   const count = await pool.query('SELECT COUNT(*)::int AS n FROM templates');
   if (count.rows[0].n === 0) {
     for (const row of SEED_TEMPLATES) {
@@ -1076,7 +1077,7 @@ function cleanTopics(value) {
   String(value || '').split(/[,;|]/).forEach(part => {
     const name = part.trim().replace(/\s+/g, ' ').slice(0, 40);
     const key = name.toLowerCase();
-    if (!name || seen.has(key) || out.length >= 12) return;
+    if (!name || seen.has(key) || out.length >= 40) return;
     seen.add(key);
     out.push(name);
   });
