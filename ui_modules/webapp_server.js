@@ -14,6 +14,7 @@ const widget = require('../core/vk-widget');
 const bridge = require('../core/bridge');
 const activity = require('../core/activity');
 const shop = require('../core/shop');
+const assistant = require('../core/assistant');
 const promo = require('../core/promo');
 const maintenance = require('../core/maintenance');
 const saveWork = require('../public/save-work');
@@ -307,6 +308,50 @@ function startWebApp() {
             res.json({ url });
         } catch (e) {
             res.status(502).json({ error: 'Чат не открылся. Нажмите «Пополнить» в диалоге ВК.' });
+        }
+    });
+
+    app.get('/api/vk/assistant', requireUser, async (req, res) => {
+        try {
+            const userId = assistant.vkId(req.userId);
+            if (!userId) return res.json({ don: false, active: false, join: assistant.JOIN_URL, community: null });
+            let view = await assistant.cabinet(userId);
+            if (!view.don) {
+                const pack = await vk.communityDonut(vk.clubGroupId());
+                if (pack.donorError) return res.json(Object.assign({ check: false }, view));
+                const found = (pack.donors || []).find(item => Number(item.id) === userId);
+                if (found) {
+                    await assistant.applyEvent('create', userId, found.name || '');
+                    view = await assistant.cabinet(userId);
+                }
+            }
+            res.json(view);
+        } catch (e) {
+            res.status(500).json({ error: 'Раздел сообщества не открылся.' });
+        }
+    });
+
+    app.post('/api/vk/assistant/community', requireUser, async (req, res) => {
+        try {
+            const userId = assistant.vkId(req.userId);
+            const body = req.body || {};
+            const checked = await vk.checkCommunityToken(body.token, body.groupId);
+            const saved = await assistant.connectCommunity(userId, checked.id, body.token, checked.name);
+            res.json(saved);
+        } catch (e) {
+            const message = e && e.public ? e.message : 'Сообщество не подключилось.';
+            res.status(400).json({ ok: false, error: message });
+        }
+    });
+
+    app.post('/api/vk/assistant/community/remove', requireUser, async (req, res) => {
+        try {
+            const userId = assistant.vkId(req.userId);
+            const result = await assistant.disconnectCommunity(userId, req.body && req.body.groupId);
+            if (!result.ok) return res.status(400).json(result);
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Сообщество не отключилось.' });
         }
     });
 
@@ -903,6 +948,47 @@ function startWebApp() {
 
     app.get('/api/admin/vk/communities', requireAdmin, (req, res) => {
         res.json({ communities: vk.adminHomes() });
+    });
+
+    app.get('/api/admin/vk/assistant', requireAdmin, async (req, res) => {
+        try {
+            res.json(await assistant.adminList());
+        } catch (e) {
+            res.status(500).json({ error: 'Помощник доната не открылся.' });
+        }
+    });
+
+    app.post('/api/admin/vk/assistant/sync', requireAdmin, async (req, res) => {
+        try {
+            const pack = await vk.communityDonut(vk.clubGroupId());
+            if (pack.donorError) return res.status(502).json({ ok: false, error: pack.donorError });
+            const result = await assistant.registerLive(pack.donors || []);
+            res.json({ ok: true, on: result.on, off: result.off });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Список донов не обновился.' });
+        }
+    });
+
+    app.post('/api/admin/vk/assistant/active', requireAdmin, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const userId = assistant.vkId(body.userId);
+            if (!userId) return res.status(400).json({ ok: false, error: 'Нужен номер ВК.' });
+            await assistant.applyEvent(body.active ? 'prolong' : 'expire', userId, '');
+            res.json({ ok: true });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Статус дона не изменился.' });
+        }
+    });
+
+    app.post('/api/admin/vk/assistant/drop', requireAdmin, async (req, res) => {
+        try {
+            const result = await assistant.adminDrop(req.body && req.body.groupId);
+            if (!result.ok) return res.status(400).json(result);
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Сообщество не отключилось.' });
+        }
     });
 
     app.get('/api/admin/vk/donut', requireAdmin, async (req, res) => {

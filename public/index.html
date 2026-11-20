@@ -556,7 +556,7 @@ async function load(){
   if (pendingPkg) tab = 'top';
   document.getElementById('bal').textContent = (me.balance||0)+' кр';
   markVkChrome();
-  if (!isVk() && (tab==='rate' || tab==='shop' || tab==='menu' || tab==='cab')) tab = 'gen';
+  if (!isVk() && (tab==='rate' || tab==='shop' || tab==='menu' || tab==='cab' || tab==='assist')) tab = 'gen';
   if (isVk() && tab === 'menu' && !window.__vkGoal) tab = 'gen';
   if (window.__vkGoal === 'rate') tab = 'rate';
   if (window.__vkGoal === 'shop') tab = 'shop';
@@ -614,6 +614,7 @@ function draw(){
   else if (tab==='top') box.innerHTML = viewTop();
   else if (tab==='rate') { box.innerHTML = '<div id="ratebox"><div class="card"><p>Считаю баллы…</p></div></div>'; loadRating(); }
   else if (tab==='shop') { box.innerHTML = '<div id="shopbox"><div class="card"><p>Открываю магазин…</p></div></div>'; loadShop(); }
+  else if (tab==='assist') { box.innerHTML = '<div id="assistbox"><div class="card"><p>Открываю сообщество…</p></div></div>'; loadAssist(); }
   else box.innerHTML = viewHelp();
   if (inVkApp() && tab !== 'gen' && tab !== 'tpl' && tab !== 'rate' && tab !== 'shop' && tab !== 'cab') {
     box.insertAdjacentHTML('afterbegin', '<button type="button" class="back" id="cab-back">Кабинет</button>');
@@ -778,6 +779,84 @@ function viewMenu(){
     '<button type="button" id="door-sub" class="sub'+(mail?' on':'')+'">'+(mail?'Вы подписаны':'Подписаться')+'</button>'+
     gear+setup+'<p id="submsg" class="hint"></p></div>';
 }
+async function loadAssist(){
+  const box = document.getElementById('assistbox');
+  if (!box) return;
+  let data = {};
+  try {
+    const response = await fetch('/api/vk/assistant', { headers: authHeaders() });
+    data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Раздел не открылся');
+  } catch (error) {
+    box.innerHTML = '<div class="card"><p class="err">'+esc(error.message || 'Раздел не открылся')+'</p></div>';
+    bind();
+    return;
+  }
+  if (!data.don) {
+    const note = data.check === false
+      ? 'Не удалось сверить донат. Откройте раздел ещё раз.'
+      : 'Раздел открыт донам НейроЯги. После оплаты подписка появится здесь, и можно будет подключить своё сообщество.';
+    box.innerHTML = '<div class="card"><div class="kicker">Моё сообщество</div><p class="now">'+esc(note)+'</p>'+
+      '<a class="btn" href="'+esc(data.join || 'https://vk.com/donut/club214554778')+'" target="_blank" rel="noopener">Оформить донат</a></div>';
+    bind();
+    return;
+  }
+  if (!data.active) {
+    box.innerHTML = '<div class="card"><div class="kicker">Моё сообщество</div><p class="now">Донат не продлён, помощник в вашем сообществе выключен. После оплаты он снова ответит покупателям.</p>'+
+      '<a class="btn" href="'+esc(data.join)+'" target="_blank" rel="noopener">Продлить донат</a></div>';
+    bind();
+    return;
+  }
+  const community = data.community;
+  const status = community
+    ? '<p class="now">Подключено: '+esc(community.title || ('сообщество '+community.groupId))+' · '+esc(community.groupId)+(community.error ? '. '+esc(community.error) : '')+'</p>'
+    : '<p class="now">Пока помощник нигде не отвечает. Укажите номер своего сообщества и ключ из его настроек.</p>';
+  box.innerHTML = '<div class="card"><div class="kicker">Моё сообщество</div>'+status+
+    '<label class="flabel" for="assistGroup">Номер сообщества</label><input id="assistGroup" inputmode="numeric" placeholder="Например 214554778" value="'+esc(community ? community.groupId : '')+'">'+
+    '<label class="flabel" for="assistToken">Ключ сообщества</label><input id="assistToken" type="password" placeholder="Ключ из настроек сообщества">'+
+    '<button class="btn" id="assistSave" type="button" style="margin-top:12px">Подключить</button>'+
+    (community ? '<button class="btn ghost" id="assistDrop" type="button" style="margin-top:8px">Отключить</button>' : '')+
+    '<p id="assistmsg" class="hint"></p></div>';
+  bind();
+}
+async function saveAssist(){
+  const msg = document.getElementById('assistmsg');
+  const button = document.getElementById('assistSave');
+  const groupId = (document.getElementById('assistGroup') || {}).value || '';
+  const token = (document.getElementById('assistToken') || {}).value || '';
+  if (button) button.disabled = true;
+  if (msg) msg.textContent = 'Проверяю ключ…';
+  try {
+    const response = await fetch('/api/vk/assistant/community', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ groupId: groupId, token: token })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Сообщество не подключилось');
+    if (msg) msg.textContent = 'Сообщество подключено.';
+    loadAssist();
+  } catch (error) {
+    if (msg) msg.textContent = error.message;
+    if (button) button.disabled = false;
+  }
+}
+async function dropAssist(){
+  const community = (document.getElementById('assistGroup') || {}).value || '';
+  const msg = document.getElementById('assistmsg');
+  try {
+    const response = await fetch('/api/vk/assistant/community/remove', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ groupId: community })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Сообщество не отключилось');
+    loadAssist();
+  } catch (error) {
+    if (msg) msg.textContent = error.message;
+  }
+}
 function viewCab(){
   const balance = (me && me.balance) || 0;
   const rows = [
@@ -788,6 +867,7 @@ function viewCab(){
     ['help', 'Помощь']
   ];
   if (vkAdmin()) rows.push(['menu', 'Кнопки сообщества']);
+  if (inVkApp() || isVk()) rows.splice(1, 0, ['assist', 'Моё сообщество']);
   return '<div class="card"><div class="kicker">Кабинет</div><div class="cabbal">'+balance+' кр</div><p class="now">Чат, рейтинг и магазин — внизу.</p></div>'+
     rows.map(function(row){ return '<button type="button" class="cabrow" data-go="'+row[0]+'">'+row[1]+'</button>'; }).join('');
 }
@@ -1127,6 +1207,10 @@ function bind(){
   document.querySelectorAll('[data-go]').forEach(function(button){
     button.onclick = function(){ tab = button.dataset.go; draw(); };
   });
+  const assistSave = document.getElementById('assistSave');
+  if (assistSave) assistSave.onclick = saveAssist;
+  const assistDrop = document.getElementById('assistDrop');
+  if (assistDrop) assistDrop.onclick = dropAssist;
   const cabBack = document.getElementById('cab-back');
   if (cabBack) cabBack.onclick = function(){ tab = 'cab'; draw(); };
   const site = document.getElementById('door-site');

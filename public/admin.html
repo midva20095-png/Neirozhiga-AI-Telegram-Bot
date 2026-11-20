@@ -127,6 +127,7 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
   <div id="section-rate"></div>
   <div id="section-shop"></div>
   <div id="section-donut"></div>
+  <div id="section-assist"></div>
   <div id="section-users"></div>
   <div id="section-tpl"></div>
   <div id="section-models"></div>
@@ -307,7 +308,7 @@ function openCabinet(tab){
 }
 
 function currentTabs(){
-  if (inCommunity()) return [['home','Обзор'],['rate','Рейтинг'],['shop','Магазин'],['donut','Донат'],['users','Клиенты'],['tickets','Поддержка']];
+  if (inCommunity()) return [['home','Обзор'],['rate','Рейтинг'],['shop','Магазин'],['donut','Донат'],['assist','Помощник'],['users','Клиенты'],['tickets','Поддержка']];
   return TABS.slice();
 }
 function rateFace(row){
@@ -321,7 +322,7 @@ function renderTabs(){
 function go(k){
   cur=k;
   renderTabs();
-  ['home','stats','rate','shop','donut','users','tpl','models','journal','packages','tickets','broadcast','settings'].forEach(t=>{
+  ['home','stats','rate','shop','donut','assist','users','tpl','models','journal','packages','tickets','broadcast','settings'].forEach(t=>{
     const node = document.getElementById('section-'+t);
     if (node) node.style.display = t===k ? 'block' : 'none';
   });
@@ -349,6 +350,7 @@ async function loadSection(k){
     if (k==='rate') return await loadRate();
     if (k==='shop') return await loadShop();
     if (k==='donut') return await loadDonut();
+    if (k==='assist') return await loadAssist();
     if (k==='users') return await loadUsers('');
     if (k==='tpl') return await loadTpl();
     if (k==='models') return await loadModels();
@@ -412,6 +414,59 @@ function openRate(id){
   rateGroup = String(id||'');
   sessionStorage.setItem('ny_admin_group', rateGroup);
   go('rate');
+}
+async function loadAssist(){
+  const el = document.getElementById('section-assist');
+  el.innerHTML = '<div class="card">Смотрю помощника…</div>';
+  const data = await api('/api/admin/vk/assistant');
+  if (data.error) throw new Error(data.error);
+  const health = data.health || {};
+  const dons = data.dons || [];
+  const on = dons.filter(item => item.active).length;
+  const communities = dons.reduce((sum, item) => sum + (item.communities || []).length, 0);
+  const line = health.online
+    ? '<span class="ok">второй бот на связи</span>'
+    : '<span class="bad">'+(health.error || 'второй бот не на связи')+'</span>';
+  el.innerHTML = '<div class="card"><h3>Помощник доната</h3>'+
+    '<p class="note">'+line+' Доны НейроЯги подключают своё сообщество в кабинете приложения. Пока донат жив, второй бот отвечает покупателям. Когда срок кончился, он замолкает только у этого человека.</p>'+
+    '<div class="grid">'+
+    '<div class="stat"><div class="n">'+dons.length+'</div><div class="l">Зарегистрировано</div></div>'+
+    '<div class="stat"><div class="n">'+on+'</div><div class="l">Донат жив</div></div>'+
+    '<div class="stat"><div class="n">'+communities+'</div><div class="l">Сообществ</div></div>'+
+    '</div>'+
+    '<div class="row" style="margin-top:12px"><button type="button" onclick="syncAssist()">Взять донов из ВК</button></div>'+
+    '<p id="assistmsg" class="note"></p></div>'+
+    '<div class="card"><h3>Доны и сообщества</h3>'+
+    (dons.length ? dons.map(item => {
+      const list = item.communities || [];
+      const groups = list.length ? list.map(group =>
+        '<div class="note">'+esc(group.title)+' · '+esc(group.groupId)+' · ключ '+esc(group.token || 'скрыт')+' · '+esc(group.syncLabel)+(group.error ? ' · '+esc(group.error) : '')+
+        '<div class="row"><button type="button" class="ghost" onclick="dropAssist(\''+esc(group.groupId)+'\')">Отключить сообщество</button></div></div>'
+      ).join('') : '<p class="note">Сообщество ещё не подключено.</p>';
+      return '<div class="stat" style="margin-top:8px"><div class="n" style="font-size:16px">'+esc(item.name)+'</div>'+
+        '<div class="l">ВК '+esc(item.userId)+' · '+(item.active ? '<span class="ok">помощник включён</span>' : '<span class="bad">помощник выключен</span>')+'</div>'+
+        groups+
+        '<div class="row" style="margin-top:8px"><button type="button" onclick="setAssist('+item.userId+','+(item.active?'false':'true')+')">'+(item.active?'Выключить':'Включить')+'</button></div></div>';
+    }).join('') : '<p class="note">Донов пока нет. Нажмите «Взять донов из ВК» или дождитесь новой подписки.</p>')+
+    '</div>';
+}
+async function syncAssist(){
+  const msg = document.getElementById('assistmsg');
+  if (msg) msg.textContent = 'Сверяю список донов…';
+  const data = await api('/api/admin/vk/assistant/sync', { method:'POST', body:'{}', timeout: 90000 });
+  if (msg) msg.textContent = data.ok ? ('Включено '+data.on+', выключено '+data.off+'.') : (data.error || 'Не получилось');
+  if (data.ok) loadAssist();
+}
+async function setAssist(userId, active){
+  const data = await api('/api/admin/vk/assistant/active', { method:'POST', body: JSON.stringify({ userId: userId, active: active }) });
+  if (!data.ok) alert(data.error || 'Не получилось');
+  loadAssist();
+}
+async function dropAssist(groupId){
+  if (!confirm('Отключить это сообщество от помощника?')) return;
+  const data = await api('/api/admin/vk/assistant/drop', { method:'POST', body: JSON.stringify({ groupId: groupId }) });
+  if (!data.ok) alert(data.error || 'Не получилось');
+  loadAssist();
 }
 function openDonut(id){
   donutGroup = String(id||'');

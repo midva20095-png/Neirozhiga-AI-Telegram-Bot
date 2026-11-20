@@ -235,6 +235,26 @@ async function initDB() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS vk_donut_log_group_idx ON vk_donut_log (group_id, id DESC)`);
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS vk_assistant_don (
+      user_id BIGINT PRIMARY KEY,
+      name TEXT NOT NULL DEFAULT '',
+      active BOOLEAN NOT NULL DEFAULT FALSE,
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vk_assistant_community (
+      group_id BIGINT PRIMARY KEY,
+      owner_id BIGINT NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      token TEXT NOT NULL,
+      sync_state TEXT NOT NULL DEFAULT '',
+      sync_error TEXT NOT NULL DEFAULT '',
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS vk_assistant_community_owner_idx ON vk_assistant_community (owner_id)`);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS vk_lesson_memory (
       id SERIAL PRIMARY KEY,
       group_id BIGINT NOT NULL,
@@ -395,6 +415,121 @@ async function recordDonut(groupId, userId, kind, amount) {
     [id, person, eventKind, Math.max(0, Math.round(Number(amount) || 0))]
   );
   return true;
+}
+
+function assistantPerson(userId) {
+  const id = Number(userId);
+  if (!Number.isInteger(id) || id <= 0) return 0;
+  return id;
+}
+
+async function getAssistantDon(userId) {
+  const id = assistantPerson(userId);
+  if (!id) return null;
+  const res = await pool.query(
+    'SELECT user_id, name, active, updated_at FROM vk_assistant_don WHERE user_id = $1',
+    [id]
+  );
+  return res.rows[0] || null;
+}
+
+async function listAssistantDons() {
+  const res = await pool.query(
+    'SELECT user_id, name, active, updated_at FROM vk_assistant_don ORDER BY active DESC, updated_at DESC'
+  );
+  return res.rows;
+}
+
+async function upsertAssistantDon(userId, name, active) {
+  const id = assistantPerson(userId);
+  if (!id) return null;
+  const title = String(name || '').trim().slice(0, 120);
+  const res = await pool.query(
+    `INSERT INTO vk_assistant_don (user_id, name, active, updated_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (user_id) DO UPDATE SET
+       name = CASE WHEN EXCLUDED.name <> '' THEN EXCLUDED.name ELSE vk_assistant_don.name END,
+       active = EXCLUDED.active,
+       updated_at = NOW()
+     RETURNING user_id, name, active, updated_at`,
+    [id, title, !!active]
+  );
+  return res.rows[0] || null;
+}
+
+async function listAssistantCommunities(ownerId) {
+  const id = ownerId == null ? 0 : assistantPerson(ownerId);
+  const res = id
+    ? await pool.query(
+      `SELECT group_id, owner_id, title, token, sync_state, sync_error, updated_at
+       FROM vk_assistant_community WHERE owner_id = $1 ORDER BY updated_at DESC`,
+      [id]
+    )
+    : await pool.query(
+      `SELECT group_id, owner_id, title, token, sync_state, sync_error, updated_at
+       FROM vk_assistant_community ORDER BY updated_at DESC`
+    );
+  return res.rows;
+}
+
+async function saveAssistantCommunity(row) {
+  const groupId = String(row.groupId || '').replace(/\D/g, '');
+  const ownerId = assistantPerson(row.ownerId);
+  const token = String(row.token || '').trim();
+  if (!groupId || !ownerId || token.length < 20) return null;
+  const res = await pool.query(
+    `INSERT INTO vk_assistant_community (group_id, owner_id, title, token, sync_state, sync_error, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, NOW())
+     ON CONFLICT (group_id) DO UPDATE SET
+       owner_id = EXCLUDED.owner_id,
+       title = EXCLUDED.title,
+       token = EXCLUDED.token,
+       sync_state = EXCLUDED.sync_state,
+       sync_error = EXCLUDED.sync_error,
+       updated_at = NOW()
+     RETURNING group_id, owner_id, title, sync_state, sync_error, updated_at`,
+    [
+      groupId,
+      ownerId,
+      String(row.title || '').trim().slice(0, 120),
+      token.slice(0, 500),
+      String(row.syncState || '').slice(0, 20),
+      String(row.syncError || '').slice(0, 240)
+    ]
+  );
+  return res.rows[0] || null;
+}
+
+async function markAssistantCommunity(groupId, state, error) {
+  const id = String(groupId || '').replace(/\D/g, '');
+  if (!id) return;
+  await pool.query(
+    `UPDATE vk_assistant_community
+     SET sync_state = $2, sync_error = $3, updated_at = NOW()
+     WHERE group_id = $1`,
+    [id, String(state || '').slice(0, 20), String(error || '').slice(0, 240)]
+  );
+}
+
+async function markAssistantOwner(ownerId, state, error) {
+  const id = assistantPerson(ownerId);
+  if (!id) return;
+  await pool.query(
+    `UPDATE vk_assistant_community
+     SET sync_state = $2, sync_error = $3, updated_at = NOW()
+     WHERE owner_id = $1`,
+    [id, String(state || '').slice(0, 20), String(error || '').slice(0, 240)]
+  );
+}
+
+async function deleteAssistantCommunity(groupId) {
+  const id = String(groupId || '').replace(/\D/g, '');
+  if (!id) return null;
+  const res = await pool.query(
+    'DELETE FROM vk_assistant_community WHERE group_id = $1 RETURNING group_id, owner_id',
+    [id]
+  );
+  return res.rows[0] || null;
 }
 
 async function listDonutLog(groupId, limit) {
@@ -1246,5 +1381,13 @@ module.exports = {
   clearDonutSurvey,
   recordDonut,
   listDonutLog,
+  getAssistantDon,
+  listAssistantDons,
+  upsertAssistantDon,
+  listAssistantCommunities,
+  saveAssistantCommunity,
+  markAssistantCommunity,
+  markAssistantOwner,
+  deleteAssistantCommunity,
   pool,
 };

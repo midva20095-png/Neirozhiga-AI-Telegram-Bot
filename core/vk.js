@@ -2680,6 +2680,12 @@ async function handleDonutJoin(token, update, groupId) {
     const hit = donut.readDonutEvent(update);
     if (!hit) return;
     try { await db.recordDonut(groupId, hit.userId, hit.kind, hit.amount); } catch (error) {}
+    try {
+        const assistant = require('./assistant');
+        await assistant.applyEvent(hit.kind, hit.userId, '');
+    } catch (error) {
+        console.error(`ВК ${groupId}: помощник доната не обновился.`);
+    }
     if (hit.kind !== 'create') return;
     const account = accountId(hit.userId);
     if (!account) return;
@@ -2732,6 +2738,25 @@ async function collectDonors(token, groupId) {
         if (!chunk.length || offset >= total) break;
     }
     return { total: total || items.length, items };
+}
+
+async function checkCommunityToken(token, groupId) {
+    const wanted = String(groupId || '').replace(/\D/g, '');
+    const key = String(token || '').trim();
+    if (!wanted || key.length < 20 || key.length > 500) {
+        const error = new Error('Нужен номер сообщества и ключ из его настроек.');
+        error.public = true;
+        throw error;
+    }
+    const info = await call(key, 'groups.getById', {});
+    const group = info && (info.groups ? info.groups[0] : (Array.isArray(info) ? info[0] : null));
+    const id = group && String(group.id || '').replace(/\D/g, '');
+    if (!id || id !== wanted) {
+        const error = new Error('Ключ не от этого сообщества.');
+        error.public = true;
+        throw error;
+    }
+    return { id, name: String(group.name || '').trim().slice(0, 120) };
 }
 
 async function communityDonut(groupId) {
@@ -3109,5 +3134,5 @@ async function ensureCommunityWidget(groupId) {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, communityStatus, adminHomes, communityDonut, monthActivity, setRatingHidden, publishPrize, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos, WALL_RECOUNT_MS
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, clubGroupId, communityStatus, adminHomes, communityDonut, checkCommunityToken, monthActivity, setRatingHidden, publishPrize, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos, WALL_RECOUNT_MS
 };
