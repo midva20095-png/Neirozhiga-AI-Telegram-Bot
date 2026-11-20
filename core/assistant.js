@@ -23,12 +23,16 @@ function maskToken(token) {
 }
 
 function cleanReply(input) {
-    if (input == null) return { greeting: '', buttons: [] };
+    if (input == null) return { greeting: '', about: '', guide: '', buttons: [] };
     if (typeof input !== 'object' || Array.isArray(input)) return null;
     if (input.greeting != null && typeof input.greeting !== 'string') return null;
+    if (input.about != null && typeof input.about !== 'string') return null;
+    if (input.guide != null && typeof input.guide !== 'string') return null;
     if (input.buttons != null && !Array.isArray(input.buttons)) return null;
     const greeting = cleanBody(input.greeting, 900, true);
-    if (greeting === null) return null;
+    const about = cleanBody(input.about, 1500, true);
+    const guide = cleanBody(input.guide, 900, true);
+    if (greeting === null || about === null || guide === null) return null;
     const source = Array.isArray(input.buttons) ? input.buttons : [];
     if (source.length > 6) return null;
     const buttons = [];
@@ -39,7 +43,7 @@ function cleanReply(input) {
         seen.add(button.label);
         buttons.push(button);
     }
-    return { greeting, buttons };
+    return { greeting, about, guide, buttons };
 }
 
 function cleanButton(item) {
@@ -289,6 +293,8 @@ async function saveDesk(account, input, fetchImpl) {
         userId: ownerId,
         groupId: Number(row.group_id),
         greeting: reply.greeting,
+        about: reply.about,
+        guide: reply.guide,
         buttons: reply.buttons
     }, fetchImpl);
     const saved = await db.saveAssistantReply(row.group_id, ownerId, reply);

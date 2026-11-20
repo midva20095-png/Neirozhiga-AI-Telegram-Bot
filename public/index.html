@@ -790,11 +790,11 @@ function assistGuide(){
     '<ol class="steps">'+
     '<li>Откройте своё сообщество во ВКонтакте. Подключить его можете вы, если вы администратор этого сообщества.</li>'+
     '<li>Управление → Настройки → Сообщения. Включите сообщения сообщества.</li>'+
-    '<li>Управление → Работа с API → Long Poll API. Включите Long Poll, поставьте версию 5.199 и отметьте событие «Входящее сообщение».</li>'+
-    '<li>На этой же странице нажмите «Создать ключ». В правах отметьте «Сообщения». Ключ показывается один раз: скопируйте его сразу.</li>'+
+    '<li>Управление → Работа с API → Long Poll API. Включите Long Poll, поставьте версию 5.199 и отметьте «Входящее сообщение» и «Новый комментарий».</li>'+
+    '<li>На этой же странице нажмите «Создать ключ». В правах отметьте «Сообщения» и «Стена». Ключ показывается один раз: скопируйте его сразу.</li>'+
     '<li>Номер сообщества — цифры в адресе. У страницы vk.com/club1234567 номер 1234567. Тот же номер есть в Управление → Настройки.</li>'+
     '<li>Вставьте номер и ключ в поля ниже и нажмите «Подключить».</li>'+
-    '<li>Напишите фразу, которой помощник встречает покупателя, и добавьте кнопки. Кнопка-ссылка открывает вашу страницу. Кнопка-ответ присылает текст, который вы напишете: доставка, цена, адрес, как оформить заказ.</li>'+
+    '<li>Напишите, что продаёте, как вести покупателя, фразу и кнопки. Кнопка-ссылка открывает страницу. Кнопка-ответ присылает ваш готовый текст. В сообщениях помощник задаёт один вопрос, предлагает кнопку и просит сделать следующий шаг. В комментариях отвечает коротко и зовёт в сообщения.</li>'+
     '</ol>'+
     '<p class="hint">Ключ нужен, чтобы помощник отвечал покупателям в этом сообществе. В кабинете он повторно не показывается и другим людям не виден. Пока действует донат НейроЯги, помощник отвечает. Когда срок закончится, он замолчит только в вашем сообществе.</p>'+
     '</details>';
@@ -814,8 +814,12 @@ function assistButtonHtml(button){
 function assistDesk(reply){
   const buttons = (reply && reply.buttons) || [];
   return '<div class="desk"><p class="now">Что увидит покупатель</p>'+
-    '<p class="hint">Покупатель пишет в сообщения сообщества. Помощник отвечает вашей фразой и показывает кнопки. Кнопка-ответ присылает ваш текст. Кнопка-ссылка открывает страницу. Если фразу не заполнить, помощник скажет: «Здравствуйте. Напишите, что вас интересует.»</p>'+
-    '<label class="flabel" for="assistGreeting">Фраза покупателю</label>'+
+    '<p class="hint">В сообщениях помощник ведёт покупателя: вопрос, предложение, следующий шаг. В комментариях отвечает коротко и зовёт в сообщения. Цены и сроки он берёт только из описания ниже и не выдумывает их. Готовая кнопка-ответ отправляется как есть. Если описание пустое, помощник скажет: «Здравствуйте. Напишите, что вас интересует.»</p>'+
+    '<label class="flabel" for="assistAbout">Что продаёте и какие условия</label>'+
+    '<textarea id="assistAbout" maxlength="1500" rows="4" placeholder="Торты на заказ. Доставка по городу в день заказа. Цену называйте только если она написана здесь.">'+esc(reply && reply.about || '')+'</textarea>'+
+    '<label class="flabel" for="assistGuide">Как вести покупателя</label>'+
+    '<textarea id="assistGuide" maxlength="900" rows="3" placeholder="Спросите повод. Затем предложите кнопку Каталог. Потом попросите нажать Заказ.">'+esc(reply && reply.guide || '')+'</textarea>'+
+    '<label class="flabel" for="assistGreeting">Фраза, если помощник молчит</label>'+
     '<textarea id="assistGreeting" maxlength="900" rows="4" placeholder="Здравствуйте. Чем могу помочь?">'+esc(reply && reply.greeting || '')+'</textarea>'+
     '<div id="assistButtons">'+buttons.map(assistButtonHtml).join('')+'</div>'+
     (buttons.length < 6 ? '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>' : '')+
@@ -911,6 +915,8 @@ async function saveDesk(){
   const msg = document.getElementById('deskmsg');
   const button = document.getElementById('assistDesk');
   const greeting = (document.getElementById('assistGreeting') || {}).value || '';
+  const about = (document.getElementById('assistAbout') || {}).value || '';
+  const guide = (document.getElementById('assistGuide') || {}).value || '';
   const buttons = [];
   document.querySelectorAll('[data-brow]').forEach(function(row){
     const label = (row.querySelector('[data-blabel]') || {}).value || '';
@@ -927,7 +933,7 @@ async function saveDesk(){
     const response = await fetch('/api/vk/assistant/reply', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ greeting: greeting, buttons: buttons })
+      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, buttons: buttons })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Ответы не сохранились');
