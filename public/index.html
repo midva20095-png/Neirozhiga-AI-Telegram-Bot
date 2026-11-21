@@ -662,6 +662,12 @@ function launchParam(name){
 function vkGroupId(){
   return String(launchParam('vk_group_id') || window.__vkGroup || '').replace(/\D/g, '');
 }
+function communityDialog(groupId, peerId){
+  const group = String(groupId || '').replace(/\D/g, '');
+  const peer = String(peerId || '').replace(/\D/g, '');
+  if (!group || !peer || peer === '0') return '';
+  return 'https://vk.com/gim' + group + '?sel=' + peer;
+}
 function chatLink(){
   const id = vkGroupId();
   return id ? 'https://vk.ru/write-' + id : '';
@@ -960,7 +966,7 @@ async function loadAssist(){
     '<button class="btn" id="assistSave" type="button" style="margin-top:12px">Подключить</button>'+
     (community ? '<button class="btn ghost" id="assistDrop" type="button" style="margin-top:8px">Отключить</button>' : '')+
     '<p id="assistmsg" class="hint"></p>'+
-    (community ? assistDesk(community.reply) + assistBookings(data.bookings, data.clients) + assistBase(data.clients) : '<p class="hint">После подключения здесь можно заполнить карточку, смотреть записи и своих клиентов.</p>')+
+    (community ? assistDesk(community.reply) + assistBookings(data.bookings, data.clients, community.groupId) + assistBase(data.clients) : '<p class="hint">После подключения здесь можно заполнить карточку, смотреть записи и своих клиентов.</p>')+
     '</div>';
   bind();
 }
@@ -1013,7 +1019,7 @@ async function askDeveloper(){
   }
   if (button) button.disabled = false;
 }
-function assistBookings(pack, clients){
+function assistBookings(pack, clients, groupId){
   const rows = (pack && pack.rows) || [];
   const people = (clients && clients.people) || [];
   const list = rows.length ? rows.map(function(item){
@@ -1021,10 +1027,12 @@ function assistBookings(pack, clients){
     const who = person && person.name ? person.name : ('ВК '+item.peerId);
     const bits = [item.when || item.day, item.slot, item.place, item.way, item.address, item.phone].filter(Boolean);
     const map = item.map ? ' · <a href="'+esc(item.map)+'">карта</a>' : '';
-    return '<div class="note"><b>'+esc(bits.join(' · '))+'</b><div class="hint">'+esc(who)+' · <a href="https://vk.com/im?sel='+encodeURIComponent(item.peerId)+'">открыть диалог</a>'+map+'</div></div>';
+    const dialog = communityDialog(groupId, item.peerId);
+    const link = dialog ? ' · <a href="'+esc(dialog)+'" data-out="'+esc(dialog)+'">открыть диалог</a>' : '';
+    return '<div class="note"><b>'+esc(bits.join(' · '))+'</b><div class="hint">'+esc(who)+link+map+'</div></div>';
   }).join('') : '<p class="hint">'+(pack && pack.pending ? 'Список откроется, когда помощник будет на связи.' : 'Пока записей нет. Они появятся здесь, когда покупатель нажмёт «Записаться» и подтвердит время.')+'</p>';
   return '<div class="desk"><p class="now">Записи</p>'+
-    '<p class="hint">Это записи только вашего сообщества. Список живёт здесь, в «Моё сообщество». Новая запись и напоминания приходят сообщениями ВК вам и покупателю: накануне после 18:00 и утром в день записи. Если вам сообщение не пришло, откройте диалог сообщества со своей страницы один раз.</p>'+
+    '<p class="hint">Это записи только вашего сообщества. Список живёт здесь, в «Моё сообщество». Новая запись и напоминания приходят в сообщения сообщества: покупателю в этот чат, вам — от имени сообщества. «Открыть диалог» ведёт в переписку сообщества с этим клиентом. Напоминание приходит накануне после 18:00 и утром в день записи. Если вам сообщение не пришло, напишите сообществу со своей страницы один раз.</p>'+
     list+'</div>';
 }
 function assistBase(clients){
