@@ -325,7 +325,11 @@ function startWebApp() {
                     view = await assistant.cabinet(userId);
                 }
             }
-            if (view.active && view.community) view.clients = await assistant.loadClients(userId);
+            if (view.active && view.community) {
+                const problem = await assistant.loadListen(userId);
+                if (problem) view.community.error = problem;
+                view.clients = await assistant.loadClients(userId);
+            }
             res.json(view);
         } catch (e) {
             res.status(500).json({ error: 'Раздел сообщества не открылся.' });

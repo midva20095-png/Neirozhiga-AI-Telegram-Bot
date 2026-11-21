@@ -867,7 +867,7 @@ async function loadAssist(){
   }
   const community = data.community;
   const status = community
-    ? '<p class="now">Подключено: '+esc(community.title || ('сообщество '+community.groupId))+' · '+esc(community.groupId)+(community.error ? '. '+esc(community.error) : '')+'</p>'
+    ? '<p class="now">Подключено: '+esc(community.title || ('сообщество '+community.groupId))+' · '+esc(community.groupId)+'</p>'+(community.error ? '<p class="err">'+esc(community.error)+'</p>' : '<p class="hint">Помощник слушает сообщения. Напишите ему со своей личной страницы, не от имени сообщества.</p>')
     : '<p class="now">Помощник пока нигде не отвечает. Подключите своё сообщество по шагам ниже.</p>';
   box.innerHTML = '<div class="card"><div class="kicker">Моё сообщество</div>'+status+assistGuide()+
     '<label class="flabel" for="assistGroup">Номер сообщества</label><input id="assistGroup" inputmode="numeric" placeholder="Например 1234567" value="'+esc(community ? community.groupId : '')+'">'+

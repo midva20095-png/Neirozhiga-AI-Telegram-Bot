@@ -430,6 +430,19 @@ function publicPeople(list) {
     })).filter(item => item.peerId > 0);
 }
 
+async function loadListen(account, fetchImpl) {
+    const userId = vkId(account);
+    const rows = userId ? await db.listAssistantCommunities(userId) : [];
+    const row = rows[0];
+    if (!row) return '';
+    const result = await postAssistant('/listen', {
+        userId,
+        groupId: Number(row.group_id)
+    }, fetchImpl, null, 20000);
+    if (!result.ok) return '';
+    return String(result.problem || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+}
+
 async function loadClients(account, fetchImpl) {
     const userId = vkId(account);
     const rows = userId ? await db.listAssistantCommunities(userId) : [];
@@ -521,6 +534,7 @@ module.exports = {
     connectCommunity,
     saveDesk,
     loadClients,
+    loadListen,
     sendBroadcast,
     publicPeople,
     disconnectCommunity,
