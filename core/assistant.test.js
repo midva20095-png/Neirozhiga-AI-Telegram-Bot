@@ -63,7 +63,9 @@ test('фраза дона принимает ссылку и ответ и от�
     assert.deepEqual(shop.schedule.days, [1, 2, 3, 4, 5]);
     assert.equal(shop.schedule.places[0], 'На месте');
     const hours = assistant.cleanReply({ schedule: { days: [1, 7], start: 9, end: 12, slot: 30, horizon: 14, places: ['Зал', 'Выезд'] } });
-    assert.deepEqual(hours.schedule, { days: [1, 7], start: 9, end: 12, slot: 30, horizon: 14, places: ['Зал', 'Выезд'] });
+    assert.deepEqual(hours.schedule, { days: [1, 7], start: 9, end: 12, slot: 30, horizon: 14, seats: 0, places: ['Зал', 'Выезд'] });
+    assert.equal(assistant.cleanReply({ schedule: { seats: 3 } }).schedule.seats, 3);
+    assert.equal(assistant.cleanReply({ schedule: { seats: 'нет' } }).schedule.seats, 0);
     assert.equal(shop.scenario, 'funnel');
     assert.equal(shop.handoff, true);
     assert.equal(shop.deliveryOn, false);

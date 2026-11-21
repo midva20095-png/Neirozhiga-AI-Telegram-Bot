@@ -861,6 +861,7 @@ function assistScheduleHtml(reply){
   const slot = Number(plan.slot) === 30 ? 30 : 60;
   const horizon = [3, 7, 14].indexOf(Number(plan.horizon)) >= 0 ? Number(plan.horizon) : 7;
   const places = Array.isArray(plan.places) && plan.places.length ? plan.places.join(', ') : 'На месте';
+  const seats = Number(plan.seats) > 0 ? String(plan.seats) : '';
   return '<p class="now">Календарь записи</p>'+
     '<p class="hint">Кнопка «Записаться» показывает дни и время по Москве. Перед подтверждением бот спрашивает телефон. Без номера запись не сохраняется. После подтверждения запись остаётся в блоке «Записи». Вам и покупателю приходит сообщение ВК, накануне после 18:00 и утром в день записи — напоминание.</p>'+
     '<label class="flabel">Рабочие дни</label><div>'+checks+'</div>'+
@@ -874,7 +875,10 @@ function assistScheduleHtml(reply){
     '<option value="7"'+(horizon===7?' selected':'')+'>7 дней</option>'+
     '<option value="14"'+(horizon===14?' selected':'')+'>14 дней</option></select>'+
     '<label class="flabel" for="assistPlaces">Места через запятую, до четырёх</label>'+
-    '<input id="assistPlaces" maxlength="180" placeholder="На месте, Выезд" value="'+esc(places)+'">';
+    '<input id="assistPlaces" maxlength="180" placeholder="На месте, Выезд" value="'+esc(places)+'">'+
+    '<label class="flabel" for="assistSeats">Мест на день</label>'+
+    '<input id="assistSeats" inputmode="numeric" maxlength="2" placeholder="Пусто — без ограничений" value="'+esc(seats)+'">'+
+    '<p class="hint">Сколько записей принять в один день. Пустое поле не ограничивает: клиент видит свободные дни и места, а занять можно всё, что не занято по времени.</p>';
 }
 function assistSection(title, body, open){
   return '<details class="stepsbox"'+(open ? ' open' : '')+'><summary>'+title+'</summary>'+body+'</details>';
@@ -1118,7 +1122,8 @@ function assistScheduleValue(){
     end: Number((document.getElementById('assistEnd') || {}).value),
     slot: Number((document.getElementById('assistSlot') || {}).value),
     horizon: Number((document.getElementById('assistHorizon') || {}).value),
-    places: places
+    places: places,
+    seats: (document.getElementById('assistSeats') || {}).value || ''
   };
 }
 async function saveDesk(){

@@ -118,8 +118,15 @@ function cleanSchedule(input) {
         end: end,
         slot: slot,
         horizon: horizon,
+        seats: seatsOf(source.seats),
         places: places.length ? places : ['На месте']
     };
+}
+
+function seatsOf(value) {
+    const number = Number(value);
+    if (!Number.isInteger(number) || number < 1) return 0;
+    return Math.min(number, 40);
 }
 
 function clockHour(value, fallback) {
