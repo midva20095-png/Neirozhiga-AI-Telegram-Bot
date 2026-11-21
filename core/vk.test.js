@@ -79,7 +79,7 @@ test('из события ВК берётся только входящий те
         type: 'message_new',
         object: { message: { from_id: 10, peer_id: 10, text: '  нарисуй кота ', out: 0 } }
     };
-    assert.deepEqual(vk.readIncoming(update), { fromId: 10, peerId: 10, text: 'нарисуй кота', payload: null, photos: [], messageId: 0 });
+    assert.deepEqual(vk.readIncoming(update), { fromId: 10, peerId: 10, text: 'нарисуй кота', payload: null, photos: [], voice: null, messageId: 0 });
     assert.equal(vk.readIncoming({ type: 'message_new', object: { message: { from_id: 10, text: 'я', out: 1 } } }), null);
     assert.equal(vk.readIncoming({ type: 'message_reply' }), null);
     const shared = vk.readIncoming({
@@ -127,6 +127,19 @@ test('из события ВК берётся только входящий те
     });
     assert.deepEqual(pair.photos, ['https://cdn.example/a.jpg', 'https://cdn.example/b.jpg']);
     assert.equal(pair.messageId, 77);
+    const spoken = vk.readIncoming({
+        type: 'message_new',
+        object: {
+            message: {
+                from_id: 10,
+                peer_id: 10,
+                text: '',
+                out: 0,
+                attachments: [{ type: 'audio_message', audio_message: { duration: 4, link_ogg: 'https://cdn.example/voice.ogg', link_mp3: 'https://cdn.example/voice.mp3' } }]
+            }
+        }
+    });
+    assert.deepEqual(spoken.voice, { url: 'https://cdn.example/voice.mp3', seconds: 4, mime: 'audio/mpeg' });
     assert.deepEqual(vk.keepPhotos(['a'], ['b'], 1000), ['a', 'b']);
     assert.deepEqual(vk.keepPhotos(['a'], ['b'], 3 * 60 * 1000), ['b']);
     assert.deepEqual(vk.keepPhotos(['a'], [], 1000), ['a']);

@@ -72,6 +72,7 @@ function readIncoming(update) {
         text: linkedText(message),
         payload: parsePayload(message.payload),
         photos: messagePhotoUrls(message),
+        voice: messageVoice(message),
         messageId: Number(message.id) || 0
     };
 }
@@ -92,6 +93,27 @@ function urlsFromAttachments(list) {
         if (url && urls.indexOf(url) < 0) urls.push(url);
     });
     return urls;
+}
+
+function voiceFromAttachments(list) {
+    if (!Array.isArray(list)) return null;
+    for (const item of list) {
+        const voice = item && item.type === 'audio_message' ? item.audio_message : null;
+        if (!voice) continue;
+        const mp3 = String(voice.link_mp3 || '');
+        const ogg = String(voice.link_ogg || '');
+        const url = /^https:\/\//i.test(mp3) ? mp3 : (/^https:\/\//i.test(ogg) ? ogg : '');
+        if (!url) continue;
+        const seconds = Math.round(Number(voice.duration) || 0);
+        return { url, seconds: seconds > 0 ? seconds : 0, mime: url === mp3 ? 'audio/mpeg' : 'audio/ogg' };
+    }
+    return null;
+}
+
+function messageVoice(message) {
+    return voiceFromAttachments(message && message.attachments)
+        || voiceFromAttachments(message && message.reply_message && message.reply_message.attachments)
+        || null;
 }
 
 function messagePhotoUrls(message) {
@@ -1341,8 +1363,10 @@ async function chooseModel(token, peerId, account, key) {
     const model = catalog.getModel(key, { audience: 'vk' });
     if (!model) return sendText(token, peerId, 'Модель недоступна.');
     await db.setCurrentModel(account, model.key);
-    const choice = modelNeedsChoice(model) ? ' После запроса внизу будут цена и размер, как в Telegram.' : '';
-    return sendText(token, peerId, `${model.name}. ${catalog.priceLabel(model)}. Напишите запрос.${choice}`);
+    const choice = model.audio
+        ? ' Отправьте фото, затем голосовое сообщение.'
+        : (modelNeedsChoice(model) ? ' После запроса внизу будут цена и размер, как в Telegram.' : ' Напишите запрос.');
+    return sendText(token, peerId, `${model.name}. ${catalog.priceLabel(model)}.${choice}`);
 }
 
 async function askOrRun(token, peerId, account, job) {
@@ -1382,14 +1406,73 @@ function takeReferencePhotos(account, fresh) {
     return keepPhotos(held && held.buffers, fresh, age);
 }
 
-function stashPhotos(account, fresh) {
+function stashPhotos(account, fresh, prompt) {
     const key = String(account);
     const held = heldPhotos.get(key);
     const age = held ? Date.now() - held.at : PHOTO_HOLD_MS;
     const older = held && age < PHOTO_HOLD_MS ? held.buffers : [];
     const buffers = older.concat(fresh || []).filter(Boolean).slice(-6);
-    heldPhotos.set(key, { buffers, at: Date.now() });
+    const kept = String(prompt || (held && age < PHOTO_HOLD_MS ? held.prompt : '') || '');
+    heldPhotos.set(key, { buffers, at: Date.now(), prompt: kept });
     return buffers;
+}
+
+function takeHeldPrompt(account) {
+    const held = heldPhotos.get(String(account));
+    return held && held.prompt ? String(held.prompt) : '';
+}
+
+async function loadVoiceBuffer(voice) {
+    if (!voice || !/^https:\/\//i.test(String(voice.url || ''))) return null;
+    const seconds = Math.round(Number(voice.seconds) || 0);
+    if (!(seconds > 0) || seconds > 120) return null;
+    try {
+        const res = await axios.get(voice.url, { responseType: 'arraybuffer', timeout: 30000, maxRedirects: 3 });
+        const buffer = Buffer.from(res.data);
+        if (buffer.length < 32 || buffer.length > 8 * 1024 * 1024) return null;
+        return { buffer, mime: voice.mime || 'audio/ogg', seconds };
+    } catch (error) {
+        return null;
+    }
+}
+
+async function beginAvatar(token, peerId, account, pack) {
+    const modelKey = (await db.getCurrentModel(account)) || catalog.defaultModelKey('vk');
+    const remembered = takeHeldPrompt(account);
+    if (pack.fresh.length && !pack.voice) {
+        stashPhotos(account, pack.fresh, pack.text || remembered);
+        await sendText(token, peerId, 'Фото получил. Теперь отправьте голосовое — человек на фото его произнесёт.');
+        return;
+    }
+    const photos = pack.fresh.length ? takeReferencePhotos(account, pack.fresh) : takeReferencePhotos(account, []);
+    const prompt = pack.text || remembered;
+    if (!pack.voice) {
+        if (photos.length) stashPhotos(account, photos, prompt);
+        await sendText(token, peerId, 'Говорящее фото: отправьте фото, затем голосовое сообщение.');
+        return;
+    }
+    if (!photos.length) {
+        await sendText(token, peerId, 'Сначала отправьте фото, затем голосовое сообщение.');
+        return;
+    }
+    const audio = await loadVoiceBuffer(pack.voice);
+    if (!audio) {
+        stashPhotos(account, photos, prompt);
+        await sendText(token, peerId, 'Голосовое не прочиталось. Отправьте его ещё раз.');
+        return;
+    }
+    return askOrRun(token, peerId, account, {
+        prompt,
+        modelKey,
+        quality: '',
+        duration: 0,
+        aspect: '',
+        groupId: pack.groupId || '',
+        photos: photos.slice(0, 1),
+        audioBuffer: audio.buffer,
+        audioMime: audio.mime,
+        audioSeconds: audio.seconds
+    });
 }
 
 async function completePhotos(token, incoming) {
@@ -1421,7 +1504,8 @@ async function runJob(token, peerId, account, job) {
             hasText: !!(job.prompt && String(job.prompt).trim()),
             audience: 'vk',
             quality: job.quality || null,
-            duration: job.duration || null
+            duration: job.duration || null,
+            audioSeconds: job.audioSeconds || 0
         });
         const waiting = prepared.model.kind === 'video'
             ? 'Собираю видео. Обычно это несколько минут, готовый ролик придёт в этот чат.'
@@ -1439,6 +1523,9 @@ async function runJob(token, peerId, account, job) {
             aspectRatio: job.aspect && job.aspect !== 'auto' ? job.aspect : null,
             duration: job.duration || null,
             quality: job.quality || null,
+            audioBuffer: job.audioBuffer || null,
+            audioMime: job.audioMime || 'audio/ogg',
+            audioSeconds: job.audioSeconds || 0,
             reason: `ВК · ${prepared.model.name}`,
             groupId: job.groupId || ''
         });
@@ -1744,7 +1831,7 @@ async function holdClub(token, peerId, account, text, action, groupId) {
     return true;
 }
 
-async function reply(token, peerId, account, text, payload, groupId, photoUrls) {
+async function reply(token, peerId, account, text, payload, groupId, photoUrls, voice) {
     let action = menuAction(text, payload);
     if (action === 'audit' && !auditHere(groupId) && !(payload && payload.a === 'audit')) action = '';
     if (action === 'opt_cancel') {
@@ -1844,6 +1931,11 @@ async function reply(token, peerId, account, text, payload, groupId, photoUrls) 
         return openMenu(token, peerId, account, action, groupId);
     }
     const fresh = await loadPhotoBuffers(photoUrls);
+    const modelKeyNow = (await db.getCurrentModel(account)) || catalog.defaultModelKey('vk');
+    const modelNow = catalog.getModel(modelKeyNow, { audience: 'vk' });
+    if (modelNow && modelNow.audio) {
+        return beginAvatar(token, peerId, account, { text, groupId, fresh, voice });
+    }
     if (!text) {
         if (fresh.length) {
             const saved = stashPhotos(account, fresh);
@@ -2825,7 +2917,7 @@ async function handleUpdate(token, update, groupId) {
     const bonus = catalog.getGeneral().start_bonus;
     if (isNew && bonus > 0) await db.updateBalance(account, bonus, 'Приветственный бонус');
     const photos = await completePhotos(token, incoming);
-    await reply(token, incoming.peerId, account, incoming.text, incoming.payload, groupId, photos);
+    await reply(token, incoming.peerId, account, incoming.text, incoming.payload, groupId, photos, incoming.voice);
 }
 
 async function noticeGroup(accountIdValue, groupId) {

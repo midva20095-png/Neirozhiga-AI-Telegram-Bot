@@ -103,6 +103,23 @@ function decodeImage(input) {
     return { buffer, mime };
 }
 
+function decodeAudio(input) {
+    const raw = String(input || '');
+    const match = /^data:(audio\/[a-zA-Z0-9.+-]+);base64,([a-zA-Z0-9+/=\s]+)$/.exec(raw);
+    if (!match) {
+        const error = new Error('Некорректное голосовое');
+        error.code = 'audio';
+        throw error;
+    }
+    const buffer = Buffer.from(match[2].replace(/\s/g, ''), 'base64');
+    if (!buffer.length || buffer.length > 8 * 1024 * 1024) {
+        const error = new Error('Голосовое слишком длинное. Запишите короче.');
+        error.code = 'audio';
+        throw error;
+    }
+    return { buffer, mime: match[1] };
+}
+
 function vkPageOrigin(origin) {
     return /^https:\/\/([a-z0-9-]+\.)*(vk\.com|vk\.ru|vk-apps\.com|vk-apps\.ru|vkuser\.net|userapi\.com)$/i.test(String(origin || ''));
 }
@@ -792,7 +809,7 @@ function startWebApp() {
                 const templateKind = (catalog.getModel(modelKey, { includeDisabled: true, audience }) || {}).kind;
                 if (templateKind !== 'video' && templateKind !== 'audio') prompt = templateFields.withAspect(prompt, aspect);
             }
-            if (!prompt && !body.image && !photos.length) return res.status(400).json({ error: 'Введите промпт' });
+            if (!prompt && !body.image && !photos.length && !body.audio) return res.status(400).json({ error: 'Введите промпт' });
             const liveModel = catalog.getModel(modelKey, { audience });
             if (!liveModel) return res.status(400).json({ error: 'Эта модель сейчас выключена.' });
             const pickedModel = catalog.getModel(modelKey, { includeDisabled: true, audience });
@@ -823,6 +840,14 @@ function startWebApp() {
                 audience,
                 groupId: askedGroup
             };
+            if (body.audio) {
+                const audio = decodeAudio(body.audio);
+                const seconds = Math.round(Number(body.audioSeconds));
+                if (!(seconds > 0) || seconds > 120) return res.status(400).json({ error: 'Голосовое должно быть от 1 до 120 секунд' });
+                fields.audioBuffer = audio.buffer;
+                fields.audioMime = audio.mime;
+                fields.audioSeconds = seconds;
+            }
             const photoKb = file && file.buffer ? Math.max(1, Math.round(file.buffer.length / 1024)) : 0;
             if (templateTitle) {
                 const service = pickedModel ? (catalog.PROVIDERS[pickedModel.provider] || pickedModel.provider) : 'модель не найдена';

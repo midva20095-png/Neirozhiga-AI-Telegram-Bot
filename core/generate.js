@@ -53,7 +53,7 @@ async function prepare({ userId, modelKey, hasImage, hasText, charge, strict, du
     if (model.image === 'required' && !hasImage) throw new GenError('Для этой модели нужно прикрепить изображение', 'need_image');
     if (model.image === 'forbidden' && hasImage) throw new GenError('Эта модель работает только по тексту, без фото', 'no_image');
     if (model.audio && !hasImage) throw new GenError('Для говорящего фото прикрепите фото и голосовое сообщение', 'need_image');
-    if (model.audio && !(Number(audioSeconds) > 0)) throw new GenError('Пришлите голосовое сообщение вместе с фото. В кабинете бота это делается в чате.', 'need_audio');
+    if (model.audio && !(Number(audioSeconds) > 0)) throw new GenError('Прикрепите голосовое сообщение вместе с фото.', 'need_audio');
     if (model.image !== 'required' && !model.audio && !hasText && !hasImage) throw new GenError('Введите текст запроса', 'need_text');
 
     if (model.provider === 'giga') {
@@ -162,7 +162,7 @@ async function run({ userId, prompt, model, plugin, fileBuffer, fileBuffers, mim
 }
 
 // Удобная обёртка для веба: data: URL вместо бинарника.
-async function generateForWeb({ userId, prompt, modelKey, fileBuffer, fileBuffers, mimeType, mimeTypes, aspectRatio, duration, quality, charge, reason, keepModel, strict, workLabel, templateId, audience, groupId, exactPrompt }) {
+async function generateForWeb({ userId, prompt, modelKey, fileBuffer, fileBuffers, mimeType, mimeTypes, aspectRatio, duration, quality, audioBuffer, audioMime, audioSeconds, charge, reason, keepModel, strict, workLabel, templateId, audience, groupId, exactPrompt }) {
     const many = Array.isArray(fileBuffers) && fileBuffers.length > 1;
     const { model, plugin } = await prepare({
         userId,
@@ -173,13 +173,16 @@ async function generateForWeb({ userId, prompt, modelKey, fileBuffer, fileBuffer
         strict,
         duration,
         quality,
+        audioSeconds,
         audience
     });
     const out = await run({
         userId, prompt, model, plugin,
         fileBuffer: many ? null : fileBuffer,
         fileBuffers: many ? fileBuffers : undefined,
-        mimeType, mimeTypes, aspectRatio, duration, quality, charge, reason, keepModel, workLabel, templateId, groupId, exactPrompt
+        mimeType, mimeTypes, aspectRatio, duration, quality,
+        audioBuffer, audioMime, audioSeconds,
+        charge, reason, keepModel, workLabel, templateId, groupId, exactPrompt
     });
     if (workLabel && out.type === 'image') out.text = 'Изображение готово';
     else if (workLabel && out.type === 'video') out.text = 'Видео готово';

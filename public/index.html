@@ -286,7 +286,7 @@ body.vkapp .tabbar button.on{background:linear-gradient(135deg,#7c3aed,#4c1d95);
 <script>
 const KIND = {text:'Текст', image:'Картинка', video:'Видео', audio:'Музыка'};
 let tab='gen', me=null, cfg=null, templates=[], works=null, worksLoading=false, userId=null, token=null, busy=false, last=null, wantMenu=false, tplAnswers={}, tplPhotos={};
-let openTpl=null, photoData=null, pickedFormat=null, genPhoto=null, draft='', pendingTpl='', pendingPkg='';
+let openTpl=null, photoData=null, pickedFormat=null, genPhoto=null, genVoice=null, genVoiceSeconds=0, draft='', pendingTpl='', pendingPkg='';
 let tplKind='', tplTopic='', tplQuery='';
 const TCAT = {image:'Картинки', fix:'Улучшение', chat:'Текст', video:'Видео', audio:'Голос'};
 const TMARK = {image:'🪄', fix:'✨', chat:'✍️', video:'🎬', audio:'🎙'};
@@ -1223,8 +1223,10 @@ function viewGen(){
   const m = modelOf(cur);
   syncPicks(m);
   const res = last ? renderResult(last) : '';
-  const price = m ? quote(m, {quality:pickedQuality, duration:pickedDuration}) : 0;
-  const info = modelPicker(cur) + (m ? ('<div class="now">'+(m.audio ? esc(costLabel(m)) : ('К списанию: <b>'+price+' кр</b>'))+'</div>') : '');
+  const price = m && m.audio
+    ? (genVoiceSeconds ? quote(m, {quality:pickedQuality, duration: genVoiceSeconds}) : 0)
+    : (m ? quote(m, {quality:pickedQuality, duration:pickedDuration}) : 0);
+  const info = modelPicker(cur) + (m ? ('<div class="now">'+(m.audio && !genVoiceSeconds ? esc(costLabel(m)) : ('К списанию: <b>'+price+' кр</b>'))+'</div>') : '');
   let opts = '';
   if (m && m.qualities && m.qualities.length > 1) opts += '<div class="hint">Режим</div>'+chips(m.qualities, pickedQuality, 'q');
   if (m && m.durations && m.durations.length > 1) opts += '<div class="hint">Длина</div>'+chips(m.durations.map(function(d){ return {id:d, name:d+' сек · '+quote(m,{quality:pickedQuality,duration:d})+' кр'}; }), pickedDuration, 'dur');
@@ -1233,10 +1235,16 @@ function viewGen(){
   if (m && (m.image === 'optional' || m.image === 'required')) {
     photo = '<label class="filebtn">'+(genPhoto?'Фото прикреплено — заменить':'Прикрепить фото'+(m.image==='required'?'':' — по желанию'))+'<input id="genfile" type="file" accept="image/*"></label>'+(genPhoto?'<img class="preview" style="margin-top:10px" src="'+genPhoto+'" alt="">':'');
   }
+  if (m && m.audio) {
+    photo += '<label class="filebtn">'+(genVoiceSeconds ? ('Голосовое прикреплено, '+genVoiceSeconds+' сек — заменить') : 'Прикрепить голосовое')+'<input id="genvoice" type="file" accept="audio/*,.ogg,.mp3,.m4a,.wav,.webm"></label>';
+  }
   const note = m && m.audio
-    ? '<div class="hint">Говорящее фото запускается в чате бота: отправьте фото и голосовое сообщение.</div>' : '';
+    ? '<div class="hint">Цена считается по длине голосового. Прикрепите фото и запись голоса.</div>' : '';
   const lack = shortOf(price);
-  const go = m && m.audio ? '' : (lack
+  const waitingVoice = m && m.audio && !(genPhoto && genVoiceSeconds);
+  const go = waitingVoice
+    ? '<button class="btn" type="button" disabled>Сгенерировать</button>'
+    : (lack
     ? '<button class="btn" type="button" disabled>Недостаточно кредитов</button><p class="err">'+esc(lack)+'</p><button class="btn ghost" id="goTop" type="button">Пополнить</button>'
     : '<button class="btn" id="go"'+(busy?' disabled':'')+'>'+(busy?'<span class="spin"></span>Генерирую…':'Сгенерировать · '+price+' кр')+'</button>');
   const hello = inVkApp() ? '<div class="kicker">Чат</div><p class="now">Напишите, что сделать: картинка, текст или видео.</p>' : '';
@@ -1569,6 +1577,7 @@ function bind(){
   document.querySelectorAll('[data-dur]').forEach(b=>b.onclick=function(){ draft=(document.getElementById('prompt')||{}).value||draft; pickedDuration=Number(b.dataset.dur); draw(); });
   document.querySelectorAll('[data-asp]').forEach(b=>b.onclick=function(){ draft=(document.getElementById('prompt')||{}).value||draft; pickedAspect=b.dataset.asp; draw(); });
   const genfile=document.getElementById('genfile'); if (genfile) genfile.onchange=function(){ onGenPhoto(genfile); };
+  const genvoice=document.getElementById('genvoice'); if (genvoice) genvoice.onchange=function(){ onGenVoice(genvoice); };
   document.querySelectorAll('[data-model]').forEach(b=>b.onclick=()=>setModel(b.dataset.model));
   const genmodel = document.getElementById('genmodel');
   if (genmodel) genmodel.onchange = function(){
@@ -1779,7 +1788,7 @@ async function shareWork(id, btn){
 }
 async function setModel(model){
   if (me) me.current_model = model;
-  pickedQuality = null; pickedDuration = null; pickedAspect = null; genPhoto = null;
+  pickedQuality = null; pickedDuration = null; pickedAspect = null; genPhoto = null; genVoice = null; genVoiceSeconds = 0;
   if (tab==='models'){ tab='gen'; }
   draw();
   try { await fetch('/api/set-model',{method:'POST',headers:authHeaders(),body:JSON.stringify({model})}); } catch(e){}
@@ -1848,6 +1857,49 @@ async function onGenPhoto(input){
   if (!file) return;
   try { genPhoto = await fileToJpeg(file); draft = (document.getElementById('prompt')||{}).value || draft; }
   catch (e) { genPhoto = null; alert(e.message); }
+  draw();
+}
+function readFileData(file){
+  return new Promise(function(resolve, reject){
+    const reader = new FileReader();
+    reader.onload = function(){ resolve(String(reader.result || '')); };
+    reader.onerror = function(){ reject(new Error('Не удалось прочитать голосовое')); };
+    reader.readAsDataURL(file);
+  });
+}
+function voiceLength(file){
+  return new Promise(function(resolve){
+    const url = URL.createObjectURL(file);
+    const audio = document.createElement('audio');
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = function(){
+      const seconds = Math.ceil(audio.duration);
+      URL.revokeObjectURL(url);
+      resolve(Number.isFinite(seconds) && seconds > 0 ? seconds : 0);
+    };
+    audio.onerror = function(){ URL.revokeObjectURL(url); resolve(0); };
+    audio.src = url;
+  });
+}
+async function onGenVoice(input){
+  const file = input.files && input.files[0];
+  if (!file) return;
+  draft = (document.getElementById('prompt')||{}).value || draft;
+  if (file.size > 6 * 1024 * 1024) {
+    genVoice = null; genVoiceSeconds = 0;
+    alert('Голосовое слишком длинное. Запишите короче.');
+    draw();
+    return;
+  }
+  try {
+    const seconds = await voiceLength(file);
+    if (!(seconds > 0) || seconds > 120) throw new Error('Голосовое должно быть от 1 до 120 секунд');
+    genVoice = await readFileData(file);
+    genVoiceSeconds = seconds;
+  } catch (e) {
+    genVoice = null; genVoiceSeconds = 0;
+    alert(e.message || 'Не удалось прочитать голосовое');
+  }
   draw();
 }
 async function onPhoto(input){
@@ -1942,9 +1994,12 @@ async function generate(){
   if (busy) return;
   const prompt = ((document.getElementById('prompt')||{}).value||'').trim();
   const m = modelOf((me&&me.current_model)||'');
-  const lack = shortOf(m ? quote(m, {quality:pickedQuality, duration:pickedDuration}) : 0);
+  const price = m && m.audio
+    ? (genVoiceSeconds ? quote(m, {quality:pickedQuality, duration: genVoiceSeconds}) : 0)
+    : (m ? quote(m, {quality:pickedQuality, duration:pickedDuration}) : 0);
+  const lack = shortOf(price);
   if (lack) { last = {_prompt:prompt, error:lack}; draw(); return; }
-  if (m && m.audio) return;
+  if (m && m.audio && (!genPhoto || !genVoice || !(genVoiceSeconds > 0))) { last = {_prompt:prompt, error:'Прикрепите фото и голосовое'}; draw(); return; }
   if (m && m.image === 'required' && !genPhoto) { last = {_prompt:prompt, error:'Прикрепите фото'}; draw(); return; }
   if (!prompt && !genPhoto) return;
   if (m && m.image === 'forbidden' && !prompt) return;
@@ -1952,6 +2007,8 @@ async function generate(){
   try {
     const r = await fetch('/api/generate',{method:'POST',headers:authHeaders(),body:JSON.stringify({
       prompt, model: me&&me.current_model, image: (m && m.image !== 'forbidden') ? genPhoto : null,
+      audio: (m && m.audio) ? genVoice : null,
+      audioSeconds: (m && m.audio) ? genVoiceSeconds : 0,
       quality: pickedQuality, duration: pickedDuration, format: pickedAspect,
       group: vkGroupId()
     })});
