@@ -22,17 +22,38 @@ function maskToken(token) {
     return `···${value.slice(-4)}`;
 }
 
+const REPLY_FIELDS = [
+    ['about', 1500],
+    ['guide', 900],
+    ['contacts', 500],
+    ['address', 500],
+    ['order', 800],
+    ['payment', 500],
+    ['booking', 800]
+];
+
+function emptyReply() {
+    const reply = { greeting: '', buttons: [] };
+    REPLY_FIELDS.forEach(item => {
+        reply[item[0]] = '';
+    });
+    return reply;
+}
+
 function cleanReply(input) {
-    if (input == null) return { greeting: '', about: '', guide: '', buttons: [] };
+    if (input == null) return emptyReply();
     if (typeof input !== 'object' || Array.isArray(input)) return null;
     if (input.greeting != null && typeof input.greeting !== 'string') return null;
-    if (input.about != null && typeof input.about !== 'string') return null;
-    if (input.guide != null && typeof input.guide !== 'string') return null;
     if (input.buttons != null && !Array.isArray(input.buttons)) return null;
     const greeting = cleanBody(input.greeting, 900, true);
-    const about = cleanBody(input.about, 1500, true);
-    const guide = cleanBody(input.guide, 900, true);
-    if (greeting === null || about === null || guide === null) return null;
+    const fields = {};
+    for (let i = 0; i < REPLY_FIELDS.length; i += 1) {
+        const name = REPLY_FIELDS[i][0];
+        const value = cleanBody(input[name], REPLY_FIELDS[i][1], true);
+        if (value === null) return null;
+        fields[name] = value;
+    }
+    if (greeting === null) return null;
     const source = Array.isArray(input.buttons) ? input.buttons : [];
     if (source.length > 6) return null;
     const buttons = [];
@@ -43,7 +64,7 @@ function cleanReply(input) {
         seen.add(button.label);
         buttons.push(button);
     }
-    return { greeting, about, guide, buttons };
+    return Object.assign({ greeting: greeting, buttons: buttons }, fields);
 }
 
 function cleanButton(item) {
@@ -125,7 +146,7 @@ function planLive(rows, donors) {
     return { on, off };
 }
 
-async function postAssistant(path, body, fetchImpl, env) {
+async function postAssistant(path, body, fetchImpl, env, timeoutMs) {
     const cfg = assistantConfig(env);
     if (!cfg.url || !cfg.secret) return { ok: false, error: 'Второй бот ещё не подключён: нет адреса или секрета.' };
     const send = fetchImpl || fetch;
@@ -137,13 +158,23 @@ async function postAssistant(path, body, fetchImpl, env) {
                 'Content-Type': 'application/json',
                 'X-Donut-Secret': cfg.secret
             },
-            body: JSON.stringify(body)
+            body: JSON.stringify(body),
+            signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined
         });
     } catch (error) {
         return { ok: false, error: 'Второй бот не ответил.' };
     }
     if (!response || !response.ok) return { ok: false, error: 'Второй бот не принял команду.' };
-    return { ok: true, error: '' };
+    let data = {};
+    if (typeof response.json === 'function') {
+        try {
+            data = await response.json();
+        } catch (error) {
+            data = {};
+        }
+    }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) data = {};
+    return Object.assign({ ok: true, error: '' }, data, { ok: true, error: '' });
 }
 
 async function readHealth(fetchImpl, env) {
@@ -338,6 +369,11 @@ async function saveDesk(account, input, fetchImpl) {
         greeting: reply.greeting,
         about: reply.about,
         guide: reply.guide,
+        contacts: reply.contacts,
+        address: reply.address,
+        order: reply.order,
+        payment: reply.payment,
+        booking: reply.booking,
         buttons: reply.buttons
     }, fetchImpl);
     const saved = await db.saveAssistantReply(row.group_id, ownerId, reply);
@@ -383,10 +419,67 @@ function syncLabel(state) {
     return 'ещё не передавалось';
 }
 
+function publicPeople(list) {
+    if (!Array.isArray(list)) return [];
+    return list.slice(0, 100).map(item => ({
+        peerId: Number(item && (item.peerId || item.peer_id)) || 0,
+        name: String(item && item.name || '').replace(/\s+/g, ' ').trim().slice(0, 80),
+        phone: String(item && item.phone || '').replace(/[^\d+]/g, '').slice(0, 16),
+        note: String(item && item.note || '').replace(/\s+/g, ' ').trim().slice(0, 180),
+        seen: Math.max(0, Number(item && item.seen) || 0)
+    })).filter(item => item.peerId > 0);
+}
+
+async function loadClients(account, fetchImpl) {
+    const userId = vkId(account);
+    const rows = userId ? await db.listAssistantCommunities(userId) : [];
+    const row = rows[0];
+    if (!row) return { total: 0, people: [] };
+    const result = await postAssistant('/clients', { userId, groupId: Number(row.group_id) }, fetchImpl);
+    if (!result.ok) return { total: 0, people: [], pending: true };
+    const people = publicPeople(result.clients);
+    return { total: Number(result.total) || people.length, people };
+}
+
+async function sendBroadcast(account, text, offset, fetchImpl) {
+    const ownerId = vkId(account);
+    if (!ownerId) throw publicError('Раздел открыт из ВК.');
+    const don = await db.getAssistantDon(ownerId);
+    if (!don || !don.active) throw publicError('Рассылку может отправить дон НейроЯги с живой подпиской.');
+    const body = cleanBody(text, 900, false);
+    if (!body) throw publicError('Напишите текст рассылки, до 900 знаков.');
+    const rows = await db.listAssistantCommunities(ownerId);
+    const row = rows[0];
+    if (!row) throw publicError('Сначала подключите сообщество.');
+    const start = Number.isInteger(Number(offset)) && Number(offset) >= 0 ? Number(offset) : 0;
+    const result = await postAssistant('/broadcast', {
+        userId: ownerId,
+        groupId: Number(row.group_id),
+        text: body,
+        offset: start
+    }, fetchImpl, null, 40000);
+    if (!result.ok) throw publicError('Помощник не отправил рассылку. Попробуйте ещё раз.');
+    return {
+        ok: true,
+        sent: Number(result.sent) || 0,
+        failed: Number(result.failed) || 0,
+        total: Number(result.total) || 0,
+        next: Number(result.next) || 0
+    };
+}
+
 async function adminList(fetchImpl) {
     const health = await readHealth(fetchImpl);
     const dons = await db.listAssistantDons();
     const communities = await db.listAssistantCommunities();
+    let counts = {};
+    const groups = communities.map(item => Number(item.group_id)).filter(id => Number.isInteger(id) && id > 0);
+    if (groups.length) {
+        const summary = await postAssistant('/summary', { groups }, fetchImpl);
+        if (summary.ok && summary.counts && typeof summary.counts === 'object' && !Array.isArray(summary.counts)) {
+            counts = summary.counts;
+        }
+    }
     return {
         health,
         join: JOIN_URL,
@@ -402,6 +495,7 @@ async function adminList(fetchImpl) {
                 sync: item.sync_state || '',
                 syncLabel: syncLabel(item.sync_state),
                 desk: deskLabel(item.reply),
+                clients: Number(counts[String(item.group_id)]) || 0,
                 error: item.sync_error || '',
                 updatedAt: item.updated_at
             }))
@@ -426,6 +520,9 @@ module.exports = {
     registerLive,
     connectCommunity,
     saveDesk,
+    loadClients,
+    sendBroadcast,
+    publicPeople,
     disconnectCommunity,
     adminDrop,
     adminList,

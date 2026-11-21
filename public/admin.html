@@ -428,7 +428,7 @@ async function loadAssist(){
     ? '<span class="ok">второй бот на связи</span>'
     : '<span class="bad">'+(health.error || 'второй бот не на связи')+'</span>';
   el.innerHTML = '<div class="card"><h3>Помощник доната</h3>'+
-    '<p class="note">'+line+' Доны НейроЯги подключают своё сообщество в кабинете приложения. Пока донат жив, второй бот отвечает покупателям. Когда срок кончился, он замолкает только у этого человека.</p>'+
+    '<p class="note">'+line+' Доны НейроЯги подключают своё сообщество в кабинете приложения. Пока донат жив, второй бот отвечает покупателям. Когда срок кончился, он замолкает только у этого человека. База клиентов каждого сообщества хранится у помощника отдельно. Здесь видно только количество, без телефонов.</p>'+
     '<div class="grid">'+
     '<div class="stat"><div class="n">'+dons.length+'</div><div class="l">Зарегистрировано</div></div>'+
     '<div class="stat"><div class="n">'+on+'</div><div class="l">Донат жив</div></div>'+
@@ -440,7 +440,7 @@ async function loadAssist(){
     (dons.length ? dons.map(item => {
       const list = item.communities || [];
       const groups = list.length ? list.map(group =>
-        '<div class="note">'+esc(group.title)+' · '+esc(group.groupId)+' · ключ '+esc(group.token || 'скрыт')+' · '+esc(group.syncLabel)+(group.desk ? ' · '+esc(group.desk) : '')+(group.error ? ' · '+esc(group.error) : '')+
+        '<div class="note">'+esc(group.title)+' · '+esc(group.groupId)+' · ключ '+esc(group.token || 'скрыт')+' · '+esc(group.syncLabel)+' · клиентов '+esc(group.clients || 0)+(group.desk ? ' · '+esc(group.desk) : '')+(group.error ? ' · '+esc(group.error) : '')+
         '<div class="row"><button type="button" class="ghost" onclick="dropAssist(\''+esc(group.groupId)+'\')">Отключить сообщество</button></div></div>'
       ).join('') : '<p class="note">Сообщество ещё не подключено.</p>';
       return '<div class="stat" style="margin-top:8px"><div class="n" style="font-size:16px">'+esc(item.name)+'</div>'+

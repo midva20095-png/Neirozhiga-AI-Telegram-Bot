@@ -325,6 +325,7 @@ function startWebApp() {
                     view = await assistant.cabinet(userId);
                 }
             }
+            if (view.active && view.community) view.clients = await assistant.loadClients(userId);
             res.json(view);
         } catch (e) {
             res.status(500).json({ error: 'Раздел сообщества не открылся.' });
@@ -350,6 +351,17 @@ function startWebApp() {
             res.json(saved);
         } catch (e) {
             const message = e && e.public ? e.message : 'Ответы не сохранились.';
+            res.status(400).json({ ok: false, error: message });
+        }
+    });
+
+    app.post('/api/vk/assistant/broadcast', requireUser, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const result = await assistant.sendBroadcast(req.userId, body.text, body.offset);
+            res.json(result);
+        } catch (e) {
+            const message = e && e.public ? e.message : 'Рассылка не ушла.';
             res.status(400).json({ ok: false, error: message });
         }
     });

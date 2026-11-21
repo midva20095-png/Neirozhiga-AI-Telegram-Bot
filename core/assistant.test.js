@@ -51,6 +51,18 @@ test('фраза дона принимает ссылку и ответ и от�
     assert.equal(reply.greeting, 'Здравствуйте.');
     assert.equal(reply.buttons[0].link, 'https://vk.com/market-1');
     assert.equal(reply.buttons[1].text, 'Привезём сегодня.');
+    const card = assistant.cleanReply({
+        payment: 'Перевод после подтверждения.',
+        booking: 'Бронь по дате в сообщениях.',
+        contacts: 12
+    });
+    assert.equal(card, null);
+    const shop = assistant.cleanReply({ payment: 'Перевод после подтверждения.', booking: 'Бронь по дате в сообщениях.' });
+    assert.equal(shop.payment, 'Перевод после подтверждения.');
+    assert.equal(shop.address, '');
+    const people = assistant.publicPeople([{ peerId: 7, name: 'Анна', phone: '+7 999 111-22-33', note: 'хочу заказ', seen: 2, token: 'secret-token' }]);
+    assert.equal(people[0].phone, '+79991112233');
+    assert.equal(JSON.stringify(people).includes('secret-token'), false);
     assert.equal(assistant.cleanReply({ buttons: [{ label: 'Сайт', link: 'http://example.com' }] }), null);
     assert.equal(assistant.cleanReply({ buttons: [{ label: 'Два', link: 'https://vk.com/a', text: 'и текст' }] }), null);
     assert.equal(JSON.stringify(reply).includes('secret'), false);

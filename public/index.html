@@ -794,7 +794,8 @@ function assistGuide(){
     '<li>На этой же странице нажмите «Создать ключ». В правах отметьте «Сообщения» и «Стена». Ключ показывается один раз: скопируйте его сразу.</li>'+
     '<li>Номер сообщества — цифры в адресе. У страницы vk.com/club1234567 номер 1234567. Тот же номер есть в Управление → Настройки.</li>'+
     '<li>Вставьте номер и ключ в поля ниже и нажмите «Подключить».</li>'+
-    '<li>Напишите, что продаёте, как вести покупателя, фразу и кнопки. Кнопка-ссылка открывает страницу. Кнопка-ответ присылает ваш готовый текст. В сообщениях помощник задаёт один вопрос, предлагает кнопку и просит сделать следующий шаг. В комментариях отвечает коротко и зовёт в сообщения.</li>'+
+    '<li>Заполните карточку: что продаёте, контакты, адрес, как заказать, как оплатить и как забронировать. Пустое поле помощник не выдумывает. Кнопка-ссылка открывает страницу. Кнопка-ответ присылает готовый текст. В сообщениях он задаёт вопрос, предлагает следующий шаг и зовёт оформить. В комментариях отвечает коротко и зовёт в сообщения.</li>'+
+    '<li>Люди, которые сами написали в сообщения, попадают в базу этого сообщества. Рассылка уходит только им.</li>'+
     '</ol>'+
     '<p class="hint">Ключ нужен, чтобы помощник отвечал покупателям в этом сообществе. В кабинете он повторно не показывается и другим людям не виден. Пока действует донат НейроЯги, помощник отвечает. Когда срок закончится, он замолчит только в вашем сообществе.</p>'+
     '</details>';
@@ -814,11 +815,21 @@ function assistButtonHtml(button){
 function assistDesk(reply){
   const buttons = (reply && reply.buttons) || [];
   return '<div class="desk"><p class="now">Что увидит покупатель</p>'+
-    '<p class="hint">В сообщениях помощник ведёт покупателя: вопрос, предложение, следующий шаг. В комментариях отвечает коротко и зовёт в сообщения. Цены и сроки он берёт только из описания ниже и не выдумывает их. Готовая кнопка-ответ отправляется как есть. Если описание пустое, помощник скажет: «Здравствуйте. Напишите, что вас интересует.»</p>'+
+    '<p class="hint">Помощник подходит любому делу: товар, услуга, запись, бронь. Цену, срок, телефон, адрес, оплату и бронь он называет только из полей ниже. Пустое поле он не придумывает. В сообщениях ведёт покупателя по шагам. В комментариях зовёт в сообщения. Готовая кнопка-ответ отправляется как есть.</p>'+
     '<label class="flabel" for="assistAbout">Что продаёте и какие условия</label>'+
-    '<textarea id="assistAbout" maxlength="1500" rows="4" placeholder="Торты на заказ. Доставка по городу в день заказа. Цену называйте только если она написана здесь.">'+esc(reply && reply.about || '')+'</textarea>'+
+    '<textarea id="assistAbout" maxlength="1500" rows="4" placeholder="Что продаёте или какую услугу делаете. Цену и срок пишите только если их можно называть покупателю.">'+esc(reply && reply.about || '')+'</textarea>'+
+    '<label class="flabel" for="assistContacts">Контакты</label>'+
+    '<textarea id="assistContacts" maxlength="500" rows="2" placeholder="Телефон, мессенджер или почта. Если контакта нет, оставьте пустым.">'+esc(reply && reply.contacts || '')+'</textarea>'+
+    '<label class="flabel" for="assistAddress">Адрес или как работаете</label>'+
+    '<textarea id="assistAddress" maxlength="500" rows="2" placeholder="Адрес, район доставки или фраза: работаем онлайн.">'+esc(reply && reply.address || '')+'</textarea>'+
+    '<label class="flabel" for="assistOrder">Как сделать заказ</label>'+
+    '<textarea id="assistOrder" maxlength="800" rows="3" placeholder="Что покупатель должен написать или какую кнопку нажать, чтобы заказ приняли.">'+esc(reply && reply.order || '')+'</textarea>'+
+    '<label class="flabel" for="assistPayment">Как оплатить</label>'+
+    '<textarea id="assistPayment" maxlength="500" rows="2" placeholder="Карта, перевод, наличные или ссылка. Не пишите то, чего нет.">'+esc(reply && reply.payment || '')+'</textarea>'+
+    '<label class="flabel" for="assistBooking">Как забронировать</label>'+
+    '<textarea id="assistBooking" maxlength="800" rows="2" placeholder="Дата, предоплата, что написать. Если брони нет, оставьте пустым.">'+esc(reply && reply.booking || '')+'</textarea>'+
     '<label class="flabel" for="assistGuide">Как вести покупателя</label>'+
-    '<textarea id="assistGuide" maxlength="900" rows="3" placeholder="Спросите повод. Затем предложите кнопку Каталог. Потом попросите нажать Заказ.">'+esc(reply && reply.guide || '')+'</textarea>'+
+    '<textarea id="assistGuide" maxlength="900" rows="3" placeholder="Спросите, что нужно. Затем предложите кнопку. Потом попросите оформить заказ.">'+esc(reply && reply.guide || '')+'</textarea>'+
     '<label class="flabel" for="assistGreeting">Фраза, если помощник молчит</label>'+
     '<textarea id="assistGreeting" maxlength="900" rows="4" placeholder="Здравствуйте. Чем могу помочь?">'+esc(reply && reply.greeting || '')+'</textarea>'+
     '<div id="assistButtons">'+buttons.map(assistButtonHtml).join('')+'</div>'+
@@ -864,7 +875,7 @@ async function loadAssist(){
     '<button class="btn" id="assistSave" type="button" style="margin-top:12px">Подключить</button>'+
     (community ? '<button class="btn ghost" id="assistDrop" type="button" style="margin-top:8px">Отключить</button>' : '')+
     '<p id="assistmsg" class="hint"></p>'+
-    (community ? assistDesk(community.reply) : '<p class="hint">После подключения здесь можно задать фразу и кнопки для покупателей.</p>')+
+    (community ? assistDesk(community.reply) + assistBase(data.clients) : '<p class="hint">После подключения здесь можно заполнить карточку, смотреть своих клиентов и писать им.</p>')+
     '</div>';
   bind();
 }
@@ -889,6 +900,48 @@ async function saveAssist(){
     if (msg) msg.textContent = error.message;
     if (button) button.disabled = false;
   }
+}
+function assistBase(clients){
+  const pack = clients || { total: 0, people: [] };
+  const people = pack.people || [];
+  const rows = people.length ? people.map(function(person){
+    const title = person.name || ('ВК '+person.peerId);
+    const phone = person.phone ? ' · '+person.phone : '';
+    const note = person.note ? '<div class="hint">'+esc(person.note)+'</div>' : '';
+    return '<div class="note"><b>'+esc(title)+'</b>'+esc(phone)+' · написал '+esc(person.seen)+' раз'+note+'</div>';
+  }).join('') : '<p class="hint">'+(pack.pending ? 'База откроется, когда помощник будет на связи.' : 'Пока никто не написал в сообщения. Как только покупатель напишет, он появится здесь.')+'</p>';
+  return '<div class="desk"><p class="now">Клиенты этого сообщества</p>'+
+    '<p class="hint">Здесь только люди, которые сами написали в сообщения подключённого сообщества. База хранится отдельно и другим донам не показывается. В комментариях человек в базу не попадает, пока не напишет в сообщения.</p>'+
+    '<p class="hint">Сейчас в базе: '+esc(pack.total || people.length)+'</p>'+rows+
+    '<label class="flabel" for="assistMail">Сообщение своим клиентам</label>'+
+    '<textarea id="assistMail" maxlength="900" rows="3" placeholder="Например: на этой неделе есть свободное время. Напишите, если хотите заказать."></textarea>'+
+    '<button class="btn" id="assistMailSend" type="button" style="margin-top:12px">Отправить следующим 20</button>'+
+    '<p id="mailmsg" class="hint">За один раз сообщение уходит двадцати людям, которые сами вам написали. Затем можно отправить следующим.</p></div>';
+}
+let assistMailAt = 0;
+async function sendAssistMail(){
+  const msg = document.getElementById('mailmsg');
+  const button = document.getElementById('assistMailSend');
+  const text = (document.getElementById('assistMail') || {}).value || '';
+  if (button) button.disabled = true;
+  if (msg) msg.textContent = 'Отправляю…';
+  try {
+    const response = await fetch('/api/vk/assistant/broadcast', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ text: text, offset: assistMailAt })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Рассылка не ушла');
+    assistMailAt = data.next || 0;
+    let line = 'Отправлено '+data.sent+'. Не дошло '+data.failed+'.';
+    if (data.total && data.next < data.total) line += ' Можно отправить следующим.';
+    else line += ' Эта рассылка дошла до собранной базы.';
+    if (msg) msg.textContent = line;
+  } catch (error) {
+    if (msg) msg.textContent = error.message;
+  }
+  if (button) button.disabled = false;
 }
 function assistKind(select){
   const row = select.closest('[data-brow]');
@@ -917,6 +970,11 @@ async function saveDesk(){
   const greeting = (document.getElementById('assistGreeting') || {}).value || '';
   const about = (document.getElementById('assistAbout') || {}).value || '';
   const guide = (document.getElementById('assistGuide') || {}).value || '';
+  const contacts = (document.getElementById('assistContacts') || {}).value || '';
+  const address = (document.getElementById('assistAddress') || {}).value || '';
+  const order = (document.getElementById('assistOrder') || {}).value || '';
+  const payment = (document.getElementById('assistPayment') || {}).value || '';
+  const booking = (document.getElementById('assistBooking') || {}).value || '';
   const buttons = [];
   document.querySelectorAll('[data-brow]').forEach(function(row){
     const label = (row.querySelector('[data-blabel]') || {}).value || '';
@@ -933,7 +991,7 @@ async function saveDesk(){
     const response = await fetch('/api/vk/assistant/reply', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, buttons: buttons })
+      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, payment: payment, booking: booking, buttons: buttons })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Ответы не сохранились');
@@ -1318,6 +1376,10 @@ function bind(){
   if (assistDeskButton) assistDeskButton.onclick = saveDesk;
   const assistAdd = document.getElementById('assistAdd');
   if (assistAdd) assistAdd.onclick = addAssistButton;
+  const assistMailSend = document.getElementById('assistMailSend');
+  if (assistMailSend) assistMailSend.onclick = sendAssistMail;
+  const assistMail = document.getElementById('assistMail');
+  if (assistMail) assistMail.oninput = function(){ assistMailAt = 0; };
   document.querySelectorAll('[data-bkind]').forEach(function(select){
     select.onchange = function(){ assistKind(select); };
   });
