@@ -64,7 +64,34 @@ function cleanReply(input) {
         seen.add(button.label);
         buttons.push(button);
     }
-    return Object.assign({ greeting: greeting, buttons: buttons }, fields);
+    return Object.assign({ greeting: greeting, buttons: buttons, schedule: cleanSchedule(input.schedule) }, fields);
+}
+
+function cleanSchedule(input) {
+    const source = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+    const rawDays = Array.isArray(source.days) ? source.days : [1, 2, 3, 4, 5];
+    const days = rawDays.map(Number).filter((day, index, list) => day >= 1 && day <= 7 && list.indexOf(day) === index).sort((a, b) => a - b);
+    let start = clockHour(source.start, 10);
+    let end = clockHour(source.end, 19);
+    if (end <= start) end = Math.min(23, start + 1);
+    const slot = Number(source.slot) === 30 ? 30 : 60;
+    const horizon = [3, 7, 14].indexOf(Number(source.horizon)) >= 0 ? Number(source.horizon) : 7;
+    const rawPlaces = Array.isArray(source.places) ? source.places : String(source.places || '').split(',');
+    const places = rawPlaces.map(item => String(item || '').replace(/\s+/g, ' ').trim()).filter(item => item && item.length <= 40).slice(0, 4);
+    return {
+        days: days.length ? days : [1, 2, 3, 4, 5],
+        start: start,
+        end: end,
+        slot: slot,
+        horizon: horizon,
+        places: places.length ? places : ['На месте']
+    };
+}
+
+function clockHour(value, fallback) {
+    const number = Number(value);
+    if (!Number.isInteger(number) || number < 0 || number > 23) return fallback;
+    return number;
 }
 
 function cleanButton(item) {
@@ -384,7 +411,8 @@ async function saveDesk(account, input, fetchImpl) {
         order: reply.order,
         payment: reply.payment,
         booking: reply.booking,
-        buttons: reply.buttons
+        buttons: reply.buttons,
+        schedule: reply.schedule
     }, fetchImpl);
     const saved = await db.saveAssistantReply(row.group_id, ownerId, reply);
     await db.markAssistantCommunity(row.group_id, pushed.ok ? 'on' : 'fail', pushed.ok ? '' : 'Ответы сохранены и ждут передачи.');

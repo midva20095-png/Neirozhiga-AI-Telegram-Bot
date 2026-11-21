@@ -794,7 +794,7 @@ function assistGuide(){
     '<li>На этой же странице нажмите «Создать ключ». В правах отметьте «Сообщения», «Стена» и «Товары». Ключ показывается один раз: скопируйте его сразу.</li>'+
     '<li>Номер сообщества — цифры в адресе. У страницы vk.com/club1234567 номер 1234567. Тот же номер есть в Управление → Настройки.</li>'+
     '<li>Вставьте номер и ключ в поля ниже и нажмите «Подключить».</li>'+
-    '<li>Заполните карточку: что продаёте, контакты, адрес, как заказать, как оплатить и как забронировать. Пустое поле помощник не выдумывает. Кнопка-ссылка открывает страницу. Кнопка-ответ присылает готовый текст. В сообщениях он задаёт вопрос, предлагает следующий шаг и зовёт оформить. В комментариях отвечает коротко и зовёт в сообщения.</li>'+
+    '<li>Заполните карточку и кнопки. Пустое поле помощник не выдумывает. В личных сообщениях покупатель видит кнопки: контакты, каталог, заказ, оплату, адрес и запись. Их можно заменить. Под постом ВК свою клавиатуру поставить нельзя: комментарий отвечает по карточке и называет кнопки, которые ждут в сообщениях. Кнопка «Записаться» открывает дни, время и место.</li>'+
     '<li>Люди, которые сами написали в сообщения, попадают в базу этого сообщества. Рассылка уходит только им.</li>'+
     '</ol>'+
     '<p class="hint">Ключ нужен, чтобы помощник отвечал покупателям в этом сообществе. В кабинете он повторно не показывается и другим людям не виден. Пока действует донат НейроЯги, помощник отвечает. Когда срок закончится, он замолчит только в вашем сообществе.</p>'+
@@ -812,10 +812,56 @@ function assistButtonHtml(button){
     '<input data-bvalue placeholder="'+(kind==='link'?'https://vk.com/...':'Например: доставка по городу в день заказа')+'" value="'+esc(value)+'">'+
     '<button class="btn ghost" type="button" data-bdel style="margin-top:8px">Убрать кнопку</button></div>';
 }
+const DEFAULT_ASSIST_BUTTONS = [
+  { label: 'Контакты', text: 'Показать контакты из карточки' },
+  { label: 'Каталог', text: 'Показать товары сообщества' },
+  { label: 'Как заказать', text: 'Показать, как оформить заказ' },
+  { label: 'Оплата', text: 'Показать способ оплаты' },
+  { label: 'Адрес', text: 'Показать адрес' },
+  { label: 'Записаться', text: 'Открыть свободные дни' }
+];
+function assistButtonList(reply){
+  const saved = reply && Array.isArray(reply.buttons) ? reply.buttons : [];
+  return saved.length ? saved : DEFAULT_ASSIST_BUTTONS;
+}
+function assistHourOptions(selected, from, to){
+  let html = '';
+  for (let hour = from; hour <= to; hour += 1) {
+    const label = (hour < 10 ? '0' : '') + hour + ':00';
+    html += '<option value="'+hour+'"'+(Number(selected)===hour?' selected':'')+'>'+label+'</option>';
+  }
+  return html;
+}
+function assistScheduleHtml(reply){
+  const plan = reply && reply.schedule && typeof reply.schedule === 'object' ? reply.schedule : {};
+  const days = Array.isArray(plan.days) && plan.days.length ? plan.days.map(Number) : [1, 2, 3, 4, 5];
+  const names = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+  const checks = names.map(function(name, index){
+    const value = index + 1;
+    return '<label style="margin-right:10px"><input type="checkbox" data-day value="'+value+'"'+(days.indexOf(value)>=0?' checked':'')+'> '+name+'</label>';
+  }).join('');
+  const slot = Number(plan.slot) === 30 ? 30 : 60;
+  const horizon = [3, 7, 14].indexOf(Number(plan.horizon)) >= 0 ? Number(plan.horizon) : 7;
+  const places = Array.isArray(plan.places) && plan.places.length ? plan.places.join(', ') : 'На месте';
+  return '<p class="now">Календарь записи</p>'+
+    '<p class="hint">Кнопка «Записаться» показывает дни и время по Москве. Покупатель выбирает день, время и место, затем подтверждает. Если место одно, шаг места пропускается. Поле «Как забронировать» дописывается к подтверждению.</p>'+
+    '<label class="flabel">Рабочие дни</label><div>'+checks+'</div>'+
+    '<label class="flabel" for="assistStart">Начало</label><select id="assistStart">'+assistHourOptions(plan.start == null ? 10 : plan.start, 0, 22)+'</select>'+
+    '<label class="flabel" for="assistEnd">Конец, это время уже не записывают</label><select id="assistEnd">'+assistHourOptions(plan.end == null ? 19 : plan.end, 1, 23)+'</select>'+
+    '<label class="flabel" for="assistSlot">Длина записи</label><select id="assistSlot">'+
+    '<option value="60"'+(slot===60?' selected':'')+'>60 минут</option>'+
+    '<option value="30"'+(slot===30?' selected':'')+'>30 минут</option></select>'+
+    '<label class="flabel" for="assistHorizon">На сколько дней вперёд</label><select id="assistHorizon">'+
+    '<option value="3"'+(horizon===3?' selected':'')+'>3 дня</option>'+
+    '<option value="7"'+(horizon===7?' selected':'')+'>7 дней</option>'+
+    '<option value="14"'+(horizon===14?' selected':'')+'>14 дней</option></select>'+
+    '<label class="flabel" for="assistPlaces">Места через запятую, до четырёх</label>'+
+    '<input id="assistPlaces" maxlength="180" placeholder="На месте, Выезд" value="'+esc(places)+'">';
+}
 function assistDesk(reply){
-  const buttons = (reply && reply.buttons) || [];
+  const buttons = assistButtonList(reply);
   return '<div class="desk"><p class="now">Что увидит покупатель</p>'+
-    '<p class="hint">Помощник подходит любому делу: товар, услуга, запись, бронь. Цену, срок, телефон, адрес, оплату и бронь он называет только из полей ниже. Пустое поле он не придумывает. В сообщениях ведёт покупателя по шагам. В комментариях зовёт в сообщения. Готовая кнопка-ответ отправляется как есть.</p>'+
+    '<p class="hint">Помощник подходит любому делу. Телефон, адрес, цену, оплату и заказ он берёт только из полей ниже и из товаров сообщества. Пустое поле он не придумывает. В личке покупатель жмёт кнопки. Надписи «Контакты», «Каталог», «Как заказать», «Оплата», «Адрес» и «Записаться» открывают эти разделы. Другая надпись присылает ваш текст или открывает ссылку. Под постом клавиатуры нет: комментарий отвечает по карточке и пишет, какие кнопки нажать в сообщениях.</p>'+
     '<label class="flabel" for="assistAbout">Что продаёте и какие условия</label>'+
     '<textarea id="assistAbout" maxlength="1500" rows="4" placeholder="Что продаёте или какую услугу делаете. Цену и срок пишите только если их можно называть покупателю.">'+esc(reply && reply.about || '')+'</textarea>'+
     '<label class="flabel" for="assistContacts">Контакты</label>'+
@@ -827,13 +873,15 @@ function assistDesk(reply){
     '<label class="flabel" for="assistPayment">Как оплатить</label>'+
     '<textarea id="assistPayment" maxlength="500" rows="2" placeholder="Карта, перевод, наличные или ссылка. Не пишите то, чего нет.">'+esc(reply && reply.payment || '')+'</textarea>'+
     '<label class="flabel" for="assistBooking">Как забронировать</label>'+
-    '<textarea id="assistBooking" maxlength="800" rows="2" placeholder="Дата, предоплата, что написать. Если брони нет, оставьте пустым.">'+esc(reply && reply.booking || '')+'</textarea>'+
+    '<textarea id="assistBooking" maxlength="800" rows="2" placeholder="Предоплата, что взять с собой. Если правила не нужны, оставьте пустым: календарь всё равно откроется.">'+esc(reply && reply.booking || '')+'</textarea>'+
+    assistScheduleHtml(reply)+
     '<label class="flabel" for="assistGuide">Как вести покупателя</label>'+
     '<textarea id="assistGuide" maxlength="900" rows="3" placeholder="Спросите, что нужно. Затем предложите кнопку. Потом попросите оформить заказ.">'+esc(reply && reply.guide || '')+'</textarea>'+
     '<label class="flabel" for="assistGreeting">Фраза, если помощник молчит</label>'+
     '<textarea id="assistGreeting" maxlength="900" rows="4" placeholder="Здравствуйте. Чем могу помочь?">'+esc(reply && reply.greeting || '')+'</textarea>'+
     '<div id="assistButtons">'+buttons.map(assistButtonHtml).join('')+'</div>'+
     (buttons.length < 6 ? '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>' : '')+
+    '<button class="btn ghost" id="assistReset" type="button" style="margin-top:8px">Вернуть кнопки по умолчанию</button>'+
     '<button class="btn" id="assistDesk" type="button" style="margin-top:12px">Сохранить ответы</button>'+
     '<p id="deskmsg" class="hint"></p></div>';
 }
@@ -964,6 +1012,29 @@ function addAssistButton(){
   if (add && list.querySelectorAll('[data-brow]').length >= 6) add.remove();
   bind();
 }
+function resetAssistButtons(){
+  const list = document.getElementById('assistButtons');
+  if (!list) return;
+  list.innerHTML = DEFAULT_ASSIST_BUTTONS.map(assistButtonHtml).join('');
+  const add = document.getElementById('assistAdd');
+  if (add) add.remove();
+  bind();
+}
+function assistScheduleValue(){
+  const days = [];
+  document.querySelectorAll('[data-day]').forEach(function(box){
+    if (box.checked) days.push(Number(box.value));
+  });
+  const places = String((document.getElementById('assistPlaces') || {}).value || '').split(',');
+  return {
+    days: days,
+    start: Number((document.getElementById('assistStart') || {}).value),
+    end: Number((document.getElementById('assistEnd') || {}).value),
+    slot: Number((document.getElementById('assistSlot') || {}).value),
+    horizon: Number((document.getElementById('assistHorizon') || {}).value),
+    places: places
+  };
+}
 async function saveDesk(){
   const msg = document.getElementById('deskmsg');
   const button = document.getElementById('assistDesk');
@@ -991,7 +1062,7 @@ async function saveDesk(){
     const response = await fetch('/api/vk/assistant/reply', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, payment: payment, booking: booking, buttons: buttons })
+      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, payment: payment, booking: booking, buttons: buttons, schedule: assistScheduleValue() })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Ответы не сохранились');
@@ -1376,6 +1447,8 @@ function bind(){
   if (assistDeskButton) assistDeskButton.onclick = saveDesk;
   const assistAdd = document.getElementById('assistAdd');
   if (assistAdd) assistAdd.onclick = addAssistButton;
+  const assistReset = document.getElementById('assistReset');
+  if (assistReset) assistReset.onclick = resetAssistButtons;
   const assistMailSend = document.getElementById('assistMailSend');
   if (assistMailSend) assistMailSend.onclick = sendAssistMail;
   const assistMail = document.getElementById('assistMail');
