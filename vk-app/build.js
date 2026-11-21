@@ -48,11 +48,17 @@ function goalOf(value){
   const goal = String(value || '').replace(/^#/, '').split('&')[0].split('?')[0];
   return goal === 'rate' || goal === 'site' || goal === 'shop' || goal === 'sub' || goal === 'help' ? goal : '';
 }
+function tplOf(value){
+  const match = String(value || '').match(/tpl=(?:local:)?(\d{1,12})(?!\d)/);
+  return match ? match[1] : '';
+}
 window.__nyHost = function(msg){
   if (!msg || !msg.type) return;
   if (msg.type === 'ny-goal-ask') {
     const goal = goalOf(location.hash);
     if (goal) tell({ type: 'ny-goal', goal: goal });
+    const tpl = tplOf(location.hash) || tplOf(location.search);
+    if (tpl) tell({ type: 'ny-tpl', id: tpl });
     return;
   }
   if (msg.type === 'ny-group-ask') {
@@ -94,8 +100,11 @@ window.addEventListener('message', function(event){
     bridgeData = data.data || {};
   }
   if (bridgeType === 'VKWebAppChangeFragment' || bridgeType === 'VKWebAppLocationChanged') {
-    const goal = goalOf((bridgeData && (bridgeData.location || bridgeData.hash)) || (data.data && data.data.location) || '');
+    const where = (bridgeData && (bridgeData.location || bridgeData.hash)) || (data.data && data.data.location) || '';
+    const goal = goalOf(where);
     if (goal) tell({ type: 'ny-goal', goal: goal });
+    const tpl = tplOf(where);
+    if (tpl) tell({ type: 'ny-tpl', id: tpl });
     return;
   }
   if (bridgeType === 'VKWebAppGetLaunchParamsResult') {

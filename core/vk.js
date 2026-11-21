@@ -14,6 +14,7 @@ const audit = require('./vk-audit');
 const club = require('./vk-club');
 const donut = require('./vk-donut');
 const lesson = require('./vk-lesson');
+const share = require('./share');
 const maintenance = require('./maintenance');
 let gigaPlugin = null;
 try { gigaPlugin = require('../ai_plugins/gigachat_plugin'); } catch (e) {}
@@ -2293,15 +2294,18 @@ async function callLesson(tokens, method, params) {
     throw last || new Error(method);
 }
 
-async function uploadWallPhoto(tokens, groupId, buffer) {
+async function uploadWallPhoto(tokens, groupId, buffer, file) {
+    const photo = file && file.buffer
+        ? file
+        : { buffer, filename: 'lesson-cover.jpg', type: 'image/jpeg' };
     let last = null;
     for (const token of tokens) {
         try {
             const server = await call(token, 'photos.getWallUploadServer', { group_id: String(groupId) });
             const uploaded = await postFile(server.upload_url, 'photo', {
-                buffer,
-                filename: 'lesson-cover.jpg',
-                type: 'image/jpeg'
+                buffer: photo.buffer,
+                filename: photo.filename,
+                type: photo.type
             });
             const saved = await call(token, 'photos.saveWallPhoto', {
                 group_id: String(groupId),
@@ -2678,6 +2682,67 @@ async function publishWeeklyRatings(now) {
             const code = Number(error && error.code);
             console.error(`ВК ${item.id}: месяц не закрылся${code ? ` (${code})` : ''}.`);
         }
+    }
+}
+
+async function templateImage(image) {
+    const packed = share.imagePayload(image);
+    if (packed.bytes) return packed.bytes;
+    if (!packed.photoUrl) return null;
+    const res = await axios.get(packed.photoUrl, {
+        responseType: 'arraybuffer',
+        timeout: 20000,
+        maxContentLength: 8 * 1024 * 1024,
+        maxBodyLength: 8 * 1024 * 1024
+    });
+    const bytes = Buffer.from(res.data || []);
+    return bytes.length ? bytes : null;
+}
+
+async function publishTemplate(tpl) {
+    const groupId = clubGroupId();
+    const url = share.vkTemplateLink(tpl && tpl.id, groupId);
+    if (!url) return { ok: false, error: 'Ссылка на шаблон не собралась.' };
+    const item = communityList().find(entry => entry.id === groupId);
+    if (!item || !item.token) return { ok: false, error: 'Нет ключа сообщества НейроЯга.' };
+    const message = share.vkTemplateText(tpl, url);
+    const secret = String(tpl && tpl.prompt || '').trim();
+    if (secret && message.includes(secret)) return { ok: false, error: 'Текст задания нельзя публиковать.' };
+    let bytes;
+    try {
+        bytes = await templateImage(tpl && tpl.image);
+    } catch (error) {
+        return { ok: false, error: 'Картинку шаблона не удалось открыть.' };
+    }
+    if (!bytes || !bytes.length) return { ok: false, error: 'У шаблона нет картинки.' };
+    let file;
+    try {
+        file = await fileForVk(bytes);
+    } catch (error) {
+        return { ok: false, error: 'Картинка шаблона не открылась.' };
+    }
+    let attachment = '';
+    try {
+        attachment = await uploadWallPhoto(lessonWriters(item.token), groupId, null, file);
+    } catch (error) {
+        const code = Number(error && error.code);
+        if (code === 15 || code === 27) return { ok: false, error: 'Ключ сообщества не может публиковать на стене. Включите право «Стена».' };
+        return { ok: false, error: 'Картинка не загрузилась на стену.' };
+    }
+    if (!attachment) return { ok: false, error: 'Картинка не загрузилась на стену.' };
+    try {
+        const posted = await call(item.token, 'wall.post', {
+            owner_id: String(-Number(groupId)),
+            from_group: '1',
+            message,
+            attachments: attachment
+        });
+        const postId = Number(posted && (posted.post_id || posted.postId));
+        return { ok: true, url, postUrl: postId ? `https://vk.com/wall-${groupId}_${postId}` : '' };
+    } catch (error) {
+        const code = Number(error && error.code);
+        if (code === 15 || code === 27) return { ok: false, error: 'Ключ сообщества не может публиковать на стене. Включите право «Стена».' };
+        return { ok: false, error: 'Запись на стене не вышла.' };
     }
 }
 
@@ -3226,5 +3291,5 @@ async function ensureCommunityWidget(groupId) {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, clubGroupId, communityStatus, adminHomes, communityDonut, checkCommunityToken, monthActivity, setRatingHidden, publishPrize, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos, WALL_RECOUNT_MS
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, clubGroupId, communityStatus, adminHomes, communityDonut, checkCommunityToken, monthActivity, setRatingHidden, publishPrize, publishTemplate, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos, WALL_RECOUNT_MS
 };

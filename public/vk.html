@@ -12,8 +12,15 @@ const q = new URLSearchParams(location.search);
 const dest = new URLSearchParams();
 dest.set('v', '24');
 q.forEach(function(value, key){
+  if (key === 'tpl') {
+    const id = String(value || '').match(/^(?:local:)?(\d{1,12})$/);
+    if (id) dest.set('tpl', id[1]);
+    return;
+  }
   if (key === 'sign' || key.indexOf('vk_') === 0 || key === 'tk' || key === 'pkg' || key === 'paid') dest.set(key, value);
 });
+const fromHash = String(location.hash || '').match(/tpl=(?:local:)?(\d{1,12})(?!\d)/);
+if (fromHash) dest.set('tpl', fromHash[1]);
 const goal = q.get('goal') || (location.hash || '').replace(/^#/, '').split('&')[0].split('?')[0];
 const hash = (goal === 'rate' || goal === 'site' || goal === 'sub' || goal === 'help') ? '#' + goal : '';
 location.replace('/?' + dest.toString() + hash);

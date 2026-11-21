@@ -15,6 +15,25 @@ function templateLink(username, id) {
     return `https://t.me/${name}?start=tpl_${n}`;
 }
 
+function vkTemplateLink(id, groupId) {
+    const n = numericId(id);
+    const group = String(groupId || '214554778').replace(/\D/g, '');
+    if (!n || !group) return '';
+    return `https://vk.com/app54901511_-${group}#tpl=${n}`;
+}
+
+function vkTemplateText(tpl, url) {
+    const title = String((tpl && tpl.title) || 'Шаблон').replace(/\s+/g, ' ').trim().slice(0, 120);
+    const lines = [`Шаблон «${title}»`];
+    const desc = String((tpl && (tpl.desc || tpl.description)) || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (desc) lines.push(desc);
+    const cost = Math.max(0, Math.round(Number(tpl && tpl.cost) || 0));
+    lines.push(`${cost} кр. в приложении`);
+    lines.push('Откройте шаблон и сделайте свою картинку:');
+    if (url) lines.push(url);
+    return lines.join('\n').slice(0, 1500);
+}
+
 function parseStart(payload) {
     const match = String(payload || '').trim().match(/^tpl_(\d{1,12})$/);
     return match ? match[1] : '';
@@ -93,6 +112,8 @@ module.exports = {
     OPEN_BOT,
     numericId,
     templateLink,
+    vkTemplateLink,
+    vkTemplateText,
     parseStart,
     workCaption,
     templateCaption,

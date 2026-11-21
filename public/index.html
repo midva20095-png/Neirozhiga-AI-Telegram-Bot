@@ -22,11 +22,17 @@ if (!window.__nyVkBoot) {
 function vkTell(msg){
   window.dispatchEvent(new MessageEvent('message', { data: msg }));
 }
+function hashTpl(value){
+  const match = String(value || '').match(/tpl=(?:local:)?(\d{1,12})(?!\d)/);
+  return match ? match[1] : '';
+}
 window.__nyHost = function(msg){
   if (!msg || !msg.type) return;
   if (msg.type === 'ny-goal-ask') {
     const goal = String(location.hash || '').replace(/^#/, '').split('&')[0].split('?')[0];
     if (goal === 'rate' || goal === 'site' || goal === 'shop' || goal === 'sub' || goal === 'help') vkTell({ type: 'ny-goal', goal: goal });
+    const tpl = hashTpl(location.hash) || hashTpl(location.search);
+    if (tpl) vkTell({ type: 'ny-tpl', id: tpl });
     return;
   }
   if (msg.type === 'ny-group-ask') {
@@ -66,8 +72,11 @@ window.addEventListener('message', function(event){
     bridgeData = data.data || {};
   }
   if (bridgeType === 'VKWebAppChangeFragment' || bridgeType === 'VKWebAppLocationChanged') {
-    const goal = String((bridgeData && (bridgeData.location || bridgeData.hash)) || '').replace(/^#/, '').split('&')[0].split('?')[0];
+    const where = String((bridgeData && (bridgeData.location || bridgeData.hash)) || '');
+    const goal = where.replace(/^#/, '').split('&')[0].split('?')[0];
     if (goal === 'rate' || goal === 'site' || goal === 'shop' || goal === 'sub' || goal === 'help') vkTell({ type: 'ny-goal', goal: goal });
+    const tpl = hashTpl(where);
+    if (tpl) vkTell({ type: 'ny-tpl', id: tpl });
     return;
   }
   if (bridgeType === 'VKWebAppGetLaunchParamsResult') {
@@ -554,11 +563,7 @@ async function load(){
   if (!live()) return;
   await loadConfig();
   try { templates = ((await (await fetchT('/api/templates'+(isVk()?'?audience=vk':''))).json()).templates)||[]; } catch(e){ templates=[]; }
-  if (pendingTpl && templates.some(function(t){ return String(t.id)===String(pendingTpl); })) {
-    tab = 'tpl';
-    openTpl = pendingTpl;
-    pendingTpl = '';
-  }
+  openSharedTpl(pendingTpl, false);
   if (pendingPkg) tab = 'top';
   document.getElementById('bal').textContent = (me.balance||0)+' кр';
   markVkChrome();
@@ -736,11 +741,27 @@ async function placeCovers(){
     if (pin) pin.disabled = false;
   }
 }
+function openSharedTpl(id, paint){
+  const num = String(id || '').replace(/^local:/, '').replace(/\D/g, '');
+  if (!num) return;
+  const hit = (templates || []).find(function(t){ return String(t.id).replace(/^local:/, '') === num; });
+  if (!hit) { pendingTpl = num; return; }
+  pendingTpl = '';
+  if (String(openTpl) === String(hit.id) && tab === 'tpl') return;
+  tab = 'tpl';
+  openTpl = hit.id;
+  photoData = null;
+  tplAnswers = {};
+  tplPhotos = {};
+  if (paint !== false && document.getElementById('view')) draw();
+}
 function bridgeGoal(data){
   const bag = data && (data.params || (data.data && data.data.data) || data.data || data) || {};
   const raw = bag.location || bag.hash || '';
   const goal = String(raw).replace(/^#/, '').split('&')[0].split('?')[0];
   if (goal === 'rate' || goal === 'site' || goal === 'shop' || goal === 'sub' || goal === 'help') applyGoal(goal);
+  const tpl = typeof hashTpl === 'function' ? hashTpl(raw) : '';
+  if (tpl) openSharedTpl(tpl);
 }
 window.addEventListener('hashchange', function(){ bridgeGoal({ hash: location.hash }); });
 window.addEventListener('message', function(event){
@@ -763,6 +784,7 @@ window.addEventListener('message', function(event){
     return;
   }
   if (data.type === 'ny-goal') { applyGoal(data.goal); return; }
+  if (data.type === 'ny-tpl') { openSharedTpl(data.id); return; }
   if (data.type !== 'ny-widget-fail') return;
   const note = document.getElementById('submsg');
   if (note && vkAdmin()) note.textContent = (data.reason && String(data.reason)) || 'ВК не открыл окно кнопок. Откройте кабинет из сообщества ещё раз.';

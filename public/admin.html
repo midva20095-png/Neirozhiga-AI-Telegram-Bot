@@ -1289,7 +1289,8 @@ async function loadTpl(){
       const picked = saved && (saved.qualities||[]).find(x=>x.id===t.quality);
       const mode = picked ? ' · '+picked.name : (t.duration ? ' · '+t.duration+' сек' : '');
       const where = t.audience==='vk' ? 'Только ВК' : t.audience==='tg' ? 'Только Telegram' : 'Оба чата';
-      const share = place==='vk' ? '' : '<button class="ghost" onclick="tplLink('+t.id+')">Ссылка</button><button class="ghost" onclick="tplChannel('+t.id+')">В канал</button>';
+      const share = (place==='vk' ? '' : '<button class="ghost" onclick="tplLink('+t.id+')">Ссылка</button><button class="ghost" onclick="tplChannel('+t.id+')">В канал</button>')+
+        '<button class="ghost" onclick="tplVk('+t.id+')">В НейроЯгу</button>';
       const themes = String(t.topics||'').trim();
       return '<div class="acard'+(t.active?'':' off')+'">'+(src?'<img src="'+esc(src)+'" alt="">':'<div class="ph"></div>')+
         '<div class="abody"><b>'+esc(t.title)+'</b><div><em>'+t.cost+' кр.</em></div><div class="note">'+esc(themes||'без категории')+' · '+esc(where)+' · '+esc(from)+' · '+esc((saved&&saved.name)||t.model||'')+esc(mode)+(t.active?'':' · скрыт')+'</div>'+
@@ -1433,6 +1434,14 @@ async function tplChannel(id){
   try {
     const d = await api('/api/admin/templates/channel',{method:'POST',body:JSON.stringify({id})});
     alert(d.ok ? 'Шаблон опубликован в канале.' : (d.error||'Не удалось опубликовать'));
+  } catch (e) { alert(e.message); }
+}
+async function tplVk(id){
+  if (!confirm('Опубликовать шаблон на стене сообщества НейроЯга? В записи будет картинка шаблона и прямая ссылка на него. Текст задания не попадёт.')) return;
+  try {
+    const d = await api('/api/admin/templates/vk',{method:'POST',timeout:45000,body:JSON.stringify({id})});
+    if (!d.ok) { alert(d.error||'Не удалось опубликовать'); return; }
+    alert('Шаблон на стене НейроЯги.'+(d.postUrl?'\n'+d.postUrl:'')+(d.url?'\n'+d.url:''));
   } catch (e) { alert(e.message); }
 }
 

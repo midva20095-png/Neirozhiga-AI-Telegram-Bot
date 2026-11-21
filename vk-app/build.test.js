@@ -31,6 +31,13 @@ test('приложение ВК остаётся на своём адресе и
     assert.equal(html.includes("['models', 'Модели']"), false);
     assert.equal(html.includes('class="cover"'), true);
     assert.equal(html.includes('src="cover.jpg"'), true);
+    assert.equal(html.includes('function tplOf'), true);
+    assert.equal(html.includes("type: 'ny-tpl'"), true);
+    assert.equal(source.includes('function openSharedTpl'), true);
+    assert.equal(source.includes('function hashTpl'), true);
+    const door = fs.readFileSync(path.join(__dirname, '../public/vk.html'), 'utf8');
+    assert.equal(door.includes("key === 'tpl'"), true);
+    assert.equal(door.includes("dest.set('tpl', fromHash[1])"), true);
     const initAt = html.indexOf('VKWebAppInit');
     const appAt = html.indexOf('function downloadWork');
     assert.ok(initAt > 0 && appAt > initAt);
