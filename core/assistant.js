@@ -37,7 +37,7 @@ const REPLY_FIELDS = [
 ];
 
 function emptyReply() {
-    const reply = { greeting: '', buttons: [] };
+    const reply = { greeting: '', buttons: [], pickupMap: '' };
     REPLY_FIELDS.forEach(item => {
         reply[item[0]] = '';
     });
@@ -68,6 +68,10 @@ function cleanReply(input) {
         seen.add(button.label);
         buttons.push(button);
     }
+    const rawMap = input.pickupMap == null ? '' : input.pickupMap;
+    if (typeof rawMap !== 'string') return null;
+    const pickupMap = yandexMapLink(rawMap);
+    if (rawMap.trim() && !pickupMap) return null;
     return Object.assign({
         greeting: greeting,
         buttons: buttons,
@@ -75,8 +79,26 @@ function cleanReply(input) {
         scenario: input.scenario === 'info' ? 'info' : 'funnel',
         handoff: !(input.handoff === false || input.handoff === 'false'),
         pickupOn: input.pickupOn === true || input.pickupOn === 'true',
-        deliveryOn: input.deliveryOn === true || input.deliveryOn === 'true'
+        deliveryOn: input.deliveryOn === true || input.deliveryOn === 'true',
+        pickupMap: pickupMap
     }, fields);
+}
+
+function yandexMapLink(value) {
+    const link = String(value || '').trim();
+    if (!link || link.length > 300 || /\s/.test(link)) return '';
+    let url;
+    try {
+        url = new URL(link);
+    } catch (error) {
+        return '';
+    }
+    if (url.protocol !== 'https:') return '';
+    const host = url.hostname.toLowerCase();
+    const yandex = host === 'yandex.ru' || host === 'yandex.com' || host.endsWith('.yandex.ru') || host.endsWith('.yandex.com');
+    if (!yandex) return '';
+    if (host !== 'maps.yandex.ru' && !/^\/(maps|map-widget|navi)(\/|$)/.test(url.pathname)) return '';
+    return url.toString();
 }
 
 function cleanSchedule(input) {
@@ -410,6 +432,9 @@ async function saveDesk(account, input, fetchImpl) {
     if (!ownerId) throw publicError('Раздел открыт из ВК.');
     const don = await db.getAssistantDon(ownerId);
     if (!don || !don.active) throw publicError('Настроить ответы может дон НейроЯги с живой подпиской.');
+    if (String(input && input.pickupMap || '').trim() && !yandexMapLink(input.pickupMap)) {
+        throw publicError('Для самовывоза нужна ссылка Яндекс Карт, например https://yandex.ru/maps/.');
+    }
     const reply = cleanReply(input);
     if (!reply) throw publicError('У кнопки нужна надпись и либо ссылка https, либо текст ответа. Кнопок не больше шести.');
     const rows = await db.listAssistantCommunities(ownerId);
@@ -427,6 +452,7 @@ async function saveDesk(account, input, fetchImpl) {
         payment: reply.payment,
         booking: reply.booking,
         pickup: reply.pickup,
+        pickupMap: reply.pickupMap,
         delivery: reply.delivery,
         deliveryPrice: reply.deliveryPrice,
         pickupOn: reply.pickupOn,
@@ -590,7 +616,9 @@ function publicBookings(list) {
         slot: String(item && item.slot || '').slice(0, 8),
         place: cleanBit(item && item.place, 40),
         way: cleanBit(item && item.way, 40),
-        address: cleanBit(item && item.address, 200)
+        address: cleanBit(item && item.address, 200),
+        phone: cleanBit(item && item.phone, 16),
+        map: yandexMapLink(item && item.map)
     })).filter(item => item.peerId > 0 && /^\d{4}-\d{2}-\d{2}$/.test(item.day));
 }
 

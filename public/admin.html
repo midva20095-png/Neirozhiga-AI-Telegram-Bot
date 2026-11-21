@@ -538,13 +538,14 @@ function openSetup(userId){
       '<label class="check"><input type="radio" name="setupScenario" value="info"'+(reply.scenario==='info'?' checked':'')+'> Только информация</label>'+
       '<label>Что продаёте</label><textarea id="setupAbout" maxlength="1500">'+esc(reply.about||'')+'</textarea>'+
       '<label>Первая фраза, уходит по кнопке «Начать»</label><textarea id="setupGreeting" maxlength="900">'+esc(reply.greeting||'')+'</textarea>'+
-      '<p class="note">Кнопки «О деле» в чате нет. Текст «Что продаёте» бот отдаёт, когда человек пишет вопрос своими словами.</p>'+
+      '<p class="note">Если «Что продаёте» заполнено, в чате появляется такая кнопка. «Доставка» и «Самовывоз» появляются, когда разделы включены.</p>'+
       '<label>Контакты</label><textarea id="setupContacts" maxlength="500">'+esc(reply.contacts||'')+'</textarea>'+
       '<label>Адрес</label><textarea id="setupAddress" maxlength="500">'+esc(reply.address||'')+'</textarea>'+
       '<label>Как заказать</label><textarea id="setupOrder" maxlength="800">'+esc(reply.order||'')+'</textarea>'+
       '<label>Оплата</label><textarea id="setupPayment" maxlength="500">'+esc(reply.payment||'')+'</textarea>'+
       '<label class="check"><input id="setupPickupOn" type="checkbox"'+(reply.pickupOn?' checked':'')+'> Самовывоз</label>'+
       '<textarea id="setupPickup" maxlength="500" placeholder="Откуда забрать">'+esc(reply.pickup||'')+'</textarea>'+
+      '<label>Ссылка Яндекс Карт</label><input id="setupPickupMap" maxlength="300" placeholder="https://yandex.ru/maps/..." value="'+esc(reply.pickupMap||'')+'">'+
       '<label class="check"><input id="setupDeliveryOn" type="checkbox"'+(reply.deliveryOn?' checked':'')+'> Доставка</label>'+
       '<textarea id="setupDelivery" maxlength="500" placeholder="Район и срок">'+esc(reply.delivery||'')+'</textarea>'+
       '<label>Стоимость доставки</label><input id="setupDeliveryPrice" maxlength="200" placeholder="400 рублей по городу" value="'+esc(reply.deliveryPrice||'')+'">'+
@@ -600,6 +601,7 @@ function setupBody(){
     order: (document.getElementById('setupOrder') || {}).value || '',
     payment: (document.getElementById('setupPayment') || {}).value || '',
     pickup: (document.getElementById('setupPickup') || {}).value || '',
+    pickupMap: (document.getElementById('setupPickupMap') || {}).value || '',
     delivery: (document.getElementById('setupDelivery') || {}).value || '',
     deliveryPrice: (document.getElementById('setupDeliveryPrice') || {}).value || '',
     pickupOn: !!(document.getElementById('setupPickupOn') || {}).checked,

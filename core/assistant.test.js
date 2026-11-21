@@ -80,13 +80,17 @@ test('фраза дона принимает ссылку и ответ и от�
     assert.equal(people[0].phone, '+79991112233');
     assert.equal(JSON.stringify(people).includes('secret-token'), false);
     const bookings = assistant.publicBookings([
-        { peerId: 9, day: '2026-11-16', slot: '12:00', place: 'Зал', way: 'Доставка', address: 'улица Мира 4', token: 'secret-token' },
+        { peerId: 9, day: '2026-11-16', slot: '12:00', place: 'Зал', way: 'Доставка', address: 'улица Мира 4', phone: '+79001112233', map: 'https://yandex.ru/maps/-/CCUexample', token: 'secret-token' },
         { peerId: 0, day: '2026-11-16', slot: '13:00', place: 'Чужое' }
     ]);
     assert.equal(bookings.length, 1);
     assert.equal(bookings[0].when, 'Пн 16.11');
     assert.equal(bookings[0].address, 'улица Мира 4');
+    assert.equal(bookings[0].phone, '+79001112233');
+    assert.equal(bookings[0].map, 'https://yandex.ru/maps/-/CCUexample');
     assert.equal(JSON.stringify(bookings).includes('secret-token'), false);
+    assert.equal(assistant.cleanReply({ pickupMap: 'https://google.com/maps' }), null);
+    assert.equal(assistant.cleanReply({ pickupMap: 'https://yandex.ru/maps/-/CCUexample' }).pickupMap, 'https://yandex.ru/maps/-/CCUexample');
     assert.equal(assistant.cleanReply({ buttons: [{ label: 'Сайт', link: 'http://example.com' }] }), null);
     assert.equal(assistant.cleanReply({ buttons: [{ label: 'Два', link: 'https://vk.com/a', text: 'и текст' }] }), null);
     assert.equal(JSON.stringify(reply).includes('secret'), false);

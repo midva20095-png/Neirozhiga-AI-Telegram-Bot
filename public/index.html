@@ -856,7 +856,7 @@ function assistScheduleHtml(reply){
   const horizon = [3, 7, 14].indexOf(Number(plan.horizon)) >= 0 ? Number(plan.horizon) : 7;
   const places = Array.isArray(plan.places) && plan.places.length ? plan.places.join(', ') : 'На месте';
   return '<p class="now">Календарь записи</p>'+
-    '<p class="hint">Кнопка «Записаться» показывает дни и время по Москве. Покупатель выбирает день, время и место, затем подтверждает. Если место одно, шаг места пропускается. После подтверждения запись остаётся в блоке «Записи» этого кабинета. Вам и покупателю приходит сообщение ВК, накануне после 18:00 и утром в день записи — напоминание.</p>'+
+    '<p class="hint">Кнопка «Записаться» показывает дни и время по Москве. Перед подтверждением бот спрашивает телефон. Без номера запись не сохраняется. После подтверждения запись остаётся в блоке «Записи». Вам и покупателю приходит сообщение ВК, накануне после 18:00 и утром в день записи — напоминание.</p>'+
     '<label class="flabel">Рабочие дни</label><div>'+checks+'</div>'+
     '<label class="flabel" for="assistStart">Начало</label><select id="assistStart">'+assistHourOptions(plan.start == null ? 10 : plan.start, 0, 22)+'</select>'+
     '<label class="flabel" for="assistEnd">Конец, это время уже не записывают</label><select id="assistEnd">'+assistHourOptions(plan.end == null ? 19 : plan.end, 1, 23)+'</select>'+
@@ -877,7 +877,7 @@ function assistDesk(reply){
   const buttons = assistButtonList(reply);
   const handoff = !reply || reply.handoff !== false;
   const about = assistSection('Первая фраза',
-    '<p class="hint">Кнопки «О деле» в чате нет. Первая фраза уходит, когда человек нажимает «Начать». Текст «Что продаёте» бот присылает, только если человек пишет вопрос своими словами и в вопросе есть слова из этого текста. Кнопки «Контакты», «Каталог», «Как заказать», «Оплата» и «Адрес» берут свои поля из разделов ниже.</p>'+
+    '<p class="hint">Первая фраза уходит, когда человек нажимает «Начать». Если заполните «Что продаёте», в чате появится такая кнопка. Пустое поле кнопки не даёт. «Контакты», «Каталог», «Как заказать», «Оплата» и «Адрес» есть всегда. «Доставка» и «Самовывоз» появляются, когда эти разделы включены и заполнены.</p>'+
     '<label class="flabel" for="assistGreeting">Первая фраза в чате</label>'+
     '<textarea id="assistGreeting" maxlength="900" rows="3" placeholder="Здравствуйте. Выберите кнопку ниже.">'+esc(reply && reply.greeting || '')+'</textarea>'+
     '<label class="flabel" for="assistAbout">Что продаёте, если спросят своими словами</label>'+
@@ -897,6 +897,9 @@ function assistDesk(reply){
     '<p class="hint">Включите только то, что у вас реально есть. Стоимость доставки помощник называет только из поля ниже.</p>'+
     '<label style="display:block;margin:8px 0"><input id="assistPickupOn" type="checkbox"'+(reply && reply.pickupOn ? ' checked' : '')+'> Самовывоз</label>'+
     '<textarea id="assistPickup" maxlength="500" rows="2" placeholder="Откуда забрать и с какого часа.">'+esc(reply && reply.pickup || '')+'</textarea>'+
+    '<label class="flabel" for="assistPickupMap">Точка на Яндекс Картах</label>'+
+    '<input id="assistPickupMap" maxlength="300" placeholder="https://yandex.ru/maps/..." value="'+esc(reply && reply.pickupMap || '')+'">'+
+    '<p class="hint">Вставьте ссылку на точку из Яндекс Карт. По кнопке «Самовывоз» покупатель получит этот адрес и ссылку.</p>'+
     '<label style="display:block;margin:8px 0"><input id="assistDeliveryOn" type="checkbox"'+(reply && reply.deliveryOn ? ' checked' : '')+'> Доставка</label>'+
     '<textarea id="assistDelivery" maxlength="500" rows="2" placeholder="Район и срок. Например: по городу в день заказа.">'+esc(reply && reply.delivery || '')+'</textarea>'+
     '<label class="flabel" for="assistDeliveryPrice">Стоимость доставки</label>'+
@@ -906,7 +909,7 @@ function assistDesk(reply){
     '<textarea id="assistBooking" maxlength="800" rows="2" placeholder="Предоплата, что взять с собой. Если правил нет, оставьте пустым.">'+esc(reply && reply.booking || '')+'</textarea>'+
     assistScheduleHtml(reply));
   const keys = assistSection('Кнопки в чате',
-    '<p class="hint">Надписи «Контакты», «Каталог», «Как заказать», «Оплата», «Адрес» и «Записаться» открывают эти разделы. Другая надпись присылает ваш текст или ссылку.</p>'+
+    '<p class="hint">«Контакты», «Каталог», «Как заказать», «Оплата», «Адрес» и «Записаться» открывают разделы карточки. «Что продаёте», «Доставка» и «Самовывоз» добавляются сами, когда эти поля заполнены. Своя надпись присылает ваш текст или ссылку.</p>'+
     '<label style="display:block;margin:8px 0"><input id="assistHandoff" type="checkbox"'+(handoff ? ' checked' : '')+'> Кнопка «Администратор»</label>'+
     '<p class="hint">Покупатель жмёт её, вам приходит сообщение ВК, а в списке клиентов появляется пометка «Ждёт администратора». Пока вы отвечаете, помощник молчит. Покупатель возвращает меню кнопкой «К помощнику».</p>'+
     '<div id="assistButtons">'+buttons.map(assistButtonHtml).join('')+'</div>'+
@@ -1016,8 +1019,9 @@ function assistBookings(pack, clients){
   const list = rows.length ? rows.map(function(item){
     const person = people.find(function(one){ return Number(one.peerId) === Number(item.peerId); });
     const who = person && person.name ? person.name : ('ВК '+item.peerId);
-    const bits = [item.when || item.day, item.slot, item.place, item.way, item.address].filter(Boolean);
-    return '<div class="note"><b>'+esc(bits.join(' · '))+'</b><div class="hint">'+esc(who)+' · <a href="https://vk.com/im?sel='+encodeURIComponent(item.peerId)+'">открыть диалог</a></div></div>';
+    const bits = [item.when || item.day, item.slot, item.place, item.way, item.address, item.phone].filter(Boolean);
+    const map = item.map ? ' · <a href="'+esc(item.map)+'">карта</a>' : '';
+    return '<div class="note"><b>'+esc(bits.join(' · '))+'</b><div class="hint">'+esc(who)+' · <a href="https://vk.com/im?sel='+encodeURIComponent(item.peerId)+'">открыть диалог</a>'+map+'</div></div>';
   }).join('') : '<p class="hint">'+(pack && pack.pending ? 'Список откроется, когда помощник будет на связи.' : 'Пока записей нет. Они появятся здесь, когда покупатель нажмёт «Записаться» и подтвердит время.')+'</p>';
   return '<div class="desk"><p class="now">Записи</p>'+
     '<p class="hint">Это записи только вашего сообщества. Список живёт здесь, в «Моё сообщество». Новая запись и напоминания приходят сообщениями ВК вам и покупателю: накануне после 18:00 и утром в день записи. Если вам сообщение не пришло, откройте диалог сообщества со своей страницы один раз.</p>'+
@@ -1121,6 +1125,7 @@ async function saveDesk(){
   const payment = (document.getElementById('assistPayment') || {}).value || '';
   const booking = (document.getElementById('assistBooking') || {}).value || '';
   const pickup = (document.getElementById('assistPickup') || {}).value || '';
+  const pickupMap = (document.getElementById('assistPickupMap') || {}).value || '';
   const delivery = (document.getElementById('assistDelivery') || {}).value || '';
   const deliveryPrice = (document.getElementById('assistDeliveryPrice') || {}).value || '';
   const pickupOn = !!(document.getElementById('assistPickupOn') || {}).checked;
@@ -1144,7 +1149,7 @@ async function saveDesk(){
     const response = await fetch('/api/vk/assistant/reply', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, payment: payment, booking: booking, pickup: pickup, delivery: delivery, deliveryPrice: deliveryPrice, pickupOn: pickupOn, deliveryOn: deliveryOn, handoff: handoff, buttons: buttons, schedule: assistScheduleValue(), scenario: scenario })
+      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, payment: payment, booking: booking, pickup: pickup, pickupMap: pickupMap, delivery: delivery, deliveryPrice: deliveryPrice, pickupOn: pickupOn, deliveryOn: deliveryOn, handoff: handoff, buttons: buttons, schedule: assistScheduleValue(), scenario: scenario })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Ответы не сохранились');
