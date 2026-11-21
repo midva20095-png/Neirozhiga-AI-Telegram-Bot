@@ -33,5 +33,5 @@ function restoreAssistant() {
     });
 }
 setTimeout(restoreAssistant, 8000);
-const assistantTimer = setInterval(restoreAssistant, 10 * 60 * 1000);
+const assistantTimer = setInterval(restoreAssistant, 60 * 1000);
 if (assistantTimer.unref) assistantTimer.unref();
