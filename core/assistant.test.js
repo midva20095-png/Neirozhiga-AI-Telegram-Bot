@@ -72,6 +72,8 @@ test('фраза дона принимает ссылку и ответ и от�
     assert.equal(road.deliveryPrice, '400 рублей');
     assert.equal(road.deliveryOn, true);
     assert.equal(road.handoff, false);
+    assert.equal(assistant.setupNote('  включите самовывоз  '), 'включите самовывоз');
+    assert.equal(assistant.setupNote('а'.repeat(600)).length, 500);
     assert.equal(assistant.cleanReply({ scenario: 'info' }).scenario, 'info');
     const people = assistant.publicPeople([{ peerId: 7, name: 'Анна', phone: '+7 999 111-22-33', note: 'хочу заказ', seen: 2, token: 'secret-token' }]);
     assert.equal(people[0].phone, '+79991112233');

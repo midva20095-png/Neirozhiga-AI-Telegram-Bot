@@ -73,6 +73,8 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
 .actions button{width:100%;background:transparent;border:1px solid var(--line);color:var(--text)}
 .head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}
 .place{font-family:Unbounded,sans-serif;font-size:18px;margin:0}
+.cover{position:fixed;inset:0;z-index:30;overflow:auto;background:rgba(5,2,12,.82);padding:16px}
+.cover .sheet{max-width:760px;margin:0 auto}
 @media(max-width:640px){.mrow{grid-template-columns:1fr 1fr}.door,.homes{grid-template-columns:1fr}}
 </style>
 </head>
@@ -110,6 +112,7 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
   </div>
 </div>
 
+<div class="cover" id="setupDialog" style="display:none"></div>
 <div id="panel" style="display:none">
   <div class="head">
     <div>
@@ -155,6 +158,8 @@ const KINDNAME = {sys:'система', pay:'оплата', kie:'Kie', gen:'сб
 let tplEdit = null, tplImage = '', tplImageTouched = false, modelsMsg = '';
 let rateGroup = sessionStorage.getItem('ny_admin_group') || '';
 let donutGroup = sessionStorage.getItem('ny_admin_donut') || '';
+let assistPack = { dons: [], requests: [] };
+let setupUserId = '';
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function tgInit(){ try{ return (window.Telegram&&window.Telegram.WebApp&&window.Telegram.WebApp.initData)||''; }catch(e){ return ''; } }
@@ -420,8 +425,10 @@ async function loadAssist(){
   el.innerHTML = '<div class="card">Смотрю помощника…</div>';
   const data = await api('/api/admin/vk/assistant');
   if (data.error) throw new Error(data.error);
+  assistPack = data;
   const health = data.health || {};
   const dons = data.dons || [];
+  const requests = data.requests || [];
   const on = dons.filter(item => item.active).length;
   const communities = dons.reduce((sum, item) => sum + (item.communities || []).length, 0);
   const line = health.online
@@ -436,6 +443,15 @@ async function loadAssist(){
     '</div>'+
     '<div class="row" style="margin-top:12px"><button type="button" onclick="syncAssist()">Взять донов из ВК</button></div>'+
     '<p id="assistmsg" class="note"></p></div>'+
+    '<div class="card"><h3>Ждут настройки</h3>'+
+    (requests.length ? requests.map(item => {
+      const don = dons.find(person => person.userId === item.userId) || { name: 'ВК '+item.userId, userId: item.userId };
+      return '<div class="stat" style="margin-top:8px"><div class="n" style="font-size:16px">'+esc(don.name)+'</div>'+
+        '<div class="l">ВК '+esc(item.userId)+'</div>'+
+        (item.note ? '<p class="note">'+esc(item.note)+'</p>' : '<p class="note">Просит настроить бота.</p>')+
+        '<div class="row"><button type="button" onclick="openSetup('+Number(item.userId)+')">Открыть</button></div></div>';
+    }).join('') : '<p class="note">Заявок нет. Кнопка «Настройка через разработчика» в кабинете дона откроет здесь окно с этим человеком. Настроить можно и без заявки: кнопка «Настроить» у дона ниже.</p>')+
+    '</div>'+
     '<div class="card"><h3>Доны и сообщества</h3>'+
     (dons.length ? dons.map(item => {
       const list = item.communities || [];
@@ -446,7 +462,7 @@ async function loadAssist(){
       return '<div class="stat" style="margin-top:8px"><div class="n" style="font-size:16px">'+esc(item.name)+'</div>'+
         '<div class="l">ВК '+esc(item.userId)+' · '+(item.active ? '<span class="ok">помощник включён</span>' : '<span class="bad">помощник выключен</span>')+'</div>'+
         groups+
-        '<div class="row" style="margin-top:8px"><button type="button" onclick="setAssist('+item.userId+','+(item.active?'false':'true')+')">'+(item.active?'Выключить':'Включить')+'</button></div></div>';
+        '<div class="row" style="margin-top:8px"><button type="button" onclick="openSetup('+Number(item.userId)+')">Настроить</button><button type="button" onclick="setAssist('+item.userId+','+(item.active?'false':'true')+')">'+(item.active?'Выключить':'Включить')+'</button></div></div>';
     }).join('') : '<p class="note">Донов пока нет. Нажмите «Взять донов из ВК» или дождитесь новой подписки.</p>')+
     '</div>';
 }
@@ -466,6 +482,148 @@ async function dropAssist(groupId){
   if (!confirm('Отключить это сообщество от помощника?')) return;
   const data = await api('/api/admin/vk/assistant/drop', { method:'POST', body: JSON.stringify({ groupId: groupId }) });
   if (!data.ok) alert(data.error || 'Не получилось');
+  loadAssist();
+}
+function setupHours(selected, from, to){
+  let html = '';
+  for (let hour = from; hour <= to; hour += 1) {
+    const label = (hour < 10 ? '0' : '') + hour + ':00';
+    html += '<option value="'+hour+'"'+(Number(selected)===hour?' selected':'')+'>'+label+'</option>';
+  }
+  return html;
+}
+function setupButtons(reply){
+  const saved = reply && Array.isArray(reply.buttons) ? reply.buttons.slice(0, 6) : [];
+  const rows = saved.slice();
+  while (rows.length < 6) rows.push({ label: '', text: '' });
+  return rows.map(function(button){
+    const kind = button.link ? 'link' : 'text';
+    const value = button.link || button.text || '';
+    return '<div class="row" data-setup-row><input data-setup-label maxlength="40" placeholder="Надпись" value="'+esc(button.label||'')+'">'+
+      '<select data-setup-kind><option value="text"'+(kind==='text'?' selected':'')+'>Текст</option><option value="link"'+(kind==='link'?' selected':'')+'>Ссылка</option></select>'+
+      '<input data-setup-value maxlength="300" placeholder="Текст или https" value="'+esc(value)+'"></div>';
+  }).join('');
+}
+function openSetup(userId){
+  setupUserId = String(userId || '').replace(/\D/g, '');
+  const box = document.getElementById('setupDialog');
+  const don = (assistPack.dons || []).find(item => String(item.userId) === setupUserId);
+  if (!box || !don) return;
+  const request = (assistPack.requests || []).find(item => String(item.userId) === setupUserId);
+  const community = (don.communities || [])[0] || null;
+  const reply = community && community.reply ? community.reply : {};
+  const plan = reply.schedule || {};
+  const days = Array.isArray(plan.days) && plan.days.length ? plan.days.map(Number) : [1, 2, 3, 4, 5];
+  const horizon = [3, 14].indexOf(Number(plan.horizon)) >= 0 ? Number(plan.horizon) : 7;
+  const names = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+  const dayBoxes = names.map(function(name, index){
+    const value = index + 1;
+    return '<label class="check"><input type="checkbox" data-setup-day value="'+value+'"'+(days.indexOf(value)>=0?' checked':'')+'>'+name+'</label>';
+  }).join('');
+  const card = community
+    ? '<p class="note">Сообщество '+esc(community.title)+' · '+esc(community.groupId)+'. Сохраняется только эта карточка.</p>'+
+      '<label class="check"><input type="radio" name="setupScenario" value="funnel"'+(reply.scenario==='info'?'':' checked')+'> Запись и заказ</label>'+
+      '<label class="check"><input type="radio" name="setupScenario" value="info"'+(reply.scenario==='info'?' checked':'')+'> Только информация</label>'+
+      '<label>Что продаёте</label><textarea id="setupAbout" maxlength="1500">'+esc(reply.about||'')+'</textarea>'+
+      '<label>Первая фраза</label><textarea id="setupGreeting" maxlength="900">'+esc(reply.greeting||'')+'</textarea>'+
+      '<label>Заметка, покупатель её отдельно не видит</label><textarea id="setupGuide" maxlength="900">'+esc(reply.guide||'')+'</textarea>'+
+      '<label>Контакты</label><textarea id="setupContacts" maxlength="500">'+esc(reply.contacts||'')+'</textarea>'+
+      '<label>Адрес</label><textarea id="setupAddress" maxlength="500">'+esc(reply.address||'')+'</textarea>'+
+      '<label>Как заказать</label><textarea id="setupOrder" maxlength="800">'+esc(reply.order||'')+'</textarea>'+
+      '<label>Оплата</label><textarea id="setupPayment" maxlength="500">'+esc(reply.payment||'')+'</textarea>'+
+      '<label class="check"><input id="setupPickupOn" type="checkbox"'+(reply.pickupOn?' checked':'')+'> Самовывоз</label>'+
+      '<textarea id="setupPickup" maxlength="500" placeholder="Откуда забрать">'+esc(reply.pickup||'')+'</textarea>'+
+      '<label class="check"><input id="setupDeliveryOn" type="checkbox"'+(reply.deliveryOn?' checked':'')+'> Доставка</label>'+
+      '<textarea id="setupDelivery" maxlength="500" placeholder="Район и срок">'+esc(reply.delivery||'')+'</textarea>'+
+      '<label>Стоимость доставки</label><input id="setupDeliveryPrice" maxlength="200" placeholder="400 рублей по городу" value="'+esc(reply.deliveryPrice||'')+'">'+
+      '<label>Правила записи</label><textarea id="setupBooking" maxlength="800">'+esc(reply.booking||'')+'</textarea>'+
+      '<label>Рабочие дни</label><div>'+dayBoxes+'</div>'+
+      '<div class="row"><div><label>Начало</label><select id="setupStart">'+setupHours(plan.start == null ? 10 : plan.start, 0, 22)+'</select></div>'+
+      '<div><label>Конец</label><select id="setupEnd">'+setupHours(plan.end == null ? 19 : plan.end, 1, 23)+'</select></div></div>'+
+      '<div class="row"><div><label>Длина</label><select id="setupSlot"><option value="30"'+(Number(plan.slot)===30?' selected':'')+'>30 минут</option><option value="60"'+(Number(plan.slot)===30?'':' selected')+'>60 минут</option></select></div>'+
+      '<div><label>Горизонт</label><select id="setupHorizon"><option value="3"'+(horizon===3?' selected':'')+'>3 дня</option><option value="7"'+(horizon===7?' selected':'')+'>7 дней</option><option value="14"'+(horizon===14?' selected':'')+'>14 дней</option></select></div></div>'+
+      '<label>Места через запятую</label><input id="setupPlaces" maxlength="180" value="'+esc((plan.places||['На месте']).join(', '))+'">'+
+      '<label class="check"><input id="setupHandoff" type="checkbox"'+(reply.handoff===false?'':' checked')+'> Кнопка «Администратор»</label>'+
+      '<label>Кнопки, пустые строки не сохраняются</label>'+setupButtons(reply)+
+      '<div class="row" style="margin-top:12px"><button type="button" id="setupSave">Сохранить карточку</button></div>'
+    : '<p class="note">Сообщество ещё не подключено. Карточку можно заполнить после того, как человек вставит номер и ключ в своём кабинете.</p>';
+  box.innerHTML = '<div class="card sheet"><div class="head"><h3>'+esc(don.name)+'</h3><button type="button" class="ghost" id="setupClose">Закрыть</button></div>'+
+    '<p class="note">ВК '+esc(don.userId)+' · '+(don.active?'<span class="ok">помощник включён</span>':'<span class="bad">помощник выключен</span>')+'</p>'+
+    (request && request.note ? '<p class="note">Просит: '+esc(request.note)+'</p>' : '')+
+    card+
+    '<label>Сообщение этому человеку</label><textarea id="setupLetter" maxlength="900" placeholder="Карточка заполнена. Откройте «Моё сообщество» и проверьте."></textarea>'+
+    '<div class="row"><button type="button" id="setupWrite">Написать</button>'+
+    (request ? '<button type="button" class="ghost" id="setupDone">Заявка выполнена</button>' : '')+
+    '</div><p id="setupmsg" class="note"></p></div>';
+  box.style.display = 'block';
+  document.getElementById('setupClose').onclick = function(){ box.style.display = 'none'; };
+  const save = document.getElementById('setupSave');
+  if (save) save.onclick = saveSetup;
+  document.getElementById('setupWrite').onclick = writeSetup;
+  const done = document.getElementById('setupDone');
+  if (done) done.onclick = closeSetup;
+}
+function setupBody(){
+  const buttons = [];
+  document.querySelectorAll('[data-setup-row]').forEach(function(row){
+    const label = (row.querySelector('[data-setup-label]') || {}).value || '';
+    const kind = (row.querySelector('[data-setup-kind]') || {}).value || 'text';
+    const value = (row.querySelector('[data-setup-value]') || {}).value || '';
+    if (!String(label).trim() && !String(value).trim()) return;
+    const item = { label: label };
+    item[kind === 'link' ? 'link' : 'text'] = value;
+    buttons.push(item);
+  });
+  const days = [];
+  document.querySelectorAll('[data-setup-day]').forEach(function(box){ if (box.checked) days.push(Number(box.value)); });
+  const picked = document.querySelector('input[name="setupScenario"]:checked');
+  return {
+    userId: setupUserId,
+    scenario: picked && picked.value === 'info' ? 'info' : 'funnel',
+    about: (document.getElementById('setupAbout') || {}).value || '',
+    greeting: (document.getElementById('setupGreeting') || {}).value || '',
+    guide: (document.getElementById('setupGuide') || {}).value || '',
+    contacts: (document.getElementById('setupContacts') || {}).value || '',
+    address: (document.getElementById('setupAddress') || {}).value || '',
+    order: (document.getElementById('setupOrder') || {}).value || '',
+    payment: (document.getElementById('setupPayment') || {}).value || '',
+    pickup: (document.getElementById('setupPickup') || {}).value || '',
+    delivery: (document.getElementById('setupDelivery') || {}).value || '',
+    deliveryPrice: (document.getElementById('setupDeliveryPrice') || {}).value || '',
+    pickupOn: !!(document.getElementById('setupPickupOn') || {}).checked,
+    deliveryOn: !!(document.getElementById('setupDeliveryOn') || {}).checked,
+    booking: (document.getElementById('setupBooking') || {}).value || '',
+    handoff: !!(document.getElementById('setupHandoff') || {}).checked,
+    buttons: buttons,
+    schedule: {
+      days: days,
+      start: Number((document.getElementById('setupStart') || {}).value),
+      end: Number((document.getElementById('setupEnd') || {}).value),
+      slot: Number((document.getElementById('setupSlot') || {}).value),
+      horizon: Number((document.getElementById('setupHorizon') || {}).value),
+      places: String((document.getElementById('setupPlaces') || {}).value || '').split(',')
+    }
+  };
+}
+async function saveSetup(){
+  const msg = document.getElementById('setupmsg');
+  if (msg) msg.textContent = 'Сохраняю карточку…';
+  const data = await api('/api/admin/vk/assistant/desk', { method:'POST', body: JSON.stringify(setupBody()) });
+  if (msg) msg.textContent = data.ok ? 'Карточка сохранена. Её видит только это сообщество.' : (data.error || 'Не сохранилось');
+  if (data.ok) loadAssist();
+}
+async function writeSetup(){
+  const msg = document.getElementById('setupmsg');
+  const text = (document.getElementById('setupLetter') || {}).value || '';
+  if (!String(text).trim()) { if (msg) msg.textContent = 'Напишите текст сообщения.'; return; }
+  const data = await api('/api/admin/message', { method:'POST', body: JSON.stringify({ userId: '-'+setupUserId, text: text }) });
+  if (msg) msg.textContent = data.ok ? 'Сообщение ушло этому человеку.' : (data.error || 'Сообщение не ушло');
+}
+async function closeSetup(){
+  const msg = document.getElementById('setupmsg');
+  const data = await api('/api/admin/vk/assistant/setup/close', { method:'POST', body: JSON.stringify({ userId: setupUserId }) });
+  if (!data.ok) { if (msg) msg.textContent = data.error || 'Заявка не закрылась'; return; }
+  document.getElementById('setupDialog').style.display = 'none';
   loadAssist();
 }
 function openDonut(id){

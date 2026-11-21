@@ -256,6 +256,14 @@ async function initDB() {
   await pool.query(`CREATE INDEX IF NOT EXISTS vk_assistant_community_owner_idx ON vk_assistant_community (owner_id)`);
   await pool.query(`ALTER TABLE vk_assistant_community ADD COLUMN IF NOT EXISTS reply JSONB NOT NULL DEFAULT '{}'::jsonb`);
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS vk_assistant_setup (
+      user_id BIGINT PRIMARY KEY,
+      note TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'open',
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS vk_lesson_memory (
       id SERIAL PRIMARY KEY,
       group_id BIGINT NOT NULL,
@@ -535,6 +543,41 @@ async function markAssistantOwner(ownerId, state, error) {
      WHERE owner_id = $1`,
     [id, String(state || '').slice(0, 20), String(error || '').slice(0, 240)]
   );
+}
+
+async function saveAssistantSetup(userId, note) {
+  const id = assistantPerson(userId);
+  if (!id) return null;
+  const text = String(note || '').slice(0, 500);
+  const res = await pool.query(
+    `INSERT INTO vk_assistant_setup (user_id, note, status, updated_at)
+     VALUES ($1, $2, 'open', NOW())
+     ON CONFLICT (user_id) DO UPDATE
+       SET note = EXCLUDED.note, status = 'open', updated_at = NOW()
+     RETURNING user_id, note, status, updated_at`,
+    [id, text]
+  );
+  return res.rows[0] || null;
+}
+
+async function listAssistantSetups(status) {
+  const state = status === 'done' ? 'done' : 'open';
+  const res = await pool.query(
+    'SELECT user_id, note, status, updated_at FROM vk_assistant_setup WHERE status = $1 ORDER BY updated_at DESC',
+    [state]
+  );
+  return res.rows;
+}
+
+async function closeAssistantSetup(userId) {
+  const id = assistantPerson(userId);
+  if (!id) return null;
+  const res = await pool.query(
+    `UPDATE vk_assistant_setup SET status = 'done', updated_at = NOW()
+     WHERE user_id = $1 RETURNING user_id, note, status, updated_at`,
+    [id]
+  );
+  return res.rows[0] || null;
 }
 
 async function deleteAssistantCommunity(groupId) {
@@ -1405,5 +1448,8 @@ module.exports = {
   markAssistantCommunity,
   markAssistantOwner,
   deleteAssistantCommunity,
+  saveAssistantSetup,
+  listAssistantSetups,
+  closeAssistantSetup,
   pool,
 };

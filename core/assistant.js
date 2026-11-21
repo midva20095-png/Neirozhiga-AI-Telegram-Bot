@@ -460,6 +460,27 @@ async function adminDrop(groupId, fetchImpl) {
     return disconnectCommunity(row.owner_id, row.group_id, fetchImpl);
 }
 
+function setupNote(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+}
+
+async function askSetup(account, note) {
+    const ownerId = vkId(account);
+    if (!ownerId) throw publicError('Раздел открыт из ВК.');
+    const don = await db.getAssistantDon(ownerId);
+    if (!don || !don.active) throw publicError('Попросить настройку может дон с живой подпиской.');
+    const text = setupNote(note);
+    await db.saveAssistantSetup(ownerId, text);
+    return { ok: true, userId: ownerId, name: don.name || '', note: text };
+}
+
+async function finishSetup(account) {
+    const ownerId = vkId(account);
+    if (!ownerId) return { ok: false };
+    await db.closeAssistantSetup(ownerId);
+    return { ok: true };
+}
+
 function deskLabel(reply) {
     const clean = cleanReply(reply) || { greeting: '', buttons: [] };
     const phrase = clean.greeting ? clean.greeting.replace(/\s+/g, ' ').slice(0, 80) : 'фраза по умолчанию';
@@ -560,6 +581,7 @@ async function adminList(fetchImpl) {
     const health = await readHealth(fetchImpl);
     const dons = await db.listAssistantDons();
     const communities = await db.listAssistantCommunities();
+    const requests = await db.listAssistantSetups('open');
     let counts = {};
     const groups = communities.map(item => Number(item.group_id)).filter(id => Number.isInteger(id) && id > 0);
     if (groups.length) {
@@ -583,10 +605,17 @@ async function adminList(fetchImpl) {
                 sync: item.sync_state || '',
                 syncLabel: syncLabel(item.sync_state),
                 desk: deskLabel(item.reply),
+                reply: cleanReply(item.reply) || { greeting: '', buttons: [] },
                 clients: Number(counts[String(item.group_id)]) || 0,
                 error: item.sync_error || '',
                 updatedAt: item.updated_at
             }))
+        })),
+        requests: requests.map(row => ({
+            userId: Number(row.user_id),
+            note: setupNote(row.note),
+            status: row.status || 'open',
+            updatedAt: row.updated_at
         }))
     };
 }
@@ -608,6 +637,9 @@ module.exports = {
     registerLive,
     connectCommunity,
     saveDesk,
+    setupNote,
+    askSetup,
+    finishSetup,
     loadClients,
     pushSaved,
     loadListen,

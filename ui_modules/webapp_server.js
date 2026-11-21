@@ -372,6 +372,24 @@ function startWebApp() {
         }
     });
 
+    app.post('/api/vk/assistant/setup', requireUser, async (req, res) => {
+        try {
+            const saved = await assistant.askSetup(req.userId, req.body && req.body.note);
+            const bot = app.locals.bot;
+            if (bot) {
+                const who = saved.name ? `${saved.name} · ВК ${saved.userId}` : `ВК ${saved.userId}`;
+                const text = `Дон просит настроить бота сообщества.\n${who}${saved.note ? `\n${saved.note}` : ''}\nЗаявка в админке, вкладка «Помощник».`;
+                for (const adminId of auth.adminIds()) {
+                    try { await bot.telegram.sendMessage(adminId, text); } catch (e) {}
+                }
+            }
+            res.json({ ok: true });
+        } catch (e) {
+            const message = e && e.public ? e.message : 'Заявка не отправилась.';
+            res.status(400).json({ ok: false, error: message });
+        }
+    });
+
     app.post('/api/vk/assistant/community/remove', requireUser, async (req, res) => {
         try {
             const userId = assistant.vkId(req.userId);
@@ -1006,6 +1024,26 @@ function startWebApp() {
             res.json({ ok: true });
         } catch (e) {
             res.status(500).json({ ok: false, error: 'Статус дона не изменился.' });
+        }
+    });
+
+    app.post('/api/admin/vk/assistant/desk', requireAdmin, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const saved = await assistant.saveDesk(body.userId, body);
+            res.json(saved);
+        } catch (e) {
+            const message = e && e.public ? e.message : 'Карточка не сохранилась.';
+            res.status(400).json({ ok: false, error: message });
+        }
+    });
+
+    app.post('/api/admin/vk/assistant/setup/close', requireAdmin, async (req, res) => {
+        try {
+            const result = await assistant.finishSetup(req.body && req.body.userId);
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Заявка не закрылась.' });
         }
     });
 

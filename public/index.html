@@ -952,7 +952,7 @@ async function loadAssist(){
   box.innerHTML = '<div class="card"><img src="cover.jpg" alt="НейроЯга" width="72" height="72" style="width:72px;height:72px;border-radius:16px;object-fit:cover">'+
     '<div class="kicker">Моё сообщество</div>'+
     '<p class="hint">Одно приложение для всех сообществ. Здесь только ваше сообщество и ваши клиенты, чужие базы сюда не попадают.</p>'+
-    status+assistGuide()+
+    status+assistHelpBox()+assistGuide()+
     '<label class="flabel" for="assistGroup">Номер сообщества</label><input id="assistGroup" inputmode="numeric" placeholder="Например 1234567" value="'+esc(community ? community.groupId : '')+'">'+
     '<label class="flabel" for="assistToken">Ключ сообщества</label><input id="assistToken" type="password" placeholder="'+(community && community.key ? 'Ключ уже сохранён, вставьте новый только для замены' : 'Ключ из настроек сообщества')+'" autocomplete="off">'+
     '<button class="btn" id="assistSave" type="button" style="margin-top:12px">Подключить</button>'+
@@ -983,6 +983,33 @@ async function saveAssist(){
     if (msg) msg.textContent = error.message;
     if (button) button.disabled = false;
   }
+}
+function assistHelpBox(){
+  return '<div class="desk"><p class="now">Настройка через разработчика</p>'+
+    '<p class="hint">Если карточку сложно заполнить самим, напишите, что нужно. В админке откроется окно только с вашим сообществом. Чужие карточки и чужие клиенты туда не попадают.</p>'+
+    '<textarea id="assistHelpNote" maxlength="500" rows="3" placeholder="Например: включите самовывоз, адрес Ленина 5, доставка 400 рублей по городу."></textarea>'+
+    '<button class="btn ghost" id="assistHelp" type="button" style="margin-top:8px">Настройка через разработчика</button>'+
+    '<p id="helpmsg" class="hint"></p></div>';
+}
+async function askDeveloper(){
+  const msg = document.getElementById('helpmsg');
+  const button = document.getElementById('assistHelp');
+  const note = (document.getElementById('assistHelpNote') || {}).value || '';
+  if (button) button.disabled = true;
+  if (msg) msg.textContent = 'Отправляю заявку…';
+  try {
+    const response = await fetch('/api/vk/assistant/setup', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ note: note })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Заявка не отправилась');
+    if (msg) msg.textContent = 'Заявка ушла. Разработчик откроет вашу карточку и заполнит её.';
+  } catch (error) {
+    if (msg) msg.textContent = error.message;
+  }
+  if (button) button.disabled = false;
 }
 function assistBase(clients){
   const pack = clients || { total: 0, people: [] };
@@ -1494,6 +1521,8 @@ function bind(){
   if (assistReset) assistReset.onclick = resetAssistButtons;
   const assistMailSend = document.getElementById('assistMailSend');
   if (assistMailSend) assistMailSend.onclick = sendAssistMail;
+  const assistHelp = document.getElementById('assistHelp');
+  if (assistHelp) assistHelp.onclick = askDeveloper;
   const assistMail = document.getElementById('assistMail');
   if (assistMail) assistMail.oninput = function(){ assistMailAt = 0; };
   document.querySelectorAll('[data-bkind]').forEach(function(select){
