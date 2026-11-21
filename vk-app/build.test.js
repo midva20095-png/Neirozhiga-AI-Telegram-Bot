@@ -27,6 +27,8 @@ test('приложение ВК остаётся на своём адресе и
     assert.equal(html.includes('nySave'), true);
     assert.equal(fs.existsSync(path.join(__dirname, 'build/widget/chat.jpg')), true);
     assert.equal(fs.existsSync(path.join(__dirname, 'build/cover.jpg')), true);
+    assert.equal(html.includes("['tpl', 'Шаблоны']"), false);
+    assert.equal(html.includes("['models', 'Модели']"), false);
     assert.equal(html.includes('class="cover"'), true);
     assert.equal(html.includes('src="cover.jpg"'), true);
     const initAt = html.indexOf('VKWebAppInit');

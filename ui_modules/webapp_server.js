@@ -150,9 +150,19 @@ function startWebApp() {
     app.use(express.urlencoded({ extended: true }));
 
     const publicPath = path.join(__dirname, '../public');
-    app.use(express.static(publicPath));
-    app.get('/', (req, res) => res.sendFile(path.join(publicPath, 'index.html')));
-    app.get('/admin', (req, res) => res.sendFile(path.join(publicPath, 'admin.html')));
+    app.use(express.static(publicPath, {
+        setHeaders(res, filePath) {
+            if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+        }
+    }));
+    app.get('/', (req, res) => {
+        res.setHeader('Cache-Control', 'no-cache');
+        res.sendFile(path.join(publicPath, 'index.html'));
+    });
+    app.get('/admin', (req, res) => {
+        res.setHeader('Cache-Control', 'no-cache');
+        res.sendFile(path.join(publicPath, 'admin.html'));
+    });
 
     // ---- Публичная конфигурация витрины ----
     function vkAccount(req) {

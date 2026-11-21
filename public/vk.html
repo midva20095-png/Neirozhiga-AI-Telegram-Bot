@@ -10,7 +10,7 @@
 <script>
 const q = new URLSearchParams(location.search);
 const dest = new URLSearchParams();
-dest.set('v', '23');
+dest.set('v', '24');
 q.forEach(function(value, key){
   if (key === 'sign' || key.indexOf('vk_') === 0 || key === 'tk' || key === 'pkg' || key === 'paid') dest.set(key, value);
 });
