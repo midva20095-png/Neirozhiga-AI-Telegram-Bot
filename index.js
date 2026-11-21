@@ -25,10 +25,14 @@ try {
 }
 
 const assistant = require('./core/assistant');
+let assistantReady = false;
 function restoreAssistant() {
     assistant.replayKnown().then(result => {
-        if (result && result.ok) console.log(`Помощник доната восстановлен, команд: ${result.sent}`);
+        if (!result || !result.ok || assistantReady) return;
+        assistantReady = true;
+        console.log(`Помощник доната восстановлен, команд: ${result.sent}`);
     }).catch(error => {
+        assistantReady = false;
         console.error('Помощник доната не восстановлен:', error && error.message ? error.message : 'ошибка');
     });
 }
