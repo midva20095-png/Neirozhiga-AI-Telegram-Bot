@@ -65,6 +65,13 @@ test('фраза дона принимает ссылку и ответ и от�
     const hours = assistant.cleanReply({ schedule: { days: [1, 7], start: 9, end: 12, slot: 30, horizon: 14, places: ['Зал', 'Выезд'] } });
     assert.deepEqual(hours.schedule, { days: [1, 7], start: 9, end: 12, slot: 30, horizon: 14, places: ['Зал', 'Выезд'] });
     assert.equal(shop.scenario, 'funnel');
+    assert.equal(shop.handoff, true);
+    assert.equal(shop.deliveryOn, false);
+    const road = assistant.cleanReply({ deliveryOn: true, delivery: 'По городу', deliveryPrice: '400 рублей', pickupOn: false, handoff: false });
+    assert.equal(road.delivery, 'По городу');
+    assert.equal(road.deliveryPrice, '400 рублей');
+    assert.equal(road.deliveryOn, true);
+    assert.equal(road.handoff, false);
     assert.equal(assistant.cleanReply({ scenario: 'info' }).scenario, 'info');
     const people = assistant.publicPeople([{ peerId: 7, name: 'Анна', phone: '+7 999 111-22-33', note: 'хочу заказ', seen: 2, token: 'secret-token' }]);
     assert.equal(people[0].phone, '+79991112233');

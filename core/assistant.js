@@ -29,7 +29,10 @@ const REPLY_FIELDS = [
     ['address', 500],
     ['order', 800],
     ['payment', 500],
-    ['booking', 800]
+    ['booking', 800],
+    ['pickup', 500],
+    ['delivery', 500],
+    ['deliveryPrice', 200]
 ];
 
 function emptyReply() {
@@ -68,7 +71,10 @@ function cleanReply(input) {
         greeting: greeting,
         buttons: buttons,
         schedule: cleanSchedule(input.schedule),
-        scenario: input.scenario === 'info' ? 'info' : 'funnel'
+        scenario: input.scenario === 'info' ? 'info' : 'funnel',
+        handoff: !(input.handoff === false || input.handoff === 'false'),
+        pickupOn: input.pickupOn === true || input.pickupOn === 'true',
+        deliveryOn: input.deliveryOn === true || input.deliveryOn === 'true'
     }, fields);
 }
 
@@ -416,6 +422,12 @@ async function saveDesk(account, input, fetchImpl) {
         order: reply.order,
         payment: reply.payment,
         booking: reply.booking,
+        pickup: reply.pickup,
+        delivery: reply.delivery,
+        deliveryPrice: reply.deliveryPrice,
+        pickupOn: reply.pickupOn,
+        deliveryOn: reply.deliveryOn,
+        handoff: reply.handoff,
         buttons: reply.buttons,
         schedule: reply.schedule,
         scenario: reply.scenario
