@@ -1324,7 +1324,7 @@ async function sendStatus(token, peerId, account, groupId) {
     const model = catalog.getModel((await db.getCurrentModel(account)) || catalog.defaultModelKey('vk'), { audience: 'vk' });
     const empty = Number(balance) > 0 ? '' : '\n\nСейчас 0 кредитов. Нажмите «Пополнить» или откройте «Баланс» в кабинете. После оплаты они придут в этот чат.';
     await sendText(token, peerId,
-        `${communityTitle(groupId)}.\n\nБаланс: ${balance} кр.\nМодель: ${model ? model.name : 'текст'}.${empty}\n\n«Модели» — что генерировать. «Пополнить» — оплата в этот чат. «Кабинет» — шаблоны, история и баланс. «Справка» и «Рейтинг» — отдельные кнопки внизу.`
+        `${communityTitle(groupId)}.\n\nБаланс: ${balance} кр.\nМодель: ${model ? model.name : 'текст'}.${empty}\n\n«Модели» — что генерировать. «Пополнить» — оплата в этот чат. «Кабинет» — история, баланс и помощь. «Шаблоны», «Справка» и «Рейтинг» — отдельные кнопки внизу.`
     );
 }
 

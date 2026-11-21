@@ -1193,14 +1193,12 @@ function viewCab(){
   const balance = (me && me.balance) || 0;
   const rows = [
     ['top', 'Баланс и оплата'],
-    ['tpl', 'Шаблоны'],
-    ['models', 'Модели'],
     ['hist', 'История'],
     ['help', 'Помощь']
   ];
   if (vkAdmin()) rows.push(['menu', 'Кнопки сообщества']);
   if (inVkApp() || isVk()) rows.splice(1, 0, ['assist', 'Моё сообщество']);
-  return '<div class="card"><div class="kicker">Кабинет</div><div class="cabbal">'+balance+' кр</div><p class="now">Чат, рейтинг и магазин — внизу.</p></div>'+
+  return '<div class="card"><div class="kicker">Кабинет</div><div class="cabbal">'+balance+' кр</div><p class="now">Чат, шаблоны, рейтинг и магазин — внизу.</p></div>'+
     rows.map(function(row){ return '<button type="button" class="cabrow" data-go="'+row[0]+'">'+row[1]+'</button>'; }).join('');
 }
 function modelPicker(cur){
@@ -1453,8 +1451,10 @@ function modelGuide(){
 }
 function viewHelp(){
   const steps = '<div class="card"><div class="now">Как пользоваться</div>'+
-    '<p>1. «Генерация» — свой запрос. «Модели» — выберите, чем отвечать. На кнопке написана цена.</p>'+
-    '<p>2. «Шаблоны» — готовые карточки. Заполните поля и нажмите «Создать». Текст задания не показывается.</p>'+
+    (isVk()
+      ? '<p>1. «Чат» — свой запрос. Модель выбирается в списке над полем. На строке написана цена.</p>'
+      : '<p>1. «Генерация» — свой запрос. «Модели» — выберите, чем отвечать. На кнопке написана цена.</p>')+
+    '<p>2. «Шаблоны» — кнопка внизу. Заполните поля и нажмите «Создать». Текст задания не показывается.</p>'+
     '<p>3. Если у модели сказано «нужно фото» или «можно с фото», прикрепите снимок. «Только текст» — без фото.</p>'+
     '<p>4. Кредиты списываются, когда ответ готов. Если не получилось, баланс не меняется.</p></div>';
   const audit = '<div class="card"><div class="now">Аудит сообщества</div>'+
