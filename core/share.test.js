@@ -22,6 +22,11 @@ test('ссылка ВК открывает шаблон в сообществе 
     assert.match(text, /20 кр/);
     assert.match(text, /https:\/\/vk\.com\/app54901511_-214554778#tpl=15/);
     assert.equal(text.includes(secret), false);
+    const card = share.templateCard({ title: 'Обложка', desc: 'Для поста', prompt: secret }, 'https://bot.example/api/templates/15/cover.jpg', share.vkTemplateLink(15));
+    assert.match(card, /og:image/);
+    assert.match(card, /cover\.jpg/);
+    assert.match(card, /#tpl=15/);
+    assert.equal(card.includes(secret), false);
 });
 
 test('пост в канал показывает название и не показывает задание', () => {

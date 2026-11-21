@@ -302,6 +302,15 @@ test('комментарий сообщества сначала уходит о
     assert.doesNotMatch(JSON.stringify(reply), /access_token|vk1\.a\./);
 });
 
+test('большая картинка шаблона для стены остаётся тем же файлом', async () => {
+    const jpeg = await sharp({
+        create: { width: 600, height: 400, channels: 3, background: { r: 9, g: 8, b: 7 } }
+    }).jpeg().toBuffer();
+    const file = await vk.prepareCover(jpeg);
+    assert.equal(file.buffer, jpeg);
+    assert.equal(file.type, 'image/jpeg');
+});
+
 test('шаблон на стену НейроЯги требует её ключ и картинку', async () => {
     const saved = {
         VK_GROUP_ID: process.env.VK_GROUP_ID,

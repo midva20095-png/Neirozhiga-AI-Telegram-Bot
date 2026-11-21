@@ -34,6 +34,26 @@ function vkTemplateText(tpl, url) {
     return lines.join('\n').slice(0, 1500);
 }
 
+function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+}
+
+function templateCard(tpl, coverUrl, openUrl) {
+    const title = escapeHtml(String((tpl && tpl.title) || 'Шаблон').replace(/\s+/g, ' ').trim().slice(0, 120));
+    const desc = escapeHtml(String((tpl && (tpl.desc || tpl.description)) || 'Шаблон НейроЯги').replace(/\s+/g, ' ').trim().slice(0, 300));
+    const cover = escapeHtml(coverUrl);
+    const open = escapeHtml(openUrl);
+    return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>${title}</title>`
+        + `<meta property="og:title" content="${title}">`
+        + `<meta property="og:description" content="${desc}">`
+        + `<meta property="og:image" content="${cover}">`
+        + `<meta property="og:url" content="${open}">`
+        + `<meta http-equiv="refresh" content="0;url=${open}">`
+        + `</head><body><p><a href="${open}">Открыть шаблон</a></p></body></html>`;
+}
+
 function parseStart(payload) {
     const match = String(payload || '').trim().match(/^tpl_(\d{1,12})$/);
     return match ? match[1] : '';
@@ -114,6 +134,7 @@ module.exports = {
     templateLink,
     vkTemplateLink,
     vkTemplateText,
+    templateCard,
     parseStart,
     workCaption,
     templateCaption,

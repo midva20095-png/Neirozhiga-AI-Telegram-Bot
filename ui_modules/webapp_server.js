@@ -697,6 +697,37 @@ function startWebApp() {
         return app.locals.botUsername || 'NeyroYaga_ai_bot';
     }
 
+    app.get('/api/templates/:id/cover.jpg', async (req, res) => {
+        try {
+            const tpl = await templatesSrc.getFull(req.params.id, 'vk');
+            const file = tpl && await vk.templateCoverFile(tpl.image);
+            if (!file) return res.status(404).end();
+            res.setHeader('Content-Type', file.type || 'image/jpeg');
+            res.setHeader('Cache-Control', 'public, max-age=300');
+            res.send(file.buffer);
+        } catch (e) {
+            res.status(404).end();
+        }
+    });
+
+    app.get('/api/templates/:id/card', async (req, res) => {
+        try {
+            const tpl = await templatesSrc.getFull(req.params.id, 'vk');
+            if (!tpl || !tpl.image) return res.status(404).end();
+            const base = String(process.env.WEBAPP_URL || 'https://neirozhiga-ai-telegram-bot-production-7ae5.up.railway.app').replace(/\/$/, '');
+            const id = share.numericId(tpl.id);
+            const cover = `${base}/api/templates/${id}/cover.jpg`;
+            const open = share.vkTemplateLink(tpl.id);
+            const html = share.templateCard(tpl, cover, open);
+            if (String(tpl.prompt || '') && html.includes(tpl.prompt)) return res.status(404).end();
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            res.setHeader('Cache-Control', 'public, max-age=300');
+            res.send(html);
+        } catch (e) {
+            res.status(404).end();
+        }
+    });
+
     app.get('/api/templates/:id/link', requireUser, async (req, res) => {
         try {
             const tpl = await templatesSrc.getFull(req.params.id);
