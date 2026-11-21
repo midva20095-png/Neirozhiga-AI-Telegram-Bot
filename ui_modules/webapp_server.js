@@ -326,6 +326,8 @@ function startWebApp() {
                 }
             }
             if (view.active && view.community) {
+                await assistant.pushSaved(userId);
+                view = await assistant.cabinet(userId);
                 const problem = await assistant.loadListen(userId);
                 if (problem) view.community.error = problem;
                 view.clients = await assistant.loadClients(userId);

@@ -476,7 +476,7 @@ async function listAssistantCommunities(ownerId) {
 async function saveAssistantCommunity(row) {
   const groupId = String(row.groupId || '').replace(/\D/g, '');
   const ownerId = assistantPerson(row.ownerId);
-  const token = String(row.token || '').trim();
+  const token = String(row.token || '').replace(/\s+/g, '');
   if (!groupId || !ownerId || token.length < 20) return null;
   const res = await pool.query(
     `INSERT INTO vk_assistant_community (group_id, owner_id, title, token, sync_state, sync_error, updated_at)
@@ -493,7 +493,7 @@ async function saveAssistantCommunity(row) {
       groupId,
       ownerId,
       String(row.title || '').trim().slice(0, 120),
-      token.slice(0, 500),
+      token.slice(0, 2000),
       String(row.syncState || '').slice(0, 20),
       String(row.syncError || '').slice(0, 240)
     ]

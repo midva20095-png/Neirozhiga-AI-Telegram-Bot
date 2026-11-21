@@ -83,6 +83,23 @@ test('после перезапуска помощника касса снова
     assert.equal(calls.some(call => call.body.groupId === 60), false);
 });
 
+test('адрес помощника понимает хост без https и сам подставляет постоянного помощника', () => {
+    const cfg = assistant.assistantConfig({
+        ASSISTANT_URL: 'vkdonutassistantbot-production.up.railway.app/',
+        ASSISTANT_SECRET: ' secret '
+    });
+    assert.equal(cfg.url, 'https://vkdonutassistantbot-production.up.railway.app');
+    assert.equal(cfg.secret, 'secret');
+    const previous = process.env.ASSISTANT_URL;
+    delete process.env.ASSISTANT_URL;
+    try {
+        assert.equal(assistant.assistantConfig().url, 'https://vkdonutassistantbot-production.up.railway.app');
+    } finally {
+        if (previous === undefined) delete process.env.ASSISTANT_URL;
+        else process.env.ASSISTANT_URL = previous;
+    }
+});
+
 test('без адреса второго бота здоровье показывает, что он не подключён', async () => {
     const health = await assistant.readHealth(async () => { throw new Error('нет сети'); }, {});
     assert.equal(health.configured, false);

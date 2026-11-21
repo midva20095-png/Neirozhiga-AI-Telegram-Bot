@@ -110,7 +110,7 @@ function httpsLink(value) {
 function publicSyncError(value) {
     const text = String(value || '').trim();
     if (!text) return '';
-    if (/второй бот|секрет|адрес второго/i.test(text)) return 'Помощник ещё не на связи. Данные уже сохранены.';
+    if (/второй бот|секрет|адрес второго/i.test(text)) return 'Ключ сообщества сохранён. Помощник его ещё не принял.';
     return text.slice(0, 180);
 }
 
@@ -120,12 +120,21 @@ function publicError(message) {
     return error;
 }
 
+const DEFAULT_ASSISTANT_URL = 'https://vkdonutassistantbot-production.up.railway.app';
+
+function assistantUrl(value) {
+    let url = String(value || '').trim().replace(/^['"]+|['"]+$/g, '').replace(/\/+$/, '');
+    if (!url) return '';
+    if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+    if (!/^https:\/\/\S+$/i.test(url)) return '';
+    return url;
+}
+
 function assistantConfig(env) {
     const source = env || process.env;
-    const url = String(source.ASSISTANT_URL || '').trim().replace(/\/$/, '');
     const secret = String(source.ASSISTANT_SECRET || '').trim();
     return {
-        url: /^https:\/\/\S+$/i.test(url) ? url : '',
+        url: assistantUrl(source.ASSISTANT_URL) || (env ? '' : DEFAULT_ASSISTANT_URL),
         secret
     };
 }
@@ -195,6 +204,7 @@ function communityCard(row) {
     return {
         groupId: String(row.group_id),
         title: row.title || '',
+        key: maskToken(row.token),
         sync: row.sync_state || '',
         error: publicSyncError(row.sync_error),
         reply: cleanReply(row.reply) || { greeting: '', buttons: [] }
@@ -308,7 +318,7 @@ async function registerLive(donors, fetchImpl) {
 async function connectCommunity(account, groupId, token, title, fetchImpl) {
     const ownerId = vkId(account);
     const communityId = String(groupId || '').replace(/\D/g, '');
-    const key = String(token || '').trim();
+    const key = String(token || '').replace(/\s+/g, '');
     if (!ownerId) {
         const error = new Error('Раздел открыт из ВК.');
         error.public = true;
@@ -320,7 +330,7 @@ async function connectCommunity(account, groupId, token, title, fetchImpl) {
         error.public = true;
         throw error;
     }
-    if (!communityId || key.length < 20 || key.length > 500) {
+    if (!communityId || key.length < 20 || key.length > 2000) {
         const error = new Error('Нужен номер сообщества и ключ из его настроек.');
         error.public = true;
         throw error;
@@ -430,6 +440,25 @@ function publicPeople(list) {
     })).filter(item => item.peerId > 0);
 }
 
+async function pushSaved(account, fetchImpl) {
+    const userId = vkId(account);
+    if (!userId) return { ok: false };
+    const don = await db.getAssistantDon(userId);
+    if (!don || !don.active) return { ok: false };
+    const rows = await db.listAssistantCommunities(userId);
+    const row = rows[0];
+    if (!row || !String(row.token || '').trim()) return { ok: false };
+    const access = await tellAccess(userId, true, fetchImpl);
+    const pushed = await tellCommunity(row, fetchImpl);
+    const ok = !!(pushed.ok && access.ok);
+    await db.markAssistantCommunity(
+        row.group_id,
+        ok ? 'on' : 'fail',
+        ok ? '' : 'Ключ сохранён. Помощник его ещё не принял.'
+    );
+    return { ok };
+}
+
 async function loadListen(account, fetchImpl) {
     const userId = vkId(account);
     const rows = userId ? await db.listAssistantCommunities(userId) : [];
@@ -534,6 +563,7 @@ module.exports = {
     connectCommunity,
     saveDesk,
     loadClients,
+    pushSaved,
     loadListen,
     sendBroadcast,
     publicPeople,

@@ -2742,8 +2742,8 @@ async function collectDonors(token, groupId) {
 
 async function checkCommunityToken(token, groupId) {
     const wanted = String(groupId || '').replace(/\D/g, '');
-    const key = String(token || '').trim();
-    if (!wanted || key.length < 20 || key.length > 500) {
+    const key = String(token || '').replace(/\s+/g, '');
+    if (!wanted || key.length < 20 || key.length > 2000) {
         const error = new Error('Нужен номер сообщества и ключ из его настроек.');
         error.public = true;
         throw error;
