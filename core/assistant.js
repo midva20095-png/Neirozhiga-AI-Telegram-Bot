@@ -64,7 +64,12 @@ function cleanReply(input) {
         seen.add(button.label);
         buttons.push(button);
     }
-    return Object.assign({ greeting: greeting, buttons: buttons, schedule: cleanSchedule(input.schedule) }, fields);
+    return Object.assign({
+        greeting: greeting,
+        buttons: buttons,
+        schedule: cleanSchedule(input.schedule),
+        scenario: input.scenario === 'info' ? 'info' : 'funnel'
+    }, fields);
 }
 
 function cleanSchedule(input) {
@@ -412,7 +417,8 @@ async function saveDesk(account, input, fetchImpl) {
         payment: reply.payment,
         booking: reply.booking,
         buttons: reply.buttons,
-        schedule: reply.schedule
+        schedule: reply.schedule,
+        scenario: reply.scenario
     }, fetchImpl);
     const saved = await db.saveAssistantReply(row.group_id, ownerId, reply);
     await db.markAssistantCommunity(row.group_id, pushed.ok ? 'on' : 'fail', pushed.ok ? '' : 'Ответы сохранены и ждут передачи.');

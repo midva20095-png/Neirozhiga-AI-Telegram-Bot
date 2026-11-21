@@ -64,6 +64,8 @@ test('фраза дона принимает ссылку и ответ и от�
     assert.equal(shop.schedule.places[0], 'На месте');
     const hours = assistant.cleanReply({ schedule: { days: [1, 7], start: 9, end: 12, slot: 30, horizon: 14, places: ['Зал', 'Выезд'] } });
     assert.deepEqual(hours.schedule, { days: [1, 7], start: 9, end: 12, slot: 30, horizon: 14, places: ['Зал', 'Выезд'] });
+    assert.equal(shop.scenario, 'funnel');
+    assert.equal(assistant.cleanReply({ scenario: 'info' }).scenario, 'info');
     const people = assistant.publicPeople([{ peerId: 7, name: 'Анна', phone: '+7 999 111-22-33', note: 'хочу заказ', seen: 2, token: 'secret-token' }]);
     assert.equal(people[0].phone, '+79991112233');
     assert.equal(JSON.stringify(people).includes('secret-token'), false);

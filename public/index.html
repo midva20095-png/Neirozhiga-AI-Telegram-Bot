@@ -790,8 +790,9 @@ function assistGuide(){
     '<ol class="steps">'+
     '<li>Откройте своё сообщество во ВКонтакте. Подключить его можете вы, если вы администратор этого сообщества.</li>'+
     '<li>Управление → Настройки → Сообщения. Включите сообщения сообщества.</li>'+
-    '<li>Управление → Работа с API → Long Poll API. Включите Long Poll, поставьте версию 5.199 и отметьте «Входящее сообщение» и «Новый комментарий».</li>'+
-    '<li>На этой же странице нажмите «Создать ключ». В правах отметьте «Сообщения», «Стена» и «Товары». Ключ показывается один раз: скопируйте его сразу.</li>'+
+    '<li>Управление → Сообщения → Настройки для бота. Включите «Возможности ботов» и «Добавить кнопку Начать». Без «Возможностей ботов» ВК не принимает клавиатуру, и покупатель видит только текст. Кнопка «Начать» стоит в чате при первом входе. После ответа помощника меню остаётся под полем ввода.</li>'+
+    '<li>Управление → Работа с API → Long Poll API. Включите Long Poll, поставьте версию 5.199 и отметьте «Входящее сообщение» и «Новый комментарий к записи». Комментарий под постом отвечает по карточке и даёт ссылку на товар. Свою клавиатуру под пост ВК не ставит.</li>'+
+    '<li>На этой же странице нажмите «Создать ключ». В правах отметьте «Сообщения», «Стена», «Товары» и, если есть, «Управление». Ключ показывается один раз: скопируйте его сразу. Право «Управление» нужно, чтобы помощник сам включил кнопки и события.</li>'+
     '<li>Номер сообщества — цифры в адресе. У страницы vk.com/club1234567 номер 1234567. Тот же номер есть в Управление → Настройки.</li>'+
     '<li>Вставьте номер и ключ в поля ниже и нажмите «Подключить».</li>'+
     '<li>Заполните карточку и кнопки. Пустое поле помощник не выдумывает. В личных сообщениях покупатель видит кнопки: контакты, каталог, заказ, оплату, адрес и запись. Их можно заменить. Под постом ВК свою клавиатуру поставить нельзя: комментарий отвечает по карточке и называет кнопки, которые ждут в сообщениях. Кнопка «Записаться» открывает дни, время и место.</li>'+
@@ -822,7 +823,16 @@ const DEFAULT_ASSIST_BUTTONS = [
 ];
 function assistButtonList(reply){
   const saved = reply && Array.isArray(reply.buttons) ? reply.buttons : [];
-  return saved.length ? saved : DEFAULT_ASSIST_BUTTONS;
+  if (saved.length) return saved;
+  if (reply && reply.scenario === 'info') return DEFAULT_ASSIST_BUTTONS.filter(function(button){ return button.label !== 'Записаться'; });
+  return DEFAULT_ASSIST_BUTTONS;
+}
+function assistScenarioHtml(reply){
+  const mode = reply && reply.scenario === 'info' ? 'info' : 'funnel';
+  return '<p class="now">Сценарий проекта</p>'+
+    '<p class="hint">Выберите, что видит покупатель. «Только информация» даёт контакты, каталог, заказ, оплату и адрес. «Запись и заказ» добавляет календарь. Кнопки появляются в чате после включения «Возможностей ботов».</p>'+
+    '<label style="display:block;margin:6px 0"><input type="radio" name="assistScenario" value="funnel"'+(mode==='funnel'?' checked':'')+'> Запись и заказ</label>'+
+    '<label style="display:block;margin:6px 0"><input type="radio" name="assistScenario" value="info"'+(mode==='info'?' checked':'')+'> Только информация</label>';
 }
 function assistHourOptions(selected, from, to){
   let html = '';
@@ -860,7 +870,8 @@ function assistScheduleHtml(reply){
 }
 function assistDesk(reply){
   const buttons = assistButtonList(reply);
-  return '<div class="desk"><p class="now">Что увидит покупатель</p>'+
+  return '<div class="desk">'+assistScenarioHtml(reply)+
+    '<p class="now">Что увидит покупатель</p>'+
     '<p class="hint">Помощник подходит любому делу. Телефон, адрес, цену, оплату и заказ он берёт только из полей ниже и из товаров сообщества. Пустое поле он не придумывает. В личке покупатель жмёт кнопки. Надписи «Контакты», «Каталог», «Как заказать», «Оплата», «Адрес» и «Записаться» открывают эти разделы. Другая надпись присылает ваш текст или открывает ссылку. Под постом клавиатуры нет: комментарий отвечает по карточке и пишет, какие кнопки нажать в сообщениях.</p>'+
     '<label class="flabel" for="assistAbout">Что продаёте и какие условия</label>'+
     '<textarea id="assistAbout" maxlength="1500" rows="4" placeholder="Что продаёте или какую услугу делаете. Цену и срок пишите только если их можно называть покупателю.">'+esc(reply && reply.about || '')+'</textarea>'+
@@ -882,7 +893,7 @@ function assistDesk(reply){
     '<div id="assistButtons">'+buttons.map(assistButtonHtml).join('')+'</div>'+
     (buttons.length < 6 ? '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>' : '')+
     '<button class="btn ghost" id="assistReset" type="button" style="margin-top:8px">Вернуть кнопки по умолчанию</button>'+
-    '<button class="btn" id="assistDesk" type="button" style="margin-top:12px">Сохранить ответы</button>'+
+    '<button class="btn" id="assistDesk" type="button" style="margin-top:12px">Сохранить сценарий и ответы</button>'+
     '<p id="deskmsg" class="hint"></p></div>';
 }
 async function loadAssist(){
@@ -1046,6 +1057,8 @@ async function saveDesk(){
   const order = (document.getElementById('assistOrder') || {}).value || '';
   const payment = (document.getElementById('assistPayment') || {}).value || '';
   const booking = (document.getElementById('assistBooking') || {}).value || '';
+  const picked = document.querySelector('input[name="assistScenario"]:checked');
+  const scenario = picked && picked.value === 'info' ? 'info' : 'funnel';
   const buttons = [];
   document.querySelectorAll('[data-brow]').forEach(function(row){
     const label = (row.querySelector('[data-blabel]') || {}).value || '';
@@ -1062,7 +1075,7 @@ async function saveDesk(){
     const response = await fetch('/api/vk/assistant/reply', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, payment: payment, booking: booking, buttons: buttons, schedule: assistScheduleValue() })
+      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, payment: payment, booking: booking, buttons: buttons, schedule: assistScheduleValue(), scenario: scenario })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Ответы не сохранились');
