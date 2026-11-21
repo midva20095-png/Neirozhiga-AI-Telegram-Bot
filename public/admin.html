@@ -537,8 +537,8 @@ function openSetup(userId){
       '<label class="check"><input type="radio" name="setupScenario" value="funnel"'+(reply.scenario==='info'?'':' checked')+'> Запись и заказ</label>'+
       '<label class="check"><input type="radio" name="setupScenario" value="info"'+(reply.scenario==='info'?' checked':'')+'> Только информация</label>'+
       '<label>Что продаёте</label><textarea id="setupAbout" maxlength="1500">'+esc(reply.about||'')+'</textarea>'+
-      '<label>Первая фраза</label><textarea id="setupGreeting" maxlength="900">'+esc(reply.greeting||'')+'</textarea>'+
-      '<label>Заметка, покупатель её отдельно не видит</label><textarea id="setupGuide" maxlength="900">'+esc(reply.guide||'')+'</textarea>'+
+      '<label>Первая фраза, уходит по кнопке «Начать»</label><textarea id="setupGreeting" maxlength="900">'+esc(reply.greeting||'')+'</textarea>'+
+      '<p class="note">Кнопки «О деле» в чате нет. Текст «Что продаёте» бот отдаёт, когда человек пишет вопрос своими словами.</p>'+
       '<label>Контакты</label><textarea id="setupContacts" maxlength="500">'+esc(reply.contacts||'')+'</textarea>'+
       '<label>Адрес</label><textarea id="setupAddress" maxlength="500">'+esc(reply.address||'')+'</textarea>'+
       '<label>Как заказать</label><textarea id="setupOrder" maxlength="800">'+esc(reply.order||'')+'</textarea>'+

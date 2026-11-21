@@ -796,8 +796,8 @@ function assistGuide(){
     '<li>На этой же странице нажмите «Создать ключ». В правах отметьте «Сообщения», «Стена», «Товары» и, если есть, «Управление». Ключ показывается один раз: скопируйте его сразу. Право «Управление» нужно, чтобы помощник сам включил кнопки и события.</li>'+
     '<li>Номер сообщества — цифры в адресе. У страницы vk.com/club1234567 номер 1234567. Тот же номер есть в Управление → Настройки.</li>'+
     '<li>Вставьте номер и ключ в поля ниже и нажмите «Подключить».</li>'+
-    '<li>Ниже разделы карточки: о деле, контакты, заказ, доставка, запись и кнопки. Пустое поле помощник не выдумывает. Под постом ВК клавиатуры нет: комментарий даёт ссылку на чат и на каталог товаров.</li>'+
-    '<li>Люди, которые сами написали в сообщения, попадают в базу этого сообщества. Рассылка уходит только им.</li>'+
+    '<li>Ниже разделы карточки: первая фраза, контакты, заказ, доставка, запись и кнопки. Пустое поле помощник не выдумывает. Под постом ВК клавиатуры нет: комментарий даёт ссылку на чат и на каталог товаров.</li>'+
+    '<li>Люди, которые сами написали в сообщения, попадают в базу этого сообщества. Рассылка уходит только им. Записи смотрите в блоке «Записи»: они же приходят сообщением вам и покупателю.</li>'+
     '</ol>'+
     '<p class="hint">Ключ нужен, чтобы помощник отвечал покупателям в этом сообществе. В кабинете он повторно не показывается и другим людям не виден. Пока действует донат НейроЯги, помощник отвечает. Когда срок закончится, он замолчит только в вашем сообществе.</p>'+
     '</details>';
@@ -856,7 +856,7 @@ function assistScheduleHtml(reply){
   const horizon = [3, 7, 14].indexOf(Number(plan.horizon)) >= 0 ? Number(plan.horizon) : 7;
   const places = Array.isArray(plan.places) && plan.places.length ? plan.places.join(', ') : 'На месте';
   return '<p class="now">Календарь записи</p>'+
-    '<p class="hint">Кнопка «Записаться» показывает дни и время по Москве. Покупатель выбирает день, время и место, затем подтверждает. Если место одно, шаг места пропускается. Поле «Как забронировать» дописывается к подтверждению.</p>'+
+    '<p class="hint">Кнопка «Записаться» показывает дни и время по Москве. Покупатель выбирает день, время и место, затем подтверждает. Если место одно, шаг места пропускается. После подтверждения запись остаётся в блоке «Записи» этого кабинета. Вам и покупателю приходит сообщение ВК, накануне после 18:00 и утром в день записи — напоминание.</p>'+
     '<label class="flabel">Рабочие дни</label><div>'+checks+'</div>'+
     '<label class="flabel" for="assistStart">Начало</label><select id="assistStart">'+assistHourOptions(plan.start == null ? 10 : plan.start, 0, 22)+'</select>'+
     '<label class="flabel" for="assistEnd">Конец, это время уже не записывают</label><select id="assistEnd">'+assistHourOptions(plan.end == null ? 19 : plan.end, 1, 23)+'</select>'+
@@ -876,13 +876,12 @@ function assistSection(title, body, open){
 function assistDesk(reply){
   const buttons = assistButtonList(reply);
   const handoff = !reply || reply.handoff !== false;
-  const about = assistSection('О деле',
-    '<label class="flabel" for="assistAbout">Что продаёте и какие условия</label>'+
-    '<textarea id="assistAbout" maxlength="1500" rows="4" placeholder="Что продаёте или какую услугу делаете. Цену пишите только если её можно называть.">'+esc(reply && reply.about || '')+'</textarea>'+
+  const about = assistSection('Первая фраза',
+    '<p class="hint">Кнопки «О деле» в чате нет. Первая фраза уходит, когда человек нажимает «Начать». Текст «Что продаёте» бот присылает, только если человек пишет вопрос своими словами и в вопросе есть слова из этого текста. Кнопки «Контакты», «Каталог», «Как заказать», «Оплата» и «Адрес» берут свои поля из разделов ниже.</p>'+
     '<label class="flabel" for="assistGreeting">Первая фраза в чате</label>'+
     '<textarea id="assistGreeting" maxlength="900" rows="3" placeholder="Здравствуйте. Выберите кнопку ниже.">'+esc(reply && reply.greeting || '')+'</textarea>'+
-    '<label class="flabel" for="assistGuide">Заметка для себя, покупатель её не видит как отдельный ответ</label>'+
-    '<textarea id="assistGuide" maxlength="900" rows="2" placeholder="Как вы сами ведёте заказ. Это не отправляется вместо карточки.">'+esc(reply && reply.guide || '')+'</textarea>',
+    '<label class="flabel" for="assistAbout">Что продаёте, если спросят своими словами</label>'+
+    '<textarea id="assistAbout" maxlength="1500" rows="4" placeholder="Что продаёте или какую услугу делаете. Цену пишите только если её можно называть.">'+esc(reply && reply.about || '')+'</textarea>',
   true);
   const contacts = assistSection('Контакты и адрес',
     '<label class="flabel" for="assistContacts">Контакты</label>'+
@@ -951,14 +950,14 @@ async function loadAssist(){
     : '<p class="now">Помощник пока нигде не отвечает. Подключите своё сообщество по шагам ниже.</p>';
   box.innerHTML = '<div class="card"><img src="cover.jpg" alt="НейроЯга" width="72" height="72" style="width:72px;height:72px;border-radius:16px;object-fit:cover">'+
     '<div class="kicker">Моё сообщество</div>'+
-    '<p class="hint">Одно приложение для всех сообществ. Здесь только ваше сообщество и ваши клиенты, чужие базы сюда не попадают.</p>'+
+    '<p class="hint">Одно приложение для всех сообществ. Здесь только ваше сообщество, ваши клиенты и ваши записи. Чужие базы сюда не попадают. Отдельное приложение скачивать не нужно.</p>'+
     status+assistHelpBox()+assistGuide()+
     '<label class="flabel" for="assistGroup">Номер сообщества</label><input id="assistGroup" inputmode="numeric" placeholder="Например 1234567" value="'+esc(community ? community.groupId : '')+'">'+
     '<label class="flabel" for="assistToken">Ключ сообщества</label><input id="assistToken" type="password" placeholder="'+(community && community.key ? 'Ключ уже сохранён, вставьте новый только для замены' : 'Ключ из настроек сообщества')+'" autocomplete="off">'+
     '<button class="btn" id="assistSave" type="button" style="margin-top:12px">Подключить</button>'+
     (community ? '<button class="btn ghost" id="assistDrop" type="button" style="margin-top:8px">Отключить</button>' : '')+
     '<p id="assistmsg" class="hint"></p>'+
-    (community ? assistDesk(community.reply) + assistBase(data.clients) : '<p class="hint">После подключения здесь можно заполнить карточку, смотреть своих клиентов и писать им.</p>')+
+    (community ? assistDesk(community.reply) + assistBookings(data.bookings, data.clients) + assistBase(data.clients) : '<p class="hint">После подключения здесь можно заполнить карточку, смотреть записи и своих клиентов.</p>')+
     '</div>';
   bind();
 }
@@ -1010,6 +1009,19 @@ async function askDeveloper(){
     if (msg) msg.textContent = error.message;
   }
   if (button) button.disabled = false;
+}
+function assistBookings(pack, clients){
+  const rows = (pack && pack.rows) || [];
+  const people = (clients && clients.people) || [];
+  const list = rows.length ? rows.map(function(item){
+    const person = people.find(function(one){ return Number(one.peerId) === Number(item.peerId); });
+    const who = person && person.name ? person.name : ('ВК '+item.peerId);
+    const bits = [item.when || item.day, item.slot, item.place, item.way, item.address].filter(Boolean);
+    return '<div class="note"><b>'+esc(bits.join(' · '))+'</b><div class="hint">'+esc(who)+' · <a href="https://vk.com/im?sel='+encodeURIComponent(item.peerId)+'">открыть диалог</a></div></div>';
+  }).join('') : '<p class="hint">'+(pack && pack.pending ? 'Список откроется, когда помощник будет на связи.' : 'Пока записей нет. Они появятся здесь, когда покупатель нажмёт «Записаться» и подтвердит время.')+'</p>';
+  return '<div class="desk"><p class="now">Записи</p>'+
+    '<p class="hint">Это записи только вашего сообщества. Список живёт здесь, в «Моё сообщество». Новая запись и напоминания приходят сообщениями ВК вам и покупателю: накануне после 18:00 и утром в день записи. Если вам сообщение не пришло, откройте диалог сообщества со своей страницы один раз.</p>'+
+    list+'</div>';
 }
 function assistBase(clients){
   const pack = clients || { total: 0, people: [] };

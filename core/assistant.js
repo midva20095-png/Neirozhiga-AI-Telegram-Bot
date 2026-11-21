@@ -581,6 +581,41 @@ async function loadListen(account, fetchImpl) {
     return String(result.problem || '').replace(/\s+/g, ' ').trim().slice(0, 300);
 }
 
+function publicBookings(list) {
+    if (!Array.isArray(list)) return [];
+    return list.slice(0, 80).map(item => ({
+        peerId: Number(item && item.peerId) || 0,
+        day: String(item && item.day || '').slice(0, 10),
+        when: bookingWhen(item && item.day),
+        slot: String(item && item.slot || '').slice(0, 8),
+        place: cleanBit(item && item.place, 40),
+        way: cleanBit(item && item.way, 40),
+        address: cleanBit(item && item.address, 200)
+    })).filter(item => item.peerId > 0 && /^\d{4}-\d{2}-\d{2}$/.test(item.day));
+}
+
+function bookingWhen(day) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || ''));
+    if (!match) return '';
+    const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+    const names = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+    return `${names[date.getUTCDay()]} ${Number(match[3])}.${match[2]}`;
+}
+
+function cleanBit(value, limit) {
+    return String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
+}
+
+async function loadBookings(account, fetchImpl) {
+    const userId = vkId(account);
+    const rows = userId ? await db.listAssistantCommunities(userId) : [];
+    const row = rows[0];
+    if (!row) return { rows: [] };
+    const result = await postAssistant('/bookings', { userId, groupId: Number(row.group_id) }, fetchImpl);
+    if (!result.ok) return { rows: [], pending: true };
+    return { rows: publicBookings(result.bookings) };
+}
+
 async function loadClients(account, fetchImpl) {
     const userId = vkId(account);
     const rows = userId ? await db.listAssistantCommunities(userId) : [];
@@ -685,6 +720,8 @@ module.exports = {
     askSetup,
     finishSetup,
     loadClients,
+    loadBookings,
+    publicBookings,
     pushSaved,
     loadListen,
     sendBroadcast,

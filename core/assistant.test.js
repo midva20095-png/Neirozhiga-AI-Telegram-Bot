@@ -79,6 +79,14 @@ test('фраза дона принимает ссылку и ответ и от�
     const people = assistant.publicPeople([{ peerId: 7, name: 'Анна', phone: '+7 999 111-22-33', note: 'хочу заказ', seen: 2, token: 'secret-token' }]);
     assert.equal(people[0].phone, '+79991112233');
     assert.equal(JSON.stringify(people).includes('secret-token'), false);
+    const bookings = assistant.publicBookings([
+        { peerId: 9, day: '2026-11-16', slot: '12:00', place: 'Зал', way: 'Доставка', address: 'улица Мира 4', token: 'secret-token' },
+        { peerId: 0, day: '2026-11-16', slot: '13:00', place: 'Чужое' }
+    ]);
+    assert.equal(bookings.length, 1);
+    assert.equal(bookings[0].when, 'Пн 16.11');
+    assert.equal(bookings[0].address, 'улица Мира 4');
+    assert.equal(JSON.stringify(bookings).includes('secret-token'), false);
     assert.equal(assistant.cleanReply({ buttons: [{ label: 'Сайт', link: 'http://example.com' }] }), null);
     assert.equal(assistant.cleanReply({ buttons: [{ label: 'Два', link: 'https://vk.com/a', text: 'и текст' }] }), null);
     assert.equal(JSON.stringify(reply).includes('secret'), false);
