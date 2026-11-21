@@ -255,6 +255,7 @@ async function initDB() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS vk_assistant_community_owner_idx ON vk_assistant_community (owner_id)`);
   await pool.query(`ALTER TABLE vk_assistant_community ADD COLUMN IF NOT EXISTS reply JSONB NOT NULL DEFAULT '{}'::jsonb`);
+  await pool.query(`ALTER TABLE vk_assistant_community ADD COLUMN IF NOT EXISTS purge_at TIMESTAMP`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS vk_assistant_setup (
       user_id BIGINT PRIMARY KEY,
@@ -470,12 +471,12 @@ async function listAssistantCommunities(ownerId) {
   const id = ownerId == null ? 0 : assistantPerson(ownerId);
   const res = id
     ? await pool.query(
-      `SELECT group_id, owner_id, title, token, sync_state, sync_error, reply, updated_at
+      `SELECT group_id, owner_id, title, token, sync_state, sync_error, reply, purge_at, updated_at
        FROM vk_assistant_community WHERE owner_id = $1 ORDER BY updated_at DESC`,
       [id]
     )
     : await pool.query(
-      `SELECT group_id, owner_id, title, token, sync_state, sync_error, reply, updated_at
+      `SELECT group_id, owner_id, title, token, sync_state, sync_error, reply, purge_at, updated_at
        FROM vk_assistant_community ORDER BY updated_at DESC`
     );
   return res.rows;
@@ -578,6 +579,40 @@ async function closeAssistantSetup(userId) {
     [id]
   );
   return res.rows[0] || null;
+}
+
+async function scheduleAssistantPurge(ownerId, at) {
+  const id = assistantPerson(ownerId);
+  if (!id || !(at instanceof Date) || Number.isNaN(at.getTime())) return;
+  await pool.query(
+    `UPDATE vk_assistant_community
+     SET purge_at = $2
+     WHERE owner_id = $1 AND purge_at IS NULL`,
+    [id, at]
+  );
+}
+
+async function clearAssistantPurge(ownerId) {
+  const id = assistantPerson(ownerId);
+  if (!id) return;
+  await pool.query('UPDATE vk_assistant_community SET purge_at = NULL WHERE owner_id = $1', [id]);
+}
+
+async function clearAssistantPurgeGroup(groupId) {
+  const id = String(groupId || '').replace(/\D/g, '');
+  if (!id) return;
+  await pool.query('UPDATE vk_assistant_community SET purge_at = NULL WHERE group_id = $1', [id]);
+}
+
+async function listDueAssistantCommunities(now) {
+  const at = now instanceof Date ? now : new Date();
+  const res = await pool.query(
+    `SELECT group_id, owner_id, purge_at
+     FROM vk_assistant_community
+     WHERE purge_at IS NOT NULL AND purge_at <= $1`,
+    [at]
+  );
+  return res.rows;
 }
 
 async function deleteAssistantCommunity(groupId) {
@@ -1448,6 +1483,10 @@ module.exports = {
   markAssistantCommunity,
   markAssistantOwner,
   deleteAssistantCommunity,
+  scheduleAssistantPurge,
+  clearAssistantPurge,
+  clearAssistantPurgeGroup,
+  listDueAssistantCommunities,
   saveAssistantSetup,
   listAssistantSetups,
   closeAssistantSetup,

@@ -1,6 +1,7 @@
 const db = require('./db');
 
 const JOIN_URL = 'https://vk.com/donut/club214554778';
+const HOLD_MS = 10 * 24 * 60 * 60 * 1000;
 
 function vkId(account) {
     const id = Number(account);
@@ -292,6 +293,7 @@ function replayPlan(dons, communities) {
 async function replayKnown(fetchImpl) {
     const cfg = assistantConfig();
     if (!cfg.url || !cfg.secret) return { ok: false, sent: 0 };
+    await sweepCommunities(fetchImpl);
     const dons = await db.listAssistantDons();
     const communities = await db.listAssistantCommunities();
     const calls = replayPlan(dons, communities);
@@ -330,11 +332,13 @@ async function applyEvent(kind, userId, name, fetchImpl) {
     const sent = await tellAccess(id, active, fetchImpl);
     const communities = await db.listAssistantCommunities(id);
     if (active) {
+        await db.clearAssistantPurge(id);
         for (const item of communities) {
             const pushed = item.token ? await tellCommunity(item, fetchImpl) : sent;
             await db.markAssistantCommunity(item.group_id, pushed.ok ? 'on' : 'fail', pushed.error || '');
         }
     } else if (communities.length) {
+        await db.scheduleAssistantPurge(id, new Date(Date.now() + HOLD_MS));
         await db.markAssistantOwner(id, sent.ok ? 'off' : 'fail', sent.error || '');
     }
     return { changed: true, active, sent };
@@ -450,6 +454,44 @@ async function disconnectCommunity(account, groupId, fetchImpl) {
     if (!row) return { ok: false, error: 'Это сообщество не подключено.' };
     await postAssistant('/community/remove', { userId: ownerId, groupId: Number(communityId) }, fetchImpl);
     await db.deleteAssistantCommunity(communityId);
+    return { ok: true };
+}
+
+async function sweepCommunities(fetchImpl) {
+    let due = [];
+    try {
+        due = await db.listDueAssistantCommunities(new Date());
+    } catch {
+        return;
+    }
+    for (const row of due) {
+        const ownerId = Number(row.owner_id);
+        const don = await db.getAssistantDon(ownerId);
+        if (don && don.active) {
+            await db.clearAssistantPurgeGroup(row.group_id);
+            continue;
+        }
+        try {
+            await postAssistant('/community/purge', {
+                userId: ownerId,
+                groupId: Number(row.group_id)
+            }, fetchImpl);
+        } catch {
+            // Помощник сотрёт ту же базу своим таймером.
+        }
+        await db.deleteAssistantCommunity(row.group_id);
+    }
+}
+
+async function wipeCommunity(groupId, fetchImpl) {
+    const rows = await db.listAssistantCommunities();
+    const row = rows.find(item => String(item.group_id) === String(groupId || '').replace(/\D/g, ''));
+    if (!row) return { ok: false, error: 'Сообщество не найдено.' };
+    await postAssistant('/community/purge', {
+        userId: Number(row.owner_id),
+        groupId: Number(row.group_id)
+    }, fetchImpl);
+    await db.deleteAssistantCommunity(row.group_id);
     return { ok: true };
 }
 
@@ -608,6 +650,7 @@ async function adminList(fetchImpl) {
                 reply: cleanReply(item.reply) || { greeting: '', buttons: [] },
                 clients: Number(counts[String(item.group_id)]) || 0,
                 error: item.sync_error || '',
+                purgeAt: item.purge_at || null,
                 updatedAt: item.updated_at
             }))
         })),
@@ -622,6 +665,7 @@ async function adminList(fetchImpl) {
 
 module.exports = {
     JOIN_URL,
+    HOLD_MS,
     vkId,
     accessChange,
     maskToken,
@@ -647,6 +691,7 @@ module.exports = {
     publicPeople,
     disconnectCommunity,
     adminDrop,
+    wipeCommunity,
     adminList,
     syncLabel
 };

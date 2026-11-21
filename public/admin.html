@@ -27,6 +27,7 @@ button{cursor:pointer;border:0;border-radius:12px;padding:10px 14px;font-weight:
 .topicadd input{flex:1;min-width:0;margin:0}
 .topicadd button{flex:0 0 auto;min-width:0}
 .danger{background:transparent;border:1px solid rgba(255,80,120,.5);color:#ffb3c7}
+.hot{background:linear-gradient(135deg,#ffb020,#ff2d95);color:#1a0b14;box-shadow:0 0 0 3px rgba(255,176,32,.55)}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
 .row>*{flex:1;min-width:120px}
 table{width:100%;border-collapse:collapse;font-size:14px}
@@ -456,8 +457,8 @@ async function loadAssist(){
     (dons.length ? dons.map(item => {
       const list = item.communities || [];
       const groups = list.length ? list.map(group =>
-        '<div class="note">'+esc(group.title)+' · '+esc(group.groupId)+' · ключ '+esc(group.token || 'скрыт')+' · '+esc(group.syncLabel)+' · клиентов '+esc(group.clients || 0)+(group.desk ? ' · '+esc(group.desk) : '')+(group.error ? ' · '+esc(group.error) : '')+
-        '<div class="row"><button type="button" class="ghost" onclick="dropAssist(\''+esc(group.groupId)+'\')">Отключить сообщество</button></div></div>'
+        '<div class="note">'+esc(group.title)+' · '+esc(group.groupId)+' · ключ '+esc(group.token || 'скрыт')+' · '+esc(group.syncLabel)+' · клиентов '+esc(group.clients || 0)+(group.desk ? ' · '+esc(group.desk) : '')+(group.error ? ' · '+esc(group.error) : '')+(group.purgeAt ? ' · если подписку не продлить, данные сотрутся '+esc(purgeWhen(group.purgeAt)) : '')+
+        '<div class="row"><button type="button" class="ghost" onclick="dropAssist(\''+esc(group.groupId)+'\')">Отключить сообщество</button><button type="button" class="hot" onclick="wipeAssist(\''+esc(group.groupId)+'\')">Удалить данные</button></div></div>'
       ).join('') : '<p class="note">Сообщество ещё не подключено.</p>';
       return '<div class="stat" style="margin-top:8px"><div class="n" style="font-size:16px">'+esc(item.name)+'</div>'+
         '<div class="l">ВК '+esc(item.userId)+' · '+(item.active ? '<span class="ok">помощник включён</span>' : '<span class="bad">помощник выключен</span>')+'</div>'+
@@ -475,6 +476,17 @@ async function syncAssist(){
 }
 async function setAssist(userId, active){
   const data = await api('/api/admin/vk/assistant/active', { method:'POST', body: JSON.stringify({ userId: userId, active: active }) });
+  if (!data.ok) alert(data.error || 'Не получилось');
+  loadAssist();
+}
+function purgeWhen(value){
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', day:'numeric', month:'short' });
+}
+async function wipeAssist(groupId){
+  if (!confirm('Удалить клиентов, записи и карточку этого сообщества? Чужие сообщества не затрагиваются.')) return;
+  const data = await api('/api/admin/vk/assistant/wipe', { method:'POST', body: JSON.stringify({ groupId: groupId }) });
   if (!data.ok) alert(data.error || 'Не получилось');
   loadAssist();
 }

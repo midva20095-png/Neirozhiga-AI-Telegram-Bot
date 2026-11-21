@@ -1047,6 +1047,16 @@ function startWebApp() {
         }
     });
 
+    app.post('/api/admin/vk/assistant/wipe', requireAdmin, async (req, res) => {
+        try {
+            const result = await assistant.wipeCommunity(req.body && req.body.groupId);
+            if (!result.ok) return res.status(400).json(result);
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Данные сообщества не удалились.' });
+        }
+    });
+
     app.post('/api/admin/vk/assistant/drop', requireAdmin, async (req, res) => {
         try {
             const result = await assistant.adminDrop(req.body && req.body.groupId);
