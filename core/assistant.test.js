@@ -56,6 +56,21 @@ test('фраза дона принимает ссылку и ответ и от�
     assert.equal(JSON.stringify(reply).includes('secret'), false);
 });
 
+test('после перезапуска помощника касса снова шлёт живых донов и их сообщества', () => {
+    const calls = assistant.replayPlan(
+        [{ user_id: 5, active: true }, { user_id: 6, active: false }],
+        [{ owner_id: 5, group_id: 50, token: 'community-token-value', title: '', reply: { greeting: 'Здравствуйте', about: 'Торты', guide: '', buttons: [] } }, { owner_id: 6, group_id: 60, token: 'other-token-value', title: 'Чужое' }]
+    );
+    assert.equal(calls.length, 3);
+    assert.equal(calls[0].body.active, true);
+    assert.equal(calls[1].path, '/community');
+    assert.equal(calls[1].body.groupId, 50);
+    assert.equal(calls[1].body.title, 'Сообщество 50');
+    assert.equal(calls[1].body.reply.about, 'Торты');
+    assert.equal(calls[2].body.active, false);
+    assert.equal(calls.some(call => call.body.groupId === 60), false);
+});
+
 test('без адреса второго бота здоровье показывает, что он не подключён', async () => {
     const health = await assistant.readHealth(async () => { throw new Error('нет сети'); }, {});
     assert.equal(health.configured, false);

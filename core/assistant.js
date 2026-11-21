@@ -185,6 +185,49 @@ async function cabinet(account) {
     };
 }
 
+function replayPlan(dons, communities) {
+    const calls = [];
+    (Array.isArray(dons) ? dons : []).forEach(don => {
+        const id = vkId(don && don.user_id);
+        if (!id) return;
+        calls.push({ path: '/access', body: { userId: id, active: !!(don && don.active) } });
+        if (!don.active) return;
+        (Array.isArray(communities) ? communities : []).forEach(item => {
+            if (!item || Number(item.owner_id) !== id || !String(item.token || '').trim()) return;
+            const reply = cleanReply(item.reply) || { greeting: '', about: '', guide: '', buttons: [] };
+            calls.push({
+                path: '/community',
+                body: {
+                    userId: id,
+                    groupId: Number(item.group_id),
+                    token: item.token,
+                    title: item.title || `Сообщество ${item.group_id}`,
+                    reply
+                }
+            });
+        });
+    });
+    return calls;
+}
+
+async function replayKnown(fetchImpl) {
+    const cfg = assistantConfig();
+    if (!cfg.url || !cfg.secret) return { ok: false, sent: 0 };
+    const dons = await db.listAssistantDons();
+    const communities = await db.listAssistantCommunities();
+    const calls = replayPlan(dons, communities);
+    let sent = 0;
+    for (const call of calls) {
+        const result = await postAssistant(call.path, call.body, fetchImpl);
+        if (!result.ok) continue;
+        sent += 1;
+        if (call.path === '/community') {
+            await db.markAssistantCommunity(call.body.groupId, 'on', '');
+        }
+    }
+    return { ok: true, sent };
+}
+
 async function tellAccess(userId, active, fetchImpl) {
     return postAssistant('/access', { userId: Number(userId), active: !!active }, fetchImpl);
 }
@@ -374,6 +417,8 @@ module.exports = {
     cleanReply,
     assistantConfig,
     planLive,
+    replayPlan,
+    replayKnown,
     postAssistant,
     readHealth,
     cabinet,
