@@ -146,17 +146,50 @@
     return out;
   }
 
+  function sectionName(value) {
+    const name = String(value || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (!name || /^(назад|оформить заказ|товары|услуги|записаться|каталог)$/i.test(name)) return '';
+    return name;
+  }
+
+  function pushProduct(out, seen, item, section) {
+    const clean = serviceItem(item);
+    const place = sectionName(section);
+    const key = clean && (place.toLowerCase() + '|' + clean.name.toLowerCase());
+    if (!clean || seen[key] || out.length >= 64) return false;
+    seen[key] = true;
+    const row = { name: clean.name, price: clean.price, link: clean.link };
+    if (place) row.section = place;
+    out.push(row);
+    return true;
+  }
+
   function cleanProducts(value) {
     if (!Array.isArray(value)) return [];
     const out = [];
     const seen = {};
-    for (var index = 0; index < value.length; index += 1) {
-      const clean = serviceItem(value[index]);
-      const key = clean && clean.name.toLowerCase();
-      if (!clean || seen[key]) continue;
-      seen[key] = true;
-      out.push({ name: clean.name, price: clean.price, link: clean.link });
-      if (out.length >= 8) break;
+    var nested = false;
+    for (var check = 0; check < value.length; check += 1) {
+      if (value[check] && Array.isArray(value[check].items)) nested = true;
+    }
+    if (!nested) {
+      for (var index = 0; index < value.length; index += 1) pushProduct(out, seen, value[index], value[index] && value[index].section);
+      return out;
+    }
+    var sections = 0;
+    for (var blockIndex = 0; blockIndex < value.length; blockIndex += 1) {
+      if (sections >= 8) break;
+      const block = value[blockIndex];
+      const items = block && Array.isArray(block.items) ? block.items : [];
+      var count = 0;
+      var used = false;
+      for (var itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
+        if (count >= 8) break;
+        if (!pushProduct(out, seen, items[itemIndex], block && (block.name || block.title))) continue;
+        count += 1;
+        used = true;
+      }
+      if (used) sections += 1;
     }
     return out;
   }

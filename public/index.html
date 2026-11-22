@@ -121,11 +121,13 @@ html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-
 button,textarea,input,select{font:inherit;color:inherit}
 .app{max-width:620px;margin:0 auto;padding:12px 12px calc(84px + env(safe-area-inset-bottom))}
 .srow{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(72px,.6fr) minmax(0,1.2fr) auto;gap:6px;margin:6px 0;align-items:center}
+.psec{margin:10px 0;padding:10px;border:1px solid var(--line);border-radius:14px}
+.prow{grid-template-columns:minmax(0,1.4fr) minmax(72px,.5fr) minmax(0,1.1fr)}
 .srow input{width:100%;border-radius:10px;border:1px solid var(--line);background:#1c1233;padding:8px}
 .srow label{font-size:12px;color:var(--mut);white-space:nowrap}
 .astep{margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
 .astep:first-child{border-top:0;margin-top:0}
-@media(max-width:640px){.srow{grid-template-columns:1fr 1fr}.srow input[data-slink]{grid-column:1 / -1}}
+@media(max-width:640px){.srow{grid-template-columns:1fr 1fr}.srow input[data-slink],.srow input[data-plink]{grid-column:1 / -1}}
 .top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .logo{font-family:Unbounded,sans-serif;font-weight:700;font-size:18px;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;flex:1}
 .bal{font-weight:800;border:1px solid var(--line);border-radius:12px;padding:6px 10px;white-space:nowrap}
@@ -883,7 +885,7 @@ function assistGuide(opened){
     '<li>На этой же странице нажмите «Создать ключ». В правах отметьте «Сообщения», «Стена», «Товары» и, если есть, «Управление». Ключ показывается один раз: скопируйте его сразу. Право «Управление» нужно, чтобы помощник сам включил кнопки и события.</li>'+
     '<li>Номер сообщества — цифры в адресе. У страницы vk.com/club1234567 номер 1234567. Тот же номер есть в Управление → Настройки.</li>'+
     '<li>Вставьте номер и ключ в блок «Подключить сообщество» и нажмите «Подключить».</li>'+
-    '<li>Карточка идёт по шагам. Шаг 2 — цены услуг. Шаг 3 — цены товаров: бот сам витрину не ищет, цену и ссылку пишете вы. «Каталог» только открывает ссылку. Пустое поле помощник не выдумывает.</li>'+
+    '<li>Карточка идёт по шагам. Шаг 2 — цены услуг. Шаг 3 — разделы каталога: сначала название раздела, внутри товары и цены. Клиент видит кнопки разделов, а не все товары сразу. Пустое поле помощник не выдумывает.</li>'+
     '<li>Люди, которые сами написали в сообщения, попадают во вкладку «Клиенты». Рассылка уходит только им. Заказы и записи лежат на своих вкладках и приходят сообщением вам и покупателю.</li>'+
     '</ol>'+
     '<p class="hint">Ключ нужен, чтобы помощник отвечал покупателям в этом сообществе. В кабинете он повторно не показывается и другим людям не виден. Пока действует донат НейроЯги, помощник отвечает. Когда срок закончится, он замолчит только в вашем сообществе.</p>'+
@@ -1037,38 +1039,81 @@ function fillAssistServices(list){
 }
 function assistProductRow(item){
   const row = item || { name: '', price: '', link: '' };
-  return '<div class="srow" data-prow>'+
+  return '<div class="srow prow" data-prow>'+
     '<input data-pname maxlength="40" placeholder="Название товара" value="'+esc(row.name || '')+'">'+
     '<input data-pprice inputmode="numeric" maxlength="7" placeholder="Цена, ₽" value="'+esc(row.price ? String(row.price) : '')+'">'+
     '<input data-plink maxlength="300" placeholder="https://..." value="'+esc(row.link || '')+'">'+
     '</div>';
 }
+function assistProductGroups(products){
+  const items = Array.isArray(products) ? products : [];
+  if (items.length && items[0] && Array.isArray(items[0].items)) {
+    return items.slice(0, 8).map(function(block){
+      return {
+        name: block && block.name ? block.name : '',
+        items: assistServiceItems(block && block.items).slice(0, 8)
+      };
+    });
+  }
+  const groups = [];
+  const index = {};
+  items.forEach(function(item){
+    if (!item || typeof item === 'string') return;
+    const name = item.section || '';
+    if (index[name] == null) {
+      index[name] = groups.length;
+      groups.push({ name: name, items: [] });
+    }
+    groups[index[name]].items.push(item);
+  });
+  return groups.length ? groups.slice(0, 8) : [{ name: '', items: [] }];
+}
+function assistSectionBlock(section){
+  const items = section && section.items && section.items.length ? section.items.slice(0, 8) : [{ name: '', price: '', link: '' }];
+  return '<div class="psec" data-psec>'+
+    '<label class="flabel">Раздел</label>'+
+    '<input data-section maxlength="40" placeholder="Например: Торты" value="'+esc(section && section.name || '')+'">'+
+    '<div class="prows">'+items.map(assistProductRow).join('')+'</div>'+
+    (items.length < 8 ? '<button type="button" class="btn ghost" data-padd style="margin-top:8px">Добавить товар</button>' : '')+
+    '</div>';
+}
 function assistProductEditor(reply){
-  const items = assistServiceItems(reply && reply.products);
-  const rows = (items.length ? items : [{ name: '', price: '', link: '' }]).slice(0, 8).map(assistProductRow).join('');
-  return '<p class="hint">Здесь задаётся цена товара. Бот витрину ВК сам не открывает и не ищет. Клиент нажмёт «Товары», увидит эти кнопки и сумму. «Каталог» — отдельная ссылка на витрину.</p>'+
-    '<div id="assistProductRows">'+rows+'</div>'+
-    (items.length < 8 ? '<button class="btn ghost" id="assistProductAdd" type="button" style="margin-top:8px">Добавить товар</button>' : '');
+  const groups = assistProductGroups(reply && reply.products);
+  return '<p class="hint">Сначала раздел, внутри него товары и цены. Клиент жмёт «Товары» и видит кнопки разделов, а не всю витрину сразу. Внутри раздела — кнопки с ценами и сумма. Если раздел один, бот сразу открывает его товары. «Каталог» по-прежнему только ссылка на витрину ВК.</p>'+
+    '<div id="assistSections">'+groups.map(assistSectionBlock).join('')+'</div>'+
+    (groups.length < 8 ? '<button class="btn ghost" id="assistSectionAdd" type="button" style="margin-top:8px">Добавить раздел</button>' : '');
 }
 function assistProductValue(){
   const products = [];
-  document.querySelectorAll('[data-prow]').forEach(function(row){
-    const name = (row.querySelector('[data-pname]') || {}).value || '';
-    if (!String(name).trim()) return;
-    products.push({
-      name: name,
-      price: (row.querySelector('[data-pprice]') || {}).value || '',
-      link: (row.querySelector('[data-plink]') || {}).value || ''
+  document.querySelectorAll('[data-psec]').forEach(function(section){
+    const place = (section.querySelector('[data-section]') || {}).value || '';
+    section.querySelectorAll('[data-prow]').forEach(function(row){
+      const name = (row.querySelector('[data-pname]') || {}).value || '';
+      if (!String(name).trim()) return;
+      const item = {
+        name: name,
+        price: (row.querySelector('[data-pprice]') || {}).value || '',
+        link: (row.querySelector('[data-plink]') || {}).value || ''
+      };
+      if (String(place).trim()) item.section = place;
+      products.push(item);
     });
   });
   return products;
 }
-function addAssistProduct(){
-  const box = document.getElementById('assistProductRows');
+function addAssistProduct(button){
+  const section = button && button.closest ? button.closest('[data-psec]') : null;
+  const box = section && section.querySelector('.prows');
   if (!box || box.querySelectorAll('[data-prow]').length >= 8) return;
   box.insertAdjacentHTML('beforeend', assistProductRow({ name: '', price: '', link: '' }));
-  if (box.querySelectorAll('[data-prow]').length >= 8) {
-    const add = document.getElementById('assistProductAdd');
+  if (box.querySelectorAll('[data-prow]').length >= 8) button.remove();
+}
+function addAssistSection(){
+  const box = document.getElementById('assistSections');
+  if (!box || box.querySelectorAll('[data-psec]').length >= 8) return;
+  box.insertAdjacentHTML('beforeend', assistSectionBlock({ name: '', items: [] }));
+  if (box.querySelectorAll('[data-psec]').length >= 8) {
+    const add = document.getElementById('assistSectionAdd');
     if (add) add.remove();
   }
   bind();
@@ -1131,7 +1176,7 @@ function assistDesk(reply, groupId){
   const parts = [
     ['scenario', '1. Направление', assistScenarioHtml(reply)],
     ['prices', '2. Цены услуг', assistServiceEditor(reply)],
-    ['products', '3. Цены товаров', assistProductEditor(reply)],
+    ['products', '3. Разделы каталога', assistProductEditor(reply)],
     ['about', '4. Фраза',
       '<p class="hint">Первая фраза уходит клиенту по кнопке «Начать». Остальной текст клиент видит только из заполненных полей. Пустое поле бот не выдумывает и не подставляет чужой пример.</p>'+
       '<label class="flabel" for="assistGreeting">Первая фраза клиенту</label>'+
@@ -1150,7 +1195,7 @@ function assistDesk(reply, groupId){
       assistArea('assistChoices', 1500, 6, 'Название: первый, второй, третий', reply && reply.choices)+
       '<p class="hint">Клиент увидит название и нажмёт один вариант. Одна строка подходит и товару, и услуге. Пустое поле клиенту не показывается.</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistOrderOn" type="checkbox"'+(!reply || reply.orderOn !== false ? ' checked' : '')+'> Принимать заказ</label>'+
-      '<p class="hint">Цены товаров пишутся на шаге 3. Бот витрину сообщества сам не ищет. Кнопка «Каталог» только открывает ссылку. Заказ сохраняет выбранные товары, телефон и получение.</p>'+
+      '<p class="hint">Разделы и цены пишутся на шаге 3. Бот витрину сообщества сам не ищет. Кнопка «Каталог» только открывает ссылку. Заказ сохраняет выбранные товары, телефон и получение.</p>'+
       '<label class="flabel" for="assistPayment">Как оплатить</label>'+
       assistArea('assistPayment', 1500, 5, 'Карта, перевод или наличные. Не пишите то, чего нет.', reply && reply.payment)],
     ['road', '7. Доставка',
@@ -1170,7 +1215,7 @@ function assistDesk(reply, groupId){
       assistArea('assistBooking', 2500, 8, 'Предоплата, что взять с собой. Если правил нет, оставьте пустым.', reply && reply.booking)+
       assistScheduleHtml(reply)],
     ['keys', '9. Кнопки',
-      '<p class="hint">Кнопка — это либо ссылка https, либо ваш текст. Поиска товаров ботом нет: цены задаются на шаге 3, «Каталог» только открывает ссылку. Кнопку «Записаться» убирает галочка на шаге 8.</p>'+
+      '<p class="hint">Кнопка — это либо ссылка https, либо ваш текст. Разделы каталога задаются на шаге 3, «Каталог» только открывает ссылку. Кнопку «Записаться» убирает галочка на шаге 8.</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistHandoff" type="checkbox"'+(handoff ? ' checked' : '')+'> Кнопка «Администратор»</label>'+
       '<p class="hint">Покупатель жмёт её, вам приходит сообщение ВК, а в списке клиентов появляется пометка «Ждёт администратора». Пока вы отвечаете, помощник молчит. Покупатель возвращает меню кнопкой «К помощнику».</p>'+
       '<div id="assistButtons">'+buttons.map(assistButtonHtml).join('')+'</div>'+
@@ -1180,7 +1225,7 @@ function assistDesk(reply, groupId){
   const chips = '<div class="aslices">'+parts.map(function(part){
     return '<button type="button" data-slice="'+part[0]+'" class="'+(assistSlice===part[0]?'on':'')+'">'+part[1]+'</button>';
   }).join('')+'</div>';
-  return '<div class="desk"><p class="hint">Идите по шагам сверху вниз. Цены услуг — шаг 2, цены товаров — шаг 3. Бот сам товары сообщества не ищет.</p>'+
+  return '<div class="desk"><p class="hint">Идите по шагам сверху вниз. Цены услуг — шаг 2, разделы каталога — шаг 3. Бот сам товары сообщества не ищет.</p>'+
     chips+parts.map(function(part){ return '<section class="astep" id="assist-step-'+part[0]+'" data-aslice="'+part[0]+'"><p class="now">Шаг '+part[1]+'</p>'+part[2]+'</section>'; }).join('')+
     '<button class="btn" id="assistDesk" type="button" style="margin-top:12px">Сохранить карточку</button>'+
     '<p class="hint">Одна кнопка сохраняет все шаги. Пустая цена клиенту не называется.</p>'+
@@ -1210,12 +1255,17 @@ function assistQuick(data){
   const goods = assistServiceItems(reply && reply.products);
   const pricedCount = list.filter(function(item){ return assistMoney(item.price) > 0; }).length;
   const goodCount = goods.filter(function(item){ return assistMoney(item.price) > 0; }).length;
+  const sectionNames = {};
+  (Array.isArray(reply && reply.products) ? reply.products : []).forEach(function(item){
+    if (item && item.section) sectionNames[item.section] = true;
+  });
+  const sectionCount = Object.keys(sectionNames).length;
   const saleNote = !list.length ? 'не заданы' : (pricedCount ? pricedCount + ' с ценой' : 'цены пустые');
-  const goodNote = !goods.length ? 'не заданы' : (goodCount ? goodCount + ' с ценой' : 'цены пустые');
+  const goodNote = !goods.length ? 'не заданы' : (sectionCount > 1 ? 'разделов: ' + sectionCount : (goodCount ? goodCount + ' с ценой' : 'цены пустые'));
   const items = [
     ['card','1. Направление','scenario','Кто вы'],
     ['card','2. Цены услуг','prices',saleNote],
-    ['card','3. Цены товаров','products',goodNote],
+    ['card','3. Разделы каталога','products',goodNote],
     ['card','4. Фраза','about','Первое сообщение'],
     ['card','5. Контакты','contacts','Телефон и адрес'],
     ['card','6. Заказ','order','Как купить'],
@@ -2117,8 +2167,11 @@ function bind(){
   if (assistAdd) assistAdd.onclick = addAssistButton;
   const assistServiceAdd = document.getElementById('assistServiceAdd');
   if (assistServiceAdd) assistServiceAdd.onclick = addAssistService;
-  const assistProductAdd = document.getElementById('assistProductAdd');
-  if (assistProductAdd) assistProductAdd.onclick = addAssistProduct;
+  const assistSectionAdd = document.getElementById('assistSectionAdd');
+  if (assistSectionAdd) assistSectionAdd.onclick = addAssistSection;
+  document.querySelectorAll('[data-padd]').forEach(function(button){
+    button.onclick = function(){ addAssistProduct(button); };
+  });
   const assistReset = document.getElementById('assistReset');
   if (assistReset) assistReset.onclick = resetAssistButtons;
   const assistMailSend = document.getElementById('assistMailSend');
