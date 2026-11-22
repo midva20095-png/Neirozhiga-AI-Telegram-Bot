@@ -264,6 +264,15 @@ body.vkapp .tabbar button.on{background:linear-gradient(135deg,#7c3aed,#4c1d95);
 .cabbal{font-size:32px;font-weight:800;line-height:1.1;margin:4px 0 6px}
 .cabrow{display:flex;width:100%;text-align:left;align-items:center;justify-content:space-between;background:#1c1233;border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:8px;font-weight:800}
 .cabrow:after{content:'›';color:var(--mut);font-size:22px}
+.atabs,.aslices{display:flex;gap:6px;overflow-x:auto;margin:10px 0;padding:8px 0}
+.atabs{position:sticky;top:0;z-index:3;background:var(--card)}
+.atabs button,.aslices button{flex:0 0 auto;border:1px solid var(--line);background:#1c1233;color:var(--mut);border-radius:999px;padding:8px 12px;font-weight:800;font-size:13px}
+.atabs button.on,.aslices button.on{color:#fff;border-color:transparent;background:linear-gradient(135deg,#7c3aed,#ff2d95)}
+.aquick{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0 4px}
+.acab{display:block;width:100%;text-align:left;background:#1c1233;border:1px solid var(--line);border-radius:16px;padding:12px;font-weight:800}
+.acab b{display:block}
+.acab span{display:block;margin-top:4px;color:var(--mut);font-size:12px;font-weight:600}
+.apanel[hidden],.aslice[hidden]{display:none}
 </style>
 </head>
 <body style="background:#0b0614;margin:0">
@@ -832,8 +841,10 @@ function viewMenu(){
     '<button type="button" id="door-sub" class="sub'+(mail?' on':'')+'">'+(mail?'Вы подписаны':'Подписаться')+'</button>'+
     gear+setup+'<p id="submsg" class="hint"></p></div>';
 }
-function assistGuide(){
-  return '<details class="stepsbox" open>'+
+let assistPane = 'home';
+let assistSlice = 'scenario';
+function assistGuide(opened){
+  return '<details class="stepsbox"'+(opened ? ' open' : '')+'>'+
     '<summary>Как подключить сообщество</summary>'+
     '<ol class="steps">'+
     '<li>Откройте своё сообщество во ВКонтакте. Подключить его можете вы, если вы администратор этого сообщества.</li>'+
@@ -842,9 +853,9 @@ function assistGuide(){
     '<li>Управление → Работа с API → Long Poll API. Включите Long Poll, поставьте версию 5.199 и отметьте «Входящее сообщение» и «Новый комментарий к записи». Комментарий под постом отвечает по карточке и даёт ссылку на товар. Свою клавиатуру под пост ВК не ставит.</li>'+
     '<li>На этой же странице нажмите «Создать ключ». В правах отметьте «Сообщения», «Стена», «Товары» и, если есть, «Управление». Ключ показывается один раз: скопируйте его сразу. Право «Управление» нужно, чтобы помощник сам включил кнопки и события.</li>'+
     '<li>Номер сообщества — цифры в адресе. У страницы vk.com/club1234567 номер 1234567. Тот же номер есть в Управление → Настройки.</li>'+
-    '<li>Вставьте номер и ключ в поля ниже и нажмите «Подключить».</li>'+
-    '<li>Ниже разделы карточки: первая фраза, контакты, заказ, доставка, запись и кнопки. Пустое поле помощник не выдумывает. Под постом ВК клавиатуры нет: комментарий даёт ссылку на чат и на каталог товаров.</li>'+
-    '<li>Люди, которые сами написали в сообщения, попадают в базу этого сообщества. Рассылка уходит только им. Записи смотрите в блоке «Записи»: они же приходят сообщением вам и покупателю.</li>'+
+    '<li>Вставьте номер и ключ в блок «Подключить сообщество» и нажмите «Подключить».</li>'+
+    '<li>Карточка открывается своей вкладкой: сценарий, фраза, контакты, заказ, доставка, запись и кнопки. Пустое поле помощник не выдумывает. Под постом ВК клавиатуры нет: комментарий даёт ссылку на чат и на каталог товаров.</li>'+
+    '<li>Люди, которые сами написали в сообщения, попадают во вкладку «Клиенты». Рассылка уходит только им. Заказы и записи лежат на своих вкладках и приходят сообщением вам и покупателю.</li>'+
     '</ol>'+
     '<p class="hint">Ключ нужен, чтобы помощник отвечал покупателям в этом сообществе. В кабинете он повторно не показывается и другим людям не виден. Пока действует донат НейроЯги, помощник отвечает. Когда срок закончится, он замолчит только в вашем сообществе.</p>'+
     '</details>';
@@ -877,11 +888,9 @@ function assistButtonList(reply){
 }
 function assistScenarioHtml(reply){
   const mode = reply && reply.scenario === 'info' ? 'info' : 'funnel';
-  return assistSection('Сценарий',
-    '<p class="hint">«Только информация» даёт контакты, каталог, заказ, оплату и адрес. «Запись и заказ» добавляет календарь. Кнопки появляются в чате после включения «Возможностей ботов».</p>'+
+  return '<p class="hint">«Только информация» даёт контакты, каталог, заказ, оплату и адрес. «Запись и заказ» добавляет календарь. Кнопки появляются в чате после включения «Возможностей ботов».</p>'+
     '<label style="display:block;margin:6px 0"><input type="radio" name="assistScenario" value="funnel"'+(mode==='funnel'?' checked':'')+'> Запись и заказ</label>'+
-    '<label style="display:block;margin:6px 0"><input type="radio" name="assistScenario" value="info"'+(mode==='info'?' checked':'')+'> Только информация</label>',
-  true);
+    '<label style="display:block;margin:6px 0"><input type="radio" name="assistScenario" value="info"'+(mode==='info'?' checked':'')+'> Только информация</label>';
 }
 function assistHourOptions(selected, from, to){
   let html = '';
@@ -921,54 +930,129 @@ function assistScheduleHtml(reply){
     '<input id="assistSeats" inputmode="numeric" maxlength="2" placeholder="Пусто — без ограничений" value="'+esc(seats)+'">'+
     '<p class="hint">Сколько записей принять в один день. Пустое поле не ограничивает: клиент видит свободные дни и места, а занять можно всё, что не занято по времени.</p>';
 }
-function assistSection(title, body, open){
-  return '<details class="stepsbox"'+(open ? ' open' : '')+'><summary>'+title+'</summary>'+body+'</details>';
+function assistSliceBox(id, body){
+  return '<div class="aslice" data-aslice="'+id+'"'+(assistSlice===id?'':' hidden')+'>'+body+'</div>';
 }
 function assistDesk(reply){
   const buttons = assistButtonList(reply);
   const handoff = !reply || reply.handoff !== false;
-  const about = assistSection('Первая фраза',
-    '<p class="hint">Первая фраза уходит, когда человек нажимает «Начать». Если заполните «Что продаёте», в чате появится такая кнопка. Пустое поле кнопки не даёт. «Контакты», «Каталог», «Как заказать», «Оплата» и «Адрес» есть всегда. «Доставка» и «Самовывоз» появляются, когда эти разделы включены и заполнены.</p>'+
-    '<label class="flabel" for="assistGreeting">Первая фраза в чате</label>'+
-    '<textarea id="assistGreeting" maxlength="900" rows="3" placeholder="Здравствуйте. Выберите кнопку ниже.">'+esc(reply && reply.greeting || '')+'</textarea>'+
-    '<label class="flabel" for="assistAbout">Что продаёте, если спросят своими словами</label>'+
-    '<textarea id="assistAbout" maxlength="1500" rows="4" placeholder="Что продаёте или какую услугу делаете. Цену пишите только если её можно называть.">'+esc(reply && reply.about || '')+'</textarea>',
-  true);
-  const contacts = assistSection('Контакты и адрес',
-    '<label class="flabel" for="assistContacts">Контакты</label>'+
-    '<textarea id="assistContacts" maxlength="500" rows="2" placeholder="Телефон, мессенджер или почта.">'+esc(reply && reply.contacts || '')+'</textarea>'+
-    '<label class="flabel" for="assistAddress">Адрес</label>'+
-    '<textarea id="assistAddress" maxlength="500" rows="2" placeholder="Где вы находитесь или что работаете онлайн.">'+esc(reply && reply.address || '')+'</textarea>');
-  const order = assistSection('Заказ и оплата',
-    '<label class="flabel" for="assistOrder">Как сделать заказ</label>'+
-    '<textarea id="assistOrder" maxlength="800" rows="3" placeholder="Что покупатель должен написать, чтобы заказ приняли.">'+esc(reply && reply.order || '')+'</textarea>'+
-    '<label class="flabel" for="assistPayment">Как оплатить</label>'+
-    '<textarea id="assistPayment" maxlength="500" rows="2" placeholder="Карта, перевод или наличные. Не пишите то, чего нет.">'+esc(reply && reply.payment || '')+'</textarea>');
-  const road = assistSection('Доставка и самовывоз',
-    '<p class="hint">Включите только то, что у вас реально есть. Стоимость доставки помощник называет только из поля ниже.</p>'+
-    '<label style="display:block;margin:8px 0"><input id="assistPickupOn" type="checkbox"'+(reply && reply.pickupOn ? ' checked' : '')+'> Самовывоз</label>'+
-    '<textarea id="assistPickup" maxlength="500" rows="2" placeholder="Откуда забрать и с какого часа.">'+esc(reply && reply.pickup || '')+'</textarea>'+
-    '<label class="flabel" for="assistPickupMap">Точка на Яндекс Картах</label>'+
-    '<input id="assistPickupMap" maxlength="300" placeholder="https://yandex.ru/maps/..." value="'+esc(reply && reply.pickupMap || '')+'">'+
-    '<p class="hint">Вставьте ссылку на точку из Яндекс Карт. По кнопке «Самовывоз» покупатель получит этот адрес и ссылку.</p>'+
-    '<label style="display:block;margin:8px 0"><input id="assistDeliveryOn" type="checkbox"'+(reply && reply.deliveryOn ? ' checked' : '')+'> Доставка</label>'+
-    '<textarea id="assistDelivery" maxlength="500" rows="2" placeholder="Район и срок. Например: по городу в день заказа.">'+esc(reply && reply.delivery || '')+'</textarea>'+
-    '<label class="flabel" for="assistDeliveryPrice">Стоимость доставки</label>'+
-    '<input id="assistDeliveryPrice" maxlength="200" placeholder="Например: 400 рублей по городу" value="'+esc(reply && reply.deliveryPrice || '')+'">');
-  const book = assistSection('Запись',
-    '<label class="flabel" for="assistBooking">Что дописать к подтверждению записи</label>'+
-    '<textarea id="assistBooking" maxlength="800" rows="2" placeholder="Предоплата, что взять с собой. Если правил нет, оставьте пустым.">'+esc(reply && reply.booking || '')+'</textarea>'+
-    assistScheduleHtml(reply));
-  const keys = assistSection('Кнопки в чате',
-    '<p class="hint">«Контакты», «Каталог», «Как заказать», «Оплата», «Адрес» и «Записаться» открывают разделы карточки. «Что продаёте», «Доставка» и «Самовывоз» добавляются сами, когда эти поля заполнены. Своя надпись присылает ваш текст или ссылку.</p>'+
-    '<label style="display:block;margin:8px 0"><input id="assistHandoff" type="checkbox"'+(handoff ? ' checked' : '')+'> Кнопка «Администратор»</label>'+
-    '<p class="hint">Покупатель жмёт её, вам приходит сообщение ВК, а в списке клиентов появляется пометка «Ждёт администратора». Пока вы отвечаете, помощник молчит. Покупатель возвращает меню кнопкой «К помощнику».</p>'+
-    '<div id="assistButtons">'+buttons.map(assistButtonHtml).join('')+'</div>'+
-    (buttons.length < 6 ? '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>' : '')+
-    '<button class="btn ghost" id="assistReset" type="button" style="margin-top:8px">Вернуть кнопки по умолчанию</button>');
-  return '<div class="desk">'+assistScenarioHtml(reply)+about+contacts+order+road+book+keys+
-    '<button class="btn" id="assistDesk" type="button" style="margin-top:12px">Сохранить сценарий и ответы</button>'+
+  const parts = [
+    ['scenario', 'Сценарий', assistScenarioHtml(reply)],
+    ['about', 'Фраза',
+      '<p class="hint">Первая фраза уходит, когда человек нажимает «Начать». Если заполните «Что продаёте», в чате появится такая кнопка. Пустое поле кнопки не даёт. «Контакты», «Каталог», «Как заказать», «Оплата» и «Адрес» есть всегда. «Доставка» и «Самовывоз» появляются, когда эти разделы включены и заполнены.</p>'+
+      '<label class="flabel" for="assistGreeting">Первая фраза в чате</label>'+
+      '<textarea id="assistGreeting" maxlength="900" rows="3" placeholder="Здравствуйте. Выберите кнопку ниже.">'+esc(reply && reply.greeting || '')+'</textarea>'+
+      '<label class="flabel" for="assistAbout">Что продаёте, если спросят своими словами</label>'+
+      '<textarea id="assistAbout" maxlength="1500" rows="4" placeholder="Что продаёте или какую услугу делаете. Цену пишите только если её можно называть.">'+esc(reply && reply.about || '')+'</textarea>'],
+    ['contacts', 'Контакты',
+      '<label class="flabel" for="assistContacts">Контакты</label>'+
+      '<textarea id="assistContacts" maxlength="500" rows="2" placeholder="Телефон, мессенджер или почта.">'+esc(reply && reply.contacts || '')+'</textarea>'+
+      '<label class="flabel" for="assistAddress">Адрес</label>'+
+      '<textarea id="assistAddress" maxlength="500" rows="2" placeholder="Где вы находитесь или что работаете онлайн.">'+esc(reply && reply.address || '')+'</textarea>'],
+    ['order', 'Заказ',
+      '<label class="flabel" for="assistOrder">Как сделать заказ</label>'+
+      '<textarea id="assistOrder" maxlength="800" rows="3" placeholder="Что покупатель должен написать, чтобы заказ приняли.">'+esc(reply && reply.order || '')+'</textarea>'+
+      '<label class="flabel" for="assistPayment">Как оплатить</label>'+
+      '<textarea id="assistPayment" maxlength="500" rows="2" placeholder="Карта, перевод или наличные. Не пишите то, чего нет.">'+esc(reply && reply.payment || '')+'</textarea>'],
+    ['road', 'Доставка',
+      '<p class="hint">Включите только то, что у вас реально есть. Стоимость доставки помощник называет только из поля ниже.</p>'+
+      '<label style="display:block;margin:8px 0"><input id="assistPickupOn" type="checkbox"'+(reply && reply.pickupOn ? ' checked' : '')+'> Самовывоз</label>'+
+      '<textarea id="assistPickup" maxlength="500" rows="2" placeholder="Откуда забрать и с какого часа.">'+esc(reply && reply.pickup || '')+'</textarea>'+
+      '<label class="flabel" for="assistPickupMap">Точка на Яндекс Картах</label>'+
+      '<input id="assistPickupMap" maxlength="300" placeholder="https://yandex.ru/maps/..." value="'+esc(reply && reply.pickupMap || '')+'">'+
+      '<p class="hint">Вставьте ссылку на точку из Яндекс Карт. По кнопке «Самовывоз» покупатель получит этот адрес и ссылку.</p>'+
+      '<label style="display:block;margin:8px 0"><input id="assistDeliveryOn" type="checkbox"'+(reply && reply.deliveryOn ? ' checked' : '')+'> Доставка</label>'+
+      '<textarea id="assistDelivery" maxlength="500" rows="2" placeholder="Район и срок. Например: по городу в день заказа.">'+esc(reply && reply.delivery || '')+'</textarea>'+
+      '<label class="flabel" for="assistDeliveryPrice">Стоимость доставки</label>'+
+      '<input id="assistDeliveryPrice" maxlength="200" placeholder="Например: 400 рублей по городу" value="'+esc(reply && reply.deliveryPrice || '')+'">'],
+    ['book', 'Запись',
+      '<label class="flabel" for="assistBooking">Что дописать к подтверждению записи</label>'+
+      '<textarea id="assistBooking" maxlength="800" rows="2" placeholder="Предоплата, что взять с собой. Если правил нет, оставьте пустым.">'+esc(reply && reply.booking || '')+'</textarea>'+
+      assistScheduleHtml(reply)],
+    ['keys', 'Кнопки',
+      '<p class="hint">«Контакты», «Каталог», «Как заказать», «Оплата», «Адрес» и «Записаться» открывают разделы карточки. «Что продаёте», «Доставка» и «Самовывоз» добавляются сами, когда эти поля заполнены. Своя надпись присылает ваш текст или ссылку.</p>'+
+      '<label style="display:block;margin:8px 0"><input id="assistHandoff" type="checkbox"'+(handoff ? ' checked' : '')+'> Кнопка «Администратор»</label>'+
+      '<p class="hint">Покупатель жмёт её, вам приходит сообщение ВК, а в списке клиентов появляется пометка «Ждёт администратора». Пока вы отвечаете, помощник молчит. Покупатель возвращает меню кнопкой «К помощнику».</p>'+
+      '<div id="assistButtons">'+buttons.map(assistButtonHtml).join('')+'</div>'+
+      (buttons.length < 6 ? '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>' : '')+
+      '<button class="btn ghost" id="assistReset" type="button" style="margin-top:8px">Вернуть кнопки по умолчанию</button>']
+  ];
+  const chips = '<div class="aslices">'+parts.map(function(part){
+    return '<button type="button" data-slice="'+part[0]+'" class="'+(assistSlice===part[0]?'on':'')+'">'+part[1]+'</button>';
+  }).join('')+'</div>';
+  return '<div class="desk">'+chips+parts.map(function(part){ return assistSliceBox(part[0], part[2]); }).join('')+
+    '<button class="btn" id="assistDesk" type="button" style="margin-top:12px">Сохранить карточку</button>'+
+    '<p class="hint">Сохраняются все разделы сразу: сценарий, фраза, контакты, заказ, доставка, запись и кнопки.</p>'+
     '<p id="deskmsg" class="hint"></p></div>';
+}
+function assistTabs(marks){
+  const items = [['home','Обзор'],['card','Карточка'],['orders','Заказы'],['book','Записи'],['people','Клиенты'],['ask','Заявка']];
+  return '<div class="atabs">'+items.map(function(item){
+    const mark = marks && marks[item[0]] ? ' · '+marks[item[0]] : '';
+    return '<button type="button" data-apane="'+item[0]+'" class="'+(assistPane===item[0]?'on':'')+'">'+item[1]+mark+'</button>';
+  }).join('')+'</div>';
+}
+function assistPaneBox(id, html){
+  return '<div class="apanel" data-apanel="'+id+'"'+(assistPane===id?'':' hidden')+'>'+html+'</div>';
+}
+function assistLocked(){
+  return '<p class="hint">Сначала подключите сообщество на вкладке «Обзор».</p>'+
+    '<button type="button" class="btn ghost" data-apane="home">К подключению</button>';
+}
+function assistQuick(data){
+  const orders = ((data.orders && data.orders.rows) || []).length;
+  const books = ((data.bookings && data.bookings.rows) || []).length;
+  const people = Number(data.clients && (data.clients.total || (data.clients.people || []).length)) || 0;
+  const ask = data.setup && data.setup.open ? 'есть заявка' : 'настроить за вас';
+  const items = [
+    ['card','Сценарий','scenario','Запись или информация'],
+    ['card','Фраза','about','Первое сообщение'],
+    ['card','Контакты','contacts','Телефон и адрес'],
+    ['card','Заказ','order','Как купить и оплата'],
+    ['card','Доставка','road','Самовывоз и цена'],
+    ['card','Запись','book','Дни и время'],
+    ['card','Кнопки','keys','Меню покупателя'],
+    ['orders','Заказы','',orders ? String(orders) : 'пока нет'],
+    ['book','Записи','',books ? String(books) : 'пока нет'],
+    ['people','Клиенты','',String(people)],
+    ['ask','Разработчик','',ask]
+  ];
+  return '<div class="aquick">'+items.map(function(item){
+    return '<button type="button" class="acab" data-apane="'+item[0]+'" data-slice="'+item[2]+'"><b>'+item[1]+'</b><span>'+esc(item[3])+'</span></button>';
+  }).join('')+'</div>';
+}
+function assistConnect(community){
+  return '<details class="stepsbox"'+(community ? '' : ' open')+'>'+
+    '<summary>'+(community ? 'Номер и ключ' : 'Подключить сообщество')+'</summary>'+
+    (community && community.key ? '<p class="hint">Ключ сохранён: '+esc(community.key)+'. Поле пустое специально, сохранённый ключ сюда не возвращается.</p>' : '')+
+    '<label class="flabel" for="assistGroup">Номер сообщества</label><input id="assistGroup" inputmode="numeric" placeholder="Например 1234567" value="'+esc(community ? community.groupId : '')+'">'+
+    '<label class="flabel" for="assistToken">Ключ сообщества</label><input id="assistToken" type="password" placeholder="'+(community && community.key ? 'Ключ уже сохранён, вставьте новый только для замены' : 'Ключ из настроек сообщества')+'" autocomplete="off">'+
+    '<button class="btn" id="assistSave" type="button" style="margin-top:12px">Подключить</button>'+
+    (community ? '<button class="btn ghost" id="assistDrop" type="button" style="margin-top:8px">Отключить</button>' : '')+
+    '<p id="assistmsg" class="hint"></p></details>';
+}
+function showAssistPane(name, slice){
+  const panes = ['home','card','orders','book','people','ask'];
+  assistPane = panes.indexOf(name) >= 0 ? name : 'home';
+  document.querySelectorAll('[data-apanel]').forEach(function(node){
+    node.hidden = node.getAttribute('data-apanel') !== assistPane;
+  });
+  document.querySelectorAll('.atabs [data-apane]').forEach(function(button){
+    button.classList.toggle('on', button.getAttribute('data-apane') === assistPane);
+  });
+  if (slice) showAssistSlice(slice);
+  const current = document.querySelector('.atabs button.on');
+  if (current && current.scrollIntoView) current.scrollIntoView({ inline:'center', block:'nearest' });
+}
+function showAssistSlice(name){
+  const names = ['scenario','about','contacts','order','road','book','keys'];
+  assistSlice = names.indexOf(name) >= 0 ? name : 'scenario';
+  document.querySelectorAll('.aslice').forEach(function(node){
+    node.hidden = node.getAttribute('data-aslice') !== assistSlice;
+  });
+  document.querySelectorAll('.aslices [data-slice]').forEach(function(button){
+    button.classList.toggle('on', button.getAttribute('data-slice') === assistSlice);
+  });
 }
 async function loadAssist(){
   const box = document.getElementById('assistbox');
@@ -999,19 +1083,28 @@ async function loadAssist(){
     return;
   }
   const community = data.community;
+  const orders = ((data.orders && data.orders.rows) || []).length;
+  const books = ((data.bookings && data.bookings.rows) || []).length;
+  const people = Number(data.clients && (data.clients.total || (data.clients.people || []).length)) || 0;
+  const marks = {};
+  if (orders) marks.orders = orders;
+  if (books) marks.book = books;
+  if (people) marks.people = people;
+  if (data.setup && data.setup.open) marks.ask = 1;
   const status = community
-    ? '<p class="now">Подключено: '+esc(community.title || ('сообщество '+community.groupId))+' · '+esc(community.groupId)+'</p>'+(community.key ? '<p class="hint">Ключ сохранён: '+esc(community.key)+'. Поле ниже пустое специально, сохранённый ключ сюда не возвращается.</p>' : '')+(community.error ? '<p class="err">'+esc(community.error)+'</p>' : '<p class="hint">Помощник слушает сообщения. Напишите ему со своей личной страницы, не от имени сообщества.</p>')
-    : '<p class="now">Помощник пока нигде не отвечает. Подключите своё сообщество по шагам ниже.</p>';
-  box.innerHTML = '<div class="card"><img src="cover.jpg" alt="НейроЯга" width="72" height="72" style="width:72px;height:72px;border-radius:16px;object-fit:cover">'+
+    ? '<p class="now">Подключено: '+esc(community.title || ('сообщество '+community.groupId))+' · '+esc(community.groupId)+'</p>'+(community.error ? '<p class="err">'+esc(community.error)+'</p>' : '<p class="hint">Помощник слушает сообщения. Напишите ему со своей личной страницы, не от имени сообщества.</p>')
+    : '<p class="now">Помощник пока нигде не отвечает. Подключите своё сообщество.</p>';
+  const home = status+(community ? assistQuick(data) : '<p class="hint">После подключения здесь будут карточка, заказы, записи и клиенты.</p>')+
+    assistConnect(community)+assistGuide(!community);
+  box.innerHTML = '<div class="card">'+
     '<div class="kicker">Моё сообщество</div>'+
-    '<p class="hint">Одно приложение для всех сообществ. Здесь только ваше сообщество, ваши клиенты и ваши записи. Чужие базы сюда не попадают. Отдельное приложение скачивать не нужно.</p>'+
-    status+assistHelpBox(data.setup)+assistGuide()+
-    '<label class="flabel" for="assistGroup">Номер сообщества</label><input id="assistGroup" inputmode="numeric" placeholder="Например 1234567" value="'+esc(community ? community.groupId : '')+'">'+
-    '<label class="flabel" for="assistToken">Ключ сообщества</label><input id="assistToken" type="password" placeholder="'+(community && community.key ? 'Ключ уже сохранён, вставьте новый только для замены' : 'Ключ из настроек сообщества')+'" autocomplete="off">'+
-    '<button class="btn" id="assistSave" type="button" style="margin-top:12px">Подключить</button>'+
-    (community ? '<button class="btn ghost" id="assistDrop" type="button" style="margin-top:8px">Отключить</button>' : '')+
-    '<p id="assistmsg" class="hint"></p>'+
-    (community ? assistDesk(community.reply) + assistOrders(data.orders, data.clients, community.groupId) + assistBookings(data.bookings, data.clients, community.groupId) + assistBase(data.clients) : '<p class="hint">После подключения здесь можно заполнить карточку, смотреть заказы, записи и своих клиентов.</p>')+
+    assistTabs(marks)+
+    assistPaneBox('home', home)+
+    assistPaneBox('card', community ? assistDesk(community.reply) : assistLocked())+
+    assistPaneBox('orders', community ? assistOrders(data.orders, data.clients, community.groupId) : assistLocked())+
+    assistPaneBox('book', community ? assistBookings(data.bookings, data.clients, community.groupId) : assistLocked())+
+    assistPaneBox('people', community ? assistBase(data.clients) : assistLocked())+
+    assistPaneBox('ask', assistHelpBox(data.setup))+
     '</div>';
   bind();
 }
@@ -1673,6 +1766,12 @@ function bind(){
   if (assistHelp) assistHelp.onclick = askDeveloper;
   const assistTalk = document.getElementById('assistTalk');
   if (assistTalk) assistTalk.onclick = replyDeveloper;
+  document.querySelectorAll('[data-apane]').forEach(function(button){
+    button.onclick = function(){ showAssistPane(button.getAttribute('data-apane'), button.getAttribute('data-slice') || ''); };
+  });
+  document.querySelectorAll('.aslices [data-slice]').forEach(function(button){
+    button.onclick = function(){ showAssistSlice(button.getAttribute('data-slice')); };
+  });
   const assistMail = document.getElementById('assistMail');
   if (assistMail) assistMail.oninput = function(){ assistMailAt = 0; };
   document.querySelectorAll('[data-bkind]').forEach(function(select){
