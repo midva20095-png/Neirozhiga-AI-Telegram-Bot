@@ -974,6 +974,9 @@ function assistDesk(reply){
     ['order', 'Заказ',
       '<label class="flabel" for="assistOrder">Как сделать заказ</label>'+
       assistArea('assistOrder', 2500, 8, 'Что покупатель должен написать, чтобы заказ приняли.', reply && reply.order)+
+      '<label class="flabel" for="assistChoices">Варианты к заказу</label>'+
+      assistArea('assistChoices', 1500, 6, 'Начинка: шоколад, ягоды, ваниль', reply && reply.choices)+
+      '<p class="hint">Каждая строка — вопрос и варианты через запятую. Пример: «Начинка: шоколад, ягоды, ваниль». При заказе бот спросит «Выберите из вариантов». Товары сообщества он берёт из витрины ВК сам. Если каталог пишет, что ключ их не видит, в ключе отметьте «Товары» и подключите его заново.</p>'+
       '<label class="flabel" for="assistPayment">Как оплатить</label>'+
       assistArea('assistPayment', 1500, 5, 'Карта, перевод или наличные. Не пишите то, чего нет.', reply && reply.payment)],
     ['road', 'Доставка',
@@ -1441,6 +1444,7 @@ async function saveDesk(){
   const contacts = (document.getElementById('assistContacts') || {}).value || '';
   const address = (document.getElementById('assistAddress') || {}).value || '';
   const order = (document.getElementById('assistOrder') || {}).value || '';
+  const choices = (document.getElementById('assistChoices') || {}).value || '';
   const payment = (document.getElementById('assistPayment') || {}).value || '';
   const booking = (document.getElementById('assistBooking') || {}).value || '';
   const pickup = (document.getElementById('assistPickup') || {}).value || '';
@@ -1468,7 +1472,7 @@ async function saveDesk(){
     const response = await fetch('/api/vk/assistant/reply', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, payment: payment, booking: booking, pickup: pickup, pickupMap: pickupMap, delivery: delivery, deliveryPrice: deliveryPrice, pickupOn: pickupOn, deliveryOn: deliveryOn, handoff: handoff, buttons: buttons, schedule: assistScheduleValue(), scenario: scenario })
+      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, choices: choices, payment: payment, booking: booking, pickup: pickup, pickupMap: pickupMap, delivery: delivery, deliveryPrice: deliveryPrice, pickupOn: pickupOn, deliveryOn: deliveryOn, handoff: handoff, buttons: buttons, schedule: assistScheduleValue(), scenario: scenario })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Ответы не сохранились');

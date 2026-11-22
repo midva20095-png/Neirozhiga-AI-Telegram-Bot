@@ -29,6 +29,7 @@ const REPLY_FIELDS = [
     ['contacts', 1500],
     ['address', 1500],
     ['order', 2500],
+    ['choices', 1500],
     ['payment', 1500],
     ['booking', 2500],
     ['pickup', 1500],
@@ -690,7 +691,7 @@ function publicOrders(list) {
     if (!Array.isArray(list)) return [];
     return list.slice(0, 80).map(item => ({
         peerId: Number(item && item.peerId) || 0,
-        item: cleanBit(item && item.item, 120),
+        item: cleanBit(item && item.item, 240),
         phone: cleanBit(item && item.phone, 16),
         way: cleanBit(item && item.way, 40)
     })).filter(item => item.peerId > 0 && item.item);
