@@ -122,7 +122,10 @@
       const name = String(raw.name || raw.title || '').replace(/\s+/g, ' ').trim().slice(0, 40);
       if (!name) return null;
       const extra = raw.extra === true || raw.extra === 'true' || raw.extra === 1 || raw.extra === '1';
-      return { name: name, price: servicePrice(raw.price), link: serviceLink(raw.link), extra: extra };
+      const text = String(raw.text || raw.about || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+      const row = { name: name, price: servicePrice(raw.price), link: serviceLink(raw.link), extra: extra };
+      if (text) row.text = text;
+      return row;
     }
     const name = String(raw || '').replace(/\s+/g, ' ').trim();
     if (!name || name.length > 40) return null;
@@ -148,7 +151,7 @@
 
   function sectionName(value) {
     const name = String(value || '').replace(/\s+/g, ' ').trim().slice(0, 40);
-    if (!name || /^(назад|оформить заказ|товары|услуги|записаться|каталог)$/i.test(name)) return '';
+    if (!name || /^(назад|оформить заказ|товары|услуги|записаться|каталог|общий каталог|витрина|добавить|убрать)$/i.test(name)) return '';
     return name;
   }
 
@@ -159,6 +162,7 @@
     if (!clean || seen[key] || out.length >= 64) return false;
     seen[key] = true;
     const row = { name: clean.name, price: clean.price, link: clean.link };
+    if (clean.text) row.text = clean.text;
     if (place) row.section = place;
     out.push(row);
     return true;

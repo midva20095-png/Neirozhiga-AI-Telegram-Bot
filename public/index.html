@@ -123,6 +123,7 @@ button,textarea,input,select{font:inherit;color:inherit}
 .srow{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(72px,.6fr) minmax(0,1.2fr) auto;gap:6px;margin:6px 0;align-items:center}
 .psec{margin:10px 0;padding:10px;border:1px solid var(--line);border-radius:14px}
 .prow{grid-template-columns:minmax(0,1.4fr) minmax(72px,.5fr) minmax(0,1.1fr)}
+.srow .snote{grid-column:1 / -1}
 .srow input{width:100%;border-radius:10px;border:1px solid var(--line);background:#1c1233;padding:8px}
 .srow label{font-size:12px;color:var(--mut);white-space:nowrap}
 .astep{margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
@@ -885,7 +886,7 @@ function assistGuide(opened){
     '<li>На этой же странице нажмите «Создать ключ». В правах отметьте «Сообщения», «Стена», «Товары» и, если есть, «Управление». Ключ показывается один раз: скопируйте его сразу. Право «Управление» нужно, чтобы помощник сам включил кнопки и события.</li>'+
     '<li>Номер сообщества — цифры в адресе. У страницы vk.com/club1234567 номер 1234567. Тот же номер есть в Управление → Настройки.</li>'+
     '<li>Вставьте номер и ключ в блок «Подключить сообщество» и нажмите «Подключить».</li>'+
-    '<li>Карточка идёт по шагам. Шаг 2 — цены услуг. Шаг 3 — разделы каталога: сначала название раздела, внутри товары и цены. Клиент видит кнопки разделов, а не все товары сразу. Пустое поле помощник не выдумывает.</li>'+
+    '<li>Карточка идёт по шагам. Шаг 2 — услуги и цены. Шаг 3 — разделы каталога. Клиент жмёт «Каталог», открывает раздел или общий каталог, читает описание и добавляет позицию в счёт. В конце «Записаться» показывает итог. Пустое поле помощник не выдумывает.</li>'+
     '<li>Люди, которые сами написали в сообщения, попадают во вкладку «Клиенты». Рассылка уходит только им. Заказы и записи лежат на своих вкладках и приходят сообщением вам и покупателю.</li>'+
     '</ol>'+
     '<p class="hint">Ключ нужен, чтобы помощник отвечал покупателям в этом сообществе. В кабинете он повторно не показывается и другим людям не виден. Пока действует донат НейроЯги, помощник отвечает. Когда срок закончится, он замолчит только в вашем сообществе.</p>'+
@@ -989,9 +990,10 @@ function assistServiceItems(value){
       name: item && item.name ? item.name : '',
       price: item && item.price ? item.price : '',
       link: item && item.link ? item.link : '',
+      text: item && item.text ? item.text : '',
       extra: !!(item && item.extra)
     };
-  }).filter(function(item){ return item.name || item.price || item.link; });
+  }).filter(function(item){ return item.name || item.price || item.link || item.text; });
 }
 function assistServiceRow(item){
   const row = item || { name: '', price: '', link: '', extra: false };
@@ -999,13 +1001,14 @@ function assistServiceRow(item){
     '<input data-sname maxlength="40" placeholder="Название" value="'+esc(row.name || '')+'" oninput="paintAssistBill()">'+
     '<input data-sprice inputmode="numeric" maxlength="7" placeholder="Цена, ₽" value="'+esc(row.price ? String(row.price) : '')+'" oninput="paintAssistBill()">'+
     '<input data-slink maxlength="300" placeholder="https://..." value="'+esc(row.link || '')+'" oninput="paintAssistBill()">'+
-    '<label><input data-sextra type="checkbox"'+(row.extra ? ' checked' : '')+' onchange="paintAssistBill()"> Доп</label></div>';
+    '<label><input data-sextra type="checkbox"'+(row.extra ? ' checked' : '')+' onchange="paintAssistBill()"> Доп</label>'+
+    '<input class="snote" data-stext maxlength="300" placeholder="Описание: клиент увидит его в каталоге" value="'+esc(row.text || '')+'"></div>';
 }
 function assistServiceEditor(reply){
   const items = assistServiceItems(reply && reply.services);
   const rows = (items.length ? items : [{ name: '', price: '', link: '', extra: false }]).slice(0, 8).map(assistServiceRow).join('');
   return '<label class="flabel">Услуги, цены и допы</label>'+
-    '<p class="hint">Название, цена в рублях и ссылка https, если она есть. Клиент жмёт «Услуги», видит эти кнопки и сумму. Пустая цена в итог не входит. «Доп» прибавляется к основной услуге.</p>'+
+    '<p class="hint">Название, цена, ссылка и описание. Описание клиент читает в «Каталог» → «Услуги», когда открывает позицию. «Доп» прибавляется к услуге. Пустая цена в итог не входит.</p>'+
     '<div id="assistBillPreview">'+assistBillPreviewHtml(items)+'</div>'+
     '<div id="assistServiceRows">'+rows+'</div>'+
     (items.length < 8 ? '<button class="btn ghost" id="assistServiceAdd" type="button" style="margin-top:8px">Добавить услугу</button>' : '');
@@ -1019,6 +1022,7 @@ function assistServiceValue(){
       name: name,
       price: (row.querySelector('[data-sprice]') || {}).value || '',
       link: (row.querySelector('[data-slink]') || {}).value || '',
+      text: (row.querySelector('[data-stext]') || {}).value || '',
       extra: !!(row.querySelector('[data-sextra]') || {}).checked
     });
   });
@@ -1043,6 +1047,7 @@ function assistProductRow(item){
     '<input data-pname maxlength="40" placeholder="Название товара" value="'+esc(row.name || '')+'">'+
     '<input data-pprice inputmode="numeric" maxlength="7" placeholder="Цена, ₽" value="'+esc(row.price ? String(row.price) : '')+'">'+
     '<input data-plink maxlength="300" placeholder="https://..." value="'+esc(row.link || '')+'">'+
+    '<input class="snote" data-ptext maxlength="300" placeholder="Описание: клиент увидит его по нажатию" value="'+esc(row.text || '')+'">'+
     '</div>';
 }
 function assistProductGroups(products){
@@ -1079,7 +1084,7 @@ function assistSectionBlock(section){
 }
 function assistProductEditor(reply){
   const groups = assistProductGroups(reply && reply.products);
-  return '<p class="hint">Сначала раздел, внутри него товары и цены. Клиент жмёт «Товары» и видит кнопки разделов, а не всю витрину сразу. Внутри раздела — кнопки с ценами и сумма. Если раздел один, бот сразу открывает его товары. «Каталог» по-прежнему только ссылка на витрину ВК.</p>'+
+  return '<p class="hint">Клиент жмёт «Каталог», затем «Общий каталог» или свой раздел. На позиции открывается описание, её можно добавить в счёт. В конце «Записаться», и там будет итог. «Витрина» внутри каталога открывает ссылку.</p>'+
     '<div id="assistSections">'+groups.map(assistSectionBlock).join('')+'</div>'+
     (groups.length < 8 ? '<button class="btn ghost" id="assistSectionAdd" type="button" style="margin-top:8px">Добавить раздел</button>' : '');
 }
@@ -1093,7 +1098,8 @@ function assistProductValue(){
       const item = {
         name: name,
         price: (row.querySelector('[data-pprice]') || {}).value || '',
-        link: (row.querySelector('[data-plink]') || {}).value || ''
+        link: (row.querySelector('[data-plink]') || {}).value || '',
+        text: (row.querySelector('[data-ptext]') || {}).value || ''
       };
       if (String(place).trim()) item.section = place;
       products.push(item);
