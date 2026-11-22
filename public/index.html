@@ -994,21 +994,22 @@ function assistDesk(reply, groupId){
   const parts = [
     ['scenario', 'Сценарий', assistScenarioHtml(reply)],
     ['about', 'Фраза',
-      '<p class="hint">Первая фраза уходит, когда человек нажимает «Начать». Если заполните «Что продаёте», в чате появится такая кнопка. Пустое поле кнопки не даёт. «Контакты», «Каталог», «Как заказать», «Оплата» и «Адрес» есть всегда. «Каталог» открывает витрину сообщества. «Доставка» и «Самовывоз» появляются, когда эти разделы включены и заполнены.</p>'+
-      '<label class="flabel" for="assistGreeting">Первая фраза в чате</label>'+
+      '<p class="hint">Первая фраза уходит клиенту по кнопке «Начать». Остальной текст клиент видит только из заполненных полей. Пустое поле бот не выдумывает и не подставляет чужой пример.</p>'+
+      '<label class="flabel" for="assistGreeting">Первая фраза клиенту</label>'+
       assistArea('assistGreeting', 2500, 6, 'Здравствуйте. Выберите кнопку ниже.', reply && reply.greeting)+
-      '<label class="flabel" for="assistAbout">Что продаёте, если спросят своими словами</label>'+
-      assistArea('assistAbout', 2500, 8, 'Что продаёте или какую услугу делаете. Цену пишите только если её можно называть.', reply && reply.about)],
+      '<label class="flabel" for="assistAbout">Ответ клиенту своими словами</label>'+
+      assistArea('assistAbout', 2500, 8, 'Чем занимаетесь и что клиент может выбрать. Цену пишите только если её можно называть.', reply && reply.about)],
     ['contacts', 'Контакты',
       '<label class="flabel" for="assistContacts">Контакты</label>'+
       assistArea('assistContacts', 1500, 5, 'Телефон, мессенджер или почта.', reply && reply.contacts)+
       '<label class="flabel" for="assistAddress">Адрес</label>'+
       assistArea('assistAddress', 1500, 5, 'Где вы находитесь или что работаете онлайн.', reply && reply.address)],
     ['order', 'Заказ',
-      '<label class="flabel" for="assistOrder">Как сделать заказ</label>'+
-      assistArea('assistOrder', 2500, 8, 'Что покупатель должен написать, чтобы заказ приняли.', reply && reply.order)+
-      '<label class="flabel" for="assistChoices">Варианты к заказу</label>'+
-      assistArea('assistChoices', 1500, 6, 'Начинка: шоколад, ягоды, ваниль', reply && reply.choices)+
+      '<label class="flabel" for="assistOrder">Текст для клиента перед выбором</label>'+
+      assistArea('assistOrder', 2500, 8, 'Клиент прочитает это и поймёт, что написать. Поле можно оставить пустым.', reply && reply.order)+
+      '<label class="flabel" for="assistChoices">Варианты кнопками для клиента</label>'+
+      assistArea('assistChoices', 1500, 6, 'Название: первый, второй, третий', reply && reply.choices)+
+      '<p class="hint">Клиент увидит название и нажмёт один вариант. Одна строка подходит и товару, и услуге. Пустое поле клиенту не показывается.</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistGoodsOn" type="checkbox"'+(!reply || reply.goodsOn !== false ? ' checked' : '')+'> Искать товары сообщества</label>'+
       '<label style="display:block;margin:8px 0"><input id="assistOrderOn" type="checkbox"'+(!reply || reply.orderOn !== false ? ' checked' : '')+'> Принимать заказ</label>'+
       '<p class="hint">Поиск показывает найденные товары кнопками. Заказ сохраняет товар, телефон и получение. Для записи на услугу оба пункта выключены: остаётся кнопка «Записаться» и список услуг.</p>'+
