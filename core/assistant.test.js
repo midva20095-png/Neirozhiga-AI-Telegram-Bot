@@ -76,6 +76,19 @@ test('фраза дона принимает ссылку и ответ и от�
     assert.equal(road.handoff, false);
     assert.equal(assistant.setupNote('  включите самовывоз  '), 'включите самовывоз');
     assert.equal(assistant.setupNote('а'.repeat(600)).length, 500);
+    const setupPack = assistant.setupCard({
+        task: 'Включите самовывоз с Ленина',
+        phone: '8 900 111-22-33',
+        address: 'Ленина 5',
+        map: 'https://yandex.ru/maps/-/CCUexample'
+    });
+    assert.equal(setupPack.phone, '+79001112233');
+    assert.equal(setupPack.address, 'Ленина 5');
+    assert.equal(setupPack.map, 'https://yandex.ru/maps/-/CCUexample');
+    assert.throws(() => assistant.setupCard({ task: 'мало', phone: '+79001112233', address: 'Ленина 5', map: 'https://yandex.ru/maps/-/CCUexample' }), /что именно настроить/);
+    assert.throws(() => assistant.setupCard({ task: 'Включите самовывоз', phone: '123', address: 'Ленина 5', map: 'https://yandex.ru/maps/-/CCUexample' }), /телефон/);
+    assert.throws(() => assistant.setupCard({ task: 'Включите самовывоз', phone: '+79001112233', address: 'д', map: 'https://yandex.ru/maps/-/CCUexample' }), /адрес/);
+    assert.throws(() => assistant.setupCard({ task: 'Включите самовывоз', phone: '+79001112233', address: 'Ленина 5', map: 'https://google.com/maps' }), /Яндекс/);
     assert.equal(assistant.HOLD_MS, 10 * 24 * 60 * 60 * 1000);
     assert.equal(assistant.cleanReply({ scenario: 'info' }).scenario, 'info');
     const people = assistant.publicPeople([{ peerId: 7, name: 'Анна', phone: '+7 999 111-22-33', note: 'хочу заказ', seen: 2, token: 'secret-token' }]);

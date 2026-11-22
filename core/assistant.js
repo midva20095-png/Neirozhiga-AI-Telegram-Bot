@@ -290,7 +290,8 @@ async function cabinet(account) {
         active: !!row.active,
         join: JOIN_URL,
         name: row.name || '',
-        community: communityCard(communities[0])
+        community: communityCard(communities[0]),
+        setup: await loadSetup(userId)
     };
 }
 
@@ -539,14 +540,85 @@ function setupNote(value) {
     return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 500);
 }
 
-async function askSetup(account, note) {
+function setupPhone(value) {
+    const digits = String(value || '').replace(/\D/g, '');
+    if (digits.length === 11 && (digits[0] === '7' || digits[0] === '8')) return `+7${digits.slice(1)}`;
+    if (digits.length === 10) return `+7${digits}`;
+    return '';
+}
+
+function setupCard(input) {
+    const source = input && typeof input === 'object' ? input : { task: input };
+    const task = setupNote(source.task || source.note);
+    if (task.length < 8) throw publicError('Напишите, что именно настроить.');
+    const phone = setupPhone(source.phone);
+    if (!phone) throw publicError('Напишите телефон, по которому с вами связаться.');
+    const address = String(source.address || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (address.length < 4) throw publicError('Напишите адрес.');
+    const map = yandexMapLink(source.map || source.pickupMap);
+    if (!map) throw publicError('Вставьте ссылку на метку в Яндекс Картах.');
+    return { task, phone, address, map, note: task };
+}
+
+function setupLine(value) {
+    const text = String(value || '').replace(/\r\n/g, '\n').trim();
+    if (!text || text.length > 500) return '';
+    return text;
+}
+
+function publicSetup(row, notes) {
+    if (!row) return null;
+    const messages = (Array.isArray(notes) ? notes : []).slice(-40).map(item => ({
+        role: item && item.role === 'dev' ? 'dev' : 'don',
+        text: setupLine(item && item.body) || setupNote(item && item.body),
+        at: item && item.created_at || null
+    })).filter(item => item.text);
+    return {
+        open: row.status !== 'done',
+        task: setupNote(row.task || row.note),
+        phone: setupPhone(row.phone) || String(row.phone || '').replace(/[^\d+]/g, '').slice(0, 16),
+        address: String(row.address || '').replace(/\s+/g, ' ').trim().slice(0, 300),
+        map: yandexMapLink(row.map),
+        messages
+    };
+}
+
+async function loadSetup(userId) {
+    const row = await db.getAssistantSetup(userId);
+    if (!row) return null;
+    const notes = await db.listAssistantSetupNotes(userId);
+    return publicSetup(row, notes);
+}
+
+async function askSetup(account, input) {
     const ownerId = vkId(account);
     if (!ownerId) throw publicError('Раздел открыт из ВК.');
     const don = await db.getAssistantDon(ownerId);
     if (!don || !don.active) throw publicError('Попросить настройку может дон с живой подпиской.');
-    const text = setupNote(note);
-    await db.saveAssistantSetup(ownerId, text);
-    return { ok: true, userId: ownerId, name: don.name || '', note: text };
+    const card = setupCard(input);
+    await db.saveAssistantSetup(ownerId, card);
+    await db.addAssistantSetupNote(ownerId, 'don', card.task);
+    return { ok: true, userId: ownerId, name: don.name || '', note: card.task, phone: card.phone, address: card.address, map: card.map };
+}
+
+async function addSetupTalk(account, text, role) {
+    const ownerId = vkId(account);
+    if (!ownerId) throw publicError('Раздел открыт из ВК.');
+    const line = setupLine(text);
+    if (!line) throw publicError('Напишите сообщение, до 500 знаков.');
+    const row = await db.getAssistantSetup(ownerId);
+    if (!row || row.status === 'done') throw publicError('Сначала отправьте заявку. Ответ придёт в это же окно.');
+    if (role !== 'dev') {
+        const don = await db.getAssistantDon(ownerId);
+        if (!don || !don.active) throw publicError('Написать может дон с живой подпиской.');
+    }
+    await db.addAssistantSetupNote(ownerId, role === 'dev' ? 'dev' : 'don', line);
+    const don = role === 'dev' ? null : await db.getAssistantDon(ownerId);
+    return { ok: true, userId: ownerId, name: don && don.name || '', text: line };
+}
+
+async function setupAlert() {
+    return { open: await db.countOpenAssistantSetups() };
 }
 
 async function finishSetup(account) {
@@ -709,6 +781,26 @@ async function sendBroadcast(account, text, offset, fetchImpl) {
     };
 }
 
+async function setupRequests(rows) {
+    const list = Array.isArray(rows) ? rows : [];
+    const notes = await db.listAssistantSetupNotes(list.map(row => row.user_id));
+    return list.map(row => {
+        const own = notes.filter(item => Number(item.user_id) === Number(row.user_id));
+        const card = publicSetup(row, own) || { task: '', phone: '', address: '', map: '', messages: [] };
+        return {
+            userId: Number(row.user_id),
+            note: setupNote(row.note || card.task),
+            task: card.task,
+            phone: card.phone,
+            address: card.address,
+            map: card.map,
+            messages: card.messages,
+            status: row.status || 'open',
+            updatedAt: row.updated_at
+        };
+    });
+}
+
 async function adminList(fetchImpl) {
     const health = await readHealth(fetchImpl);
     const dons = await db.listAssistantDons();
@@ -744,12 +836,7 @@ async function adminList(fetchImpl) {
                 updatedAt: item.updated_at
             }))
         })),
-        requests: requests.map(row => ({
-            userId: Number(row.user_id),
-            note: setupNote(row.note),
-            status: row.status || 'open',
-            updatedAt: row.updated_at
-        }))
+        requests: await setupRequests(requests)
     };
 }
 
@@ -772,7 +859,10 @@ module.exports = {
     connectCommunity,
     saveDesk,
     setupNote,
+    setupCard,
     askSetup,
+    addSetupTalk,
+    setupAlert,
     finishSetup,
     loadClients,
     loadBookings,

@@ -1005,7 +1005,7 @@ async function loadAssist(){
   box.innerHTML = '<div class="card"><img src="cover.jpg" alt="НейроЯга" width="72" height="72" style="width:72px;height:72px;border-radius:16px;object-fit:cover">'+
     '<div class="kicker">Моё сообщество</div>'+
     '<p class="hint">Одно приложение для всех сообществ. Здесь только ваше сообщество, ваши клиенты и ваши записи. Чужие базы сюда не попадают. Отдельное приложение скачивать не нужно.</p>'+
-    status+assistHelpBox()+assistGuide()+
+    status+assistHelpBox(data.setup)+assistGuide()+
     '<label class="flabel" for="assistGroup">Номер сообщества</label><input id="assistGroup" inputmode="numeric" placeholder="Например 1234567" value="'+esc(community ? community.groupId : '')+'">'+
     '<label class="flabel" for="assistToken">Ключ сообщества</label><input id="assistToken" type="password" placeholder="'+(community && community.key ? 'Ключ уже сохранён, вставьте новый только для замены' : 'Ключ из настроек сообщества')+'" autocomplete="off">'+
     '<button class="btn" id="assistSave" type="button" style="margin-top:12px">Подключить</button>'+
@@ -1037,32 +1037,86 @@ async function saveAssist(){
     if (button) button.disabled = false;
   }
 }
-function assistHelpBox(){
+function assistTalkLines(setup){
+  const rows = (setup && setup.messages) || [];
+  if (!rows.length) return '';
+  return rows.map(function(item){
+    const who = item.role === 'dev' ? 'Разработчик' : 'Вы';
+    return '<div class="note"><b>'+esc(who)+'</b><div>'+esc(item.text)+'</div></div>';
+  }).join('');
+}
+function assistHelpBox(setup){
+  const history = assistTalkLines(setup);
+  if (setup && setup.open) {
+    const map = setup.map ? '<p class="hint"><a href="'+esc(setup.map)+'">Метка на карте</a></p>' : '';
+    return '<div class="desk"><p class="now">Заявка разработчику</p>'+
+      '<p class="hint">Ответы приходят сюда, в это окно. В чат писать не нужно: там этой переписки нет.</p>'+
+      '<p class="hint">Что настроить: '+esc(setup.task)+'</p>'+
+      '<p class="hint">Телефон: '+esc(setup.phone)+'</p>'+
+      '<p class="hint">Адрес: '+esc(setup.address)+'</p>'+map+
+      history+
+      '<label class="flabel" for="assistTalkText">Сообщение в эту заявку</label>'+
+      '<textarea id="assistTalkText" maxlength="500" rows="3" placeholder="Уточнение. Ответ разработчика появится ниже."></textarea>'+
+      '<button class="btn ghost" id="assistTalk" type="button" style="margin-top:8px">Отправить сюда</button>'+
+      '<p id="helpmsg" class="hint"></p></div>';
+  }
+  const done = setup && setup.task ? '<p class="hint">Прошлая заявка выполнена. Новая откроет переписку здесь же.</p>'+history : '';
   return '<div class="desk"><p class="now">Настройка через разработчика</p>'+
-    '<p class="hint">Если карточку сложно заполнить самим, напишите, что нужно. В админке откроется окно только с вашим сообществом. Чужие карточки и чужие клиенты туда не попадают.</p>'+
-    '<textarea id="assistHelpNote" maxlength="500" rows="3" placeholder="Например: включите самовывоз, адрес Ленина 5, доставка 400 рублей по городу."></textarea>'+
-    '<button class="btn ghost" id="assistHelp" type="button" style="margin-top:8px">Настройка через разработчика</button>'+
+    '<p class="hint">Заявка и ответы остаются в этом окне. Без телефона, адреса и метки на карте настроить бота нельзя.</p>'+
+    done+
+    '<label class="flabel" for="assistHelpTask">Что именно настроить</label>'+
+    '<textarea id="assistHelpTask" maxlength="500" rows="3" placeholder="Например: включите самовывоз и доставку 400 рублей по городу."></textarea>'+
+    '<label class="flabel" for="assistHelpPhone">Телефон</label><input id="assistHelpPhone" inputmode="tel" maxlength="20" placeholder="+7 900 000-00-00">'+
+    '<label class="flabel" for="assistHelpAddress">Адрес</label><input id="assistHelpAddress" maxlength="300" placeholder="Ленина 5">'+
+    '<label class="flabel" for="assistHelpMap">Ссылка на метку в Яндекс Картах</label><input id="assistHelpMap" maxlength="300" placeholder="https://yandex.ru/maps/...">'+
+    '<button class="btn ghost" id="assistHelp" type="button" style="margin-top:8px">Отправить заявку</button>'+
     '<p id="helpmsg" class="hint"></p></div>';
 }
 async function askDeveloper(){
   const msg = document.getElementById('helpmsg');
   const button = document.getElementById('assistHelp');
-  const note = (document.getElementById('assistHelpNote') || {}).value || '';
+  const body = {
+    task: (document.getElementById('assistHelpTask') || {}).value || '',
+    phone: (document.getElementById('assistHelpPhone') || {}).value || '',
+    address: (document.getElementById('assistHelpAddress') || {}).value || '',
+    map: (document.getElementById('assistHelpMap') || {}).value || ''
+  };
   if (button) button.disabled = true;
   if (msg) msg.textContent = 'Отправляю заявку…';
   try {
     const response = await fetch('/api/vk/assistant/setup', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ note: note })
+      body: JSON.stringify(body)
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Заявка не отправилась');
-    if (msg) msg.textContent = 'Заявка ушла. Разработчик откроет вашу карточку и заполнит её.';
+    if (msg) msg.textContent = 'Заявка в этом окне. Ответ разработчика появится здесь.';
+    loadAssist();
   } catch (error) {
     if (msg) msg.textContent = error.message;
+    if (button) button.disabled = false;
   }
-  if (button) button.disabled = false;
+}
+async function replyDeveloper(){
+  const msg = document.getElementById('helpmsg');
+  const button = document.getElementById('assistTalk');
+  const text = (document.getElementById('assistTalkText') || {}).value || '';
+  if (button) button.disabled = true;
+  if (msg) msg.textContent = 'Отправляю…';
+  try {
+    const response = await fetch('/api/vk/assistant/setup/message', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ text: text })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Сообщение не отправилось');
+    loadAssist();
+  } catch (error) {
+    if (msg) msg.textContent = error.message;
+    if (button) button.disabled = false;
+  }
 }
 function assistOrders(pack, clients, groupId){
   const rows = (pack && pack.rows) || [];
@@ -1617,6 +1671,8 @@ function bind(){
   if (assistMailSend) assistMailSend.onclick = sendAssistMail;
   const assistHelp = document.getElementById('assistHelp');
   if (assistHelp) assistHelp.onclick = askDeveloper;
+  const assistTalk = document.getElementById('assistTalk');
+  if (assistTalk) assistTalk.onclick = replyDeveloper;
   const assistMail = document.getElementById('assistMail');
   if (assistMail) assistMail.oninput = function(){ assistMailAt = 0; };
   document.querySelectorAll('[data-bkind]').forEach(function(select){

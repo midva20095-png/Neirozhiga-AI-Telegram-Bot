@@ -403,18 +403,22 @@ function startWebApp() {
 
     app.post('/api/vk/assistant/setup', requireUser, async (req, res) => {
         try {
-            const saved = await assistant.askSetup(req.userId, req.body && req.body.note);
-            const bot = app.locals.bot;
-            if (bot) {
-                const who = saved.name ? `${saved.name} · ВК ${saved.userId}` : `ВК ${saved.userId}`;
-                const text = `Дон просит настроить бота сообщества.\n${who}${saved.note ? `\n${saved.note}` : ''}\nЗаявка в админке, вкладка «Помощник».`;
-                for (const adminId of auth.adminIds()) {
-                    try { await bot.telegram.sendMessage(adminId, text); } catch (e) {}
-                }
-            }
+            const saved = await assistant.askSetup(req.userId, req.body || {});
+            await tellSetupAdmins(app, `Дон просит настроить бота сообщества.\n${setupWho(saved)}\n${saved.note}\nТелефон: ${saved.phone}\nАдрес: ${saved.address}\nКарта: ${saved.map}\nОтвет пишите в админке, вкладка «Помощник». Переписка видна человеку в приложении.`);
             res.json({ ok: true });
         } catch (e) {
             const message = e && e.public ? e.message : 'Заявка не отправилась.';
+            res.status(400).json({ ok: false, error: message });
+        }
+    });
+
+    app.post('/api/vk/assistant/setup/message', requireUser, async (req, res) => {
+        try {
+            const saved = await assistant.addSetupTalk(req.userId, req.body && req.body.text, 'don');
+            await tellSetupAdmins(app, `Дон дописал в заявке на настройку.\n${setupWho(saved)}\n${saved.text}\nОтвет в админке, вкладка «Помощник».`);
+            res.json({ ok: true });
+        } catch (e) {
+            const message = e && e.public ? e.message : 'Сообщение не отправилось.';
             res.status(400).json({ ok: false, error: message });
         }
     });
@@ -1060,6 +1064,18 @@ function startWebApp() {
         return true;
     }
 
+    function setupWho(saved) {
+        return saved && saved.name ? `${saved.name} · ВК ${saved.userId}` : `ВК ${saved && saved.userId || ''}`;
+    }
+
+    async function tellSetupAdmins(appRef, text) {
+        const bot = appRef && appRef.locals && appRef.locals.bot;
+        if (!bot) return;
+        for (const adminId of auth.adminIds()) {
+            try { await bot.telegram.sendMessage(adminId, text); } catch (e) {}
+        }
+    }
+
     app.get('/api/admin/vk/communities', requireAdmin, (req, res) => {
         res.json({ communities: vk.adminHomes() });
     });
@@ -1102,6 +1118,25 @@ function startWebApp() {
             res.json(saved);
         } catch (e) {
             const message = e && e.public ? e.message : 'Карточка не сохранилась.';
+            res.status(400).json({ ok: false, error: message });
+        }
+    });
+
+    app.get('/api/admin/vk/assistant/ping', requireAdmin, async (req, res) => {
+        try {
+            res.json(await assistant.setupAlert());
+        } catch (e) {
+            res.status(500).json({ open: 0 });
+        }
+    });
+
+    app.post('/api/admin/vk/assistant/setup/message', requireAdmin, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const saved = await assistant.addSetupTalk(body.userId, body.text, 'dev');
+            res.json(saved);
+        } catch (e) {
+            const message = e && e.public ? e.message : 'Сообщение не отправилось.';
             res.status(400).json({ ok: false, error: message });
         }
     });

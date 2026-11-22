@@ -36,6 +36,8 @@ th{color:var(--mut);font-size:12px}
 .tabs{display:flex;gap:6px;margin:12px 0;flex-wrap:wrap;overflow-x:auto}
 .tabs button{padding:8px 12px}
 .tabs button.off{background:transparent;border:1px solid var(--line)}
+@keyframes nyblink{50%{box-shadow:0 0 0 3px #ff2d95;background:#ff2d95;color:#fff}}
+.tabs button.alarm,.homes button.alarm{animation:nyblink 1s steps(2) infinite}
 .ok{color:#3ee08f;font-weight:800}.bad{color:#ff8fb0;font-weight:800}
 .ava{width:36px;height:36px;border-radius:50%;object-fit:cover;background:#1c1233;display:inline-flex;align-items:center;justify-content:center;font-weight:800;vertical-align:middle;margin-right:8px}
 .note{color:var(--mut);font-size:13px}
@@ -152,6 +154,8 @@ let place = sessionStorage.getItem('ny_admin_place') || '';
 let vkHome = sessionStorage.getItem('ny_admin_home') || '';
 let homes = [];
 let cur = 'stats';
+let assistNeed = 0;
+let assistWatch = 0;
 let users=[], templates=[], modelsData=[], groupsData={}, providersData={}, packagesData=[], generalData={};
 let usersQuery = '';
 let openUserId = '';
@@ -258,9 +262,13 @@ function showCommunities(){
   document.getElementById('communities').style.display='block';
   renderCommunityDoor();
   refreshGate();
+  armAssistWatch();
 }
 function renderCommunityDoor(){
-  document.getElementById('communityDoor').innerHTML = homes.map(item =>
+  const alarm = assistNeed
+    ? '<button type="button" class="alarm" onclick="enterAssist()">Помощник: '+esc(assistNeed)+' заявок</button>'
+    : '';
+  document.getElementById('communityDoor').innerHTML = alarm + homes.map(item =>
     '<button type="button" onclick="enterCommunity(\''+esc(item.id)+'\')">'+
     '<strong>'+esc(item.title)+'</strong>'+
     '<span class="meta">'+esc(item.id)+'</span>'+
@@ -289,6 +297,13 @@ function enterCommunity(id){
   sessionStorage.setItem('ny_admin_home', vkHome);
   openCabinet('home');
 }
+function enterAssist(){
+  const id = vkHome && /^\d+$/.test(vkHome) ? vkHome : ((homes[0] && homes[0].id) || '');
+  if (!id) return;
+  vkHome = String(id);
+  sessionStorage.setItem('ny_admin_home', vkHome);
+  openCabinet('assist');
+}
 function enterShared(){
   vkHome = 'shared';
   sessionStorage.setItem('ny_admin_home', vkHome);
@@ -311,6 +326,7 @@ function openCabinet(tab){
   if (back) back.textContent = place==='vk' ? 'К сообществам' : 'Другой вход';
   renderTabs();
   go(tab);
+  if (inCommunity()) armAssistWatch();
 }
 
 function currentTabs(){
@@ -323,7 +339,25 @@ function rateFace(row){
   return '<span class="ava">'+esc((row.name||'?').trim().charAt(0))+'</span>';
 }
 function renderTabs(){
-  document.getElementById('tabs').innerHTML = currentTabs().map(([k,l])=>'<button class="'+(k===cur?'':'off')+'" onclick="go(\''+k+'\')">'+l+'</button>').join('');
+  document.getElementById('tabs').innerHTML = currentTabs().map(([k,l])=>{
+    const mark = k==='assist' && assistNeed ? ' · '+assistNeed : '';
+    const alarm = k==='assist' && assistNeed ? ' alarm' : '';
+    return '<button class="'+(k===cur?'':'off')+alarm+'" onclick="go(\''+k+'\')">'+l+mark+'</button>';
+  }).join('');
+}
+async function watchAssist(){
+  if (!token || place!=='vk') return;
+  try {
+    const data = await api('/api/admin/vk/assistant/ping');
+    assistNeed = Number(data.open) || 0;
+  } catch (e) { return; }
+  if (document.getElementById('communities').style.display !== 'none') renderCommunityDoor();
+  if (document.getElementById('panel').style.display !== 'none') renderTabs();
+}
+function armAssistWatch(){
+  watchAssist();
+  if (assistWatch) clearInterval(assistWatch);
+  assistWatch = setInterval(watchAssist, 20000);
 }
 function go(k){
   cur=k;
@@ -430,6 +464,8 @@ async function loadAssist(){
   const health = data.health || {};
   const dons = data.dons || [];
   const requests = data.requests || [];
+  assistNeed = requests.length;
+  renderTabs();
   const on = dons.filter(item => item.active).length;
   const communities = dons.reduce((sum, item) => sum + (item.communities || []).length, 0);
   const line = health.online
@@ -447,10 +483,14 @@ async function loadAssist(){
     '<div class="card"><h3>Ждут настройки</h3>'+
     (requests.length ? requests.map(item => {
       const don = dons.find(person => person.userId === item.userId) || { name: 'ВК '+item.userId, userId: item.userId };
+      const map = item.map ? '<p class="note"><a href="'+esc(item.map)+'">Метка на карте</a></p>' : '';
       return '<div class="stat" style="margin-top:8px"><div class="n" style="font-size:16px">'+esc(don.name)+'</div>'+
         '<div class="l">ВК '+esc(item.userId)+'</div>'+
-        (item.note ? '<p class="note">'+esc(item.note)+'</p>' : '<p class="note">Просит настроить бота.</p>')+
-        '<div class="row"><button type="button" onclick="openSetup('+Number(item.userId)+')">Открыть</button></div></div>';
+        '<p class="note">Что настроить: '+esc(item.task || item.note || 'просит настроить бота')+'</p>'+
+        (item.phone ? '<p class="note">Телефон: '+esc(item.phone)+'</p>' : '')+
+        (item.address ? '<p class="note">Адрес: '+esc(item.address)+'</p>' : '')+
+        map+
+        '<div class="row"><button type="button" onclick="openSetup('+Number(item.userId)+')">Открыть переписку</button></div></div>';
     }).join('') : '<p class="note">Заявок нет. Кнопка «Настройка через разработчика» в кабинете дона откроет здесь окно с этим человеком. Настроить можно и без заявки: кнопка «Настроить» у дона ниже.</p>')+
     '</div>'+
     '<div class="card"><h3>Доны и сообщества</h3>'+
@@ -563,19 +603,34 @@ function openSetup(userId){
     : '<p class="note">Сообщество ещё не подключено. Карточку можно заполнить после того, как человек вставит номер и ключ в своём кабинете.</p>';
   box.innerHTML = '<div class="card sheet"><div class="head"><h3>'+esc(don.name)+'</h3><button type="button" class="ghost" id="setupClose">Закрыть</button></div>'+
     '<p class="note">ВК '+esc(don.userId)+' · '+(don.active?'<span class="ok">помощник включён</span>':'<span class="bad">помощник выключен</span>')+'</p>'+
-    (request && request.note ? '<p class="note">Просит: '+esc(request.note)+'</p>' : '')+
+    (request ? '<p class="note">Что настроить: '+esc(request.task || request.note || '')+'</p>'+
+      (request.phone ? '<p class="note">Телефон: '+esc(request.phone)+'</p>' : '')+
+      (request.address ? '<p class="note">Адрес: '+esc(request.address)+'</p>' : '')+
+      (request.map ? '<p class="note"><a href="'+esc(request.map)+'">Метка на карте</a></p>' : '')+
+      setupThread(request) : '')+
     card+
-    '<label>Сообщение этому человеку</label><textarea id="setupLetter" maxlength="900" placeholder="Карточка заполнена. Откройте «Моё сообщество» и проверьте."></textarea>'+
-    '<div class="row"><button type="button" id="setupWrite">Написать</button>'+
-    (request ? '<button type="button" class="ghost" id="setupDone">Заявка выполнена</button>' : '')+
-    '</div><p id="setupmsg" class="note"></p></div>';
+    (request
+      ? '<label>Ответ в приложение, в ту же заявку</label><textarea id="setupLetter" maxlength="500" placeholder="Карточка заполнена. Откройте «Моё сообщество» и проверьте."></textarea>'+
+        '<div class="row"><button type="button" id="setupWrite">Ответить в приложении</button>'+
+        '<button type="button" class="ghost" id="setupDone">Заявка выполнена</button></div>'
+      : '')+
+    '<p id="setupmsg" class="note"></p></div>';
   box.style.display = 'block';
   document.getElementById('setupClose').onclick = function(){ box.style.display = 'none'; };
   const save = document.getElementById('setupSave');
   if (save) save.onclick = saveSetup;
-  document.getElementById('setupWrite').onclick = writeSetup;
+  const write = document.getElementById('setupWrite');
+  if (write) write.onclick = writeSetup;
   const done = document.getElementById('setupDone');
   if (done) done.onclick = closeSetup;
+}
+function setupThread(request){
+  const rows = (request && request.messages) || [];
+  if (!rows.length) return '';
+  return rows.map(function(item){
+    const who = item.role === 'dev' ? 'Вы' : 'Дон';
+    return '<div class="note"><b>'+esc(who)+'</b><div>'+esc(item.text)+'</div></div>';
+  }).join('');
 }
 function setupBody(){
   const buttons = [];
@@ -632,8 +687,12 @@ async function writeSetup(){
   const msg = document.getElementById('setupmsg');
   const text = (document.getElementById('setupLetter') || {}).value || '';
   if (!String(text).trim()) { if (msg) msg.textContent = 'Напишите текст сообщения.'; return; }
-  const data = await api('/api/admin/message', { method:'POST', body: JSON.stringify({ userId: '-'+setupUserId, text: text }) });
-  if (msg) msg.textContent = data.ok ? 'Сообщение ушло этому человеку.' : (data.error || 'Сообщение не ушло');
+  const data = await api('/api/admin/vk/assistant/setup/message', { method:'POST', body: JSON.stringify({ userId: setupUserId, text: text }) });
+  if (msg) msg.textContent = data.ok ? 'Ответ в заявке, в приложении этого человека.' : (data.error || 'Сообщение не ушло');
+  if (data.ok) {
+    await loadAssist();
+    openSetup(setupUserId);
+  }
 }
 async function closeSetup(){
   const msg = document.getElementById('setupmsg');

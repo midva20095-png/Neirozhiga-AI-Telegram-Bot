@@ -264,6 +264,20 @@ async function initDB() {
       updated_at TIMESTAMP DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE vk_assistant_setup ADD COLUMN IF NOT EXISTS task TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE vk_assistant_setup ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE vk_assistant_setup ADD COLUMN IF NOT EXISTS address TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE vk_assistant_setup ADD COLUMN IF NOT EXISTS map TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vk_assistant_setup_note (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      role TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS vk_assistant_setup_note_idx ON vk_assistant_setup_note (user_id, id)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS vk_lesson_memory (
       id SERIAL PRIMARY KEY,
@@ -546,17 +560,33 @@ async function markAssistantOwner(ownerId, state, error) {
   );
 }
 
-async function saveAssistantSetup(userId, note) {
+async function saveAssistantSetup(userId, card) {
+  const id = assistantPerson(userId);
+  const pack = card && typeof card === 'object' ? card : { note: card };
+  if (!id) return null;
+  const note = String(pack.note || pack.task || '').slice(0, 500);
+  const task = String(pack.task || note).slice(0, 500);
+  const phone = String(pack.phone || '').slice(0, 16);
+  const address = String(pack.address || '').slice(0, 300);
+  const map = String(pack.map || '').slice(0, 300);
+  const res = await pool.query(
+    `INSERT INTO vk_assistant_setup (user_id, note, task, phone, address, map, status, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, 'open', NOW())
+     ON CONFLICT (user_id) DO UPDATE
+       SET note = EXCLUDED.note, task = EXCLUDED.task, phone = EXCLUDED.phone,
+           address = EXCLUDED.address, map = EXCLUDED.map, status = 'open', updated_at = NOW()
+     RETURNING user_id, note, task, phone, address, map, status, updated_at`,
+    [id, note, task, phone, address, map]
+  );
+  return res.rows[0] || null;
+}
+
+async function getAssistantSetup(userId) {
   const id = assistantPerson(userId);
   if (!id) return null;
-  const text = String(note || '').slice(0, 500);
   const res = await pool.query(
-    `INSERT INTO vk_assistant_setup (user_id, note, status, updated_at)
-     VALUES ($1, $2, 'open', NOW())
-     ON CONFLICT (user_id) DO UPDATE
-       SET note = EXCLUDED.note, status = 'open', updated_at = NOW()
-     RETURNING user_id, note, status, updated_at`,
-    [id, text]
+    'SELECT user_id, note, task, phone, address, map, status, updated_at FROM vk_assistant_setup WHERE user_id = $1',
+    [id]
   );
   return res.rows[0] || null;
 }
@@ -564,8 +594,40 @@ async function saveAssistantSetup(userId, note) {
 async function listAssistantSetups(status) {
   const state = status === 'done' ? 'done' : 'open';
   const res = await pool.query(
-    'SELECT user_id, note, status, updated_at FROM vk_assistant_setup WHERE status = $1 ORDER BY updated_at DESC',
+    'SELECT user_id, note, task, phone, address, map, status, updated_at FROM vk_assistant_setup WHERE status = $1 ORDER BY updated_at DESC',
     [state]
+  );
+  return res.rows;
+}
+
+async function countOpenAssistantSetups() {
+  const res = await pool.query(`SELECT COUNT(*)::int AS total FROM vk_assistant_setup WHERE status = 'open'`);
+  return Number(res.rows[0] && res.rows[0].total) || 0;
+}
+
+async function addAssistantSetupNote(userId, role, body) {
+  const id = assistantPerson(userId);
+  const who = role === 'dev' ? 'dev' : 'don';
+  const text = String(body || '').trim().slice(0, 500);
+  if (!id || !text) return null;
+  const res = await pool.query(
+    `INSERT INTO vk_assistant_setup_note (user_id, role, body)
+     VALUES ($1, $2, $3)
+     RETURNING id, user_id, role, body, created_at`,
+    [id, who, text]
+  );
+  return res.rows[0] || null;
+}
+
+async function listAssistantSetupNotes(userIds) {
+  const ids = (Array.isArray(userIds) ? userIds : [userIds]).map(assistantPerson).filter(Boolean);
+  if (!ids.length) return [];
+  const res = await pool.query(
+    `SELECT id, user_id, role, body, created_at
+     FROM vk_assistant_setup_note
+     WHERE user_id = ANY($1::bigint[])
+     ORDER BY id`,
+    [ids]
   );
   return res.rows;
 }
@@ -1488,7 +1550,11 @@ module.exports = {
   clearAssistantPurgeGroup,
   listDueAssistantCommunities,
   saveAssistantSetup,
+  getAssistantSetup,
   listAssistantSetups,
+  countOpenAssistantSetups,
+  addAssistantSetupNote,
+  listAssistantSetupNotes,
   closeAssistantSetup,
   pool,
 };
