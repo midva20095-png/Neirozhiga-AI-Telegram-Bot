@@ -150,7 +150,20 @@ button,textarea,input,select{font:inherit;color:inherit}
 .gate span,.niche span{display:block;position:relative;z-index:1;margin-top:6px;font-size:14px;font-weight:600;color:rgba(255,255,255,.88)}
 .gate::after,.niche::after{content:"";position:absolute;z-index:0;pointer-events:none;top:0;bottom:0;width:42%;left:-60%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.38),transparent);animation:gateShine 3.4s ease-in-out infinite}
 .desk.mode-wizard.wiz-hello #assistWizardNav .wiznav,.desk.mode-wizard.wiz-hello #wizLeft,.desk.mode-wizard.wiz-hello #wizNote{display:none}
-.desk.mode-wizard #assistSimple,.desk.mode-wizard #assistFull{padding-bottom:120px}
+.desk.mode-wizard{display:flex;flex-direction:column}
+.desk.mode-wizard #assistWizardNav{display:contents}
+.desk.mode-wizard #wizTitle{order:1}
+.desk.mode-wizard .wizbar{order:2}
+.desk.mode-wizard #wizLeft{order:3}
+.desk.mode-wizard #wizNote{display:none}
+.desk.mode-wizard #assistSimple,.desk.mode-wizard #assistFull{order:4;padding-bottom:0}
+.desk.mode-wizard .wiznav{order:5;margin-top:16px}
+.desk.mode-wizard #assistDesk,.desk.mode-wizard #assistSaveHint,.desk.mode-wizard #deskmsg{order:6}
+.desk.mode-wizard.wiz-full:not(.wiz-hello) #assistSimple{display:none}
+.wiz-scene{display:none}
+.desk.mode-wizard .wiz-scene{display:block}
+.desk.mode-wizard .scene-raw{display:none}
+.niche.alt{background:linear-gradient(120deg,#140c24,#243b8f 38%,#00c2ff 78%,#b366ff);background-size:240% 240%}
 .textlink{display:block;width:100%;margin-top:8px;padding:12px 0;border:0;background:none;color:#c4b5fd;font-weight:700}
 #assistModeHint{display:none}
 .plain[data-role="welcome"]{background:transparent;border:0;padding:0}
@@ -1063,10 +1076,20 @@ function assistTradeHtml(reply){
 }
 function assistScenarioHtml(reply){
   const mode = reply && reply.scenario === 'info' ? 'info' : 'funnel';
-  return assistTradeHtml(reply)+
+  return '<div class="wiz-scene">'+
+    '<p class="gate-kicker">НейроЯга AI</p>'+
+    '<p class="gate-title">Чем занимаетесь</p>'+
+    '<p class="hint">Нажмите направление. Кнопки и список услуг подставятся сами.</p>'+
+    '<div class="niches" id="wizTrades"></div>'+
+    '<p class="gate-title" style="font-size:22px;margin-top:22px">Что умеет бот</p>'+
+    '<div class="niches">'+
+      '<button type="button" class="niche'+(mode==='funnel'?' on':'')+'" data-mode="funnel"><b>Запись и заказ</b><span>Клиент выбирает услугу и время</span></button>'+
+      '<button type="button" class="niche alt'+(mode==='info'?' on':'')+'" data-mode="info"><b>Только информация</b><span>Контакты и ответы, без записи</span></button>'+
+    '</div></div>'+
+    '<div class="scene-raw">'+assistTradeHtml(reply)+
     '<p class="hint">«Только информация» оставляет контакты и ответы без записи. «Запись и заказ» включает то, что выбрано в направлении.</p>'+
     '<label style="display:block;margin:6px 0"><input type="radio" name="assistScenario" value="funnel"'+(mode==='funnel'?' checked':'')+'> Запись и заказ</label>'+
-    '<label style="display:block;margin:6px 0"><input type="radio" name="assistScenario" value="info"'+(mode==='info'?' checked':'')+'> Только информация</label>';
+    '<label style="display:block;margin:6px 0"><input type="radio" name="assistScenario" value="info"'+(mode==='info'?' checked':'')+'> Только информация</label></div>';
 }
 function assistHourOptions(selected, from, to){
   let html = '';
@@ -1466,10 +1489,61 @@ function assistSimpleHtml(reply){
 }
 let assistWizardAt = 0;
 let assistWizardKind = 'simple';
+let assistNiche = '';
 function assistCount(input){
   if (!input) return;
   const note = input.parentElement && input.parentElement.querySelector('[data-pcount]');
   if (note) note.textContent = String(input.value || '').length+' из 24';
+}
+function nicheTradeIds(niche){
+  const sets = {
+    auto: ['tire', 'auto', 'wash', 'detail', 'tow'],
+    beauty: ['nails', 'hair', 'barber', 'brows', 'cosmo', 'makeup', 'depil', 'massage', 'tattoo', 'spa'],
+    food: ['cafe', 'food', 'cake', 'bakery'],
+    shop: ['shop', 'flowers', 'cake', 'bakery'],
+    service: ['clean', 'plumb', 'electric', 'renovation', 'handyman', 'furniture', 'groom', 'vet', 'dental', 'fitness', 'yoga', 'psych', 'tutor', 'kids', 'music', 'dance', 'photo', 'video', 'phone', 'tech', 'atelier', 'dry', 'print', 'realty']
+  };
+  return sets[niche] || null;
+}
+function nicheFromTrade(id){
+  const names = ['auto', 'beauty', 'food', 'shop', 'service'];
+  for (let i = 0; i < names.length; i += 1) {
+    const ids = nicheTradeIds(names[i]);
+    if (ids && ids.indexOf(id) >= 0) return names[i];
+  }
+  return '';
+}
+function nicheTradeList(){
+  const catalog = window.ASSIST_TRADES || { trades: [] };
+  const current = (document.getElementById('assistTrade') || {}).value || '';
+  const niche = assistNiche || nicheFromTrade(current);
+  let ids = nicheTradeIds(niche);
+  if (!ids) ids = catalog.trades.map(function(item){ return item.id; });
+  if (current && ids.indexOf(current) < 0) ids = [current].concat(ids);
+  return ids.map(function(id){
+    return catalog.trades.find(function(item){ return item.id === id; });
+  }).filter(Boolean);
+}
+function paintScenarioCards(){
+  const box = document.getElementById('wizTrades');
+  if (!box) return;
+  const current = (document.getElementById('assistTrade') || {}).value || '';
+  box.innerHTML = nicheTradeList().map(function(trade){
+    const about = (trade.services || []).filter(function(name){ return name !== trade.title; }).slice(0, 3).join(', ');
+    return '<button type="button" class="niche'+(trade.id === current ? ' on' : '')+'" data-trade="'+esc(trade.id)+'"><b>'+esc(trade.title)+'</b><span>'+esc(about || 'Кнопки и ответы под это направление')+'</span></button>';
+  }).join('');
+  const mode = (document.querySelector('input[name="assistScenario"]:checked') || {}).value || 'funnel';
+  document.querySelectorAll('[data-mode]').forEach(function(button){
+    button.classList.toggle('on', button.getAttribute('data-mode') === mode);
+  });
+  box.querySelectorAll('[data-trade]').forEach(function(button){
+    button.onclick = function(){
+      const id = button.getAttribute('data-trade');
+      const select = document.getElementById('assistTrade');
+      if (select) select.value = id;
+      applyTrade(id);
+    };
+  });
 }
 function applyNiche(id){
   const picks = {
@@ -1481,6 +1555,7 @@ function applyNiche(id){
   };
   const pick = picks[id];
   if (!pick) return;
+  assistNiche = id;
   const menu = document.querySelector('#assistSimple [data-role="menu"]');
   const book = document.querySelector('#assistSimple [data-role="book"]');
   const menuLabel = menu && menu.querySelector('[data-plabel]');
@@ -1492,6 +1567,12 @@ function applyNiche(id){
   document.querySelectorAll('[data-niche]').forEach(function(button){
     button.classList.toggle('on', button.getAttribute('data-niche') === id);
   });
+  const trades = nicheTradeList();
+  const select = document.getElementById('assistTrade');
+  if (select && trades.length && !trades.some(function(trade){ return trade.id === select.value; })) {
+    select.value = trades[0].id;
+    applyTrade(trades[0].id);
+  }
 }
 function wizardSteps(){
   const kind = document.querySelector('[name="assistWizardKind"]:checked');
@@ -1499,7 +1580,7 @@ function wizardSteps(){
   if (assistWizardKind === 'full') {
     return [
       { title: 'Знакомство', welcome: true },
-      { title: 'Сценарий', step: 'scenario' },
+      { title: 'Направление', step: 'scenario' },
       { title: 'Услуги', step: 'prices' },
       { title: 'Товары', step: 'products' },
       { title: 'О себе', step: 'about' },
@@ -1592,6 +1673,7 @@ function paintWizard(){
   if (note) note.textContent = step.welcome ? 'Выберите нишу и нажмите «Начать настройку».' : (step.done ? 'Карточка уйдёт в бот после сохранения.' : '«Дальше» запоминает шаг. В бот карточка уйдёт на последнем шаге.');
   if (prev) { prev.disabled = false; prev.textContent = assistWizardAt === 0 ? 'К выбору бота' : 'Назад'; }
   if (next) { next.disabled = assistWizardAt >= steps.length - 1; next.textContent = step.welcome ? 'Начать настройку' : 'Дальше'; }
+  paintScenarioCards();
   paintAssistTabs();
 }
 function copyDesk(from){
@@ -2268,7 +2350,8 @@ function applyTrade(id){
     ensureAssistAdd();
   }
   const msg = document.getElementById('deskmsg');
-  if (msg) msg.textContent = 'Направление «'+trade.title+'» подставлено. Сохраните карточку.';
+  const wizard = document.querySelector('.desk.mode-wizard');
+  if (msg) msg.textContent = wizard ? '' : 'Направление «'+trade.title+'» подставлено. Сохраните карточку.';
   bind();
 }
 function syncBookButton(){
@@ -2808,6 +2891,27 @@ function bindPlain(){
   });
   const kindBack = document.getElementById('wizKindBack');
   if (kindBack) kindBack.onclick = function(){ openWizardPick(); };
+  document.querySelectorAll('[data-mode]').forEach(function(button){
+    button.onclick = function(){
+      const mode = button.getAttribute('data-mode') === 'info' ? 'info' : 'funnel';
+      const radio = document.querySelector('input[name="assistScenario"][value="'+mode+'"]');
+      if (radio) radio.checked = true;
+      const box = document.getElementById('assistBookingOn');
+      if (mode === 'info') {
+        if (box) box.checked = false;
+      } else {
+        const select = document.getElementById('assistTrade');
+        const catalog = window.ASSIST_TRADES;
+        const trade = catalog && select && catalog.trades.find(function(item){ return item.id === select.value; });
+        if (box && trade) box.checked = !!trade.bookingOn;
+      }
+      if (typeof syncBookButton === 'function') syncBookButton();
+      if (typeof paintAssistKeys === 'function') paintAssistKeys();
+      document.querySelectorAll('[data-mode]').forEach(function(node){
+        node.classList.toggle('on', node.getAttribute('data-mode') === mode);
+      });
+    };
+  });
   document.querySelectorAll('input[name="assistWizardKind"]').forEach(function(radio){
     radio.onchange = function(){
       const nextKind = radio.value === 'full' ? 'full' : 'simple';
