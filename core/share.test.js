@@ -22,6 +22,9 @@ test('ссылка ВК открывает шаблон в сообществе 
     assert.equal(share.vkTemplateId('tpl=local:15'), '15');
     assert.equal(share.vkTemplateId('vk_ref=tpl15'), '15');
     assert.equal(share.vkTemplateId('https://vk.com/app54901511_-214554778#t15'), '15');
+    assert.equal(share.vkTemplateId('vk_user_id=1&vk_app_id=54901511&vk_group_id=214554778&sign=abc&hash=t15'), '15');
+    assert.equal(share.vkTemplateId('https://prod.example/?vk_user_id=1&hash=%23t15'), '15');
+    assert.equal(share.vkTemplateId('hash=tpl_15'), '15');
     assert.equal(share.vkTemplateId('vk_user_id=7&vk_ref=tpl15&sign=abc'), '15');
     assert.equal(share.vkTemplateId('help'), '');
     const secret = 'секретный текст задания который нельзя публиковать';

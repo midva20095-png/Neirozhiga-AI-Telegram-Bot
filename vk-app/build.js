@@ -50,12 +50,25 @@ function goalOf(value){
 }
 function tplOf(value){
   const text = String(value || '');
-  const direct = text.match(/tpl=(?:local:)?(\\d{1,12})(?!\\d)/);
-  if (direct) return direct[1];
-  const ref = text.match(/(?:^|[?&#]|vk_ref=|ref=)tpl_?(\\d{1,12})(?!\\d)/);
-  if (ref) return ref[1];
-  const short = text.match(/(?:^|[#?&])t(\\d{1,12})(?!\\d)/);
-  return short ? short[1] : '';
+  const query = text.indexOf('?') >= 0 ? text.slice(text.indexOf('?') + 1) : text;
+  const mark = query.lastIndexOf('hash=');
+  let carried = '';
+  if (mark >= 0 && (mark === 0 || query.charAt(mark - 1) === '&')) {
+    carried = query.slice(mark + 5);
+    try { carried = decodeURIComponent(carried.replace(/\\+/g, ' ')); } catch (e) {}
+    carried = carried.replace(/^#/, '');
+  }
+  const chunks = carried ? [carried, text] : [text];
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const direct = chunk.match(/tpl=(?:local:)?(\\d{1,12})(?!\\d)/);
+    if (direct) return direct[1];
+    const ref = chunk.match(/(?:^|[?&#]|vk_ref=|ref=)tpl_?(\\d{1,12})(?!\\d)/);
+    if (ref) return ref[1];
+    const short = chunk.match(/(?:^|[#?&])t(\\d{1,12})(?!\\d)/);
+    if (short) return short[1];
+  }
+  return '';
 }
 window.__nyHost = function(msg){
   if (!msg || !msg.type) return;
