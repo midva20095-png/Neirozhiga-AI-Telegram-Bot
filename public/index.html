@@ -898,11 +898,14 @@ const DEFAULT_ASSIST_BUTTONS = [
   { label: 'Адрес', text: 'Показать адрес' },
   { label: 'Записаться', text: 'Открыть свободные дни' }
 ];
-function assistButtonList(reply){
+function assistButtonList(reply, groupId){
   const saved = reply && Array.isArray(reply.buttons) ? reply.buttons : [];
-  if (saved.length) return saved;
-  if (reply && reply.scenario === 'info') return DEFAULT_ASSIST_BUTTONS.filter(function(button){ return button.label !== 'Записаться'; });
-  return DEFAULT_ASSIST_BUTTONS;
+  const source = saved.length ? saved : (reply && reply.scenario === 'info' ? DEFAULT_ASSIST_BUTTONS.filter(function(button){ return button.label !== 'Записаться'; }) : DEFAULT_ASSIST_BUTTONS);
+  const id = String(groupId || '').replace(/\D/g, '');
+  return source.map(function(button){
+    if (!button || button.label !== 'Каталог' || button.link || button.goods || !id) return button;
+    return { label: 'Каталог', link: 'https://vk.com/market-' + id };
+  });
 }
 function assistScenarioHtml(reply){
   const mode = reply && reply.scenario === 'info' ? 'info' : 'funnel';
@@ -957,13 +960,13 @@ function assistArea(id, limit, rows, placeholder, value){
 function assistSliceBox(id, body){
   return '<div class="aslice" data-aslice="'+id+'"'+(assistSlice===id?'':' hidden')+'>'+body+'</div>';
 }
-function assistDesk(reply){
-  const buttons = assistButtonList(reply);
+function assistDesk(reply, groupId){
+  const buttons = assistButtonList(reply, groupId);
   const handoff = !reply || reply.handoff !== false;
   const parts = [
     ['scenario', 'Сценарий', assistScenarioHtml(reply)],
     ['about', 'Фраза',
-      '<p class="hint">Первая фраза уходит, когда человек нажимает «Начать». Если заполните «Что продаёте», в чате появится такая кнопка. Пустое поле кнопки не даёт. «Контакты», «Каталог», «Как заказать», «Оплата» и «Адрес» есть всегда. «Доставка» и «Самовывоз» появляются, когда эти разделы включены и заполнены.</p>'+
+      '<p class="hint">Первая фраза уходит, когда человек нажимает «Начать». Если заполните «Что продаёте», в чате появится такая кнопка. Пустое поле кнопки не даёт. «Контакты», «Каталог», «Как заказать», «Оплата» и «Адрес» есть всегда. «Каталог» открывает витрину сообщества. «Доставка» и «Самовывоз» появляются, когда эти разделы включены и заполнены.</p>'+
       '<label class="flabel" for="assistGreeting">Первая фраза в чате</label>'+
       assistArea('assistGreeting', 2500, 6, 'Здравствуйте. Выберите кнопку ниже.', reply && reply.greeting)+
       '<label class="flabel" for="assistAbout">Что продаёте, если спросят своими словами</label>'+
@@ -999,7 +1002,7 @@ function assistDesk(reply){
       assistArea('assistBooking', 2500, 8, 'Предоплата, что взять с собой. Если правил нет, оставьте пустым.', reply && reply.booking)+
       assistScheduleHtml(reply)],
     ['keys', 'Кнопки',
-      '<p class="hint">«Прямая ссылка» открывает адрес, который вы сами вставили. «Ответ: бот ищет товары» показывает товары сообщества кнопками, человек может написать запрос. «Свой текст» присылает вашу фразу. В заявке видно, откуда товар: найден ботом или это ваша ссылка.</p>'+
+      '<p class="hint">«Каталог» — прямая ссылка на витрину сообщества, её можно заменить своим адресом https. «Свой текст» присылает вашу фразу. «Ответ: бот ищет товары» — отдельная кнопка, если нужен поиск по сообществу.</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistHandoff" type="checkbox"'+(handoff ? ' checked' : '')+'> Кнопка «Администратор»</label>'+
       '<p class="hint">Покупатель жмёт её, вам приходит сообщение ВК, а в списке клиентов появляется пометка «Ждёт администратора». Пока вы отвечаете, помощник молчит. Покупатель возвращает меню кнопкой «К помощнику».</p>'+
       '<div id="assistButtons">'+buttons.map(assistButtonHtml).join('')+'</div>'+
@@ -1144,7 +1147,7 @@ async function loadAssist(){
     '<div class="kicker">Моё сообщество</div>'+
     assistTabs(marks)+
     assistPaneBox('home', home)+
-    assistPaneBox('card', community ? assistDesk(community.reply) : assistLocked())+
+    assistPaneBox('card', community ? assistDesk(community.reply, community.groupId) : assistLocked())+
     assistPaneBox('orders', community ? assistOrders(data.orders, data.clients, community.groupId) : assistLocked())+
     assistPaneBox('book', community ? assistBookings(data.bookings, data.clients, community.groupId) : assistLocked())+
     assistPaneBox('people', community ? assistBase(data.clients) : assistLocked())+
@@ -1421,7 +1424,12 @@ function addAssistButton(){
 function resetAssistButtons(){
   const list = document.getElementById('assistButtons');
   if (!list) return;
-  list.innerHTML = DEFAULT_ASSIST_BUTTONS.map(assistButtonHtml).join('');
+  const id = String((document.getElementById('assistGroup') || {}).value || '').replace(/\D/g, '');
+  const buttons = DEFAULT_ASSIST_BUTTONS.map(function(button){
+    if (button.label === 'Каталог' && id) return { label: 'Каталог', link: 'https://vk.com/market-' + id };
+    return button;
+  });
+  list.innerHTML = buttons.map(assistButtonHtml).join('');
   const add = document.getElementById('assistAdd');
   if (add) add.remove();
   bind();
