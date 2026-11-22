@@ -123,8 +123,10 @@
       if (!name) return null;
       const extra = raw.extra === true || raw.extra === 'true' || raw.extra === 1 || raw.extra === '1';
       const text = String(raw.text || raw.about || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+      const hidden = raw.hidden === true || raw.hidden === 'true' || raw.hidden === 1 || raw.hidden === '1';
       const row = { name: name, price: servicePrice(raw.price), link: serviceLink(raw.link), extra: extra };
       if (text) row.text = text;
+      if (hidden) row.hidden = true;
       return row;
     }
     const name = String(raw || '').replace(/\s+/g, ' ').trim();
@@ -163,6 +165,7 @@
     seen[key] = true;
     const row = { name: clean.name, price: clean.price, link: clean.link };
     if (clean.text) row.text = clean.text;
+    if (clean.hidden) row.hidden = true;
     if (place) row.section = place;
     out.push(row);
     return true;

@@ -153,22 +153,40 @@ function clockHour(value, fallback) {
     return number;
 }
 
-function cleanButton(item) {
+var NESTED_RESERVED = new Set(['Назад', 'Отменить запись', 'К помощнику', 'Подтвердить', 'Отмена']);
+
+function cleanButton(item, depth) {
+    const level = depth || 0;
     if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
     const label = String(item.label || '').replace(/\s+/g, ' ').trim();
     if (!label || label.length > 40) return null;
-    if (item.goods === true || item.goods === 'true') return { label, goods: true };
+    if (level && NESTED_RESERVED.has(label)) return null;
+    if (!level && (item.goods === true || item.goods === 'true')) return { label: label, goods: true };
+    const rawItems = Array.isArray(item.items) ? item.items : [];
+    if (rawItems.length && level < 2) {
+        if (rawItems.length > 6) return null;
+        const items = [];
+        const seen = new Set();
+        for (let i = 0; i < rawItems.length; i += 1) {
+            const next = cleanButton(rawItems[i], level + 1);
+            if (!next || next.goods) return null;
+            if (seen.has(next.label)) return null;
+            seen.add(next.label);
+            items.push(next);
+        }
+        if (items.length) return { label: label, items: items };
+    }
     const hasLink = item.link != null && item.link !== '';
     const hasText = item.text != null && item.text !== '';
     if (hasLink === hasText) return null;
     if (hasLink) {
         const link = httpsLink(item.link);
         if (!link) return null;
-        return { label, link };
+        return { label: label, link: link };
     }
     const text = cleanBody(item.text, 900, false);
     if (!text) return null;
-    return { label, text };
+    return { label: label, text: text };
 }
 
 function cleanBody(value, limit, allowEmpty) {

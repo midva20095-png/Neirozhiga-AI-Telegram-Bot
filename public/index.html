@@ -246,6 +246,7 @@ input[type=checkbox],input[type=radio]{width:auto;padding:0;margin:0 8px 0 0;ver
 .steps{margin:8px 0 0;padding-left:18px}
 .steps li{margin:8px 0;line-height:1.35}
 .brow{margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:14px;background:#140c24}
+.brows{margin:8px 0 0 10px;padding-left:10px;border-left:2px solid var(--line)}
 .cover{display:block;width:100%;height:196px;object-fit:cover;object-position:center 20%;border-radius:18px;margin:0 0 12px;background:#140c24}
 body.vkapp .cover{display:none}
 #tabmenu,#tabrate,#tabshop,#tabcab{display:none}
@@ -892,17 +893,46 @@ function assistGuide(opened){
     '<p class="hint">Ключ нужен, чтобы помощник отвечал покупателям в этом сообществе. В кабинете он повторно не показывается и другим людям не виден. Пока действует донат НейроЯги, помощник отвечает. Когда срок закончится, он замолчит только в вашем сообществе.</p>'+
     '</details>';
 }
-function assistButtonHtml(button){
-  const kind = button && button.text && !button.goods ? 'text' : 'link';
+function assistButtonHtml(button, depth){
+  const level = depth || 0;
+  const nested = button && Array.isArray(button.items) && button.items.length;
+  const kind = nested ? 'menu' : (button && button.text && !button.goods ? 'text' : 'link');
   const value = kind === 'link' ? ((button && button.link) || '') : (kind === 'text' ? (button.text || '') : '');
-  return '<div class="brow" data-brow>'+
-    '<label class="flabel">Надпись на кнопке</label><input data-blabel maxlength="40" placeholder="Например: Каталог" value="'+esc(button && button.label || '')+'">'+
+  const kids = nested ? button.items.map(function(item){ return assistButtonHtml(item, level + 1); }).join('') : '';
+  const menuOption = level < 2 ? '<option value="menu"'+(kind==='menu'?' selected':'')+'>Свои кнопки</option>' : '';
+  const plain = kind === 'menu' ? ' hidden' : '';
+  const nest = kind === 'menu' ? '' : ' hidden';
+  return '<div class="brow" data-brow data-depth="'+level+'">'+
+    '<label class="flabel">'+(level ? 'Кнопка внутри' : 'Основная кнопка')+'</label><input data-blabel maxlength="40" placeholder="Например: Каталог" value="'+esc(button && button.label || '')+'">'+
     '<label class="flabel">Что делает кнопка</label><select data-bkind>'+
     '<option value="link"'+(kind==='link'?' selected':'')+'>Прямая ссылка</option>'+
-    '<option value="text"'+(kind==='text'?' selected':'')+'>Свой текст</option></select>'+
-    '<label class="flabel" data-bcap>'+(kind==='goods'?'Поиск':(kind==='link'?'Ваша ссылка https':'Текст ответа'))+'</label>'+
-    '<input data-bvalue placeholder="'+(kind==='goods'?'Бот сам покажет товары кнопками':(kind==='link'?'https://vk.com/...':'Например: доставка по городу в день заказа'))+'" value="'+esc(value)+'"'+(kind==='goods'?' disabled':'')+'>'+
+    '<option value="text"'+(kind==='text'?' selected':'')+'>Свой текст</option>'+menuOption+'</select>'+
+    '<div data-bplain'+plain+'>'+
+    '<label class="flabel" data-bcap>'+(kind==='link'?'Ваша ссылка https':'Текст ответа')+'</label>'+
+    '<input data-bvalue placeholder="'+(kind==='link'?'https://vk.com/...':'Например: доставка по городу в день заказа')+'" value="'+esc(value)+'"></div>'+
+    '<div class="brows" data-brows'+nest+'>'+kids+'</div>'+
+    '<button class="btn ghost" type="button" data-badd style="margin-top:8px"'+(kind==='menu' && (!nested || button.items.length < 6) ? '' : ' hidden')+'>Добавить кнопку внутри</button>'+
     '<button class="btn ghost" type="button" data-bdel style="margin-top:8px">Убрать кнопку</button></div>';
+}
+function assistReadButton(row){
+  const label = (row.querySelector(':scope > [data-blabel]') || {}).value || '';
+  if (!String(label).trim()) return null;
+  const kind = (row.querySelector(':scope > [data-bkind]') || {}).value || 'link';
+  if (kind === 'menu') {
+    const items = [];
+    row.querySelectorAll(':scope > [data-brows] > [data-brow]').forEach(function(child){
+      const item = assistReadButton(child);
+      if (item) items.push(item);
+    });
+    if (!items.length) return null;
+    return { label: label, items: items };
+  }
+  if (kind === 'goods') return null;
+  const value = (row.querySelector(':scope > [data-bplain] [data-bvalue]') || {}).value || '';
+  if (!String(value).trim()) return null;
+  const item = { label: label };
+  item[kind === 'text' ? 'text' : 'link'] = value;
+  return item;
 }
 const DEFAULT_ASSIST_BUTTONS = [
   { label: 'Контакты', text: 'Показать контакты из карточки' },
@@ -966,9 +996,9 @@ function assistBillPreviewHtml(items){
   let total = 0;
   let priced = 0;
   const lines = list.map(function(item){
-    const price = assistMoney(item.price);
+    const price = item.hidden ? 0 : assistMoney(item.price);
     if (price) { total += price; priced += 1; }
-    const cost = price ? price + ' ₽' : 'цена не указана';
+    const cost = item.hidden ? 'скрыта' : (price ? price + ' ₽' : 'цена не указана');
     const extra = item.extra ? ' · доп' : '';
     const link = item.link ? ' · ссылка' : '';
     return '<div>'+esc(item.name)+' — '+esc(String(cost))+extra+link+'</div>';
@@ -991,7 +1021,8 @@ function assistServiceItems(value){
       price: item && item.price ? item.price : '',
       link: item && item.link ? item.link : '',
       text: item && item.text ? item.text : '',
-      extra: !!(item && item.extra)
+      extra: !!(item && item.extra),
+      hidden: !!(item && item.hidden)
     };
   }).filter(function(item){ return item.name || item.price || item.link || item.text; });
 }
@@ -1002,13 +1033,15 @@ function assistServiceRow(item){
     '<input data-sprice inputmode="numeric" maxlength="7" placeholder="Цена, ₽" value="'+esc(row.price ? String(row.price) : '')+'" oninput="paintAssistBill()">'+
     '<input data-slink maxlength="300" placeholder="https://..." value="'+esc(row.link || '')+'" oninput="paintAssistBill()">'+
     '<label><input data-sextra type="checkbox"'+(row.extra ? ' checked' : '')+' onchange="paintAssistBill()"> Доп</label>'+
-    '<input class="snote" data-stext maxlength="300" placeholder="Описание: клиент увидит его в каталоге" value="'+esc(row.text || '')+'"></div>';
+    '<input class="snote" data-stext maxlength="300" placeholder="Описание: клиент увидит его в каталоге" value="'+esc(row.text || '')+'">'+
+    '<label><input data-shide type="checkbox"'+(row.hidden ? ' checked' : '')+' onchange="paintAssistBill()"> Скрыть</label>'+
+    '<button class="btn ghost" type="button" data-sdel>Удалить</button></div>';
 }
 function assistServiceEditor(reply){
   const items = assistServiceItems(reply && reply.services);
   const rows = (items.length ? items : [{ name: '', price: '', link: '', extra: false }]).slice(0, 8).map(assistServiceRow).join('');
   return '<label class="flabel">Услуги, цены и допы</label>'+
-    '<p class="hint">Название, цена, ссылка и описание. Описание клиент читает в «Каталог» → «Услуги», когда открывает позицию. «Доп» прибавляется к услуге. Пустая цена в итог не входит.</p>'+
+    '<p class="hint">Название, цена, ссылка и описание. Клиент жмёт услугу, на кнопке появляется галочка, можно выбрать несколько, сумма внизу. «Скрыть» оставляет строку здесь, клиент её не видит. «Удалить» убирает строку. Пустая цена в итог не входит.</p>'+
     '<div id="assistBillPreview">'+assistBillPreviewHtml(items)+'</div>'+
     '<div id="assistServiceRows">'+rows+'</div>'+
     (items.length < 8 ? '<button class="btn ghost" id="assistServiceAdd" type="button" style="margin-top:8px">Добавить услугу</button>' : '');
@@ -1023,7 +1056,8 @@ function assistServiceValue(){
       price: (row.querySelector('[data-sprice]') || {}).value || '',
       link: (row.querySelector('[data-slink]') || {}).value || '',
       text: (row.querySelector('[data-stext]') || {}).value || '',
-      extra: !!(row.querySelector('[data-sextra]') || {}).checked
+      extra: !!(row.querySelector('[data-sextra]') || {}).checked,
+      hidden: !!(row.querySelector('[data-shide]') || {}).checked
     });
   });
   return services;
@@ -1048,6 +1082,8 @@ function assistProductRow(item){
     '<input data-pprice inputmode="numeric" maxlength="7" placeholder="Цена, ₽" value="'+esc(row.price ? String(row.price) : '')+'">'+
     '<input data-plink maxlength="300" placeholder="https://..." value="'+esc(row.link || '')+'">'+
     '<input class="snote" data-ptext maxlength="300" placeholder="Описание: клиент увидит его по нажатию" value="'+esc(row.text || '')+'">'+
+    '<label><input data-phide type="checkbox"'+(row.hidden ? ' checked' : '')+'> Скрыть</label>'+
+    '<button class="btn ghost" type="button" data-pdel>Удалить</button>'+
     '</div>';
 }
 function assistProductGroups(products){
@@ -1080,6 +1116,7 @@ function assistSectionBlock(section){
     '<input data-section maxlength="40" placeholder="Например: Торты" value="'+esc(section && section.name || '')+'">'+
     '<div class="prows">'+items.map(assistProductRow).join('')+'</div>'+
     (items.length < 8 ? '<button type="button" class="btn ghost" data-padd style="margin-top:8px">Добавить товар</button>' : '')+
+    '<button type="button" class="btn ghost" data-secdel style="margin-top:8px">Удалить раздел</button>'+
     '</div>';
 }
 function assistProductEditor(reply){
@@ -1099,7 +1136,8 @@ function assistProductValue(){
         name: name,
         price: (row.querySelector('[data-pprice]') || {}).value || '',
         link: (row.querySelector('[data-plink]') || {}).value || '',
-        text: (row.querySelector('[data-ptext]') || {}).value || ''
+        text: (row.querySelector('[data-ptext]') || {}).value || '',
+        hidden: !!(row.querySelector('[data-phide]') || {}).checked
       };
       if (String(place).trim()) item.section = place;
       products.push(item);
@@ -1221,10 +1259,10 @@ function assistDesk(reply, groupId){
       assistArea('assistBooking', 2500, 8, 'Предоплата, что взять с собой. Если правил нет, оставьте пустым.', reply && reply.booking)+
       assistScheduleHtml(reply)],
     ['keys', '9. Кнопки',
-      '<p class="hint">Кнопка — это либо ссылка https, либо ваш текст. Разделы каталога задаются на шаге 3, «Каталог» только открывает ссылку. Кнопку «Записаться» убирает галочка на шаге 8.</p>'+
+      '<p class="hint">Сначала основные кнопки: их клиент видит сразу. Если к основной нужны свои кнопки, выберите «Свои кнопки» и добавьте их внутри. Клиент нажмёт основную, увидит эти кнопки и вернётся назад кнопкой «Назад». Внутри можно открыть ещё один ряд. Ссылка и свой текст остаются для кнопки, которая сразу отвечает.</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistHandoff" type="checkbox"'+(handoff ? ' checked' : '')+'> Кнопка «Администратор»</label>'+
       '<p class="hint">Покупатель жмёт её, вам приходит сообщение ВК, а в списке клиентов появляется пометка «Ждёт администратора». Пока вы отвечаете, помощник молчит. Покупатель возвращает меню кнопкой «К помощнику».</p>'+
-      '<div id="assistButtons">'+buttons.map(assistButtonHtml).join('')+'</div>'+
+      '<div id="assistButtons">'+buttons.map(function(button){ return assistButtonHtml(button); }).join('')+'</div>'+
       (buttons.length < 6 ? '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>' : '')+
       '<button class="btn ghost" id="assistReset" type="button" style="margin-top:8px">Вернуть кнопки по умолчанию</button>']
   ];
@@ -1632,15 +1670,24 @@ async function sendAssistMail(){
 }
 function assistKind(select){
   const row = select.closest('[data-brow]');
-  if (!row) return;
-  const cap = row.querySelector('[data-bcap]');
-  const field = row.querySelector('[data-bvalue]');
+  if (!row || row.querySelector(':scope > [data-bkind]') !== select) return;
+  const plain = row.querySelector(':scope > [data-bplain]');
+  const nest = row.querySelector(':scope > [data-brows]');
+  const add = row.querySelector(':scope > [data-badd]');
+  const cap = plain && plain.querySelector('[data-bcap]');
+  const field = plain && plain.querySelector('[data-bvalue]');
+  if (select.value === 'menu') {
+    if (plain) plain.hidden = true;
+    if (nest) nest.hidden = false;
+    if (add) add.hidden = nest && nest.querySelectorAll(':scope > [data-brow]').length >= 6;
+    return;
+  }
+  if (plain) plain.hidden = false;
+  if (nest) nest.hidden = true;
+  if (add) add.hidden = true;
   if (select.value === 'link') {
     if (cap) cap.textContent = 'Ваша ссылка https';
     if (field) { field.disabled = false; field.placeholder = 'https://vk.com/...'; }
-  } else if (select.value === 'goods') {
-    if (cap) cap.textContent = 'Поиск';
-    if (field) { field.disabled = true; field.value = ''; field.placeholder = 'Бот сам покажет товары кнопками'; }
   } else {
     if (cap) cap.textContent = 'Текст ответа';
     if (field) { field.disabled = false; field.placeholder = 'Например: доставка по городу в день заказа'; }
@@ -1672,10 +1719,10 @@ function applyTrade(id){
       }
       return button;
     });
-    list.innerHTML = buttons.map(assistButtonHtml).join('');
+    list.innerHTML = buttons.map(function(button){ return assistButtonHtml(button); }).join('');
     const add = document.getElementById('assistAdd');
-    if (buttons.length >= 6 && add) add.remove();
-    if (buttons.length < 6 && !document.getElementById('assistAdd')) {
+    if (list.querySelectorAll(':scope > [data-brow]').length >= 6 && add) add.remove();
+    if (list.querySelectorAll(':scope > [data-brow]').length < 6 && !document.getElementById('assistAdd')) {
       list.insertAdjacentHTML('afterend', '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>');
     }
   }
@@ -1693,10 +1740,10 @@ function syncBookButton(){
 }
 function addAssistButton(){
   const list = document.getElementById('assistButtons');
-  if (!list || list.querySelectorAll('[data-brow]').length >= 6) return;
+  if (!list || list.querySelectorAll(':scope > [data-brow]').length >= 6) return;
   list.insertAdjacentHTML('beforeend', assistButtonHtml({ label: '', link: '' }));
   const add = document.getElementById('assistAdd');
-  if (add && list.querySelectorAll('[data-brow]').length >= 6) add.remove();
+  if (add && list.querySelectorAll(':scope > [data-brow]').length >= 6) add.remove();
   bind();
 }
 function resetAssistButtons(){
@@ -1707,7 +1754,7 @@ function resetAssistButtons(){
     if (button.label === 'Каталог' && id) return { label: 'Каталог', link: 'https://vk.com/market-' + id };
     return button;
   });
-  list.innerHTML = buttons.map(assistButtonHtml).join('');
+  list.innerHTML = buttons.map(function(button){ return assistButtonHtml(button); }).join('');
   const add = document.getElementById('assistAdd');
   if (add) add.remove();
   bind();
@@ -1757,16 +1804,9 @@ async function saveDesk(){
   const picked = document.querySelector('input[name="assistScenario"]:checked');
   const scenario = picked && picked.value === 'info' ? 'info' : 'funnel';
   const buttons = [];
-  document.querySelectorAll('[data-brow]').forEach(function(row){
-    const label = (row.querySelector('[data-blabel]') || {}).value || '';
-    const kind = (row.querySelector('[data-bkind]') || {}).value || 'link';
-    const value = (row.querySelector('[data-bvalue]') || {}).value || '';
-    if (!String(label).trim()) return;
-    if (kind === 'goods') return;
-    if (!String(value).trim()) return;
-    const item = { label: label };
-    item[kind === 'text' ? 'text' : 'link'] = value;
-    buttons.push(item);
+  document.querySelectorAll('#assistButtons > [data-brow]').forEach(function(row){
+    const item = assistReadButton(row);
+    if (item) buttons.push(item);
   });
   if (button) button.disabled = true;
   if (msg) msg.textContent = 'Сохраняю ответы…';
@@ -2227,13 +2267,66 @@ function bind(){
     };
   });
   syncBookButton();
+  document.querySelectorAll('[data-sdel]').forEach(function(button){
+    button.onclick = function(){
+      const row = button.closest('[data-srow]');
+      if (row) row.remove();
+      const box = document.getElementById('assistServiceRows');
+      if (box && !document.getElementById('assistServiceAdd') && box.querySelectorAll('[data-srow]').length < 8 && box.parentNode) {
+        box.insertAdjacentHTML('afterend', '<button class="btn ghost" id="assistServiceAdd" type="button" style="margin-top:8px">Добавить услугу</button>');
+      }
+      paintAssistBill();
+      bind();
+    };
+  });
+  document.querySelectorAll('[data-pdel]').forEach(function(button){
+    button.onclick = function(){
+      const row = button.closest('[data-prow]');
+      const section = button.closest('[data-psec]');
+      if (row) row.remove();
+      const box = section && section.querySelector('.prows');
+      if (box && !section.querySelector('[data-padd]') && box.querySelectorAll('[data-prow]').length < 8) {
+        box.insertAdjacentHTML('afterend', '<button type="button" class="btn ghost" data-padd style="margin-top:8px">Добавить товар</button>');
+      }
+      bind();
+    };
+  });
+  document.querySelectorAll('[data-secdel]').forEach(function(button){
+    button.onclick = function(){
+      const section = button.closest('[data-psec]');
+      const box = document.getElementById('assistSections');
+      if (section) section.remove();
+      if (box && !box.querySelector('[data-psec]')) box.insertAdjacentHTML('beforeend', assistSectionBlock({ name: '', items: [] }));
+      if (box && !document.getElementById('assistSectionAdd') && box.querySelectorAll('[data-psec]').length < 8 && box.parentNode) {
+        box.insertAdjacentHTML('afterend', '<button class="btn ghost" id="assistSectionAdd" type="button" style="margin-top:8px">Добавить раздел</button>');
+      }
+      bind();
+    };
+  });
+  document.querySelectorAll('[data-badd]').forEach(function(button){
+    button.onclick = function(){
+      const row = button.closest('[data-brow]');
+      const box = row && row.querySelector(':scope > [data-brows]');
+      if (!box || box.querySelectorAll(':scope > [data-brow]').length >= 6) return;
+      const depth = Number(row.getAttribute('data-depth') || 0) + 1;
+      box.insertAdjacentHTML('beforeend', assistButtonHtml({ label: '', link: '' }, depth));
+      if (box.querySelectorAll(':scope > [data-brow]').length >= 6) button.hidden = true;
+      bind();
+    };
+  });
   document.querySelectorAll('[data-bdel]').forEach(function(button){
     button.onclick = function(){
       const row = button.closest('[data-brow]');
+      const parent = row && row.parentElement;
       if (row) row.remove();
       const list = document.getElementById('assistButtons');
-      if (list && !document.getElementById('assistAdd') && list.querySelectorAll('[data-brow]').length < 6) {
+      if (list && parent === list && !document.getElementById('assistAdd') && list.querySelectorAll(':scope > [data-brow]').length < 6) {
         list.insertAdjacentHTML('afterend', '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>');
+      }
+      if (parent && parent.hasAttribute('data-brows')) {
+        const host = parent.parentElement;
+        const add = host && host.querySelector(':scope > [data-badd]');
+        if (add) add.hidden = parent.querySelectorAll(':scope > [data-brow]').length >= 6;
       }
       bind();
     };
