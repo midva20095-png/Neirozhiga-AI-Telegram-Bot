@@ -51,6 +51,17 @@ test('фраза дона принимает ссылку и ответ и от�
     assert.equal(reply.greeting, 'Здравствуйте.');
     assert.equal(reply.buttons[0].link, 'https://vk.com/market-1');
     assert.equal(reply.buttons[1].text, 'Привезём сегодня.');
+    const modes = assistant.cleanReply({
+        buttons: [{ label: 'Витрина', goods: true }],
+        goodsOn: false,
+        bookingOn: false
+    });
+    assert.deepEqual(modes.buttons[0], { label: 'Витрина', goods: true });
+    assert.equal(modes.goodsOn, false);
+    assert.equal(modes.bookingOn, false);
+    assert.equal(assistant.cleanReply({ scenario: 'info', bookingOn: true }).bookingOn, false);
+    assert.equal(assistant.cleanReply({}).goodsOn, true);
+    assert.equal(assistant.cleanReply({}).bookingOn, true);
     const card = assistant.cleanReply({
         payment: 'Перевод после подтверждения.',
         booking: 'Бронь по дате в сообщениях.',

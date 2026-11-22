@@ -878,15 +878,16 @@ function assistGuide(opened){
     '</details>';
 }
 function assistButtonHtml(button){
-  const kind = button && button.text ? 'text' : 'link';
-  const value = kind === 'link' ? ((button && button.link) || '') : (button.text || '');
+  const kind = button && button.goods ? 'goods' : (button && button.text ? 'text' : 'link');
+  const value = kind === 'link' ? ((button && button.link) || '') : (kind === 'text' ? (button.text || '') : '');
   return '<div class="brow" data-brow>'+
     '<label class="flabel">Надпись на кнопке</label><input data-blabel maxlength="40" placeholder="Например: Каталог" value="'+esc(button && button.label || '')+'">'+
     '<label class="flabel">Что делает кнопка</label><select data-bkind>'+
-    '<option value="link"'+(kind==='link'?' selected':'')+'>Открывает ссылку</option>'+
-    '<option value="text"'+(kind==='text'?' selected':'')+'>Присылает ответ</option></select>'+
-    '<label class="flabel" data-bcap>'+(kind==='link'?'Ссылка https':'Текст ответа')+'</label>'+
-    '<input data-bvalue placeholder="'+(kind==='link'?'https://vk.com/...':'Например: доставка по городу в день заказа')+'" value="'+esc(value)+'">'+
+    '<option value="link"'+(kind==='link'?' selected':'')+'>Прямая ссылка</option>'+
+    '<option value="goods"'+(kind==='goods'?' selected':'')+'>Ответ: бот ищет товары</option>'+
+    '<option value="text"'+(kind==='text'?' selected':'')+'>Свой текст</option></select>'+
+    '<label class="flabel" data-bcap>'+(kind==='goods'?'Поиск':(kind==='link'?'Ваша ссылка https':'Текст ответа'))+'</label>'+
+    '<input data-bvalue placeholder="'+(kind==='goods'?'Бот сам покажет товары кнопками':(kind==='link'?'https://vk.com/...':'Например: доставка по городу в день заказа'))+'" value="'+esc(value)+'"'+(kind==='goods'?' disabled':'')+'>'+
     '<button class="btn ghost" type="button" data-bdel style="margin-top:8px">Убрать кнопку</button></div>';
 }
 const DEFAULT_ASSIST_BUTTONS = [
@@ -930,7 +931,8 @@ function assistScheduleHtml(reply){
   const places = Array.isArray(plan.places) && plan.places.length ? plan.places.join(', ') : 'На месте';
   const seats = Number(plan.seats) > 0 ? String(plan.seats) : '';
   return '<p class="now">Календарь записи</p>'+
-    '<p class="hint">Кнопка «Записаться» показывает дни и время по Москве. Перед подтверждением бот спрашивает телефон. Без номера запись не сохраняется. После подтверждения запись остаётся в блоке «Записи». Вам и покупателю приходит сообщение ВК, накануне после 18:00 и утром в день записи — напоминание.</p>'+
+      '<label style="display:block;margin:8px 0"><input id="assistBookingOn" type="checkbox"'+(!reply || (reply.bookingOn !== false && reply.scenario !== 'info') ? ' checked' : '')+'> Принимать запись</label>'+
+      '<p class="hint">Включено: день, время и телефон. Ссылку на товар бот спросит только если поиск товаров включён, и её можно пропустить кнопкой «Без товара». Выключите, если записывать не нужно.</p>'+
     '<label class="flabel">Рабочие дни</label><div>'+checks+'</div>'+
     '<label class="flabel" for="assistStart">Начало</label><select id="assistStart">'+assistHourOptions(plan.start == null ? 10 : plan.start, 0, 22)+'</select>'+
     '<label class="flabel" for="assistEnd">Конец, это время уже не записывают</label><select id="assistEnd">'+assistHourOptions(plan.end == null ? 19 : plan.end, 1, 23)+'</select>'+
@@ -976,7 +978,8 @@ function assistDesk(reply){
       assistArea('assistOrder', 2500, 8, 'Что покупатель должен написать, чтобы заказ приняли.', reply && reply.order)+
       '<label class="flabel" for="assistChoices">Варианты к заказу</label>'+
       assistArea('assistChoices', 1500, 6, 'Начинка: шоколад, ягоды, ваниль', reply && reply.choices)+
-      '<p class="hint">Каждая строка — вопрос и варианты через запятую. Пример: «Начинка: шоколад, ягоды, ваниль». При заказе бот спросит «Выберите из вариантов». Товары сообщества он берёт из витрины ВК сам.</p>'+
+      '<label style="display:block;margin:8px 0"><input id="assistGoodsOn" type="checkbox"'+(!reply || reply.goodsOn !== false ? ' checked' : '')+'> Искать товары сообщества</label>'+
+      '<p class="hint">Включено: бот показывает найденные товары кнопками, человек может написать, что искать. В заказе и в записи будет видно, что товар нашёл бот, и ссылка на него. Прямая ссылка на кнопке открывается сразу и в заявку сама не попадает. Выключите, если товары не нужны, например для автосервиса.</p>'+
       '<label class="flabel" for="assistPayment">Как оплатить</label>'+
       assistArea('assistPayment', 1500, 5, 'Карта, перевод или наличные. Не пишите то, чего нет.', reply && reply.payment)],
     ['road', 'Доставка',
@@ -996,7 +999,7 @@ function assistDesk(reply){
       assistArea('assistBooking', 2500, 8, 'Предоплата, что взять с собой. Если правил нет, оставьте пустым.', reply && reply.booking)+
       assistScheduleHtml(reply)],
     ['keys', 'Кнопки',
-      '<p class="hint">«Контакты», «Каталог», «Как заказать», «Оплата», «Адрес» и «Записаться» открывают разделы карточки. «Что продаёте», «Доставка» и «Самовывоз» добавляются сами, когда эти поля заполнены. Своя надпись присылает ваш текст или ссылку.</p>'+
+      '<p class="hint">«Прямая ссылка» открывает адрес, который вы сами вставили. «Ответ: бот ищет товары» показывает товары сообщества кнопками, человек может написать запрос. «Свой текст» присылает вашу фразу. В заявке видно, откуда товар: найден ботом или это ваша ссылка.</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistHandoff" type="checkbox"'+(handoff ? ' checked' : '')+'> Кнопка «Администратор»</label>'+
       '<p class="hint">Покупатель жмёт её, вам приходит сообщение ВК, а в списке клиентов появляется пометка «Ждёт администратора». Пока вы отвечаете, помощник молчит. Покупатель возвращает меню кнопкой «К помощнику».</p>'+
       '<div id="assistButtons">'+buttons.map(assistButtonHtml).join('')+'</div>'+
@@ -1329,10 +1332,11 @@ function assistBookings(pack, clients, groupId){
     const person = people.find(function(one){ return Number(one.peerId) === Number(item.peerId); });
     const who = person && person.name ? person.name : ('ВК '+item.peerId);
     const bits = [item.slot, item.place, item.way, item.address, item.phone].filter(Boolean);
+    const product = item.product ? ' · <a href="'+esc(item.product)+'">товар, который нашёл бот</a>' : '';
     const map = item.map ? ' · <a href="'+esc(item.map)+'">карта</a>' : '';
     const dialog = communityDialog(groupId, item.peerId);
     const link = dialog ? ' · <a href="'+esc(dialog)+'" data-out="'+esc(dialog)+'">открыть диалог</a>' : '';
-    return '<div class="note"><b>'+esc(bits.join(' · '))+'</b><div class="hint">'+esc(who)+link+map+'</div></div>';
+    return '<div class="note"><b>'+esc(bits.join(' · '))+'</b><div class="hint">'+esc(who)+link+map+product+'</div></div>';
   }).join('') : '<p class="hint">'+(pack && pack.pending ? 'Календарь откроется, когда помощник будет на связи.' : 'В этот день записей нет.')+'</p>';
   return '<div class="desk"><p class="now">Календарь записей</p>'+
     '<p class="hint">Уведомление приходит вам в ВК от имени этого сообщества, на телефон в приложение ВК. Если его нет, напишите сообществу со своей страницы один раз. «Открыть диалог» — переписка с клиентом. Настройки бота — вкладка «Карточка».</p>'+
@@ -1396,11 +1400,14 @@ function assistKind(select){
   const cap = row.querySelector('[data-bcap]');
   const field = row.querySelector('[data-bvalue]');
   if (select.value === 'link') {
-    if (cap) cap.textContent = 'Ссылка https';
-    if (field) field.placeholder = 'https://vk.com/...';
+    if (cap) cap.textContent = 'Ваша ссылка https';
+    if (field) { field.disabled = false; field.placeholder = 'https://vk.com/...'; }
+  } else if (select.value === 'goods') {
+    if (cap) cap.textContent = 'Поиск';
+    if (field) { field.disabled = true; field.value = ''; field.placeholder = 'Бот сам покажет товары кнопками'; }
   } else {
     if (cap) cap.textContent = 'Текст ответа';
-    if (field) field.placeholder = 'Например: доставка по городу в день заказа';
+    if (field) { field.disabled = false; field.placeholder = 'Например: доставка по городу в день заказа'; }
   }
 }
 function addAssistButton(){
@@ -1454,6 +1461,8 @@ async function saveDesk(){
   const pickupOn = !!(document.getElementById('assistPickupOn') || {}).checked;
   const deliveryOn = !!(document.getElementById('assistDeliveryOn') || {}).checked;
   const handoff = !!(document.getElementById('assistHandoff') || {}).checked;
+  const goodsOn = !!(document.getElementById('assistGoodsOn') || {}).checked;
+  const bookingOn = !!(document.getElementById('assistBookingOn') || {}).checked;
   const picked = document.querySelector('input[name="assistScenario"]:checked');
   const scenario = picked && picked.value === 'info' ? 'info' : 'funnel';
   const buttons = [];
@@ -1461,7 +1470,12 @@ async function saveDesk(){
     const label = (row.querySelector('[data-blabel]') || {}).value || '';
     const kind = (row.querySelector('[data-bkind]') || {}).value || 'link';
     const value = (row.querySelector('[data-bvalue]') || {}).value || '';
-    if (!String(label).trim() && !String(value).trim()) return;
+    if (!String(label).trim()) return;
+    if (kind === 'goods') {
+      buttons.push({ label: label, goods: true });
+      return;
+    }
+    if (!String(value).trim()) return;
     const item = { label: label };
     item[kind === 'text' ? 'text' : 'link'] = value;
     buttons.push(item);
@@ -1472,7 +1486,7 @@ async function saveDesk(){
     const response = await fetch('/api/vk/assistant/reply', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, choices: choices, payment: payment, booking: booking, pickup: pickup, pickupMap: pickupMap, delivery: delivery, deliveryPrice: deliveryPrice, pickupOn: pickupOn, deliveryOn: deliveryOn, handoff: handoff, buttons: buttons, schedule: assistScheduleValue(), scenario: scenario })
+      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, choices: choices, payment: payment, booking: booking, pickup: pickup, pickupMap: pickupMap, delivery: delivery, deliveryPrice: deliveryPrice, pickupOn: pickupOn, deliveryOn: deliveryOn, goodsOn: goodsOn, bookingOn: scenario === 'info' ? false : bookingOn, handoff: handoff, buttons: buttons, schedule: assistScheduleValue(), scenario: scenario })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Ответы не сохранились');

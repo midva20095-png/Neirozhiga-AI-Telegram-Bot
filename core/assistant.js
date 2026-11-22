@@ -81,6 +81,8 @@ function cleanReply(input) {
         handoff: !(input.handoff === false || input.handoff === 'false'),
         pickupOn: input.pickupOn === true || input.pickupOn === 'true',
         deliveryOn: input.deliveryOn === true || input.deliveryOn === 'true',
+        goodsOn: !(input.goodsOn === false || input.goodsOn === 'false'),
+        bookingOn: input.scenario === 'info' ? false : !(input.bookingOn === false || input.bookingOn === 'false'),
         pickupMap: pickupMap
     }, fields);
 }
@@ -140,6 +142,7 @@ function cleanButton(item) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
     const label = String(item.label || '').replace(/\s+/g, ' ').trim();
     if (!label || label.length > 40) return null;
+    if (item.goods === true || item.goods === 'true') return { label, goods: true };
     const hasLink = item.link != null && item.link !== '';
     const hasText = item.text != null && item.text !== '';
     if (hasLink === hasText) return null;
@@ -445,7 +448,7 @@ async function saveDesk(account, input, fetchImpl) {
         throw publicError('Для самовывоза нужна ссылка Яндекс Карт, например https://yandex.ru/maps/.');
     }
     const reply = cleanReply(input);
-    if (!reply) throw publicError('У кнопки нужна надпись и либо ссылка https, либо текст ответа. Кнопок не больше шести.');
+    if (!reply) throw publicError('У кнопки нужна надпись. Дальше либо ваша ссылка https, либо текст ответа, либо поиск товаров. Кнопок не больше шести.');
     const rows = await db.listAssistantCommunities(ownerId);
     const row = rows[0];
     if (!row) throw publicError('Сначала подключите сообщество.');
@@ -458,6 +461,7 @@ async function saveDesk(account, input, fetchImpl) {
         contacts: reply.contacts,
         address: reply.address,
         order: reply.order,
+        choices: reply.choices,
         payment: reply.payment,
         booking: reply.booking,
         pickup: reply.pickup,
@@ -466,6 +470,8 @@ async function saveDesk(account, input, fetchImpl) {
         deliveryPrice: reply.deliveryPrice,
         pickupOn: reply.pickupOn,
         deliveryOn: reply.deliveryOn,
+        goodsOn: reply.goodsOn,
+        bookingOn: reply.bookingOn,
         handoff: reply.handoff,
         buttons: reply.buttons,
         schedule: reply.schedule,
@@ -691,7 +697,7 @@ function publicOrders(list) {
     if (!Array.isArray(list)) return [];
     return list.slice(0, 80).map(item => ({
         peerId: Number(item && item.peerId) || 0,
-        item: cleanBit(item && item.item, 240),
+        item: cleanBit(item && item.item, 320),
         phone: cleanBit(item && item.phone, 16),
         way: cleanBit(item && item.way, 40)
     })).filter(item => item.peerId > 0 && item.item);
@@ -708,7 +714,8 @@ function publicBookings(list) {
         way: cleanBit(item && item.way, 40),
         address: cleanBit(item && item.address, 200),
         phone: cleanBit(item && item.phone, 16),
-        map: yandexMapLink(item && item.map)
+        map: yandexMapLink(item && item.map),
+        product: httpsLink(item && item.product)
     })).filter(item => item.peerId > 0 && /^\d{4}-\d{2}-\d{2}$/.test(item.day));
 }
 
