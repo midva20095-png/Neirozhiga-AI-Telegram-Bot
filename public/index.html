@@ -120,15 +120,13 @@ window.addEventListener('message', function(event){
 html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,sans-serif;min-height:100%}
 button,textarea,input,select{font:inherit;color:inherit}
 .app{max-width:620px;margin:0 auto;padding:12px 12px calc(84px + env(safe-area-inset-bottom))}
-.srow{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(72px,.6fr) minmax(0,1.2fr) auto;gap:6px;margin:6px 0;align-items:center}
+.srow{display:flex;flex-direction:column;align-items:stretch;gap:6px;margin:10px 0;padding:10px;border:1px solid var(--line);border-radius:14px;background:#1c1233}
 .psec{margin:10px 0;padding:10px;border:1px solid var(--line);border-radius:14px}
-.prow{grid-template-columns:minmax(0,1.4fr) minmax(72px,.5fr) minmax(0,1.1fr)}
-.srow .snote{grid-column:1 / -1}
-.srow input{width:100%;border-radius:10px;border:1px solid var(--line);background:#1c1233;padding:8px}
-.srow label{font-size:12px;color:var(--mut);white-space:nowrap}
+.srow input,.srow textarea,.brow input,.brow textarea{width:100%;border-radius:10px;border:1px solid var(--line);background:#100818;padding:10px}
+.brow textarea{min-height:72px}
+.srow label{font-size:14px;color:var(--text)}
 .astep{margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
 .astep:first-child{border-top:0;margin-top:0}
-@media(max-width:640px){.srow{grid-template-columns:1fr 1fr}.srow input[data-slink],.srow input[data-plink]{grid-column:1 / -1}}
 .top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .logo{font-family:Unbounded,sans-serif;font-weight:700;font-size:18px;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;flex:1}
 .bal{font-weight:800;border:1px solid var(--line);border-radius:12px;padding:6px 10px;white-space:nowrap}
@@ -246,6 +244,10 @@ input[type=checkbox],input[type=radio]{width:auto;padding:0;margin:0 8px 0 0;ver
 .steps{margin:8px 0 0;padding-left:18px}
 .steps li{margin:8px 0;line-height:1.35}
 .brow{margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:14px;background:#140c24}
+.keyprev{background:#100818;border:1px solid var(--line);border-radius:16px;padding:10px;margin-top:8px}
+.keyprev .row{display:flex;gap:6px;margin-top:6px}
+.keyprev .key{flex:1;text-align:center;border:1px solid var(--line);border-radius:10px;padding:8px;font-size:13px;font-weight:800}
+.keyprev .key.wide{background:#14302a}
 .brows{margin:8px 0 0 10px;padding-left:10px;border-left:2px solid var(--line)}
 .cover{display:block;width:100%;height:196px;object-fit:cover;object-position:center 20%;border-radius:18px;margin:0 0 12px;background:#140c24}
 body.vkapp .cover{display:none}
@@ -893,45 +895,77 @@ function assistGuide(opened){
     '<p class="hint">Ключ нужен, чтобы помощник отвечал покупателям в этом сообществе. В кабинете он повторно не показывается и другим людям не виден. Пока действует донат НейроЯги, помощник отвечает. Когда срок закончится, он замолчит только в вашем сообществе.</p>'+
     '</details>';
 }
+function assistHttps(value){
+  const link = String(value || '').trim();
+  if (!/^https:\/\/\S+$/i.test(link) || link.length > 300) return '';
+  return link;
+}
+function assistButtonKind(button){
+  if (button && Array.isArray(button.items) && button.items.length) return 'menu';
+  if (button && button.action === 'contact') return 'contact';
+  if (button && button.link && !button.text) return 'link';
+  return 'text';
+}
 function assistButtonHtml(button, depth){
   const level = depth || 0;
-  const nested = button && Array.isArray(button.items) && button.items.length;
-  const kind = nested ? 'menu' : (button && button.text && !button.goods ? 'text' : 'link');
-  const value = kind === 'link' ? ((button && button.link) || '') : (kind === 'text' ? (button.text || '') : '');
+  const kind = assistButtonKind(button);
+  const nested = kind === 'menu';
   const kids = nested ? button.items.map(function(item){ return assistButtonHtml(item, level + 1); }).join('') : '';
-  const menuOption = level < 2 ? '<option value="menu"'+(kind==='menu'?' selected':'')+'>Свои кнопки</option>' : '';
-  const plain = kind === 'menu' ? ' hidden' : '';
-  const nest = kind === 'menu' ? '' : ' hidden';
+  const text = button && button.text && !button.link ? button.text : '';
+  const link = button && button.link ? button.link : '';
+  const name = button && button.label || '';
+  const count = String(name).length;
   return '<div class="brow" data-brow data-depth="'+level+'">'+
-    '<label class="flabel">'+(level ? 'Кнопка внутри' : 'Основная кнопка')+'</label><input data-blabel maxlength="40" placeholder="Надпись кнопки" value="'+esc(button && button.label || '')+'">'+
-    '<label class="flabel">Что делает кнопка</label><select data-bkind>'+
-    '<option value="link"'+(kind==='link'?' selected':'')+'>Прямая ссылка</option>'+
-    '<option value="text"'+(kind==='text'?' selected':'')+'>Свой текст</option>'+menuOption+'</select>'+
-    '<div data-bplain'+plain+'>'+
-    '<label class="flabel" data-bcap>'+(kind==='link'?'Ваша ссылка https':'Текст ответа')+'</label>'+
-    '<input data-bvalue placeholder="'+(kind==='link'?'https://...':'Свой ответ клиенту')+'" value="'+esc(value)+'"></div>'+
-    '<div class="brows" data-brows'+nest+'>'+kids+'</div>'+
-    '<button class="btn ghost" type="button" data-badd style="margin-top:8px"'+(kind==='menu' && (!nested || button.items.length < 6) ? '' : ' hidden')+'>Добавить кнопку внутри</button>'+
-    '<button class="btn ghost" type="button" data-bdel style="margin-top:8px">Убрать кнопку</button></div>';
+    '<label class="flabel">'+(level ? 'Кнопка внутри' : 'Своя кнопка')+'</label>'+
+    '<input data-blabel maxlength="24" placeholder="Прайс" value="'+esc(name)+'">'+
+    '<p class="count" data-bcount>'+count+' из 24</p>'+
+    '<label class="flabel">Что делает кнопка</label>'+
+    '<select data-bkind>'+
+    '<option value="text"'+(kind==='text'?' selected':'')+'>Текст</option>'+
+    '<option value="link"'+(kind==='link'?' selected':'')+'>Ссылка</option>'+
+    '<option value="contact"'+(kind==='contact'?' selected':'')+'>Контакты из карточки</option>'+
+    (level < 2 ? '<option value="menu"'+(kind==='menu'?' selected':'')+'>Кнопки внутри</option>' : '')+
+    '</select>'+
+    '<div data-btextwrap'+(kind==='text'?'':' hidden')+'>'+
+    '<label class="flabel">Текст клиенту</label>'+
+    '<textarea data-btext maxlength="900" rows="2" placeholder="Свой ответ. Если пусто, клиент увидит название кнопки.">'+esc(text)+'</textarea></div>'+
+    '<div data-blinkwrap'+(kind==='link'?'':' hidden')+'>'+
+    '<label class="flabel">Ссылка https</label>'+
+    '<input data-blink maxlength="300" placeholder="https://..." value="'+esc(link)+'"></div>'+
+    '<div class="brows" data-brows'+(kind==='menu'?'':' hidden')+'>'+kids+'</div>'+
+    (level < 2 ? '<button class="btn ghost" type="button" data-badd style="margin-top:8px"'+(kind==='menu'?'':' hidden')+'>Добавить кнопку внутри</button>' : '')+
+    '<label style="display:block;margin-top:8px"><input data-bhide type="checkbox"'+(button && button.hidden ? ' checked' : '')+'> Скрыть, не удаляя</label>'+
+    (level ? '' : '<button class="btn ghost" type="button" data-bup style="margin-top:8px">Выше</button><button class="btn ghost" type="button" data-bdown style="margin-top:8px">Ниже</button>')+
+    '<button class="btn ghost" type="button" data-bdel style="margin-top:8px">Убрать</button></div>';
 }
 function assistReadButton(row){
-  const label = (row.querySelector(':scope > [data-blabel]') || {}).value || '';
-  if (!String(label).trim()) return null;
-  const kind = (row.querySelector(':scope > [data-bkind]') || {}).value || 'link';
+  const label = String((row.querySelector(':scope > [data-blabel]') || {}).value || '').replace(/\s+/g, ' ').trim().slice(0, 24);
+  if (!label) return null;
+  const kind = (row.querySelector(':scope > [data-bkind]') || {}).value || 'text';
+  const hidden = !!((row.querySelector(':scope > label > [data-bhide]') || {}).checked);
+  let item = null;
   if (kind === 'menu') {
     const items = [];
+    const seen = {};
     row.querySelectorAll(':scope > [data-brows] > [data-brow]').forEach(function(child){
-      const item = assistReadButton(child);
-      if (item) items.push(item);
+      const next = assistReadButton(child);
+      if (!next || seen[next.label]) return;
+      seen[next.label] = true;
+      items.push(next);
     });
     if (!items.length) return null;
-    return { label: label, items: items };
+    item = { label: label, items: items };
+  } else if (kind === 'link') {
+    const link = assistHttps((row.querySelector(':scope > [data-blinkwrap] [data-blink]') || {}).value || '');
+    if (!link) return null;
+    item = { label: label, link: link };
+  } else if (kind === 'contact') {
+    item = { label: label, action: 'contact' };
+  } else {
+    const text = String((row.querySelector(':scope > [data-btextwrap] [data-btext]') || {}).value || '').trim();
+    item = { label: label, text: text || label };
   }
-  if (kind === 'goods') return null;
-  const value = (row.querySelector(':scope > [data-bplain] [data-bvalue]') || {}).value || '';
-  if (!String(value).trim()) return null;
-  const item = { label: label };
-  item[kind === 'text' ? 'text' : 'link'] = value;
+  if (hidden) item.hidden = true;
   return item;
 }
 const DEFAULT_ASSIST_BUTTONS = [
@@ -942,6 +976,16 @@ const DEFAULT_ASSIST_BUTTONS = [
   { label: 'Адрес', text: 'Показать адрес' },
   { label: 'Записаться', text: 'Открыть свободные дни' }
 ];
+function assistBookName(reply){
+  const saved = reply && Array.isArray(reply.buttons) ? reply.buttons : [];
+  const hit = saved.find(function(button){ return button && (button.action === 'book' || button.label === 'Записаться'); });
+  return hit && hit.label ? hit.label : 'Записаться';
+}
+function assistCustomButtons(reply, groupId){
+  return assistButtonList(reply, groupId).filter(function(button){
+    return button && button.action !== 'book' && button.label !== 'Записаться';
+  });
+}
 function assistButtonList(reply, groupId){
   const saved = reply && Array.isArray(reply.buttons) ? reply.buttons : [];
   const source = saved.length ? saved : (reply && reply.scenario === 'info' ? DEFAULT_ASSIST_BUTTONS.filter(function(button){ return button.label !== 'Записаться'; }) : DEFAULT_ASSIST_BUTTONS);
@@ -1029,19 +1073,22 @@ function assistServiceItems(value){
 function assistServiceRow(item){
   const row = item || { name: '', price: '', link: '', extra: false };
   return '<div class="srow" data-srow>'+
-    '<input data-sname maxlength="40" placeholder="Название услуги" value="'+esc(row.name || '')+'" oninput="paintAssistBill()">'+
-    '<input data-sprice inputmode="numeric" maxlength="7" placeholder="Цена, ₽" value="'+esc(row.price ? String(row.price) : '')+'" oninput="paintAssistBill()">'+
+    '<label class="flabel">Название</label>'+
+    '<input data-sname maxlength="80" placeholder="Название услуги" value="'+esc(row.name || '')+'" oninput="paintAssistBill()">'+
+    '<label class="flabel">Цена, ₽</label>'+
+    '<input data-sprice inputmode="numeric" maxlength="7" placeholder="500" value="'+esc(row.price ? String(row.price) : '')+'" oninput="paintAssistBill()">'+
+    '<label class="flabel">Ссылка, если есть</label>'+
     '<input data-slink maxlength="300" placeholder="https://..." value="'+esc(row.link || '')+'" oninput="paintAssistBill()">'+
-    '<label><input data-sextra type="checkbox"'+(row.extra ? ' checked' : '')+' onchange="paintAssistBill()"> Доп</label>'+
-    '<input class="snote" data-stext maxlength="300" placeholder="Что входит в услугу" value="'+esc(row.text || '')+'">'+
-    '<label><input data-shide type="checkbox"'+(row.hidden ? ' checked' : '')+' onchange="paintAssistBill()"> Скрыть</label>'+
-    '<button class="btn ghost" type="button" data-sdel>Удалить</button></div>';
+    '<label class="flabel">Что входит</label>'+
+    '<input class="snote" data-stext maxlength="300" placeholder="Коротко, что получает клиент" value="'+esc(row.text || '')+'">'+
+    '<label><input data-shide type="checkbox"'+(row.hidden ? ' checked' : '')+' onchange="paintAssistBill()"> Скрыть от клиента</label>'+
+    '<button class="btn ghost" type="button" data-sdel>Удалить услугу</button></div>';
 }
 function assistServiceEditor(reply){
   const items = assistServiceItems(reply && reply.services);
   const rows = (items.length ? items : [{ name: '', price: '', link: '', extra: false }]).slice(0, 8).map(assistServiceRow).join('');
   return '<label class="flabel">Услуги, цены и допы</label>'+
-    '<p class="hint">Название, цена, ссылка и описание. Клиент жмёт услугу, на кнопке появляется галочка, можно выбрать несколько, сумма внизу. «Скрыть» оставляет строку здесь, клиент её не видит. «Удалить» убирает строку. Пустая цена в итог не входит.</p>'+
+    '<p class="hint">Напишите название и цену. «Скрыть от клиента» оставляет строку здесь, в чате её не будет. Пустая цена в сумму не входит.</p>'+
     '<div id="assistBillPreview">'+assistBillPreviewHtml(items)+'</div>'+
     '<div id="assistServiceRows">'+rows+'</div>'+
     (items.length < 8 ? '<button class="btn ghost" id="assistServiceAdd" type="button" style="margin-top:8px">Добавить услугу</button>' : '');
@@ -1078,11 +1125,15 @@ function fillAssistServices(list){
 function assistProductRow(item){
   const row = item || { name: '', price: '', link: '' };
   return '<div class="srow prow" data-prow>'+
-    '<input data-pname maxlength="40" placeholder="Название" value="'+esc(row.name || '')+'">'+
-    '<input data-pprice inputmode="numeric" maxlength="7" placeholder="Цена, ₽" value="'+esc(row.price ? String(row.price) : '')+'">'+
+    '<label class="flabel">Название</label>'+
+    '<input data-pname maxlength="80" placeholder="Название" value="'+esc(row.name || '')+'">'+
+    '<label class="flabel">Цена, ₽</label>'+
+    '<input data-pprice inputmode="numeric" maxlength="7" placeholder="500" value="'+esc(row.price ? String(row.price) : '')+'">'+
+    '<label class="flabel">Ссылка, если есть</label>'+
     '<input data-plink maxlength="300" placeholder="https://..." value="'+esc(row.link || '')+'">'+
+    '<label class="flabel">Описание</label>'+
     '<input class="snote" data-ptext maxlength="300" placeholder="Что это за позиция" value="'+esc(row.text || '')+'">'+
-    '<label><input data-phide type="checkbox"'+(row.hidden ? ' checked' : '')+'> Скрыть</label>'+
+    '<label><input data-phide type="checkbox"'+(row.hidden ? ' checked' : '')+'> Скрыть от клиента</label>'+
     '<button class="btn ghost" type="button" data-pdel>Удалить</button>'+
     '</div>';
 }
@@ -1121,7 +1172,7 @@ function assistSectionBlock(section){
 }
 function assistProductEditor(reply){
   const groups = assistProductGroups(reply && reply.products);
-  return '<p class="hint">Серый текст в поле — пустая подсказка, клиент её не видит и это не ваше описание. Название раздела пишете сами. Клиент жмёт «Каталог», открывает раздел, читает описание и добавляет позицию в счёт.</p>'+
+  return '<p class="hint">Раздел — это группа, например «Дополнительно». Внутри напишите название и цену. Клиент откроет группу кнопкой «Каталог».</p>'+
     '<div id="assistSections">'+groups.map(assistSectionBlock).join('')+'</div>'+
     (groups.length < 8 ? '<button class="btn ghost" id="assistSectionAdd" type="button" style="margin-top:8px">Добавить раздел</button>' : '');
 }
@@ -1259,17 +1310,21 @@ function assistDesk(reply, groupId){
       assistArea('assistBooking', 2500, 8, 'Что дописать к записи. Если правил нет, оставьте пустым.', reply && reply.booking)+
       assistScheduleHtml(reply)],
     ['keys', '9. Кнопки',
-      '<p class="hint">Сначала основные кнопки: их клиент видит сразу. Если к основной нужны свои кнопки, выберите «Свои кнопки» и добавьте их внутри. Клиент нажмёт основную, увидит эти кнопки и вернётся назад кнопкой «Назад». Внутри можно открыть ещё один ряд. Ссылка и свой текст остаются для кнопки, которая сразу отвечает.</p>'+
+      '<p class="hint">«Записаться» стоит всегда и на всю ширину. Её можно только переименовать. Свои кнопки — текст, ссылка, контакты или кнопки внутри. На телефоне в ряд помещаются две короткие кнопки, не длиннее 24 знаков. «Скрыть» убирает кнопку из чата, но не стирает её.</p>'+
+      '<label class="flabel" for="assistBookLabel">Кнопка записи</label>'+
+      '<input id="assistBookLabel" maxlength="24" placeholder="Записаться" value="'+esc(assistBookName(reply))+'">'+
+      '<p class="hint">Эту кнопку нельзя удалить. Снять запись целиком можно на шаге 8.</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistHandoff" type="checkbox"'+(handoff ? ' checked' : '')+'> Кнопка «Администратор»</label>'+
-      '<p class="hint">Покупатель жмёт её, вам приходит сообщение ВК, а в списке клиентов появляется пометка «Ждёт администратора». Пока вы отвечаете, помощник молчит. Покупатель возвращает меню кнопкой «К помощнику».</p>'+
-      '<div id="assistButtons">'+buttons.map(function(button){ return assistButtonHtml(button); }).join('')+'</div>'+
-      (buttons.length < 6 ? '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>' : '')+
+      '<p class="hint">Клиент нажмёт её, и вам придёт сообщение во ВК. Пока вы отвечаете, бот молчит.</p>'+
+      '<div id="assistButtons">'+assistCustomButtons(reply, groupId).map(function(button){ return assistButtonHtml(button); }).join('')+'</div>'+
+      (assistCustomButtons(reply, groupId).length < 8 ? '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>' : '')+
+      '<div id="assistKeyPreview"></div>'+
       '<button class="btn ghost" id="assistReset" type="button" style="margin-top:8px">Вернуть кнопки по умолчанию</button>']
   ];
   const chips = '<div class="aslices">'+parts.map(function(part){
     return '<button type="button" data-slice="'+part[0]+'" class="'+(assistSlice===part[0]?'on':'')+'">'+part[1]+'</button>';
   }).join('')+'</div>';
-  return '<div class="desk"><p class="hint">Идите по шагам сверху вниз. Цены услуг — шаг 2, разделы каталога — шаг 3. Бот сам товары сообщества не ищет.</p>'+
+  return '<div class="desk"><p class="hint">Сверху вниз: направление, цены, каталог, текст, кнопки. В конце одна кнопка «Сохранить карточку».</p>'+
     chips+parts.map(function(part){ return '<section class="astep" id="assist-step-'+part[0]+'" data-aslice="'+part[0]+'"><p class="now">Шаг '+part[1]+'</p>'+part[2]+'</section>'; }).join('')+
     '<button class="btn" id="assistDesk" type="button" style="margin-top:12px">Сохранить карточку</button>'+
     '<p class="hint">Одна кнопка сохраняет все шаги. Пустая цена клиенту не называется.</p>'+
@@ -1671,27 +1726,50 @@ async function sendAssistMail(){
 function assistKind(select){
   const row = select.closest('[data-brow]');
   if (!row || row.querySelector(':scope > [data-bkind]') !== select) return;
-  const plain = row.querySelector(':scope > [data-bplain]');
+  const text = row.querySelector(':scope > [data-btextwrap]');
+  const link = row.querySelector(':scope > [data-blinkwrap]');
   const nest = row.querySelector(':scope > [data-brows]');
   const add = row.querySelector(':scope > [data-badd]');
-  const cap = plain && plain.querySelector('[data-bcap]');
-  const field = plain && plain.querySelector('[data-bvalue]');
-  if (select.value === 'menu') {
-    if (plain) plain.hidden = true;
-    if (nest) nest.hidden = false;
-    if (add) add.hidden = nest && nest.querySelectorAll(':scope > [data-brow]').length >= 6;
+  const menu = select.value === 'menu';
+  if (text) text.hidden = select.value !== 'text';
+  if (link) link.hidden = select.value !== 'link';
+  if (nest) nest.hidden = !menu;
+  if (add) add.hidden = !menu || (nest && nest.querySelectorAll(':scope > [data-brow]').length >= 6);
+}
+function ensureAssistAdd(){
+  const list = document.getElementById('assistButtons');
+  if (!list) return;
+  let add = document.getElementById('assistAdd');
+  const full = list.querySelectorAll(':scope > [data-brow]').length >= 8;
+  if (full) {
+    if (add) add.remove();
     return;
   }
-  if (plain) plain.hidden = false;
-  if (nest) nest.hidden = true;
-  if (add) add.hidden = true;
-  if (select.value === 'link') {
-    if (cap) cap.textContent = 'Ваша ссылка https';
-    if (field) { field.disabled = false; field.placeholder = 'https://vk.com/...'; }
-  } else {
-    if (cap) cap.textContent = 'Текст ответа';
-    if (field) { field.disabled = false; field.placeholder = 'Свой ответ клиенту'; }
+  if (!add) {
+    list.insertAdjacentHTML('afterend', '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>');
+    add = document.getElementById('assistAdd');
   }
+  if (add) add.onclick = addAssistButton;
+}
+function paintAssistKeys(){
+  const box = document.getElementById('assistKeyPreview');
+  if (!box) return;
+  const names = [];
+  document.querySelectorAll('#assistButtons > [data-brow]').forEach(function(row){
+    if ((row.querySelector(':scope > label > [data-bhide]') || {}).checked) return;
+    const label = String((row.querySelector(':scope > [data-blabel]') || {}).value || '').trim();
+    if (label) names.push(label);
+  });
+  const bookOn = !document.getElementById('assistBookingOn') || document.getElementById('assistBookingOn').checked;
+  const book = String((document.getElementById('assistBookLabel') || {}).value || '').trim() || 'Записаться';
+  let rows = '';
+  for (let index = 0; index < names.length; index += 2) {
+    const pair = names.slice(index, index + 2).map(function(label){ return '<div class="key">'+esc(label)+'</div>'; }).join('');
+    rows += '<div class="row">'+pair+'</div>';
+  }
+  if (bookOn) rows += '<div class="row"><div class="key wide">'+esc(book)+'</div></div>';
+  if ((document.getElementById('assistHandoff') || {}).checked !== false) rows += '<div class="row"><div class="key">Администратор</div></div>';
+  box.innerHTML = '<p class="now">Так увидит клиент</p>'+rows;
 }
 function applyTrade(id){
   const catalog = window.ASSIST_TRADES;
@@ -1719,12 +1797,11 @@ function applyTrade(id){
       }
       return button;
     });
-    list.innerHTML = buttons.map(function(button){ return assistButtonHtml(button); }).join('');
-    const add = document.getElementById('assistAdd');
-    if (list.querySelectorAll(':scope > [data-brow]').length >= 6 && add) add.remove();
-    if (list.querySelectorAll(':scope > [data-brow]').length < 6 && !document.getElementById('assistAdd')) {
-      list.insertAdjacentHTML('afterend', '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>');
-    }
+    const book = document.getElementById('assistBookLabel');
+    const named = buttons.find(function(button){ return button && (button.action === 'book' || button.label === 'Записаться'); });
+    if (book && named && named.label) book.value = named.label;
+    list.innerHTML = buttons.filter(function(button){ return button && button.action !== 'book' && button.label !== 'Записаться'; }).map(function(button){ return assistButtonHtml(button); }).join('');
+    ensureAssistAdd();
   }
   const msg = document.getElementById('deskmsg');
   if (msg) msg.textContent = 'Направление «'+trade.title+'» подставлено. Сохраните карточку.';
@@ -1740,23 +1817,23 @@ function syncBookButton(){
 }
 function addAssistButton(){
   const list = document.getElementById('assistButtons');
-  if (!list || list.querySelectorAll(':scope > [data-brow]').length >= 6) return;
-  list.insertAdjacentHTML('beforeend', assistButtonHtml({ label: '', link: '' }));
-  const add = document.getElementById('assistAdd');
-  if (add && list.querySelectorAll(':scope > [data-brow]').length >= 6) add.remove();
+  if (!list || list.querySelectorAll(':scope > [data-brow]').length >= 8) return;
+  list.insertAdjacentHTML('beforeend', assistButtonHtml({ label: '' }));
+  ensureAssistAdd();
   bind();
 }
 function resetAssistButtons(){
   const list = document.getElementById('assistButtons');
   if (!list) return;
   const id = String((document.getElementById('assistGroup') || {}).value || '').replace(/\D/g, '');
-  const buttons = DEFAULT_ASSIST_BUTTONS.map(function(button){
+  const buttons = DEFAULT_ASSIST_BUTTONS.filter(function(button){ return button.label !== 'Записаться'; }).map(function(button){
     if (button.label === 'Каталог' && id) return { label: 'Каталог', link: 'https://vk.com/market-' + id };
     return button;
   });
   list.innerHTML = buttons.map(function(button){ return assistButtonHtml(button); }).join('');
-  const add = document.getElementById('assistAdd');
-  if (add) add.remove();
+  const book = document.getElementById('assistBookLabel');
+  if (book) book.value = 'Записаться';
+  ensureAssistAdd();
   bind();
 }
 function assistScheduleValue(){
@@ -1804,10 +1881,16 @@ async function saveDesk(){
   const picked = document.querySelector('input[name="assistScenario"]:checked');
   const scenario = picked && picked.value === 'info' ? 'info' : 'funnel';
   const buttons = [];
+  const seen = {};
   document.querySelectorAll('#assistButtons > [data-brow]').forEach(function(row){
     const item = assistReadButton(row);
-    if (item) buttons.push(item);
+    if (!item || seen[item.label]) return;
+    seen[item.label] = true;
+    buttons.push(item);
   });
+  const bookOn = !!(document.getElementById('assistBookingOn') || {}).checked;
+  const bookLabel = String((document.getElementById('assistBookLabel') || {}).value || '').replace(/\s+/g, ' ').trim().slice(0, 24) || 'Записаться';
+  if (bookOn && !seen[bookLabel]) buttons.push({ label: bookLabel, action: 'book', text: 'Открыть свободные дни' });
   if (button) button.disabled = true;
   if (msg) msg.textContent = 'Сохраняю ответы…';
   try {
@@ -2209,8 +2292,9 @@ function bind(){
   if (assistDrop) assistDrop.onclick = dropAssist;
   const assistDeskButton = document.getElementById('assistDesk');
   if (assistDeskButton) assistDeskButton.onclick = saveDesk;
-  const assistAdd = document.getElementById('assistAdd');
-  if (assistAdd) assistAdd.onclick = addAssistButton;
+  ensureAssistAdd();
+  const bookLabel = document.getElementById('assistBookLabel');
+  if (bookLabel) bookLabel.oninput = paintAssistKeys;
   const assistServiceAdd = document.getElementById('assistServiceAdd');
   if (assistServiceAdd) assistServiceAdd.onclick = addAssistService;
   const assistSectionAdd = document.getElementById('assistSectionAdd');
@@ -2252,10 +2336,22 @@ function bind(){
   const assistMail = document.getElementById('assistMail');
   if (assistMail) assistMail.oninput = function(){ assistMailAt = 0; };
   document.querySelectorAll('[data-bkind]').forEach(function(select){
-    select.onchange = function(){ assistKind(select); };
+    select.onchange = function(){ assistKind(select); paintAssistKeys(); };
+  });
+  document.querySelectorAll('[data-blabel]').forEach(function(input){
+    input.oninput = function(){
+      const count = input.parentElement && input.parentElement.querySelector(':scope > [data-bcount]');
+      if (count) count.textContent = String(input.value || '').length + ' из 24';
+      paintAssistKeys();
+    };
+  });
+  document.querySelectorAll('[data-bhide]').forEach(function(box){
+    box.onchange = paintAssistKeys;
   });
   const bookBox = document.getElementById('assistBookingOn');
-  if (bookBox) bookBox.onchange = syncBookButton;
+  if (bookBox) bookBox.onchange = function(){ syncBookButton(); paintAssistKeys(); };
+  const handBox = document.getElementById('assistHandoff');
+  if (handBox) handBox.onchange = paintAssistKeys;
   const tradeBox = document.getElementById('assistTrade');
   if (tradeBox) tradeBox.onchange = function(){ applyTrade(tradeBox.value); };
   document.querySelectorAll('input[name="assistScenario"]').forEach(function(node){
@@ -2264,9 +2360,11 @@ function bind(){
       const box = document.getElementById('assistBookingOn');
       if (box) box.checked = false;
       syncBookButton();
+      paintAssistKeys();
     };
   });
   syncBookButton();
+  paintAssistKeys();
   document.querySelectorAll('[data-sdel]').forEach(function(button){
     button.onclick = function(){
       const row = button.closest('[data-srow]');
@@ -2309,9 +2407,23 @@ function bind(){
       const box = row && row.querySelector(':scope > [data-brows]');
       if (!box || box.querySelectorAll(':scope > [data-brow]').length >= 6) return;
       const depth = Number(row.getAttribute('data-depth') || 0) + 1;
-      box.insertAdjacentHTML('beforeend', assistButtonHtml({ label: '', link: '' }, depth));
+      box.hidden = false;
+      box.insertAdjacentHTML('beforeend', assistButtonHtml({ label: '' }, depth));
       if (box.querySelectorAll(':scope > [data-brow]').length >= 6) button.hidden = true;
       bind();
+    };
+  });
+  document.querySelectorAll('[data-bup], [data-bdown]').forEach(function(button){
+    button.onclick = function(){
+      const row = button.closest('[data-brow]');
+      const list = document.getElementById('assistButtons');
+      if (!row || !list || row.parentElement !== list) return;
+      const down = button.hasAttribute('data-bdown');
+      const other = down ? row.nextElementSibling : row.previousElementSibling;
+      if (!other || !other.hasAttribute('data-brow')) return;
+      if (down) list.insertBefore(other, row);
+      else list.insertBefore(row, other);
+      paintAssistKeys();
     };
   });
   document.querySelectorAll('[data-bdel]').forEach(function(button){
@@ -2319,15 +2431,12 @@ function bind(){
       const row = button.closest('[data-brow]');
       const parent = row && row.parentElement;
       if (row) row.remove();
-      const list = document.getElementById('assistButtons');
-      if (list && parent === list && !document.getElementById('assistAdd') && list.querySelectorAll(':scope > [data-brow]').length < 6) {
-        list.insertAdjacentHTML('afterend', '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>');
-      }
       if (parent && parent.hasAttribute('data-brows')) {
         const host = parent.parentElement;
         const add = host && host.querySelector(':scope > [data-badd]');
         if (add) add.hidden = parent.querySelectorAll(':scope > [data-brow]').length >= 6;
       }
+      ensureAssistAdd();
       bind();
     };
   });

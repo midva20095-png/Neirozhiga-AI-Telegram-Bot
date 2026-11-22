@@ -61,7 +61,7 @@ function cleanReply(input) {
     }
     if (greeting === null) return null;
     const source = Array.isArray(input.buttons) ? input.buttons : [];
-    if (source.length > 6) return null;
+    if (source.length > 10) return null;
     const buttons = [];
     const seen = new Set();
     for (const item of source) {
@@ -161,10 +161,13 @@ function cleanButton(item, depth) {
     const label = String(item.label || '').replace(/\s+/g, ' ').trim();
     if (!label || label.length > 40) return null;
     if (level && NESTED_RESERVED.has(label)) return null;
-    if (!level && (item.goods === true || item.goods === 'true')) return { label: label, goods: true };
+    if (!level && (item.goods === true || item.goods === 'true')) return stampButton(item, { label: label, goods: true });
+    if (!level && item.action === 'contact') return stampButton(item, { label: label, action: 'contact' });
+    if (!level && item.action === 'human') return stampButton(item, { label: label, action: 'human' });
+    if (!level && item.action === 'book') return stampButton(item, { label: label, action: 'book', text: cleanBody(item.text, 900, true) || 'Открыть свободные дни' });
     const rawItems = Array.isArray(item.items) ? item.items : [];
     if (rawItems.length && level < 2) {
-        if (rawItems.length > 6) return null;
+        if (rawItems.length > 8) return null;
         const items = [];
         const seen = new Set();
         for (let i = 0; i < rawItems.length; i += 1) {
@@ -174,7 +177,7 @@ function cleanButton(item, depth) {
             seen.add(next.label);
             items.push(next);
         }
-        if (items.length) return { label: label, items: items };
+        if (items.length) return stampButton(item, { label: label, items: items });
     }
     const hasLink = item.link != null && item.link !== '';
     const hasText = item.text != null && item.text !== '';
@@ -182,11 +185,17 @@ function cleanButton(item, depth) {
     if (hasLink) {
         const link = httpsLink(item.link);
         if (!link) return null;
-        return { label: label, link: link };
+        return stampButton(item, { label: label, link: link });
     }
     const text = cleanBody(item.text, 900, false);
     if (!text) return null;
-    return { label: label, text: text };
+    return stampButton(item, { label: label, text: text });
+}
+
+function stampButton(item, button) {
+    if (!button) return null;
+    if (item.hidden === true || item.hidden === 'true') button.hidden = true;
+    return button;
 }
 
 function cleanBody(value, limit, allowEmpty) {
@@ -481,7 +490,7 @@ async function saveDesk(account, input, fetchImpl) {
         throw publicError('Для самовывоза нужна ссылка Яндекс Карт, например https://yandex.ru/maps/.');
     }
     const reply = cleanReply(input);
-    if (!reply) throw publicError('У кнопки нужна надпись. Дальше либо ваша ссылка https, либо текст ответа, либо поиск товаров. Кнопок не больше шести.');
+    if (!reply) throw publicError('У кнопки нужна надпись до 24 знаков и действие: текст, ссылка или кнопки внутри. Своих кнопок не больше восьми, «Записаться» остаётся сама.');
     const rows = await db.listAssistantCommunities(ownerId);
     const row = rows[0];
     if (!row) throw publicError('Сначала подключите сообщество.');

@@ -63,6 +63,19 @@ test('фраза дона принимает ссылку и ответ и от�
     assert.equal(tree.buttons[0].items[0].text, 'Шиномонтаж 400 рублей.');
     assert.equal(tree.buttons[0].items[1].items[0].link, 'https://vk.com/market-1');
     assert.equal(assistant.cleanReply({ buttons: [{ label: 'Меню', items: [{ label: 'Назад', text: 'нет' }] }] }), null);
+    const kinds = assistant.cleanReply({
+        buttons: [
+            { label: 'Запись онлайн', action: 'book' },
+            { label: 'Как доехать', action: 'contact' },
+            { label: 'Акция', text: 'Сезон', hidden: true }
+        ]
+    });
+    assert.equal(kinds.buttons[0].action, 'book');
+    assert.equal(kinds.buttons[1].action, 'contact');
+    assert.equal(kinds.buttons[2].hidden, true);
+    assert.equal(assistant.cleanReply({
+        buttons: Array.from({ length: 11 }, (_, index) => ({ label: `Кнопка ${index + 1}`, text: 'Текст' }))
+    }), null);
     const modes = assistant.cleanReply({
         buttons: [{ label: 'Витрина', goods: true }],
         goodsOn: false,

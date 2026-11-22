@@ -119,7 +119,7 @@
 
   function serviceItem(raw) {
     if (raw && typeof raw === 'object') {
-      const name = String(raw.name || raw.title || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+      const name = String(raw.name || raw.title || '').replace(/\s+/g, ' ').trim().slice(0, 80);
       if (!name) return null;
       const extra = raw.extra === true || raw.extra === 'true' || raw.extra === 1 || raw.extra === '1';
       const text = String(raw.text || raw.about || '').replace(/\s+/g, ' ').trim().slice(0, 300);
@@ -129,8 +129,8 @@
       if (hidden) row.hidden = true;
       return row;
     }
-    const name = String(raw || '').replace(/\s+/g, ' ').trim();
-    if (!name || name.length > 40) return null;
+    const name = String(raw || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (!name) return null;
     return { name: name, price: 0, link: '', extra: false };
   }
 
