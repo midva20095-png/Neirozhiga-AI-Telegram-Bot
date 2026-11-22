@@ -614,6 +614,16 @@ async function loadListen(account, fetchImpl) {
     return String(result.problem || '').replace(/\s+/g, ' ').trim().slice(0, 300);
 }
 
+function publicOrders(list) {
+    if (!Array.isArray(list)) return [];
+    return list.slice(0, 80).map(item => ({
+        peerId: Number(item && item.peerId) || 0,
+        item: cleanBit(item && item.item, 120),
+        phone: cleanBit(item && item.phone, 16),
+        way: cleanBit(item && item.way, 40)
+    })).filter(item => item.peerId > 0 && item.item);
+}
+
 function publicBookings(list) {
     if (!Array.isArray(list)) return [];
     return list.slice(0, 80).map(item => ({
@@ -639,6 +649,16 @@ function bookingWhen(day) {
 
 function cleanBit(value, limit) {
     return String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
+}
+
+async function loadOrders(account, fetchImpl) {
+    const userId = vkId(account);
+    const rows = userId ? await db.listAssistantCommunities(userId) : [];
+    const row = rows[0];
+    if (!row) return { rows: [] };
+    const result = await postAssistant('/orders', { userId, groupId: Number(row.group_id) }, fetchImpl);
+    if (!result.ok) return { rows: [], pending: true };
+    return { rows: publicOrders(result.orders) };
 }
 
 async function loadBookings(account, fetchImpl) {
@@ -756,7 +776,9 @@ module.exports = {
     finishSetup,
     loadClients,
     loadBookings,
+    loadOrders,
     publicBookings,
+    publicOrders,
     pushSaved,
     loadListen,
     sendBroadcast,

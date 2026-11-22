@@ -358,6 +358,7 @@ function startWebApp() {
                 const problem = await assistant.loadListen(userId);
                 if (problem) view.community.error = problem;
                 view.clients = await assistant.loadClients(userId);
+                view.orders = await assistant.loadOrders(userId);
                 view.bookings = await assistant.loadBookings(userId);
             }
             res.json(view);

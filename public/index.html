@@ -1011,7 +1011,7 @@ async function loadAssist(){
     '<button class="btn" id="assistSave" type="button" style="margin-top:12px">Подключить</button>'+
     (community ? '<button class="btn ghost" id="assistDrop" type="button" style="margin-top:8px">Отключить</button>' : '')+
     '<p id="assistmsg" class="hint"></p>'+
-    (community ? assistDesk(community.reply) + assistBookings(data.bookings, data.clients, community.groupId) + assistBase(data.clients) : '<p class="hint">После подключения здесь можно заполнить карточку, смотреть записи и своих клиентов.</p>')+
+    (community ? assistDesk(community.reply) + assistOrders(data.orders, data.clients, community.groupId) + assistBookings(data.bookings, data.clients, community.groupId) + assistBase(data.clients) : '<p class="hint">После подключения здесь можно заполнить карточку, смотреть заказы, записи и своих клиентов.</p>')+
     '</div>';
   bind();
 }
@@ -1063,6 +1063,21 @@ async function askDeveloper(){
     if (msg) msg.textContent = error.message;
   }
   if (button) button.disabled = false;
+}
+function assistOrders(pack, clients, groupId){
+  const rows = (pack && pack.rows) || [];
+  const people = (clients && clients.people) || [];
+  const list = rows.length ? rows.map(function(item){
+    const person = people.find(function(one){ return Number(one.peerId) === Number(item.peerId); });
+    const who = person && person.name ? person.name : ('ВК '+item.peerId);
+    const bits = [item.item, item.phone, item.way].filter(Boolean);
+    const dialog = communityDialog(groupId, item.peerId);
+    const link = dialog ? ' · <a href="'+esc(dialog)+'" data-out="'+esc(dialog)+'">открыть диалог</a>' : '';
+    return '<div class="note"><b>'+esc(bits.join(' · '))+'</b><div class="hint">'+esc(who)+link+'</div></div>';
+  }).join('') : '<p class="hint">'+(pack && pack.pending ? 'Список откроется, когда помощник будет на связи.' : 'Пока заказов нет. Они появятся, когда покупатель нажмёт «Оформить заказ», напишет товар и телефон и подтвердит.')+'</p>';
+  return '<div class="desk"><p class="now">Заказы</p>'+
+    '<p class="hint">Это заявки только вашего сообщества: что заказали, телефон и самовывоз или доставка. Новая заявка приходит вам в сообщения сообщества. Цена в заявке не придумывается: бот берёт её из карточки.</p>'+
+    list+'</div>';
 }
 function assistBookings(pack, clients, groupId){
   const rows = (pack && pack.rows) || [];

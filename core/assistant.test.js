@@ -91,6 +91,14 @@ test('фраза дона принимает ссылку и ответ и от�
     assert.equal(bookings[0].phone, '+79001112233');
     assert.equal(bookings[0].map, 'https://yandex.ru/maps/-/CCUexample');
     assert.equal(JSON.stringify(bookings).includes('secret-token'), false);
+    const orders = assistant.publicOrders([
+        { peerId: 9, item: 'Наполеон', phone: '+79001112233', way: 'Доставка', token: 'secret-token' },
+        { peerId: 0, item: 'Чужое' }
+    ]);
+    assert.equal(orders.length, 1);
+    assert.equal(orders[0].item, 'Наполеон');
+    assert.equal(orders[0].way, 'Доставка');
+    assert.equal(JSON.stringify(orders).includes('secret-token'), false);
     assert.equal(assistant.cleanReply({ pickupMap: 'https://google.com/maps' }), null);
     assert.equal(assistant.cleanReply({ pickupMap: 'https://yandex.ru/maps/-/CCUexample' }).pickupMap, 'https://yandex.ru/maps/-/CCUexample');
     assert.equal(assistant.cleanReply({ buttons: [{ label: 'Сайт', link: 'http://example.com' }] }), null);
