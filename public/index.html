@@ -188,6 +188,11 @@ a.niche{display:block;text-decoration:none;box-sizing:border-box}
 .sandkey.positive{background:#4bb34b}
 .sandkey.negative{background:#e64646}
 .sandkey.on{box-shadow:0 0 0 2px #c4b5fd}
+.sandkey b{display:block;font-size:16px}
+.sandkey small{display:block;margin-top:4px;font-size:12px;font-weight:600;opacity:.86}
+.sandtree,.node{display:flex;flex-direction:column;gap:8px;width:100%}
+.hang{display:flex;flex-direction:column;gap:8px;margin-left:14px;padding-left:12px;border-left:2px solid #c4b5fd}
+.sandedit textarea{width:100%;border-radius:10px;border:1px solid var(--line);background:#100818;color:#fff;padding:10px}
 .sandlog{display:flex;flex-direction:column;gap:8px}
 .sandme{align-self:flex-end;max-width:86%;background:#5181b8;border-radius:14px;padding:10px 12px}
 .sandkeys{display:flex;flex-wrap:wrap;gap:8px}
@@ -1013,7 +1018,7 @@ function assistGuide(opened){
     '<li>Номер сообщества — цифры в адресе. У страницы vk.com/club1234567 номер 1234567. Тот же номер есть в Управление → Настройки.</li>'+
     '<li>Вставьте номер и ключ в блок «Подключить сообщество» и нажмите «Подключить».</li>'+
     '<li>Карточка идёт по шагам. Шаг 2 — услуги и цены. Шаг 3 — разделы каталога. Клиент жмёт «Каталог», открывает раздел или общий каталог, читает описание и добавляет позицию в счёт. В конце «Записаться» показывает итог. Пустое поле помощник не выдумывает.</li>'+
-    '<li>Кнопки собираются в песочнице. «Добавить кнопку» ставит кнопку на текущий экран. Нажмите её, напишите название и «Готово». «Кнопки внутри» открывает только этот экран. «Назад» возвращает наверх. Глубже одного подраздела бот не открывает.</li>'+
+    '<li>На шаге кнопок нажмите кнопку. Под ней линия и поля: название, текст, ссылка или кнопки внутри. «Добавить кнопку» на этой линии ставит новую кнопку именно под неё. Подпись под кнопкой показывает, куда она ведёт. Глубже одного подраздела бот не открывает.</li>'+
     '<li>Люди, которые сами написали в сообщения, попадают во вкладку «Клиенты». Рассылка уходит только им. Заказы и записи лежат на своих вкладках и приходят сообщением вам и покупателю.</li>'+
     '</ol>'+
     '<p class="hint">Ключ нужен, чтобы помощник отвечал покупателям в этом сообществе. В кабинете он повторно не показывается и другим людям не виден. Пока действует донат НейроЯги, помощник отвечает. Когда срок закончится, он замолчит только в вашем сообществе.</p>'+
@@ -1840,7 +1845,7 @@ function paintWizard(){
     pay: 'Как платить. Клиент прочитает этот текст по кнопке «Оплата».',
     address: 'Куда ехать. Ссылка на карту уйдёт вместе с адресом.',
     menu: 'Кнопки ниже — основные, они на главном экране. Дополнительные стоят внутри основной: клиент видит их только после нажатия.',
-    keys: 'Песочница — конструктор. «Добавить кнопку», название и «Готово» сохраняют кнопку на этом экране. «Кнопки внутри» открывает только её экран, не все разделы сразу.',
+    keys: 'Нажмите кнопку. Под ней линия и поля: название, текст, ссылка или кнопки внутри. «Добавить кнопку» на линии ставит новую кнопку именно сюда.',
     keyAsk: 'Добавить разделы в эту кнопку? Раздел клиент видит только после нажатия. «Ещё раздел» добавляет следующую кнопку внутри. «Ещё подраздел» добавляет кнопку внутрь раздела.',
     hand: 'Последний шаг. Ниже просмотр бота: можно нажать все кнопки до конца. В сообщество ничего не уходит.'
   };
@@ -2869,108 +2874,196 @@ function wizardWriteName(row, value){
   if (text && (!String(text.value || '').trim() || String(text.value).trim() === 'Напишите, что увидит клиент.')) text.value = label ? label.value : '';
   return label ? label.value : 'Новая кнопка';
 }
+function wizardRowLabel(row){
+  return String((row.querySelector(':scope > [data-blabel]') || {}).value || '').trim() || 'Новая кнопка';
+}
+function wizardRowKind(row){
+  return (row.querySelector(':scope > [data-bkind]') || {}).value || 'text';
+}
+function wizardWhere(row){
+  const kind = wizardRowKind(row);
+  if (kind === 'link') {
+    const link = String((row.querySelector(':scope > [data-blinkwrap] [data-blink]') || {}).value || '').trim();
+    return link ? 'ведёт по ссылке' : 'ссылку ещё не вставили';
+  }
+  if (kind === 'contact') return 'ведёт в контакты';
+  if (kind === 'menu') {
+    const names = Array.prototype.slice.call(row.querySelectorAll(':scope > [data-brows] > [data-brow]')).map(wizardRowLabel);
+    return names.length ? 'ведёт в: '+names.join(', ') : 'кнопки внутри ещё не названы';
+  }
+  const text = String((row.querySelector(':scope > [data-btextwrap] [data-btext]') || {}).value || '').trim();
+  return text && text !== 'Напишите, что увидит клиент.' ? 'ведёт в текст' : 'текст ещё не написан';
+}
+function wizardPathSame(a, b){
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return false;
+  return true;
+}
+function wizardPathOpen(path){
+  const open = assistSand.path || [];
+  if (path.length > open.length) return false;
+  for (let i = 0; i < path.length; i += 1) if (path[i] !== open[i]) return false;
+  return true;
+}
+function wizardRowAt(path){
+  if (!path.length) return null;
+  return wizardLevelRows(path.slice(0, -1))[path[path.length - 1]] || null;
+}
+function wizardEditor(row, path){
+  const kind = wizardRowKind(row);
+  const label = String((row.querySelector(':scope > [data-blabel]') || {}).value || '');
+  const text = String((row.querySelector(':scope > [data-btextwrap] [data-btext]') || {}).value || '');
+  const link = String((row.querySelector(':scope > [data-blinkwrap] [data-blink]') || {}).value || '');
+  const tone = wizardTone((row.querySelector(':scope > [data-bcolor]') || {}).value);
+  const acts = [['text', 'Текст'], ['link', 'Ссылка'], ['contact', 'Контакты']];
+  if (path.length < 3) acts.push(['menu', 'Кнопки внутри']);
+  let html = '<div class="sandedit">';
+  html += '<label class="flabel">Название</label><input data-sandname maxlength="24" value="'+esc(label)+'">';
+  html += wizardToneButtons(tone);
+  html += '<p class="flabel">Куда ведёт</p><div class="botmap">'+acts.map(function(act){
+    return '<button type="button" class="sandkey'+(kind === act[0] ? ' on' : '')+'" data-sandfn="'+act[0]+'">'+act[1]+'</button>';
+  }).join('')+'</div>';
+  if (kind === 'link') html += '<label class="flabel">Ссылка https</label><input data-sandlink maxlength="300" placeholder="https://..." value="'+esc(link)+'"><p class="hint">Без ссылки эта кнопка клиенту не попадёт.</p>';
+  else if (kind === 'contact') html += '<p class="hint">Клиент увидит телефон и адрес из карточки.</p>';
+  else if (kind === 'menu') html += '<p class="hint">Кнопки ниже внутри этой. Линия показывает, куда она ведёт.</p>';
+  else html += '<label class="flabel">Текст клиенту</label><textarea data-sandtext maxlength="900" rows="3">'+esc(text)+'</textarea>';
+  html += '<button type="button" class="sandkey positive wide" data-sanddo="done">Готово</button><button type="button" class="textlink" data-sanddo="drop">Убрать</button></div>';
+  return html;
+}
+function wizardBranch(path){
+  return wizardLevelRows(path).map(function(row, index){
+    const here = path.concat(index);
+    const opened = wizardPathOpen(here);
+    const tone = wizardTone((row.querySelector(':scope > [data-bcolor]') || {}).value);
+    let html = '<div class="node"><button type="button" class="sandkey '+tone+(opened ? ' on' : '')+'" data-sand="open:'+here.join('.')+'"><b>'+esc(wizardRowLabel(row))+'</b><small>'+esc(wizardWhere(row))+'</small></button>';
+    if (opened) {
+      html += '<div class="hang">';
+      if (wizardPathSame(assistSand.path || [], here)) html += wizardEditor(row, here);
+      if (here.length < 3) {
+        if (wizardRowKind(row) === 'menu') html += wizardBranch(here);
+        if (wizardLevelRows(here).length < 6) html += '<button type="button" class="sandkey primary" data-sand="add:'+here.join('.')+'">Добавить кнопку</button>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    return html;
+  }).join('');
+}
 function paintWizardBuild(){
   const box = document.getElementById('wizSandbox');
   if (!box) return;
   if (!assistSand || !assistSand.log) wizardFresh();
   if (!Array.isArray(assistSand.path)) assistSand.path = [];
-  if (assistSand.path.length > 2) assistSand.path = assistSand.path.slice(0, 2);
-  const path = assistSand.path;
-  const rows = wizardLevelRows(path);
-  if (typeof assistSand.edit === 'number' && (assistSand.edit < 0 || assistSand.edit >= rows.length)) assistSand.edit = -1;
-  const keys = rows.map(function(row, index){
-    const label = String((row.querySelector(':scope > [data-blabel]') || {}).value || '').trim() || 'Новая кнопка';
-    const tone = wizardTone((row.querySelector(':scope > [data-bcolor]') || {}).value);
-    return '<button type="button" class="sandkey '+tone+(assistSand.edit === index ? ' on' : '')+'" data-sand="edit'+index+'">'+esc(label)+'</button>';
-  });
-  if (rows.length < (path.length ? 6 : 8)) keys.push('<button type="button" class="sandkey primary wide" data-sand="add">Добавить кнопку</button>');
-  if (!path.length) {
-    const book = String((document.getElementById('assistBookLabel') || {}).value || '').trim() || 'Записаться';
-    const adminOn = (document.getElementById('assistHandoff') || {}).checked !== false;
-    keys.push('<button type="button" class="sandkey positive wide" data-sand="book">'+esc(book)+'</button>');
-    keys.push('<button type="button" class="sandkey primary" data-sand="admin">Администратор'+(adminOn ? '' : ' · скрыта')+'</button>');
-  } else keys.push('<button type="button" class="sandkey negative wide" data-sand="up">Назад</button>');
-  let edit = '';
-  if (assistSand.edit === 'book') {
-    const book = String((document.getElementById('assistBookLabel') || {}).value || '').trim() || 'Записаться';
-    edit = '<label class="flabel">Название</label><input data-sandname maxlength="24" value="'+esc(book)+'"><button type="button" class="sandkey positive wide" data-sanddo="done">Готово</button>';
-  } else if (assistSand.edit === 'admin') {
-    const adminOn = (document.getElementById('assistHandoff') || {}).checked !== false;
-    edit = '<label><input data-sandadmin type="checkbox"'+(adminOn ? ' checked' : '')+'> Показывать «Администратор»</label><button type="button" class="sandkey positive wide" data-sanddo="done">Готово</button>';
-  } else if (typeof assistSand.edit === 'number' && assistSand.edit >= 0) {
-    const row = rows[assistSand.edit];
-    const label = String((row.querySelector(':scope > [data-blabel]') || {}).value || '');
-    edit = '<label class="flabel">Название</label><input data-sandname maxlength="24" value="'+esc(label)+'"><button type="button" class="sandkey positive wide" data-sanddo="done">Готово</button>'+(path.length < 2 ? '<button type="button" class="sandkey primary wide" data-sanddo="into">Кнопки внутри</button>' : '')+'<button type="button" class="textlink" data-sanddo="drop">Убрать</button>';
-  }
-  box.innerHTML = '<div class="sand"><p class="flabel">Конструктор · '+esc(wizardBuildTitle(path))+'</p><p class="hint">«Добавить кнопку», название и «Готово» оставляют кнопку на этом экране. «Кнопки внутри» открывает только её. «Назад» возвращает наверх.</p><div class="sandphone"><div class="sandkeys">'+keys.join('')+'</div>'+(edit ? '<div class="sandedit">'+edit+'</div>' : '')+'</div></div>';
+  assistSand.path = assistSand.path.filter(function(n){ return n >= 0; }).slice(0, 2);
+  const book = String((document.getElementById('assistBookLabel') || {}).value || '').trim() || 'Записаться';
+  const adminOn = (document.getElementById('assistHandoff') || {}).checked !== false;
+  let tail = '<button type="button" class="sandkey primary wide" data-sand="add:">Добавить кнопку</button>';
+  tail += '<button type="button" class="sandkey positive wide" data-sand="book"><b>'+esc(book)+'</b><small>ведёт к выбору дня и времени</small></button>';
+  tail += '<button type="button" class="sandkey primary" data-sand="admin"><b>Администратор</b><small>'+(adminOn ? 'ведёт к сообщению вам' : 'сейчас скрыта')+'</small></button>';
+  if (assistSand.extra === 'book') tail += '<div class="sandedit"><label class="flabel">Название</label><input data-sandname maxlength="24" value="'+esc(book)+'"><button type="button" class="sandkey positive wide" data-sanddo="bookdone">Готово</button></div>';
+  if (assistSand.extra === 'admin') tail += '<div class="sandedit"><label><input data-sandadmin type="checkbox"'+(adminOn ? ' checked' : '')+'> Показывать «Администратор»</label><button type="button" class="sandkey positive wide" data-sanddo="admindone">Готово</button></div>';
+  box.innerHTML = '<div class="sand"><p class="flabel">Конструктор кнопок</p><p class="hint">Нажмите кнопку. Под ней линия: название, текст, ссылка или кнопки внутри. Подпись под кнопкой говорит, куда она ведёт.</p><div class="sandphone"><div class="sandtree">'+wizardBranch([])+tail+'</div></div></div>';
   box.querySelectorAll('[data-sand]').forEach(function(button){
     button.onclick = function(){
-      const id = button.getAttribute('data-sand');
-      if (id === 'add') {
-        const index = wizardBuildAdd(path);
-        if (index >= 0) { assistSand.edit = index; assistSand.focus = true; }
+      const id = button.getAttribute('data-sand') || '';
+      if (id === 'book' || id === 'admin') { assistSand.extra = id; assistSand.path = []; paintWizardBuild(); return; }
+      assistSand.extra = '';
+      if (id.indexOf('add:') === 0) {
+        const at = id.slice(4).split('.').filter(Boolean).map(Number);
+        const index = wizardBuildAdd(at);
+        if (index >= 0) { assistSand.path = at.concat(index); assistSand.focus = true; }
         paintWizardBuild();
         return;
       }
-      if (id === 'up') {
-        wizardKeepParent(path);
-        assistSand.path = path.slice(0, -1);
-        assistSand.edit = -1;
+      if (id.indexOf('open:') === 0) {
+        const here = id.slice(5).split('.').filter(Boolean).map(Number);
+        assistSand.path = wizardPathSame(assistSand.path || [], here) ? here.slice(0, -1) : here;
+        assistSand.focus = true;
         paintWizardBuild();
-        return;
       }
-      if (id === 'book' || id === 'admin') { assistSand.edit = id; assistSand.focus = true; paintWizardBuild(); return; }
-      if (id.indexOf('edit') === 0) { assistSand.edit = Number(id.slice(4)); assistSand.focus = true; paintWizardBuild(); }
     };
   });
-  const name = box.querySelector('[data-sandname]');
-  if (name && typeof assistSand.edit === 'number') name.oninput = function(){
-    const row = wizardLevelRows(assistSand.path)[assistSand.edit];
-    const label = row && row.querySelector(':scope > [data-blabel]');
+  const open = assistSand.path || [];
+  const row = wizardRowAt(open);
+  const name = box.querySelector('.hang .sandedit [data-sandname], .sandedit [data-sandname]');
+  if (name && row) name.oninput = function(){
+    const label = row.querySelector(':scope > [data-blabel]');
     const written = String(name.value || '').replace(/\s+/g, ' ').trim().slice(0, 24);
     if (label) label.value = written;
-    const face = box.querySelector('[data-sand="edit'+assistSand.edit+'"]');
+    const face = box.querySelector('[data-sand="open:'+open.join('.')+'"] b');
     if (face) face.textContent = written || 'Новая кнопка';
   };
+  const text = box.querySelector('[data-sandtext]');
+  if (text && row) text.oninput = function(){
+    const real = row.querySelector(':scope > [data-btextwrap] [data-btext]');
+    if (real) real.value = text.value;
+    const note = box.querySelector('[data-sand="open:'+open.join('.')+'"] small');
+    if (note) note.textContent = wizardWhere(row);
+  };
+  const link = box.querySelector('[data-sandlink]');
+  if (link && row) link.oninput = function(){
+    const real = row.querySelector(':scope > [data-blinkwrap] [data-blink]');
+    if (real) real.value = link.value;
+    const note = box.querySelector('[data-sand="open:'+open.join('.')+'"] small');
+    if (note) note.textContent = wizardWhere(row);
+  };
+  box.querySelectorAll('[data-sandfn]').forEach(function(button){
+    button.onclick = function(){
+      if (!row) return;
+      const select = row.querySelector(':scope > [data-bkind]');
+      const kind = button.getAttribute('data-sandfn');
+      if (!select || !kind) return;
+      select.value = kind;
+      assistKind(select);
+      if (kind === 'menu') {
+        const nest = row.querySelector(':scope > [data-brows]');
+        if (nest && !nest.querySelector(':scope > [data-brow]')) {
+          nest.insertAdjacentHTML('beforeend', assistButtonHtml({ label: 'Новая кнопка', text: 'Новая кнопка' }, open.length));
+        }
+      }
+      paintWizardBuild();
+    };
+  });
+  box.querySelectorAll('[data-ktone]').forEach(function(button){
+    button.onclick = function(){
+      if (!row) return;
+      const tone = wizardTone(button.getAttribute('data-ktone'));
+      const real = row.querySelector(':scope > [data-bcolor]');
+      if (real) real.value = tone;
+      paintWizardBuild();
+    };
+  });
   box.querySelectorAll('[data-sanddo]').forEach(function(button){
     button.onclick = function(){
       const act = button.getAttribute('data-sanddo');
-      if (assistSand.edit === 'book') {
+      if (act === 'bookdone') {
         const input = box.querySelector('[data-sandname]');
         const real = document.getElementById('assistBookLabel');
         if (real && input) real.value = String(input.value || '').trim().slice(0, 24) || 'Записаться';
-        assistSand.edit = -1;
+        assistSand.extra = '';
         paintWizardBuild();
         return;
       }
-      if (assistSand.edit === 'admin') {
+      if (act === 'admindone') {
         const real = document.getElementById('assistHandoff');
         const tick = box.querySelector('[data-sandadmin]');
         if (real && tick) real.checked = tick.checked;
-        assistSand.edit = -1;
+        assistSand.extra = '';
         paintWizardBuild();
         return;
       }
-      const row = wizardLevelRows(assistSand.path)[assistSand.edit];
-      if (act === 'drop' && row) {
+      if (!row) return;
+      if (act === 'drop') {
         row.remove();
-        wizardKeepParent(assistSand.path);
-        assistSand.edit = -1;
+        wizardKeepParent(open.slice(0, -1));
+        assistSand.path = open.slice(0, -1);
         paintWizardBuild();
         return;
       }
-      if (act === 'into' && row && assistSand.path.length < 2) {
+      if (act === 'done') {
         const input = box.querySelector('[data-sandname]');
         if (input) wizardWriteName(row, input.value);
-        assistSand.path = assistSand.path.concat(assistSand.edit);
-        assistSand.edit = -1;
-        paintWizardBuild();
-        return;
-      }
-      if (act === 'done' && row) {
-        const input = box.querySelector('[data-sandname]');
-        if (input) wizardWriteName(row, input.value);
-        assistSand.edit = -1;
+        assistSand.path = open.slice(0, -1);
         paintWizardBuild();
       }
     };
