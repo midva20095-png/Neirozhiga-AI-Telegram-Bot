@@ -471,7 +471,17 @@ async function loadAssist(){
   const line = health.online
     ? '<span class="ok">второй бот на связи</span>'
     : '<span class="bad">'+(health.error || 'второй бот не на связи')+'</span>';
-  el.innerHTML = '<div class="card"><h3>Помощник доната</h3>'+
+  const demo = data.demo || null;
+  el.innerHTML = '<div class="card"><h3>Демонстрация</h3>'+
+    '<p class="note">Отдельное тестовое сообщество. Вставьте его номер и ключ. Карточка заполнится сама: услуги с ценами и допом, разделы товаров, запись на две недели, доставка, самовывоз, оплата, прайс с кнопками внутри и кнопка администратора. Люди пишут этому сообществу и смотрят бота.</p>'+
+    (demo ? '<p class="note"><span class="ok">'+esc(demo.title)+'</span> · '+esc(demo.groupId)+' · '+esc(demo.syncLabel)+'</p>'+
+      '<p class="note"><a href="'+esc(demo.link)+'" target="_blank" rel="noopener">Открыть переписку с демонстрацией</a></p>'+
+      (demo.error ? '<p class="note">'+esc(demo.error)+'</p>' : '') : '<p class="note">Демонстрация ещё не подключена.</p>')+
+    '<label>Номер сообщества</label><input id="demoGroup" inputmode="numeric" placeholder="123456789" value="'+esc(demo ? demo.groupId : '')+'">'+
+    '<label>Ключ сообщества</label><input id="demoToken" type="password" placeholder="Ключ из настроек сообщества" autocomplete="off">'+
+    '<div class="row" style="margin-top:12px"><button type="button" onclick="saveDemo()">Подключить и заполнить</button></div>'+
+    '<p id="demomsg" class="note"></p></div>'+
+    '<div class="card"><h3>Помощник доната</h3>'+
     '<p class="note">'+line+' Доны НейроЯги подключают своё сообщество в кабинете приложения. Пока донат жив, второй бот отвечает покупателям. Когда срок кончился, он замолкает только у этого человека. База клиентов каждого сообщества хранится у помощника отдельно. Здесь видно только количество, без телефонов.</p>'+
     '<div class="grid">'+
     '<div class="stat"><div class="n">'+dons.length+'</div><div class="l">Зарегистрировано</div></div>'+
@@ -506,6 +516,21 @@ async function loadAssist(){
         '<div class="row" style="margin-top:8px"><button type="button" onclick="openSetup('+Number(item.userId)+')">Настроить</button><button type="button" onclick="setAssist('+item.userId+','+(item.active?'false':'true')+')">'+(item.active?'Выключить':'Включить')+'</button></div></div>';
     }).join('') : '<p class="note">Донов пока нет. Нажмите «Взять донов из ВК» или дождитесь новой подписки.</p>')+
     '</div>';
+}
+async function saveDemo(){
+  const msg = document.getElementById('demomsg');
+  const groupId = (document.getElementById('demoGroup') || {}).value || '';
+  const token = (document.getElementById('demoToken') || {}).value || '';
+  if (msg) msg.textContent = 'Проверяю ключ и заполняю карточку…';
+  const data = await api('/api/admin/vk/assistant/demo', { method:'POST', body: JSON.stringify({ groupId: groupId, token: token }), timeout: 90000 });
+  if (!data.ok) {
+    if (msg) msg.textContent = data.error || 'Не получилось';
+    return;
+  }
+  if (msg) msg.textContent = data.pending
+    ? 'Карточка сохранена. Второй бот её ещё не принял.'
+    : 'Готово. Люди могут писать сообществу и смотреть бота.';
+  loadAssist();
 }
 async function syncAssist(){
   const msg = document.getElementById('assistmsg');

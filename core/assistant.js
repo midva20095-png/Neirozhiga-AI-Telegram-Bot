@@ -3,6 +3,7 @@ const { cleanProducts, cleanServices, tradeById } = require('../public/trades');
 
 const JOIN_URL = 'https://vk.com/donut/club214554778';
 const HOLD_MS = 10 * 24 * 60 * 60 * 1000;
+const DEMO_OWNER = 770770770;
 
 function vkId(account) {
     const id = Number(account);
@@ -264,7 +265,7 @@ function planLive(rows, donors) {
     const off = [];
     (Array.isArray(rows) ? rows : []).forEach(row => {
         const id = vkId(row && row.user_id);
-        if (row && row.active && id && !live.has(id)) off.push(id);
+        if (row && row.active && id && id !== DEMO_OWNER && !live.has(id)) off.push(id);
     });
     return { on, off };
 }
@@ -858,6 +859,113 @@ async function setupRequests(rows) {
     });
 }
 
+function demoReply() {
+    return cleanReply({
+        scenario: 'funnel',
+        trade: 'tire',
+        handoff: true,
+        bookingOn: true,
+        orderOn: true,
+        goodsOn: false,
+        linkOn: false,
+        pickupOn: true,
+        deliveryOn: true,
+        greeting: 'Здравствуйте. Это демонстрация помощника: услуги, запись, доставка и кнопка администратора.',
+        about: 'Шиномонтаж и сезонная переобувка. Цены смотрите в кнопке «Услуги».',
+        contacts: 'Телефон демонстрации: +7 900 000-00-00',
+        address: 'Демонстрационный адрес: улица Пример, 1',
+        order: 'Выберите диаметр и оставьте телефон. Это учебный заказ, его никто не везёт.',
+        choices: 'Диаметр: R15, R16, R17',
+        payment: 'В демонстрации оплата на месте.',
+        booking: 'Это учебная запись. Слот занят только внутри этой демонстрации.',
+        pickup: 'Самовывоз с улицы Пример, 1, с 10:00.',
+        pickupMap: 'https://yandex.ru/maps/?text=Москва',
+        delivery: 'По городу в день обращения.',
+        deliveryPrice: '400 рублей по городу',
+        services: [
+            { name: 'Шиномонтаж', price: 400 },
+            { name: 'Ремонт прокола', price: 500 },
+            { name: 'Балансировка', price: 300, extra: true },
+            { name: 'Сезонная переобувка четырёх колёс', price: 2200 },
+            { name: 'Скрытая позиция', price: 1, hidden: true }
+        ],
+        products: [
+            { name: 'Колпачки', price: 200, section: 'Расходники' },
+            { name: 'Вентиль', price: 50, section: 'Расходники' },
+            { name: 'Чехлы', price: 1500, section: 'Хранение' }
+        ],
+        schedule: {
+            days: [1, 2, 3, 4, 5, 6],
+            start: 9,
+            end: 19,
+            slot: 30,
+            horizon: 14,
+            places: ['Зал', 'Выезд'],
+            seats: 4
+        },
+        buttons: [
+            { label: 'Услуги', text: 'Показать услуги' },
+            {
+                label: 'Прайс',
+                items: [
+                    { label: 'Шиномонтаж', text: '400 рублей за колесо.' },
+                    { label: 'Хранение', text: 'Сезонное хранение оформляется записью.' }
+                ]
+            },
+            { label: 'Как доехать', action: 'contact' },
+            { label: 'Оплата', text: 'Показать способ оплаты' },
+            { label: 'Отзывы', link: 'https://vk.com/feed' },
+            { label: 'Запись онлайн', action: 'book', text: 'Открыть свободные дни' }
+        ]
+    });
+}
+
+async function installDemo(groupId, token, title, fetchImpl) {
+    const communityId = String(groupId || '').replace(/\D/g, '');
+    const key = String(token || '').replace(/\s+/g, '');
+    const name = String(title || '').trim().slice(0, 120) || 'Демонстрация';
+    if (!communityId || key.length < 20 || key.length > 2000) {
+        throw publicError('Нужен номер сообщества и ключ из его настроек.');
+    }
+    const reply = demoReply();
+    if (!reply) throw publicError('Карточка демонстрации не собралась.');
+    const rows = await db.listAssistantCommunities();
+    const taken = rows.find(item => String(item.group_id) === communityId && Number(item.owner_id) !== DEMO_OWNER);
+    if (taken) throw publicError('Это сообщество уже подключено к дону. Для демонстрации возьмите отдельное тестовое.');
+    for (const old of rows) {
+        if (Number(old.owner_id) !== DEMO_OWNER || String(old.group_id) === communityId) continue;
+        await postAssistant('/community/remove', { userId: DEMO_OWNER, groupId: Number(old.group_id) }, fetchImpl);
+        await db.deleteAssistantCommunity(old.group_id);
+    }
+    await db.upsertAssistantDon(DEMO_OWNER, 'Демонстрация', true);
+    await db.saveAssistantCommunity({
+        groupId: communityId,
+        ownerId: DEMO_OWNER,
+        title: name,
+        token: key,
+        syncState: 'wait',
+        syncError: ''
+    });
+    await db.saveAssistantReply(communityId, DEMO_OWNER, reply);
+    const access = await tellAccess(DEMO_OWNER, true, fetchImpl);
+    const pushed = await tellCommunity({
+        owner_id: DEMO_OWNER,
+        group_id: communityId,
+        token: key,
+        title: name,
+        reply
+    }, fetchImpl);
+    const ready = !!(pushed.ok && access.ok);
+    await db.markAssistantCommunity(communityId, ready ? 'on' : 'fail', ready ? '' : (pushed.error || access.error || ''));
+    return {
+        ok: true,
+        pending: !ready,
+        groupId: communityId,
+        title: name,
+        link: `https://vk.com/write-${communityId}`
+    };
+}
+
 async function adminList(fetchImpl) {
     const health = await readHealth(fetchImpl);
     const dons = await db.listAssistantDons();
@@ -871,10 +979,20 @@ async function adminList(fetchImpl) {
             counts = summary.counts;
         }
     }
+    const demoRow = communities.find(item => Number(item.owner_id) === DEMO_OWNER) || null;
+    const demo = demoRow ? {
+        groupId: String(demoRow.group_id),
+        title: demoRow.title || 'Демонстрация',
+        sync: demoRow.sync_state || '',
+        syncLabel: syncLabel(demoRow.sync_state),
+        error: demoRow.sync_error || '',
+        link: `https://vk.com/write-${demoRow.group_id}`
+    } : null;
     return {
         health,
         join: JOIN_URL,
-        dons: dons.map(row => ({
+        demo,
+        dons: dons.filter(row => Number(row.user_id) !== DEMO_OWNER).map(row => ({
             userId: Number(row.user_id),
             name: row.name || `ВК ${row.user_id}`,
             active: !!row.active,
@@ -900,6 +1018,9 @@ async function adminList(fetchImpl) {
 module.exports = {
     JOIN_URL,
     HOLD_MS,
+    DEMO_OWNER,
+    demoReply,
+    installDemo,
     vkId,
     accessChange,
     maskToken,

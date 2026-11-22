@@ -1116,6 +1116,18 @@ function startWebApp() {
         }
     });
 
+    app.post('/api/admin/vk/assistant/demo', requireAdmin, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const checked = await vk.checkCommunityToken(body.token, body.groupId);
+            const saved = await assistant.installDemo(checked.id, body.token, checked.name || 'Демонстрация');
+            res.json(saved);
+        } catch (e) {
+            const message = e && e.public ? e.message : 'Демонстрация не подключилась.';
+            res.status(400).json({ ok: false, error: message });
+        }
+    });
+
     app.post('/api/admin/vk/assistant/desk', requireAdmin, async (req, res) => {
         try {
             const body = req.body || {};

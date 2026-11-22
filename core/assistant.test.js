@@ -18,11 +18,27 @@ test('номер дона берётся и из кабинета ВК, и из 
 
 test('живой список донов включает текущих и выключает пропавших', () => {
     const plan = assistant.planLive(
-        [{ user_id: 1, active: true }, { user_id: 2, active: true }, { user_id: 3, active: false }],
+        [{ user_id: 1, active: true }, { user_id: 2, active: true }, { user_id: 3, active: false }, { user_id: assistant.DEMO_OWNER, active: true }],
         [{ id: 2, name: 'Анна' }, { id: 4, name: 'Борис' }]
     );
     assert.deepEqual(plan.on.map(item => item.id), [2, 4]);
     assert.deepEqual(plan.off, [1]);
+});
+
+test('карточка демонстрации собирает услуги, разделы и кнопки', () => {
+    const reply = assistant.demoReply();
+    assert.ok(reply);
+    assert.equal(reply.trade, 'tire');
+    assert.equal(reply.services.some(item => item.hidden), true);
+    assert.equal(reply.services.some(item => item.name === 'Сезонная переобувка четырёх колёс' && item.price === 2200), true);
+    assert.equal(reply.products.filter(item => item.section === 'Расходники').length, 2);
+    assert.equal(reply.buttons.find(item => item.label === 'Прайс').items.length, 2);
+    assert.equal(reply.buttons.find(item => item.label === 'Как доехать').action, 'contact');
+    assert.equal(reply.buttons.find(item => item.label === 'Запись онлайн').action, 'book');
+    assert.equal(reply.schedule.slot, 30);
+    assert.equal(reply.schedule.horizon, 14);
+    assert.equal(reply.pickupOn, true);
+    assert.equal(reply.deliveryOn, true);
 });
 
 test('команда второму боту уходит с секретом и не кладёт его в тело', async () => {
