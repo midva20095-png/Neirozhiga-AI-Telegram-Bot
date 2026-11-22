@@ -583,9 +583,9 @@ function openSetup(userId){
       '<input type="hidden" id="setupOrderOn" value="'+(reply.orderOn===false?'0':'1')+'">'+
       '<input type="hidden" id="setupBookingOn" value="'+((reply.bookingOn===false||reply.scenario==='info')?'0':'1')+'">'+
       '<input type="hidden" id="setupLinkOn" value="'+((reply.linkOn===false||(reply.linkOn==null&&reply.goodsOn===false))?'0':'1')+'">'+
-      '<label>Что продаёте</label><textarea id="setupAbout" maxlength="1500">'+esc(reply.about||'')+'</textarea>'+
+      '<label>Ответ клиенту</label><textarea id="setupAbout" maxlength="1500" placeholder="Своими словами. Чужой пример сюда не подставляется.">'+esc(reply.about||'')+'</textarea>'+
       '<label>Первая фраза, уходит по кнопке «Начать»</label><textarea id="setupGreeting" maxlength="900">'+esc(reply.greeting||'')+'</textarea>'+
-      '<p class="note">Если «Что продаёте» заполнено, в чате появляется такая кнопка. «Доставка» и «Самовывоз» появляются, когда разделы включены.</p>'+
+      '<p class="note">Если ответ клиенту заполнен, в чате появляется кнопка «Что продаёте». «Доставка» и «Самовывоз» появляются, когда эти разделы включены.</p>'+
       '<label>Контакты</label><textarea id="setupContacts" maxlength="500">'+esc(reply.contacts||'')+'</textarea>'+
       '<label>Адрес</label><textarea id="setupAddress" maxlength="500">'+esc(reply.address||'')+'</textarea>'+
       '<label>Как заказать</label><textarea id="setupOrder" maxlength="800">'+esc(reply.order||'')+'</textarea>'+

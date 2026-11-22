@@ -903,13 +903,13 @@ function assistButtonHtml(button, depth){
   const plain = kind === 'menu' ? ' hidden' : '';
   const nest = kind === 'menu' ? '' : ' hidden';
   return '<div class="brow" data-brow data-depth="'+level+'">'+
-    '<label class="flabel">'+(level ? 'Кнопка внутри' : 'Основная кнопка')+'</label><input data-blabel maxlength="40" placeholder="Например: Каталог" value="'+esc(button && button.label || '')+'">'+
+    '<label class="flabel">'+(level ? 'Кнопка внутри' : 'Основная кнопка')+'</label><input data-blabel maxlength="40" placeholder="Надпись кнопки" value="'+esc(button && button.label || '')+'">'+
     '<label class="flabel">Что делает кнопка</label><select data-bkind>'+
     '<option value="link"'+(kind==='link'?' selected':'')+'>Прямая ссылка</option>'+
     '<option value="text"'+(kind==='text'?' selected':'')+'>Свой текст</option>'+menuOption+'</select>'+
     '<div data-bplain'+plain+'>'+
     '<label class="flabel" data-bcap>'+(kind==='link'?'Ваша ссылка https':'Текст ответа')+'</label>'+
-    '<input data-bvalue placeholder="'+(kind==='link'?'https://vk.com/...':'Например: доставка по городу в день заказа')+'" value="'+esc(value)+'"></div>'+
+    '<input data-bvalue placeholder="'+(kind==='link'?'https://...':'Свой ответ клиенту')+'" value="'+esc(value)+'"></div>'+
     '<div class="brows" data-brows'+nest+'>'+kids+'</div>'+
     '<button class="btn ghost" type="button" data-badd style="margin-top:8px"'+(kind==='menu' && (!nested || button.items.length < 6) ? '' : ' hidden')+'>Добавить кнопку внутри</button>'+
     '<button class="btn ghost" type="button" data-bdel style="margin-top:8px">Убрать кнопку</button></div>';
@@ -1029,11 +1029,11 @@ function assistServiceItems(value){
 function assistServiceRow(item){
   const row = item || { name: '', price: '', link: '', extra: false };
   return '<div class="srow" data-srow>'+
-    '<input data-sname maxlength="40" placeholder="Название" value="'+esc(row.name || '')+'" oninput="paintAssistBill()">'+
+    '<input data-sname maxlength="40" placeholder="Название услуги" value="'+esc(row.name || '')+'" oninput="paintAssistBill()">'+
     '<input data-sprice inputmode="numeric" maxlength="7" placeholder="Цена, ₽" value="'+esc(row.price ? String(row.price) : '')+'" oninput="paintAssistBill()">'+
     '<input data-slink maxlength="300" placeholder="https://..." value="'+esc(row.link || '')+'" oninput="paintAssistBill()">'+
     '<label><input data-sextra type="checkbox"'+(row.extra ? ' checked' : '')+' onchange="paintAssistBill()"> Доп</label>'+
-    '<input class="snote" data-stext maxlength="300" placeholder="Описание: клиент увидит его в каталоге" value="'+esc(row.text || '')+'">'+
+    '<input class="snote" data-stext maxlength="300" placeholder="Что входит в услугу" value="'+esc(row.text || '')+'">'+
     '<label><input data-shide type="checkbox"'+(row.hidden ? ' checked' : '')+' onchange="paintAssistBill()"> Скрыть</label>'+
     '<button class="btn ghost" type="button" data-sdel>Удалить</button></div>';
 }
@@ -1078,10 +1078,10 @@ function fillAssistServices(list){
 function assistProductRow(item){
   const row = item || { name: '', price: '', link: '' };
   return '<div class="srow prow" data-prow>'+
-    '<input data-pname maxlength="40" placeholder="Название товара" value="'+esc(row.name || '')+'">'+
+    '<input data-pname maxlength="40" placeholder="Название" value="'+esc(row.name || '')+'">'+
     '<input data-pprice inputmode="numeric" maxlength="7" placeholder="Цена, ₽" value="'+esc(row.price ? String(row.price) : '')+'">'+
     '<input data-plink maxlength="300" placeholder="https://..." value="'+esc(row.link || '')+'">'+
-    '<input class="snote" data-ptext maxlength="300" placeholder="Описание: клиент увидит его по нажатию" value="'+esc(row.text || '')+'">'+
+    '<input class="snote" data-ptext maxlength="300" placeholder="Что это за позиция" value="'+esc(row.text || '')+'">'+
     '<label><input data-phide type="checkbox"'+(row.hidden ? ' checked' : '')+'> Скрыть</label>'+
     '<button class="btn ghost" type="button" data-pdel>Удалить</button>'+
     '</div>';
@@ -1113,7 +1113,7 @@ function assistSectionBlock(section){
   const items = section && section.items && section.items.length ? section.items.slice(0, 8) : [{ name: '', price: '', link: '' }];
   return '<div class="psec" data-psec>'+
     '<label class="flabel">Раздел</label>'+
-    '<input data-section maxlength="40" placeholder="Например: Торты" value="'+esc(section && section.name || '')+'">'+
+    '<input data-section maxlength="40" placeholder="Название раздела" value="'+esc(section && section.name || '')+'">'+
     '<div class="prows">'+items.map(assistProductRow).join('')+'</div>'+
     (items.length < 8 ? '<button type="button" class="btn ghost" data-padd style="margin-top:8px">Добавить товар</button>' : '')+
     '<button type="button" class="btn ghost" data-secdel style="margin-top:8px">Удалить раздел</button>'+
@@ -1121,7 +1121,7 @@ function assistSectionBlock(section){
 }
 function assistProductEditor(reply){
   const groups = assistProductGroups(reply && reply.products);
-  return '<p class="hint">Клиент жмёт «Каталог», затем «Общий каталог» или свой раздел. На позиции открывается описание, её можно добавить в счёт. В конце «Записаться», и там будет итог. «Витрина» внутри каталога открывает ссылку.</p>'+
+  return '<p class="hint">Серый текст в поле — пустая подсказка, клиент её не видит и это не ваше описание. Название раздела пишете сами. Клиент жмёт «Каталог», открывает раздел, читает описание и добавляет позицию в счёт.</p>'+
     '<div id="assistSections">'+groups.map(assistSectionBlock).join('')+'</div>'+
     (groups.length < 8 ? '<button class="btn ghost" id="assistSectionAdd" type="button" style="margin-top:8px">Добавить раздел</button>' : '');
 }
@@ -1222,11 +1222,11 @@ function assistDesk(reply, groupId){
     ['prices', '2. Цены услуг', assistServiceEditor(reply)],
     ['products', '3. Разделы каталога', assistProductEditor(reply)],
     ['about', '4. Фраза',
-      '<p class="hint">Первая фраза уходит клиенту по кнопке «Начать». Остальной текст клиент видит только из заполненных полей. Пустое поле бот не выдумывает и не подставляет чужой пример.</p>'+
+      '<p class="hint">Подсказка в пустом поле клиенту не уходит. Пишите своими словами, без чужого примера. Пустое поле бот не заполняет сам.</p>'+
       '<label class="flabel" for="assistGreeting">Первая фраза клиенту</label>'+
-      assistArea('assistGreeting', 2500, 6, 'Здравствуйте. Выберите кнопку ниже.', reply && reply.greeting)+
+      assistArea('assistGreeting', 2500, 6, 'Первая фраза по кнопке «Начать»', reply && reply.greeting)+
       '<label class="flabel" for="assistAbout">Ответ клиенту своими словами</label>'+
-      assistArea('assistAbout', 2500, 8, 'Чем занимаетесь и что клиент может выбрать. Цену пишите только если её можно называть.', reply && reply.about)],
+      assistArea('assistAbout', 2500, 8, 'Чем занимаетесь. Цену пишите, только если её можно называть.', reply && reply.about)],
     ['contacts', '5. Контакты',
       '<label class="flabel" for="assistContacts">Контакты</label>'+
       assistArea('assistContacts', 1500, 5, 'Телефон, мессенджер или почта.', reply && reply.contacts)+
@@ -1234,14 +1234,14 @@ function assistDesk(reply, groupId){
       assistArea('assistAddress', 1500, 5, 'Где вы находитесь или что работаете онлайн.', reply && reply.address)],
     ['order', '6. Заказ',
       '<label class="flabel" for="assistOrder">Текст для клиента перед выбором</label>'+
-      assistArea('assistOrder', 2500, 8, 'Клиент прочитает это и поймёт, что написать. Поле можно оставить пустым.', reply && reply.order)+
+      assistArea('assistOrder', 2500, 8, 'Что клиент должен написать. Можно оставить пустым.', reply && reply.order)+
       '<label class="flabel" for="assistChoices">Варианты кнопками для клиента</label>'+
-      assistArea('assistChoices', 1500, 6, 'Название: первый, второй, третий', reply && reply.choices)+
-      '<p class="hint">Клиент увидит название и нажмёт один вариант. Одна строка подходит и товару, и услуге. Пустое поле клиенту не показывается.</p>'+
+      assistArea('assistChoices', 1500, 6, 'Параметр: первый, второй', reply && reply.choices)+
+      '<p class="hint">Одна строка — один вопрос. После двоеточия варианты через запятую. Это не описание позиции и не чужой пример. Пустое поле клиенту не показывается.</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistOrderOn" type="checkbox"'+(!reply || reply.orderOn !== false ? ' checked' : '')+'> Принимать заказ</label>'+
       '<p class="hint">Разделы и цены пишутся на шаге 3. Бот витрину сообщества сам не ищет. Кнопка «Каталог» только открывает ссылку. Заказ сохраняет выбранные товары, телефон и получение.</p>'+
       '<label class="flabel" for="assistPayment">Как оплатить</label>'+
-      assistArea('assistPayment', 1500, 5, 'Карта, перевод или наличные. Не пишите то, чего нет.', reply && reply.payment)],
+      assistArea('assistPayment', 1500, 5, 'Как платят. Не пишите то, чего нет.', reply && reply.payment)],
     ['road', '7. Доставка',
       '<p class="hint">Включите только то, что у вас реально есть. Стоимость доставки помощник называет только из поля ниже.</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistPickupOn" type="checkbox"'+(reply && reply.pickupOn ? ' checked' : '')+'> Самовывоз</label>'+
@@ -1250,13 +1250,13 @@ function assistDesk(reply, groupId){
       '<input id="assistPickupMap" maxlength="300" placeholder="https://yandex.ru/maps/..." value="'+esc(reply && reply.pickupMap || '')+'">'+
       '<p class="hint">Вставьте ссылку на точку из Яндекс Карт. По кнопкам «Адрес» и «Самовывоз» покупатель получит эту ссылку.</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistDeliveryOn" type="checkbox"'+(reply && reply.deliveryOn ? ' checked' : '')+'> Доставка</label>'+
-      assistArea('assistDelivery', 1500, 5, 'Район и срок. Например: по городу в день заказа.', reply && reply.delivery)+
+      assistArea('assistDelivery', 1500, 5, 'Куда и за какой срок.', reply && reply.delivery)+
       '<label class="flabel" for="assistDeliveryPrice">Стоимость доставки</label>'+
-      '<input id="assistDeliveryPrice" maxlength="400" placeholder="Например: 400 рублей по городу" value="'+esc(reply && reply.deliveryPrice || '')+'">'+
+      '<input id="assistDeliveryPrice" maxlength="400" placeholder="Сумма своими словами" value="'+esc(reply && reply.deliveryPrice || '')+'">'+
       '<p class="count">'+String(reply && reply.deliveryPrice || '').length+' из 400</p>'],
     ['book', '8. Запись',
       '<label class="flabel" for="assistBooking">Что дописать к подтверждению записи</label>'+
-      assistArea('assistBooking', 2500, 8, 'Предоплата, что взять с собой. Если правил нет, оставьте пустым.', reply && reply.booking)+
+      assistArea('assistBooking', 2500, 8, 'Что дописать к записи. Если правил нет, оставьте пустым.', reply && reply.booking)+
       assistScheduleHtml(reply)],
     ['keys', '9. Кнопки',
       '<p class="hint">Сначала основные кнопки: их клиент видит сразу. Если к основной нужны свои кнопки, выберите «Свои кнопки» и добавьте их внутри. Клиент нажмёт основную, увидит эти кнопки и вернётся назад кнопкой «Назад». Внутри можно открыть ещё один ряд. Ссылка и свой текст остаются для кнопки, которая сразу отвечает.</p>'+
@@ -1690,7 +1690,7 @@ function assistKind(select){
     if (field) { field.disabled = false; field.placeholder = 'https://vk.com/...'; }
   } else {
     if (cap) cap.textContent = 'Текст ответа';
-    if (field) { field.disabled = false; field.placeholder = 'Например: доставка по городу в день заказа'; }
+    if (field) { field.disabled = false; field.placeholder = 'Свой ответ клиенту'; }
   }
 }
 function applyTrade(id){
