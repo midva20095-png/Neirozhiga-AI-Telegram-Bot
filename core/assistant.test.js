@@ -2,6 +2,17 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const assistant = require('./assistant');
 
+test('цвет кнопки сохраняется, чужой стиль отбрасывается', () => {
+    const reply = assistant.cleanReply({
+        buttons: [
+            { label: 'Шиномонтаж', text: 'Сезон и размеры', color: 'primary' },
+            { label: 'Адрес', text: 'Куда ехать', color: 'rainbow' }
+        ]
+    });
+    assert.equal(reply.buttons[0].color, 'primary');
+    assert.equal(reply.buttons[1].color, undefined);
+});
+
 test('срок доната выключает помощника, отмена продления нет', () => {
     assert.equal(assistant.accessChange('create'), true);
     assert.equal(assistant.accessChange('prolong'), true);

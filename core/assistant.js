@@ -197,6 +197,7 @@ function cleanButton(item, depth) {
 function stampButton(item, button) {
     if (!button) return null;
     if (item.hidden === true || item.hidden === 'true') button.hidden = true;
+    if (item.color === 'primary' || item.color === 'secondary' || item.color === 'positive' || item.color === 'negative') button.color = item.color;
     return button;
 }
 

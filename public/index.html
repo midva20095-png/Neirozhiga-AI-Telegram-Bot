@@ -171,6 +171,25 @@ button,textarea,input,select{font:inherit;color:inherit}
 .desk.wiz-done #assistWizardNav,.desk.wiz-done #assistSimple,.desk.wiz-done #assistFull,.desk.wiz-done #assistDesk,.desk.wiz-done #assistSaveHint,.desk.wiz-done #deskmsg{display:none !important}
 .desk.wiz-done #wizDone{display:block}
 a.niche{display:block;text-decoration:none;box-sizing:border-box}
+.wiz-ask{display:none}
+.desk.mode-wizard .wiz-ask{display:block;margin-bottom:12px}
+.tones{display:flex;gap:8px;margin:8px 0 12px}
+.tone{flex:1;border:0;border-radius:12px;padding:10px 6px;font-weight:800;color:#fff;background:#2c2d32}
+.tone.primary{background:#5181b8}
+.tone.positive{background:#4bb34b}
+.tone.negative{background:#e64646}
+.tone.on{box-shadow:0 0 0 3px #fff}
+.sand{margin-top:16px}
+.sandphone{background:#12121a;border:1px solid var(--line);border-radius:18px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.sandmsg{background:#222232;border-radius:14px;padding:12px}
+.sandkey{border:0;border-radius:10px;padding:12px;font-weight:800;color:#fff;background:#2c2d32}
+.sandkey.primary{background:#5181b8}
+.sandkey.positive{background:#4bb34b}
+.sandkey.negative{background:#e64646}
+.desk.mode-wizard #wizSandbox{order:5}
+.desk.mode-wizard .wiznav{order:6}
+.desk.mode-wizard #assistDesk,.desk.mode-wizard #assistSaveHint,.desk.mode-wizard #deskmsg,.desk.mode-wizard #wizDone{order:7}
+#wizSandbox[hidden]{display:none}
 .textlink{display:block;width:100%;margin-top:8px;padding:12px 0;border:0;background:none;color:#c4b5fd;font-weight:700}
 #assistModeHint{display:none}
 .plain[data-role="welcome"]{background:transparent;border:0;padding:0}
@@ -987,6 +1006,7 @@ function assistButtonHtml(button, depth){
   return '<div class="brow" data-brow data-depth="'+level+'">'+
     '<label class="flabel">'+(level ? 'Кнопка внутри' : 'Своя кнопка')+'</label>'+
     '<input data-blabel maxlength="24" placeholder="Прайс" value="'+esc(name)+'">'+
+    '<input type="hidden" data-bcolor value="'+esc(button && (button.color === 'primary' || button.color === 'positive' || button.color === 'negative') ? button.color : 'secondary')+'">'+
     '<p class="count" data-bcount>'+count+' из 24</p>'+
     '<label class="flabel">Что делает кнопка</label>'+
     '<select data-bkind>'+
@@ -1035,6 +1055,8 @@ function assistReadButton(row){
     item = { label: label, text: text || label };
   }
   if (hidden) item.hidden = true;
+  const tone = (row.querySelector(':scope > [data-bcolor]') || {}).value;
+  if (tone === 'primary' || tone === 'secondary' || tone === 'positive' || tone === 'negative') item.color = tone;
   return item;
 }
 const DEFAULT_ASSIST_BUTTONS = [
@@ -1263,7 +1285,8 @@ function assistSectionBlock(section){
 }
 function assistProductEditor(reply){
   const groups = assistProductGroups(reply && reply.products);
-  return '<p class="hint">Раздел — это группа, например «Дополнительно». Внутри напишите название и цену. Клиент откроет группу кнопкой «Каталог».</p>'+
+  return '<div class="wiz-ask"><p class="gate-kicker">НейроЯга AI</p><p class="gate-title" style="font-size:22px">Нужны кнопки разделов?</p><p class="hint">Если товары разные, напишите раздел: клиент сначала нажмёт его, потом увидит цены. Если товар один, раздел можно оставить пустым.</p></div>'+
+    '<p class="hint">Раздел — это группа, например «Дополнительно». Внутри напишите название и цену. Клиент откроет группу кнопкой «Каталог».</p>'+
     '<div id="assistSections">'+groups.map(assistSectionBlock).join('')+'</div>'+
     (groups.length < 8 ? '<button class="btn ghost" id="assistSectionAdd" type="button" style="margin-top:8px">Добавить раздел</button>' : '');
 }
@@ -1498,6 +1521,8 @@ let assistWizardAt = 0;
 let assistWizardKind = 'simple';
 let assistNiche = '';
 let assistKeyOpen = '';
+let assistSand = [];
+let assistSandStep = -1;
 function assistCount(input){
   if (!input) return;
   const note = input.parentElement && input.parentElement.querySelector('[data-pcount]');
@@ -1681,8 +1706,26 @@ function paintWizard(){
   if (note) note.textContent = step.welcome ? 'Выберите нишу и нажмите «Начать настройку».' : (step.done ? 'Карточка уйдёт в бот после сохранения.' : '«Дальше» запоминает шаг. В бот карточка уйдёт на последнем шаге.');
   if (prev) { prev.disabled = false; prev.textContent = assistWizardAt === 0 ? 'К выбору бота' : 'Назад'; }
   if (next) { next.disabled = assistWizardAt >= steps.length - 1; next.textContent = step.welcome ? 'Начать настройку' : 'Дальше'; }
+  const leads = {
+    prices: 'Напишите услуги и цены. Клиент увидит их по кнопке «Услуги».',
+    products: 'Нужны ли отдельные кнопки товаров? Если товары разные, дайте разделам имена. Клиент сначала нажмёт раздел.',
+    about: 'Первая фраза. Клиент видит её, когда открывает бота в сообщениях сообщества.',
+    contacts: 'Телефон и адрес. Кнопка «Контакты» покажет этот текст.',
+    order: 'Как заказать и как платить. Клиент прочитает это по своим кнопкам.',
+    road: 'Куда ехать или как доставить. Ссылка на карту уйдёт вместе с адресом.',
+    book: 'Дни и часы записи. Клиент выберет свободное время.',
+    shello: 'Первая фраза. Клиент видит её после кнопки «Начать».',
+    pay: 'Как платить. Клиент прочитает этот текст по кнопке «Оплата».',
+    address: 'Куда ехать. Ссылка на карту уйдёт вместе с адресом.',
+    menu: 'Кнопка меню. Если внутри нужны разделы, отметьте галочку ниже.',
+    hand: 'Последний шаг. Ниже просмотр бота: это песочница, в сообщество ничего не уходит.'
+  };
+  const lead = document.getElementById('wizLead');
+  const leadText = leads[step.step] || leads[step.role] || '';
+  if (lead) { lead.hidden = !leadText; lead.textContent = leadText; }
   paintScenarioCards();
   paintWizardKeys();
+  paintWizardSandbox(step);
   paintAssistTabs();
 }
 function copyDesk(from){
@@ -1792,7 +1835,7 @@ function assistDesk(reply, groupId){
       '<div class="wiz-keys">'+
       '<p class="gate-kicker">НейроЯга AI</p>'+
       '<p class="gate-title">Кнопки в чате</p>'+
-      '<p class="hint">Это меню под полем сообщения. Нажмите кнопку и напишите, что клиент прочитает.</p>'+
+      '<p class="hint">Нажмите кнопку. Выберите стиль и решите, нужны ли внутри разделы. Например: шиномонтаж, внутри сезон, а в нём размеры колёс.</p>'+
       '<div class="niches" id="wizKeyBoard"></div>'+
       '<button type="button" class="textlink" id="wizKeyAdd">Своя кнопка</button></div>'+
       '<div class="keys-raw">'+
@@ -1818,6 +1861,8 @@ function assistDesk(reply, groupId){
     '<div class="modes">'+radio('simple','Простой бот','Пять кнопок. Лишние поля скрыты.')+radio('wizard','Мастер настроек','Один вопрос за раз, в конце сохранение.')+radio('full','Расширенный','Цены, разделы, доставка и все кнопки.')+'</div>'+
     assistPickHtml()+
     '<div id="assistWizardNav"><p class="now" id="wizTitle"></p><div class="wizbar" aria-hidden="true"><span id="wizFill"></span></div><p class="hint" id="wizLeft"></p><p class="hint" id="wizNote"></p><div class="wiznav"><button class="btn ghost" id="wizPrev" type="button">Назад</button><button class="btn" id="wizNext" type="button">Дальше</button></div></div>'+
+    '<p class="hint" id="wizLead" hidden></p>'+
+    '<div id="wizSandbox" hidden></div>'+
     '<div id="assistSimple">'+assistSimpleHtml(reply)+'</div>'+
     '<div id="assistFull"><p class="hint">Сверху вниз: направление, цены, каталог, текст, кнопки. В конце одна кнопка «Сохранить карточку».</p>'+
     chips+parts.map(function(part){ return '<section class="astep" id="assist-step-'+part[0]+'" data-aslice="'+part[0]+'"><p class="now">Шаг '+part[1]+'</p>'+part[2]+'</section>'; }).join('')+
@@ -2318,12 +2363,78 @@ function wizardKeyNote(row){
   if (row.hidden) return 'Скрыта из чата';
   if (row.kind === 'link') return row.link ? 'Откроет ссылку' : 'Нужна ссылка https';
   if (row.kind === 'contact') return 'Покажет контакты из карточки';
-  if (row.kind === 'menu') return 'Откроет кнопки внутри';
+  if (row.kind === 'menu') {
+    const names = (row.kids || []).map(function(kid){ return kid.label; }).filter(Boolean);
+    return names.length ? 'Сначала разделы: '+names.join(', ') : 'Нужны разделы внутри';
+  }
   if (row.label === 'Контакты') return 'Покажет телефон и адрес из карточки';
   if (row.label === 'Оплата') return 'Покажет, как платить';
   if (row.label === 'Адрес') return 'Покажет, куда ехать';
   if (row.label === 'Услуги' || row.label === 'Каталог') return 'Покажет цены и список';
   return row.text ? 'Клиент прочитает ваш текст' : 'Напишите, что клиент прочитает';
+}
+function wizardTone(value){
+  return value === 'primary' || value === 'positive' || value === 'negative' ? value : 'secondary';
+}
+function wizardKids(row){
+  return Array.prototype.slice.call(row.querySelectorAll(':scope > [data-brows] > [data-brow]')).map(function(child){
+    const subs = Array.prototype.slice.call(child.querySelectorAll(':scope > [data-brows] > [data-brow]')).map(function(grand){
+      return String((grand.querySelector(':scope > [data-blabel]') || {}).value || '').trim();
+    }).filter(Boolean);
+    return {
+      label: String((child.querySelector(':scope > [data-blabel]') || {}).value || '').trim(),
+      text: String((child.querySelector(':scope > [data-btextwrap] [data-btext]') || {}).value || ''),
+      subs: subs.join(', ')
+    };
+  });
+}
+function wizardToneButtons(current){
+  const tones = [['secondary','Обычная'],['primary','Синяя'],['positive','Зелёная'],['negative','Красная']];
+  return '<p class="flabel">Стиль кнопки</p><div class="tones">'+tones.map(function(tone){
+    return '<button type="button" class="tone '+tone[0]+(wizardTone(current)===tone[0]?' on':'')+'" data-ktone="'+tone[0]+'">'+tone[1]+'</button>';
+  }).join('')+'</div>';
+}
+function paintWizardSandbox(step){
+  const box = document.getElementById('wizSandbox');
+  if (!box) return;
+  const current = step || (wizardSteps()[assistWizardAt] || {});
+  const show = current.step === 'keys' || current.done || current.role === 'menu' || current.role === 'hand';
+  box.hidden = !show;
+  if (!show) return;
+  if (assistSandStep !== assistWizardAt) { assistSand = []; assistSandStep = assistWizardAt; }
+  const tree = function(row){
+    const label = String((row.querySelector(':scope > [data-blabel]') || {}).value || '').trim();
+    const kind = (row.querySelector(':scope > [data-bkind]') || {}).value || 'text';
+    const hidden = !!((row.querySelector(':scope > label > [data-bhide]') || {}).checked);
+    const text = String((row.querySelector(':scope > [data-btextwrap] [data-btext]') || {}).value || '').trim();
+    const color = wizardTone((row.querySelector(':scope > [data-bcolor]') || {}).value);
+    const items = kind === 'menu' ? Array.prototype.slice.call(row.querySelectorAll(':scope > [data-brows] > [data-brow]')).map(tree).filter(function(item){ return item.label && !item.hidden; }) : [];
+    return { label: label, text: text, color: color, hidden: hidden, items: items };
+  };
+  const top = Array.prototype.slice.call(document.querySelectorAll('#assistButtons > [data-brow]')).map(tree).filter(function(item){ return item.label && !item.hidden; });
+  const bookOn = !document.getElementById('assistBookingOn') || document.getElementById('assistBookingOn').checked;
+  const book = String((document.getElementById('assistBookLabel') || {}).value || '').trim() || 'Записаться';
+  if (bookOn) top.push({ label: book, text: 'Клиент выберет день и время.', color: 'positive', items: [] });
+  if ((document.getElementById('assistHandoff') || {}).checked !== false) top.push({ label: 'Администратор', text: 'Вам придёт сообщение во ВК.', color: 'primary', items: [] });
+  const level = assistSand.length ? assistSand[assistSand.length - 1] : null;
+  const buttons = level ? level.items : top;
+  const greet = String((document.getElementById('assistGreeting') || {}).value || '').trim() || 'Здравствуйте. Выберите кнопку.';
+  const typed = String((document.getElementById('assistGroup') || {}).value || '').replace(/\D/g, '');
+  const savedGroup = assistView && assistView.community ? String(assistView.community.groupId || '').replace(/\D/g, '') : '';
+  const group = typed || savedGroup;
+  box.innerHTML = '<div class="sand"><p class="gate-kicker">Песочница</p><p class="gate-title" style="font-size:22px">Так увидит клиент</p><p class="hint">Это просмотр. В сообщество'+(group ? ' № '+esc(group) : '')+' ничего не уходит. Подключение — это номер и ключ: бот отвечает в сообщениях этого сообщества.</p><div class="sandphone"><div class="sandmsg">'+esc(level ? '«'+level.label+'». Выберите раздел.' : greet.slice(0, 180))+'</div>'+
+    buttons.map(function(item){ return '<button type="button" class="sandkey '+(item.color || 'secondary')+'" data-sand="'+esc(item.label)+'">'+esc(item.label)+'</button>'; }).join('')+
+    (level ? '<button type="button" class="sandkey negative" data-sand="back">Назад</button>' : '')+'</div></div>';
+  box.querySelectorAll('[data-sand]').forEach(function(button){
+    button.onclick = function(){
+      const name = button.getAttribute('data-sand');
+      if (name === 'back') { assistSand.pop(); paintWizardSandbox(current); return; }
+      const hit = buttons.find(function(item){ return item.label === name; });
+      if (hit && hit.items && hit.items.length) { assistSand.push(hit); paintWizardSandbox(current); return; }
+      const note = box.querySelector('.sandmsg');
+      if (note) note.textContent = hit && hit.text ? hit.text : 'Клиент прочитает этот ответ.';
+    };
+  });
 }
 function paintWizardKeys(){
   const box = document.getElementById('wizKeyBoard');
@@ -2335,7 +2446,9 @@ function paintWizardKeys(){
       kind: (row.querySelector(':scope > [data-bkind]') || {}).value || 'text',
       text: String((row.querySelector(':scope > [data-btextwrap] [data-btext]') || {}).value || ''),
       link: String((row.querySelector(':scope > [data-blinkwrap] [data-blink]') || {}).value || '').trim(),
-      hidden: !!((row.querySelector(':scope > label > [data-bhide]') || {}).checked)
+      hidden: !!((row.querySelector(':scope > label > [data-bhide]') || {}).checked),
+      color: wizardTone((row.querySelector(':scope > [data-bcolor]') || {}).value),
+      kids: wizardKids(row)
     });
   });
   let open = assistKeyOpen;
@@ -2352,11 +2465,20 @@ function paintWizardKeys(){
   rows.forEach(function(row, index){
     const id = 'b'+index;
     if (open === id) {
-      html += '<div class="plain"><label class="flabel">Надпись на кнопке</label><input data-kname maxlength="24" value="'+esc(row.label)+'">';
+      const nested = row.kind === 'menu';
+      html += '<div class="plain"><label class="flabel">Надпись на кнопке</label><input data-kname maxlength="24" value="'+esc(row.label)+'">'+wizardToneButtons(row.color);
+      html += '<p class="gate-title" style="font-size:22px">Разделы внутри</p><p class="hint">Например кнопка «Шиномонтаж», внутри «Сезонный», а в нём размеры колёс.</p>';
+      html += '<button type="button" class="niche'+(!nested?' on':'')+'" data-knest="0"><b>Без разделов</b><span>Клиент сразу читает текст</span></button>';
+      html += '<button type="button" class="niche'+(nested?' on':'')+'" data-knest="1"><b>Нужны разделы</b><span>Сначала выбор, потом текст или подраздел</span></button>';
       if (row.kind === 'link') html += '<label class="flabel">Ссылка https</label><input data-klink maxlength="300" value="'+esc(row.link)+'">';
-      else if (row.kind === 'menu') html += '<p class="hint">Эта кнопка открывает кнопки внутри. Название можно поменять здесь.</p>';
       else if (row.kind === 'contact') html += '<p class="hint">Клиент увидит контакты из карточки.</p>';
-      else html += '<label class="flabel">Что клиент прочитает</label><textarea data-ktext maxlength="900" rows="3">'+esc(row.text)+'</textarea>';
+      else if (!nested) html += '<label class="flabel">Что клиент прочитает</label><textarea data-ktext maxlength="900" rows="3">'+esc(row.text)+'</textarea>';
+      if (nested) {
+        html += row.kids.map(function(kid, kidIndex){
+          return '<div class="srow" data-kidx="'+kidIndex+'"><label class="flabel">Раздел</label><input data-kchild maxlength="24" value="'+esc(kid.label)+'"><label class="flabel">Текст, если нет подразделов</label><textarea data-kchildtext maxlength="900" rows="2">'+esc(kid.text)+'</textarea><label class="flabel">Подразделы через запятую</label><input data-ksubs maxlength="180" placeholder="R15, R16, R17" value="'+esc(kid.subs)+'"><button type="button" class="textlink" data-kchilddel>Убрать раздел</button></div>';
+        }).join('');
+        html += '<button type="button" class="textlink" data-kchildadd>Ещё раздел</button>';
+      }
       html += '<button type="button" class="textlink" data-khide>'+(row.hidden ? 'Вернуть в чат' : 'Скрыть из чата')+'</button><button type="button" class="textlink" data-kdel>Убрать кнопку</button><button type="button" class="textlink" data-kopen="">Закрыть</button></div>';
     } else html += '<button type="button" class="niche'+(row.hidden ? '' : '')+'" data-kopen="'+id+'"><b>'+esc(row.label || 'Без названия')+'</b><span>'+esc(wizardKeyNote(row))+'</span></button>';
   });
@@ -2392,6 +2514,7 @@ function paintWizardKeys(){
       const real = row.querySelector(':scope > [data-blabel]');
       if (real) real.value = name.value;
       paintAssistKeys();
+      paintWizardSandbox();
     };
     if (text) text.oninput = function(){
       const real = row.querySelector(':scope > [data-btextwrap] [data-btext]');
@@ -2401,6 +2524,80 @@ function paintWizardKeys(){
     if (link) link.oninput = function(){
       const real = row.querySelector(':scope > [data-blinkwrap] [data-blink]');
       if (real) real.value = link.value;
+      paintWizardSandbox();
+    };
+    box.querySelectorAll('[data-ktone]').forEach(function(button){
+      button.onclick = function(){
+        const tone = wizardTone(button.getAttribute('data-ktone'));
+        const real = row.querySelector(':scope > [data-bcolor]');
+        if (real) real.value = tone;
+        box.querySelectorAll('[data-ktone]').forEach(function(node){ node.classList.toggle('on', node === button); });
+        paintWizardSandbox();
+      };
+    });
+    box.querySelectorAll('[data-knest]').forEach(function(button){
+      button.onclick = function(){
+        const select = row.querySelector(':scope > [data-bkind]');
+        if (!select) return;
+        const nested = button.getAttribute('data-knest') === '1';
+        if (nested) select.value = 'menu';
+        else if (select.value === 'menu') select.value = 'text';
+        assistKind(select);
+        const nest = row.querySelector(':scope > [data-brows]');
+        if (nested && nest && !nest.querySelector(':scope > [data-brow]')) {
+          nest.insertAdjacentHTML('beforeend', assistButtonHtml({ label: 'Сезонный', text: 'Напишите, что входит в сезон.' }, 1));
+        }
+        paintWizardKeys();
+      };
+    });
+    box.querySelectorAll('[data-kidx]').forEach(function(card){
+      const child = row.querySelectorAll(':scope > [data-brows] > [data-brow]')[Number(card.getAttribute('data-kidx'))];
+      if (!child) return;
+      const childName = card.querySelector('[data-kchild]');
+      const childText = card.querySelector('[data-kchildtext]');
+      const subs = card.querySelector('[data-ksubs]');
+      if (childName) childName.oninput = function(){
+        const real = child.querySelector(':scope > [data-blabel]');
+        if (real) real.value = childName.value;
+        paintWizardSandbox();
+      };
+      if (childText) childText.oninput = function(){
+        const real = child.querySelector(':scope > [data-btextwrap] [data-btext]');
+        if (real) real.value = childText.value;
+      };
+      if (subs) subs.oninput = function(){
+        const names = subs.value.split(',').map(function(part){ return part.trim(); }).filter(Boolean).slice(0, 6);
+        const kind = child.querySelector(':scope > [data-bkind]');
+        const nest = child.querySelector(':scope > [data-brows]');
+        if (!nest || !kind) return;
+        if (!names.length) { kind.value = 'text'; assistKind(kind); return; }
+        kind.value = 'menu';
+        assistKind(kind);
+        let kids = Array.prototype.slice.call(nest.querySelectorAll(':scope > [data-brow]'));
+        while (kids.length < names.length) {
+          nest.insertAdjacentHTML('beforeend', assistButtonHtml({ label: '', text: '' }, 2));
+          kids = Array.prototype.slice.call(nest.querySelectorAll(':scope > [data-brow]'));
+        }
+        while (kids.length > names.length) kids.pop().remove();
+        kids.forEach(function(kid, kidIndex){
+          const label = kid.querySelector(':scope > [data-blabel]');
+          const text = kid.querySelector(':scope > [data-btextwrap] [data-btext]');
+          const kidKind = kid.querySelector(':scope > [data-bkind]');
+          if (label) label.value = names[kidIndex].slice(0, 24);
+          if (text) text.value = names[kidIndex];
+          if (kidKind) kidKind.value = 'text';
+        });
+        paintWizardSandbox();
+      };
+      const drop = card.querySelector('[data-kchilddel]');
+      if (drop) drop.onclick = function(){ child.remove(); paintWizardKeys(); };
+    });
+    const addChild = box.querySelector('[data-kchildadd]');
+    if (addChild) addChild.onclick = function(){
+      const nest = row.querySelector(':scope > [data-brows]');
+      if (!nest || nest.querySelectorAll(':scope > [data-brow]').length >= 6) return;
+      nest.insertAdjacentHTML('beforeend', assistButtonHtml({ label: '', text: '' }, 1));
+      paintWizardKeys();
     };
     const hide = box.querySelector('[data-khide]');
     if (hide) hide.onclick = function(){
@@ -2422,6 +2619,7 @@ function paintWizardKeys(){
     const raw = document.getElementById('assistAdd');
     if (raw) raw.click();
   };
+  paintWizardSandbox();
 }
 function showWizardDone(pending){
   const desk = document.querySelector('.desk');
