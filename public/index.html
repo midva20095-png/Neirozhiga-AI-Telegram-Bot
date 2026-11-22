@@ -991,7 +991,7 @@ function assistDesk(reply, groupId){
       assistArea('assistPickup', 1500, 5, 'Откуда забрать и с какого часа.', reply && reply.pickup)+
       '<label class="flabel" for="assistPickupMap">Точка на Яндекс Картах</label>'+
       '<input id="assistPickupMap" maxlength="300" placeholder="https://yandex.ru/maps/..." value="'+esc(reply && reply.pickupMap || '')+'">'+
-      '<p class="hint">Вставьте ссылку на точку из Яндекс Карт. По кнопке «Самовывоз» покупатель получит этот адрес и ссылку.</p>'+
+      '<p class="hint">Вставьте ссылку на точку из Яндекс Карт. По кнопкам «Адрес» и «Самовывоз» покупатель получит эту ссылку.</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistDeliveryOn" type="checkbox"'+(reply && reply.deliveryOn ? ' checked' : '')+'> Доставка</label>'+
       assistArea('assistDelivery', 1500, 5, 'Район и срок. Например: по городу в день заказа.', reply && reply.delivery)+
       '<label class="flabel" for="assistDeliveryPrice">Стоимость доставки</label>'+
