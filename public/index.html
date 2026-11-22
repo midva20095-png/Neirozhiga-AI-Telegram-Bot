@@ -140,8 +140,30 @@ button,textarea,input,select{font:inherit;color:inherit}
 #assistWizardNav{position:sticky;top:0;z-index:4;background:var(--bg);padding:8px 0 4px}
 .wizbar{height:8px;border-radius:999px;background:#1c1233;overflow:hidden;margin:8px 0}
 .wizbar span{display:block;height:100%;background:linear-gradient(90deg,#7c3aed,#ff2d95)}
-.niches{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-.niches button{flex:1 1 40%;border:1px solid var(--line);background:#1c1233;border-radius:12px;padding:10px}
+.lobby,.gate-pick{display:flex;flex-direction:column;gap:14px;margin:12px 0 18px}
+.gate-pick{display:none}
+.gate-kicker{margin:0;font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.gate-title{margin:0;font-size:28px;line-height:1.15;font-weight:800}
+.gate,.niche{position:relative;overflow:hidden;width:100%;min-height:92px;border:0;border-radius:22px;padding:20px 22px;text-align:left;color:#fff;cursor:pointer;background:linear-gradient(120deg,#10263c,#5b2a86 40%,#ff2d95 72%,#00ffe0);background-size:240% 240%;animation:gateFlow 6s ease-in-out infinite;box-shadow:0 14px 36px rgba(255,45,149,.22)}
+.gate.alt{animation-delay:-2.4s;background:linear-gradient(120deg,#140c24,#243b8f 38%,#00c2ff 78%,#b366ff)}
+.gate b,.niche b{display:block;position:relative;z-index:1;font-size:22px;font-weight:800}
+.gate span,.niche span{display:block;position:relative;z-index:1;margin-top:6px;font-size:14px;font-weight:600;color:rgba(255,255,255,.88)}
+.gate::after,.niche::after{content:"";position:absolute;z-index:0;top:0;bottom:0;width:42%;left:-60%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.38),transparent);animation:gateShine 3.4s ease-in-out infinite}
+#assistModeHint{display:none}
+.plain[data-role="welcome"]{background:transparent;border:0;padding:0}
+.niche:nth-child(2){animation-delay:-1s}
+.niche:nth-child(3){animation-delay:-2s}
+.niche:nth-child(4){animation-delay:-3s}
+.niche:nth-child(5){animation-delay:-4s}
+.niche.on{box-shadow:0 0 0 3px #fff,0 14px 36px rgba(0,255,224,.28)}
+.gate:active,.niche:active{transform:scale(.985)}
+.niches{display:flex;flex-direction:column;gap:12px;margin-top:14px}
+@keyframes gateFlow{0%{background-position:0% 40%}50%{background-position:100% 60%}100%{background-position:0% 40%}}
+@keyframes gateShine{0%{left:-60%}55%,100%{left:140%}}
+@media (prefers-reduced-motion:reduce){.gate,.niche,.gate::after,.niche::after{animation:none}}
+.desk .modes,.desk [data-role="kind"]{display:none}
+.desk.mode-pick #assistSimple,.desk.mode-pick #assistFull,.desk.mode-pick #assistWizardNav,.desk.mode-pick #assistDesk,.desk.mode-pick #assistSaveHint,.desk.mode-pick > .hint{display:none}
+.desk.mode-pick .gate-pick{display:flex}
 .desk.mode-wizard.wiz-full #assistFull{display:block}
 .desk.mode-wizard.wiz-full #assistFull > .hint,.desk.mode-wizard.wiz-full #assistFull .aslices{display:none}
 .desk.mode-wizard.wiz-full #assistFull .astep{display:none}
@@ -1359,20 +1381,48 @@ function assistPlainHtml(slot){
 }
 function assistKindHtml(reply){
   const kind = assistDeskMode(reply) === 'full' ? 'full' : 'simple';
-  return '<div class="plain" data-role="kind">'+
-    '<p class="flabel">Какой бот настраиваем</p>'+
-    '<label class="mode"><input type="radio" name="assistWizardKind" value="simple"'+(kind === 'simple' ? ' checked' : '')+'> Простой бот</label>'+
-    '<label class="mode"><input type="radio" name="assistWizardKind" value="full"'+(kind === 'full' ? ' checked' : '')+'> Расширенный бот</label>'+
-    '<p class="hint">Простой бот — пять кнопок. Расширенный — услуги, товары, разделы и свои кнопки.</p>'+
-    '<p class="flabel">Ниша</p>'+
-    '<div class="niches">'+
-      '<button type="button" data-niche="service">Услуги</button>'+
-      '<button type="button" data-niche="auto">Авто</button>'+
-      '<button type="button" data-niche="beauty">Бьюти</button>'+
-      '<button type="button" data-niche="food">Еда</button>'+
-      '<button type="button" data-niche="shop">Магазин</button>'+
-    '</div>'+
-    '<p class="hint">Ниша подставит названия кнопок. Свой текст карточки останется.</p>'+
+  return '<div data-role="kind">'+
+    '<input type="radio" name="assistWizardKind" value="simple"'+(kind === 'simple' ? ' checked' : '')+'>'+
+    '<input type="radio" name="assistWizardKind" value="full"'+(kind === 'full' ? ' checked' : '')+'>'+
+  '</div>';
+}
+function assistNicheButtons(){
+  const items = [
+    ['service', 'Услуги', 'Цены, запись и кнопки под вашу сферу'],
+    ['auto', 'Авто', 'Шиномонтаж, сервис и запись'],
+    ['beauty', 'Бьюти', 'Услуги мастера и запись'],
+    ['food', 'Еда', 'Меню и заказ'],
+    ['shop', 'Магазин', 'Каталог и заказ']
+  ];
+  return '<div class="niches">'+items.map(function(item){
+    return '<button type="button" class="niche" data-niche="'+item[0]+'"><b>'+item[1]+'</b><span>'+item[2]+'</span></button>';
+  }).join('')+'</div>';
+}
+function assistWelcomeHtml(){
+  return '<div class="plain" data-role="welcome">'+
+    '<p class="gate-kicker">НейроЯга AI</p>'+
+    '<p class="gate-title">Здравствуйте</p>'+
+    '<p class="hint">Я НейроЯга AI. Соберём бота сообщества по шагам: кнопки, оплата, адрес и запись. Карточка уйдёт в чат после сохранения на последнем шаге.</p>'+
+    '<p class="gate-title" style="font-size:22px;margin-top:18px">С какой ниши начнём</p>'+
+    assistNicheButtons()+
+  '</div>';
+}
+function assistLobbyHtml(){
+  return '<div class="lobby" id="assistLobby">'+
+    '<p class="gate-kicker">НейроЯга AI</p>'+
+    '<p class="gate-title">Настройка бота</p>'+
+    '<p class="hint">Выберите, как заполнить карточку сообщества.</p>'+
+    '<button type="button" class="gate" data-gate="wizard"><b>Мастер настроек</b><span>Крупные шаги. Я проведу от приветствия до сохранения.</span></button>'+
+    '<button type="button" class="gate alt" data-gate="manual"><b>Ручные настройки для продвинутых</b><span>Все разделы сразу: цены, кнопки, запись и заказы.</span></button>'+
+  '</div>';
+}
+function assistPickHtml(){
+  return '<div class="gate-pick" id="assistPick">'+
+    '<p class="gate-kicker">НейроЯга AI</p>'+
+    '<p class="gate-title">Какой бот собираем</p>'+
+    '<button type="button" class="gate" data-pick="simple"><b>Простой бот</b><span>Пять понятных кнопок. Мастер ведёт по одному шагу.</span></button>'+
+    '<button type="button" class="gate alt" data-pick="full"><b>Продвинутый бот</b><span>Услуги, товары, разделы, доставка и свои кнопки.</span></button>'+
+    '<button type="button" class="btn ghost" data-pick="back">К началу</button>'+
   '</div>';
 }
 function assistSimpleHtml(reply){
@@ -1398,6 +1448,7 @@ function assistSimpleHtml(reply){
   const hand = !reply || reply.handoff !== false;
   return '<p class="hint simple-help">Пять кнопок: Контакты, услуги или меню, Оплата, Адрес и Записаться. Дополнительные кнопки появляются только у той кнопки, где стоит галочка «Кнопки внутри».</p>'+
     assistKindHtml(reply)+
+    assistWelcomeHtml()+
     '<div class="shello plain">'+
     '<p class="now">Первая фраза</p>'+
     '<p class="hint">Клиент видит её после «Начать».</p>'+
@@ -1433,13 +1484,16 @@ function applyNiche(id){
   if (menuLabel) { menuLabel.value = pick[0]; assistCount(menuLabel); }
   if (menuText) menuText.placeholder = pick[2];
   if (bookLabel) { bookLabel.value = pick[1]; assistCount(bookLabel); }
+  document.querySelectorAll('[data-niche]').forEach(function(button){
+    button.classList.toggle('on', button.getAttribute('data-niche') === id);
+  });
 }
 function wizardSteps(){
   const kind = document.querySelector('[name="assistWizardKind"]:checked');
   if (kind) assistWizardKind = kind.value === 'full' ? 'full' : 'simple';
   if (assistWizardKind === 'full') {
     return [
-      { title: 'Вид бота', kind: true },
+      { title: 'Знакомство', welcome: true },
       { title: 'Сценарий', step: 'scenario' },
       { title: 'Услуги', step: 'prices' },
       { title: 'Товары', step: 'products' },
@@ -1453,7 +1507,7 @@ function wizardSteps(){
     ];
   }
   return [
-    { title: 'Вид бота', kind: true },
+    { title: 'Знакомство', welcome: true },
     { title: 'Приветствие', role: 'shello' },
     { title: 'Контакты', role: 'contacts' },
     { title: 'Оплата', role: 'pay' },
@@ -1490,9 +1544,9 @@ function paintWizard(){
   root.querySelectorAll('#assistFull .astep').forEach(function(node){
     node.classList.remove('wiz');
   });
-  if (step.kind) {
-    const kind = root.querySelector('#assistSimple [data-role="kind"]');
-    if (kind) kind.classList.add('wiz');
+  if (step.welcome) {
+    const hello = root.querySelector('#assistSimple [data-role="welcome"]');
+    if (hello) hello.classList.add('wiz');
   } else if (step.role === 'shello') {
     const hello = root.querySelector('#assistSimple .shello');
     if (hello) hello.classList.add('wiz');
@@ -1520,9 +1574,9 @@ function paintWizard(){
   if (title) title.textContent = 'Шаг '+(assistWizardAt + 1)+' из '+steps.length+'. '+step.title;
   if (left) left.textContent = rest ? 'Осталось шагов: '+rest : 'Последний шаг. Нажмите «Сохранить карточку».';
   if (fill) fill.style.width = Math.round(((assistWizardAt + 1) / steps.length) * 100)+'%';
-  if (note) note.textContent = step.done ? 'Карточка уйдёт в бот после сохранения.' : '«Дальше» запоминает шаг. В бот карточка уйдёт на последнем шаге.';
-  if (prev) prev.disabled = assistWizardAt === 0;
-  if (next) next.disabled = assistWizardAt >= steps.length - 1;
+  if (note) note.textContent = step.welcome ? 'Выберите нишу и нажмите «Начать настройку».' : (step.done ? 'Карточка уйдёт в бот после сохранения.' : '«Дальше» запоминает шаг. В бот карточка уйдёт на последнем шаге.');
+  if (prev) { prev.disabled = false; prev.textContent = assistWizardAt === 0 ? 'К выбору бота' : 'Назад'; }
+  if (next) { next.disabled = assistWizardAt >= steps.length - 1; next.textContent = step.welcome ? 'Начать настройку' : 'Дальше'; }
   const nav = document.getElementById('assistWizardNav');
   if (nav && nav.offsetParent) nav.scrollIntoView({ block: 'start' });
 }
@@ -1648,8 +1702,9 @@ function assistDesk(reply, groupId){
   const radio = function(value, title, note){
     return '<label><input type="radio" name="assistDeskMode" value="'+value+'"'+(mode===value?' checked':'')+'><span><b>'+title+'</b><br><span class="hint">'+note+'</span></span></label>';
   };
-  return '<div class="desk mode-'+mode+'"><p class="hint">Выберите, как настраивать. Простой бот прячет длинные шаги. Мастер задаёт по одному вопросу. Расширенный открывает цены, разделы и все кнопки.</p>'+
+  return '<div class="desk mode-pick"><p class="hint" id="assistModeHint">Выберите, как настраивать. Простой бот прячет длинные шаги. Мастер задаёт по одному вопросу. Расширенный открывает цены, разделы и все кнопки.</p>'+
     '<div class="modes">'+radio('simple','Простой бот','Пять кнопок. Лишние поля скрыты.')+radio('wizard','Мастер настроек','Один вопрос за раз, в конце сохранение.')+radio('full','Расширенный','Цены, разделы, доставка и все кнопки.')+'</div>'+
+    assistPickHtml()+
     '<div id="assistWizardNav"><p class="now" id="wizTitle"></p><div class="wizbar" aria-hidden="true"><span id="wizFill"></span></div><p class="hint" id="wizLeft"></p><p class="hint" id="wizNote"></p><div class="wiznav"><button class="btn ghost" id="wizPrev" type="button">Назад</button><button class="btn" id="wizNext" type="button">Дальше</button></div></div>'+
     '<div id="assistSimple">'+assistSimpleHtml(reply)+'</div>'+
     '<div id="assistFull"><p class="hint">Сверху вниз: направление, цены, каталог, текст, кнопки. В конце одна кнопка «Сохранить карточку».</p>'+
@@ -1728,9 +1783,57 @@ function showAssistPane(name, slice){
   document.querySelectorAll('.atabs [data-apane]').forEach(function(button){
     button.classList.toggle('on', button.getAttribute('data-apane') === assistPane);
   });
-  if (slice) showAssistSlice(slice);
+  if (slice && assistPane === 'card') openManual(slice);
+  else if (slice) showAssistSlice(slice);
   const current = document.querySelector('.atabs button.on');
   if (current && current.scrollIntoView) current.scrollIntoView({ inline:'center', block:'nearest' });
+}
+function openWizardPick(){
+  showAssistPane('card');
+  const desk = document.querySelector('.desk');
+  if (!desk) return;
+  desk.classList.remove('mode-simple', 'mode-full', 'mode-wizard', 'wiz-full');
+  desk.classList.add('mode-pick');
+  const button = document.getElementById('assistDesk');
+  const hint = document.getElementById('assistSaveHint');
+  if (button) button.hidden = true;
+  if (hint) hint.hidden = true;
+}
+function beginWizard(kind){
+  assistWizardKind = kind === 'full' ? 'full' : 'simple';
+  const kindRadio = document.querySelector('input[name="assistWizardKind"][value="'+assistWizardKind+'"]');
+  if (kindRadio) kindRadio.checked = true;
+  const modeRadio = document.querySelector('input[name="assistDeskMode"][value="wizard"]');
+  if (modeRadio) modeRadio.checked = true;
+  const desk = document.querySelector('.desk');
+  if (!desk) return;
+  const wasFull = desk.classList.contains('mode-full') || desk.classList.contains('wiz-full');
+  if (wasFull && assistWizardKind !== 'full') copyDesk('full');
+  if (!wasFull && assistWizardKind === 'full') copyDesk('simple');
+  desk.classList.remove('mode-simple', 'mode-full', 'mode-wizard', 'mode-pick', 'wiz-full');
+  desk.classList.add('mode-wizard');
+  assistWizardAt = 0;
+  paintWizard();
+}
+function openManual(slice){
+  const desk = document.querySelector('.desk');
+  if (!desk) return;
+  const radio = document.querySelector('input[name="assistDeskMode"][value="full"]');
+  if (radio) radio.checked = true;
+  desk.classList.remove('mode-simple', 'mode-wizard', 'mode-pick', 'wiz-full');
+  desk.classList.add('mode-full');
+  const button = document.getElementById('assistDesk');
+  const hint = document.getElementById('assistSaveHint');
+  if (button) button.hidden = false;
+  if (hint) hint.hidden = false;
+  if (slice) showAssistSlice(slice);
+}
+function openManualBoard(){
+  const lobby = document.getElementById('assistLobby');
+  const board = document.getElementById('assistManual');
+  if (lobby) lobby.hidden = true;
+  if (board) board.hidden = false;
+  showAssistPane('home');
 }
 function showAssistSlice(name){
   const names = ['scenario','prices','products','about','contacts','order','road','book','keys'];
@@ -1796,7 +1899,10 @@ async function loadAssist(){
   const status = community
     ? '<p class="now">Подключено: '+esc(community.title || ('сообщество '+community.groupId))+' · '+esc(community.groupId)+'</p>'+(community.error ? '<p class="err">'+esc(community.error)+'</p>' : '<p class="hint">Помощник слушает сообщения. Напишите ему со своей личной страницы, не от имени сообщества.</p>')
     : '<p class="now">Помощник пока нигде не отвечает. Подключите своё сообщество.</p>';
-  const home = status+(community ? assistBillPreviewHtml(assistServiceItems(community.reply && community.reply.services)) : '')+(community ? assistQuick(data) : '<p class="hint">После подключения здесь будут карточка, заказы, записи и клиенты.</p>')+
+  const board = community
+    ? '<div id="assistManual" hidden><button class="btn ghost" id="assistLobbyBack" type="button">К началу</button>'+assistBillPreviewHtml(assistServiceItems(community.reply && community.reply.services))+assistQuick(data)+'</div>'
+    : '<p class="hint">После подключения здесь будут карточка, заказы, записи и клиенты.</p>';
+  const home = status+(community ? assistLobbyHtml() : '')+board+
     assistConnect(community)+assistGuide(!community);
   box.innerHTML = '<div class="card">'+
     '<div class="kicker">Моё сообщество</div>'+
@@ -2676,8 +2782,25 @@ function bindPlain(){
       paintWizard();
     };
   });
+  document.querySelectorAll('[data-pick]').forEach(function(button){
+    button.onclick = function(){
+      const pick = button.getAttribute('data-pick');
+      if (pick === 'back') {
+        showAssistPane('home');
+        const lobby = document.getElementById('assistLobby');
+        const board = document.getElementById('assistManual');
+        if (lobby) lobby.hidden = false;
+        if (board) board.hidden = true;
+        return;
+      }
+      beginWizard(pick);
+    };
+  });
   const prev = document.getElementById('wizPrev');
-  if (prev) prev.onclick = function(){ if (assistWizardAt > 0) assistWizardAt -= 1; paintWizard(); };
+  if (prev) prev.onclick = function(){
+    if (assistWizardAt > 0) { assistWizardAt -= 1; paintWizard(); return; }
+    openWizardPick();
+  };
   const next = document.getElementById('wizNext');
   if (next) next.onclick = function(){ if (assistWizardAt < wizardSteps().length - 1) assistWizardAt += 1; paintWizard(); };
   paintWizard();
@@ -2726,6 +2849,19 @@ function bind(){
   document.querySelectorAll('[data-apane]').forEach(function(button){
     button.onclick = function(){ showAssistPane(button.getAttribute('data-apane'), button.getAttribute('data-slice') || ''); };
   });
+  document.querySelectorAll('[data-gate]').forEach(function(button){
+    button.onclick = function(){
+      if (button.getAttribute('data-gate') === 'manual') openManualBoard();
+      else openWizardPick();
+    };
+  });
+  const lobbyBack = document.getElementById('assistLobbyBack');
+  if (lobbyBack) lobbyBack.onclick = function(){
+    const lobby = document.getElementById('assistLobby');
+    const board = document.getElementById('assistManual');
+    if (lobby) lobby.hidden = false;
+    if (board) board.hidden = true;
+  };
   document.querySelectorAll('.aslices [data-slice]').forEach(function(button){
     button.onclick = function(){ showAssistSlice(button.getAttribute('data-slice')); };
   });
