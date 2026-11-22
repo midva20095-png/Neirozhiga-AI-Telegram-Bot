@@ -403,8 +403,7 @@ function startWebApp() {
 
     app.post('/api/vk/assistant/setup', requireUser, async (req, res) => {
         try {
-            const saved = await assistant.askSetup(req.userId, req.body || {});
-            await tellSetupAdmins(app, `Дон просит настроить бота сообщества.\n${setupWho(saved)}\n${saved.note}\nТелефон: ${saved.phone}\nАдрес: ${saved.address}\nКарта: ${saved.map}\nОтвет пишите в админке, вкладка «Помощник». Переписка видна человеку в приложении.`);
+            await assistant.askSetup(req.userId, req.body || {});
             res.json({ ok: true });
         } catch (e) {
             const message = e && e.public ? e.message : 'Заявка не отправилась.';
@@ -414,8 +413,7 @@ function startWebApp() {
 
     app.post('/api/vk/assistant/setup/message', requireUser, async (req, res) => {
         try {
-            const saved = await assistant.addSetupTalk(req.userId, req.body && req.body.text, 'don');
-            await tellSetupAdmins(app, `Дон дописал в заявке на настройку.\n${setupWho(saved)}\n${saved.text}\nОтвет в админке, вкладка «Помощник».`);
+            await assistant.addSetupTalk(req.userId, req.body && req.body.text, 'don');
             res.json({ ok: true });
         } catch (e) {
             const message = e && e.public ? e.message : 'Сообщение не отправилось.';
@@ -1062,18 +1060,6 @@ function startWebApp() {
         if (!bot) return false;
         await bot.telegram.sendMessage(id, text, markdown ? { parse_mode: 'Markdown' } : undefined);
         return true;
-    }
-
-    function setupWho(saved) {
-        return saved && saved.name ? `${saved.name} · ВК ${saved.userId}` : `ВК ${saved && saved.userId || ''}`;
-    }
-
-    async function tellSetupAdmins(appRef, text) {
-        const bot = appRef && appRef.locals && appRef.locals.bot;
-        if (!bot) return;
-        for (const adminId of auth.adminIds()) {
-            try { await bot.telegram.sendMessage(adminId, text); } catch (e) {}
-        }
     }
 
     app.get('/api/admin/vk/communities', requireAdmin, (req, res) => {
