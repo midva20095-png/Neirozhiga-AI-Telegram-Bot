@@ -1010,6 +1010,7 @@ function assistGuide(opened){
     '<li>Номер сообщества — цифры в адресе. У страницы vk.com/club1234567 номер 1234567. Тот же номер есть в Управление → Настройки.</li>'+
     '<li>Вставьте номер и ключ в блок «Подключить сообщество» и нажмите «Подключить».</li>'+
     '<li>Карточка идёт по шагам. Шаг 2 — услуги и цены. Шаг 3 — разделы каталога. Клиент жмёт «Каталог», открывает раздел или общий каталог, читает описание и добавляет позицию в счёт. В конце «Записаться» показывает итог. Пустое поле помощник не выдумывает.</li>'+
+    '<li>На шаге кнопок откройте нужную кнопку, например «Адрес», и нажмите «Нужны разделы». В поле «Название дополнительной кнопки» напишите имя. «Ещё раздел» добавляет следующую кнопку внутрь этой. «Ещё подраздел» добавляет кнопку внутрь раздела. Дальше бот не открывает. Без разделов кнопка «Адрес» показывает текст адреса из карточки.</li>'+
     '<li>Люди, которые сами написали в сообщения, попадают во вкладку «Клиенты». Рассылка уходит только им. Заказы и записи лежат на своих вкладках и приходят сообщением вам и покупателю.</li>'+
     '</ol>'+
     '<p class="hint">Ключ нужен, чтобы помощник отвечал покупателям в этом сообществе. В кабинете он повторно не показывается и другим людям не виден. Пока действует донат НейроЯги, помощник отвечает. Когда срок закончится, он замолчит только в вашем сообществе.</p>'+
@@ -1630,6 +1631,7 @@ let assistWizardAt = 0;
 let assistWizardKind = 'simple';
 let assistNiche = '';
 let assistKeyOpen = '';
+let assistKeyFocus = false;
 let assistSand = [];
 let assistSandStep = -1;
 function assistCount(input){
@@ -2963,7 +2965,7 @@ function paintWizardKeys(){
       if (path.child >= 0 && data.kids[path.child]) {
         const kid = data.kids[path.child];
         const subs = kid.subs ? kid.subs.split(', ') : [];
-        html += '<div class="srow" data-kidx="'+path.child+'"><label class="flabel">Раздел</label><input data-kchild maxlength="24" value="'+esc(kid.label)+'"><label class="flabel">Текст, если нет подразделов</label><textarea data-kchildtext maxlength="900" rows="2">'+esc(kid.text)+'</textarea>';
+        html += '<div class="kedit" data-kidx="'+path.child+'"><label class="flabel">Название дополнительной кнопки</label><input data-kchild maxlength="24" value="'+esc(kid.label)+'"><label class="flabel">Текст, если нет подразделов</label><textarea data-kchildtext maxlength="900" rows="2">'+esc(kid.text)+'</textarea>';
         html += '<p class="flabel">Подразделы</p>'+wizardPair(subs.map(function(name, subIndex){
           return wizardFace(name, 'ведёт в текст', 'b'+path.index+'.c'+path.child+'.s'+subIndex, 'secondary', path.sub === subIndex, false);
         }));
@@ -3044,9 +3046,10 @@ function paintWizardKeys(){
         assistKind(select);
         const nest = row.querySelector(':scope > [data-brows]');
         if (nested && nest && !nest.querySelector(':scope > [data-brow]')) {
-          nest.insertAdjacentHTML('beforeend', assistButtonHtml({ label: 'Сезонный', text: 'Напишите, что входит в сезон.' }, 1));
-        }
-        assistKeyOpen = 'b'+path.index;
+          nest.insertAdjacentHTML('beforeend', assistButtonHtml({ label: 'Новый раздел', text: 'Напишите, что увидит клиент.' }, 1));
+          assistKeyOpen = 'b'+path.index+'.c0';
+          assistKeyFocus = true;
+        } else assistKeyOpen = 'b'+path.index;
         paintWizardKeys();
       };
     });
@@ -3092,8 +3095,9 @@ function paintWizardKeys(){
         kind.value = 'menu';
         assistKind(kind);
         const next = nest.querySelectorAll(':scope > [data-brow]').length;
-        nest.insertAdjacentHTML('beforeend', assistButtonHtml({ label: 'Размер', text: 'Размер' }, 2));
+        nest.insertAdjacentHTML('beforeend', assistButtonHtml({ label: 'Новый подраздел', text: 'Новый подраздел' }, 2));
         assistKeyOpen = 'b'+path.index+'.c'+path.child+'.s'+next;
+        assistKeyFocus = true;
         paintWizardKeys();
       };
     }
@@ -3102,8 +3106,9 @@ function paintWizardKeys(){
       const nest = row.querySelector(':scope > [data-brows]');
       if (!nest || nest.querySelectorAll(':scope > [data-brow]').length >= 6) return;
       const next = nest.querySelectorAll(':scope > [data-brow]').length;
-      nest.insertAdjacentHTML('beforeend', assistButtonHtml({ label: '', text: '' }, 1));
+      nest.insertAdjacentHTML('beforeend', assistButtonHtml({ label: 'Новый раздел', text: 'Напишите, что увидит клиент.' }, 1));
       assistKeyOpen = 'b'+path.index+'.c'+next;
+      assistKeyFocus = true;
       paintWizardKeys();
     };
     const hide = box.querySelector('[data-khide]');
@@ -3126,6 +3131,14 @@ function paintWizardKeys(){
     const raw = document.getElementById('assistAdd');
     if (raw) raw.click();
   };
+  if (assistKeyFocus) {
+    assistKeyFocus = false;
+    const fresh = box.querySelector('[data-kchild], [data-ksub]');
+    if (fresh) {
+      fresh.focus();
+      if (fresh.select) fresh.select();
+    }
+  }
   paintWizardSandbox();
 }
 function showWizardDone(pending){
