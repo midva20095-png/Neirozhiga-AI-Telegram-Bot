@@ -125,6 +125,18 @@ button,textarea,input,select{font:inherit;color:inherit}
 .srow input,.srow textarea,.brow input,.brow textarea{width:100%;border-radius:10px;border:1px solid var(--line);background:#100818;padding:10px}
 .brow textarea{min-height:72px}
 .srow label{font-size:14px;color:var(--text)}
+.modes{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.modes label{display:flex;gap:8px;align-items:flex-start;padding:10px;border:1px solid var(--line);border-radius:14px;background:#1c1233}
+.modes input{margin-top:4px}
+.plain{margin:10px 0;padding:10px;border:1px solid var(--line);border-radius:14px;background:#1c1233}
+.plain textarea,.plain input:not([type="checkbox"]){width:100%;border-radius:10px;border:1px solid var(--line);background:#100818;padding:10px}
+.wiznav{display:flex;gap:8px}
+.wiznav .btn{margin-top:0}
+.desk.mode-full #assistSimple,.desk.mode-full #assistWizardNav{display:none}
+.desk.mode-simple #assistFull,.desk.mode-simple #assistWizardNav{display:none}
+.desk.mode-wizard #assistFull{display:none}
+.desk.mode-wizard #assistSimple .simple-help,.desk.mode-wizard #assistSimple .shello,.desk.mode-wizard #assistSimple .plain,.desk.mode-wizard #assistSimple .simple-extra{display:none}
+.desk.mode-wizard #assistSimple .shello.wiz,.desk.mode-wizard #assistSimple .plain.wiz,.desk.mode-wizard #assistSimple .simple-extra.wiz{display:block}
 .astep{margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
 .astep:first-child{border-top:0;margin-top:0}
 .top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
@@ -1265,6 +1277,190 @@ function assistArea(id, limit, rows, placeholder, value){
 function assistSliceBox(id, body){
   return '<div class="aslice" data-aslice="'+id+'"'+(assistSlice===id?'':' hidden')+'>'+body+'</div>';
 }
+function assistDeskMode(reply){
+  if (reply && reply.desk === 'simple') return 'simple';
+  if (reply && reply.desk === 'full') return 'full';
+  const services = reply && Array.isArray(reply.services) && reply.services.length;
+  const products = reply && Array.isArray(reply.products) && reply.products.length;
+  const nested = reply && Array.isArray(reply.buttons) && reply.buttons.some(function(button){ return button && button.items && button.items.length; });
+  if (services || products || nested) return 'full';
+  if (reply && Array.isArray(reply.buttons) && reply.buttons.length > 5) return 'full';
+  return 'simple';
+}
+function assistPlainChild(item){
+  return '<div class="prow" data-pchild>'+
+    '<label class="flabel">Кнопка внутри</label>'+
+    '<input data-clabel maxlength="24" placeholder="Каталог" value="'+esc(item && item.label || '')+'">'+
+    '<textarea data-ctext maxlength="900" rows="2" placeholder="Что клиент прочитает">'+esc(item && item.text || '')+'</textarea>'+
+    '<button class="btn ghost" type="button" data-pdelkid>Убрать</button></div>';
+}
+function assistTakeButton(list, used, pred){
+  for (let i = 0; i < list.length; i += 1) {
+    if (used[i] || !pred(list[i])) continue;
+    used[i] = true;
+    return list[i];
+  }
+  return null;
+}
+function assistOwnText(button){
+  if (!button || !button.text) return '';
+  const skip = ['Показать контакты из карточки', 'Показать товары сообщества', 'Показать, как оформить заказ', 'Показать способ оплаты', 'Показать адрес', 'Открыть свободные дни', 'Показать услуги', 'Открыть разделы'];
+  return skip.indexOf(button.text) >= 0 ? '' : button.text;
+}
+function assistPlainHtml(slot){
+  const items = slot.items || [];
+  const nest = items.length > 0;
+  const book = slot.role === 'book';
+  const limit = slot.role === 'menu' || slot.role === 'own' ? 900 : 1500;
+  return '<div class="plain" data-plain data-role="'+slot.role+'">'+
+    '<p class="now">'+esc(slot.title)+'</p>'+
+    (slot.hint ? '<p class="hint">'+esc(slot.hint)+'</p>' : '')+
+    (book ? '<label style="display:block;margin:8px 0"><input data-pbook type="checkbox"'+(slot.on ? ' checked' : '')+'> Показывать кнопку записи</label>' : '')+
+    '<label class="flabel">Надпись на кнопке</label>'+
+    '<input data-plabel maxlength="24" value="'+esc(slot.label || '')+'">'+
+    (book ? '' :
+      '<label class="flabel">'+esc(slot.textLabel)+'</label>'+
+      '<textarea data-ptext maxlength="'+limit+'" rows="4" placeholder="'+esc(slot.placeholder || '')+'">'+esc(slot.text || '')+'</textarea>')+
+    (slot.role === 'address' ? '<label class="flabel">Ссылка на точку в Яндекс Картах</label><input data-pmap maxlength="300" placeholder="https://yandex.ru/maps/..." value="'+esc(slot.map || '')+'">' : '')+
+    (book ? '' :
+      '<label style="display:block;margin-top:8px"><input data-pnest type="checkbox"'+(nest ? ' checked' : '')+'> Кнопки внутри этой кнопки</label>'+
+      '<div data-pnestbox'+(nest ? '' : ' hidden')+'>'+
+      '<p class="hint">Эти кнопки откроются только после нажатия этой кнопки. Пустая галочка выше прячет список.</p>'+
+      '<div data-pkids>'+items.map(assistPlainChild).join('')+'</div>'+
+      '<button class="btn ghost" type="button" data-paddkid style="margin-top:8px">Добавить кнопку внутри</button></div>')+
+    '</div>';
+}
+function assistSimpleHtml(reply){
+  const saved = reply && reply.desk === 'simple' && Array.isArray(reply.buttons) ? reply.buttons : [];
+  const used = {};
+  const contacts = assistTakeButton(saved, used, function(button){ return button.label === 'Контакты'; });
+  const pay = assistTakeButton(saved, used, function(button){ return button.label === 'Оплата'; });
+  const address = assistTakeButton(saved, used, function(button){ return button.label === 'Адрес'; });
+  const book = assistTakeButton(saved, used, function(button){ return button.action === 'book' || button.label === 'Записаться'; });
+  const menu = assistTakeButton(saved, used, function(){ return true; });
+  const rest = saved.filter(function(button, index){ return !used[index]; });
+  const bookOn = !reply || (reply.bookingOn !== false && reply.scenario !== 'info');
+  const slots = [
+    { role: 'contacts', title: '1. Контакты', hint: 'Клиент получит этот текст по кнопке «Контакты».', textLabel: 'Телефон и связь', placeholder: 'Телефон, мессенджер или почта.', label: contacts && contacts.label || 'Контакты', text: reply && reply.contacts || '', items: contacts && contacts.items },
+    { role: 'menu', title: '2. Меню', hint: 'Галочка «Кнопки внутри» стоит на этой кнопке. Пока она пустая, клиент сразу читает текст. Если отметить, кнопка откроет свои кнопки, например «Каталог».', textLabel: 'Текст клиенту', placeholder: 'Напишите, что вам нужно.', label: menu && menu.label || 'Меню', text: assistOwnText(menu), items: menu && menu.items },
+    { role: 'pay', title: '3. Оплата', hint: 'Это описание оплаты. Клиент прочитает его целиком по кнопке «Оплата». Напишите своими словами: наличные, карта, перевод, чек, нужна ли предоплата.', textLabel: 'Описание оплаты', placeholder: 'Наличные после работы, перевод на карту, чек по просьбе. Предоплата не нужна.', label: pay && pay.label || 'Оплата', text: reply && reply.payment || '', items: pay && pay.items },
+    { role: 'address', title: '4. Адрес', hint: 'Куда ехать. Ссылка на Яндекс Карты уйдёт вместе с адресом.', textLabel: 'Адрес', placeholder: 'Улица, дом, как найти вход.', label: address && address.label || 'Адрес', text: reply && reply.address || '', map: reply && reply.pickupMap || '', items: address && address.items },
+    { role: 'book', title: '5. Записаться', hint: 'Клиент выберет день и время. Кнопку можно переименовать.', label: book && book.label || 'Записаться', on: saved.length ? !!book : bookOn }
+  ];
+  rest.forEach(function(button){
+    slots.push({ role: 'own', title: 'Ещё кнопка', hint: 'Эта кнопка тоже стоит на главном экране.', textLabel: 'Текст клиенту', placeholder: 'Что клиент прочитает', label: button.label, text: assistOwnText(button), items: button.items });
+  });
+  const hand = !reply || reply.handoff !== false;
+  return '<p class="hint simple-help">Пять кнопок, как раньше: Контакты, Меню, Оплата, Адрес и Записаться. Дополнительные кнопки появляются только у той кнопки, где стоит галочка «Кнопки внутри».</p>'+
+    '<div class="shello plain">'+
+    '<p class="now">Первая фраза</p>'+
+    '<p class="hint">Клиент видит её после «Начать».</p>'+
+    '<textarea data-shello maxlength="2500" rows="4" placeholder="Здравствуйте. Напишите, что вас интересует.">'+esc(reply && reply.greeting || '')+'</textarea></div>'+
+    slots.map(assistPlainHtml).join('')+
+    '<div class="plain" data-plain data-role="hand">'+
+    '<label style="display:block"><input data-phand type="checkbox"'+(hand ? ' checked' : '')+'> Кнопка «Администратор»</label>'+
+    '<p class="hint">Клиент нажмёт её, и вам придёт сообщение во ВК. Пока вы отвечаете, бот молчит.</p></div>'+
+    (slots.length < 8 ? '<button class="btn ghost simple-extra" id="assistPlainAdd" type="button" style="margin-top:8px">Ещё кнопка на главном экране</button>' : '');
+}
+let assistWizardAt = 0;
+function paintWizard(){
+  const root = document.querySelector('.desk');
+  if (!root || !root.classList.contains('mode-wizard')) return;
+  const titles = ['Как бот здоровается', 'Телефон и связь', 'Адрес', 'Описание оплаты', 'Запись', 'Кнопки внутри', 'Проверьте и сохраните'];
+  const notes = [
+    'Эту фразу клиент видит после «Начать».',
+    'Напишите телефон или мессенджер. Клиент прочитает это по кнопке «Контакты».',
+    'Куда ехать. Ссылку на Яндекс Карты можно вставить ниже.',
+    'Напишите своими словами, как принимаете деньги. Клиент получит этот текст целиком по кнопке «Оплата». Пример сам не подставится.',
+    'Если запись нужна, оставьте галочку. Клиент выберет день и время.',
+    'Галочка «Кнопки внутри» стоит на конкретной кнопке. Пустая галочка — клиент сразу читает текст. Отмеченная — кнопка открывает свои кнопки. Например, «Меню» открывает «Каталог».',
+    'Нажмите «Сохранить карточку». В чате останутся эти кнопки.'
+  ];
+  const order = ['shello', 'contacts', 'address', 'pay', 'book', 'menu', 'done'];
+  const at = Math.max(0, Math.min(assistWizardAt, titles.length - 1));
+  assistWizardAt = at;
+  root.querySelectorAll('#assistSimple .shello, #assistSimple .plain, #assistSimple .simple-extra').forEach(function(node){ node.classList.remove('wiz'); });
+  const key = order[at];
+  if (key === 'shello') {
+    const node = root.querySelector('#assistSimple .shello');
+    if (node) node.classList.add('wiz');
+  } else if (key === 'menu') {
+    root.querySelectorAll('#assistSimple .plain').forEach(function(node){
+      if (node.classList.contains('shello') || node.getAttribute('data-role') === 'hand') return;
+      node.classList.add('wiz');
+    });
+    const extra = root.querySelector('#assistSimple .simple-extra');
+    if (extra) extra.classList.add('wiz');
+  } else if (key === 'done') {
+    const node = root.querySelector('#assistSimple [data-role="hand"]');
+    if (node) node.classList.add('wiz');
+  } else {
+    const node = root.querySelector('#assistSimple [data-role="'+key+'"]');
+    if (node) node.classList.add('wiz');
+  }
+  const title = document.getElementById('wizTitle');
+  const note = document.getElementById('wizNote');
+  if (title) title.textContent = (at + 1) + ' из ' + titles.length + '. ' + titles[at];
+  if (note) note.textContent = notes[at];
+  const prev = document.getElementById('wizPrev');
+  const next = document.getElementById('wizNext');
+  if (prev) prev.disabled = at === 0;
+  if (next) next.disabled = at === titles.length - 1;
+}
+function copyDesk(from){
+  [['#assistSimple [data-shello]', 'assistGreeting'], ['#assistSimple [data-role="contacts"] [data-ptext]', 'assistContacts'], ['#assistSimple [data-role="pay"] [data-ptext]', 'assistPayment'], ['#assistSimple [data-role="address"] [data-ptext]', 'assistAddress'], ['#assistSimple [data-role="address"] [data-pmap]', 'assistPickupMap']].forEach(function(pair){
+    const simple = document.querySelector(pair[0]);
+    const full = document.getElementById(pair[1]);
+    if (!simple || !full) return;
+    if (from === 'simple') full.value = simple.value;
+    else simple.value = full.value;
+  });
+  const book = document.querySelector('#assistSimple [data-pbook]');
+  const bookFull = document.getElementById('assistBookingOn');
+  if (book && bookFull) { if (from === 'simple') bookFull.checked = book.checked; else book.checked = bookFull.checked; }
+  const bookLabel = document.querySelector('#assistSimple [data-role="book"] [data-plabel]');
+  const bookLabelFull = document.getElementById('assistBookLabel');
+  if (bookLabel && bookLabelFull) { if (from === 'simple') bookLabelFull.value = bookLabel.value; else bookLabel.value = bookLabelFull.value; }
+  const hand = document.querySelector('#assistSimple [data-phand]');
+  const handFull = document.getElementById('assistHandoff');
+  if (hand && handFull) { if (from === 'simple') handFull.checked = hand.checked; else hand.checked = handFull.checked; }
+}
+function readPlainButtons(){
+  const buttons = [];
+  document.querySelectorAll('#assistSimple [data-plain]').forEach(function(row){
+    const role = row.getAttribute('data-role');
+    if (!role || role === 'hand') return;
+    const label = String((row.querySelector(':scope > [data-plabel]') || {}).value || '').replace(/\s+/g, ' ').trim().slice(0, 24);
+    if (role === 'book') {
+      if (!((row.querySelector('[data-pbook]') || {}).checked)) return;
+      buttons.push({ label: label || 'Записаться', action: 'book', text: 'Открыть свободные дни' });
+      return;
+    }
+    const name = label || (role === 'contacts' ? 'Контакты' : role === 'pay' ? 'Оплата' : role === 'address' ? 'Адрес' : 'Меню');
+    const nest = !!((row.querySelector(':scope > label [data-pnest]') || {}).checked);
+    if (nest) {
+      const items = [];
+      const seen = {};
+      row.querySelectorAll(':scope > [data-pnestbox] [data-pchild]').forEach(function(child){
+        const childLabel = String((child.querySelector('[data-clabel]') || {}).value || '').replace(/\s+/g, ' ').trim().slice(0, 24);
+        const childText = String((child.querySelector('[data-ctext]') || {}).value || '').trim();
+        if (!childLabel || seen[childLabel]) return;
+        seen[childLabel] = true;
+        items.push({ label: childLabel, text: childText || childLabel });
+      });
+      if (items.length) {
+        buttons.push({ label: name, items: items });
+        return;
+      }
+    }
+    const text = String((row.querySelector(':scope > [data-ptext]') || {}).value || '').trim();
+    if (role === 'contacts' && name === 'Контакты') buttons.push({ label: name, text: 'Показать контакты из карточки' });
+    else if (role === 'pay' && name === 'Оплата') buttons.push({ label: name, text: 'Показать способ оплаты' });
+    else if (role === 'address' && name === 'Адрес') buttons.push({ label: name, text: 'Показать адрес' });
+    else buttons.push({ label: name, text: text || name });
+  });
+  return buttons;
+}
 function assistDesk(reply, groupId){
   const buttons = assistButtonList(reply, groupId);
   const handoff = !reply || reply.handoff !== false;
@@ -1291,8 +1487,9 @@ function assistDesk(reply, groupId){
       '<p class="hint">Одна строка — один вопрос. После двоеточия варианты через запятую. Это не описание позиции и не чужой пример. Пустое поле клиенту не показывается.</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistOrderOn" type="checkbox"'+(!reply || reply.orderOn !== false ? ' checked' : '')+'> Принимать заказ</label>'+
       '<p class="hint">Разделы и цены пишутся на шаге 3. Бот витрину сообщества сам не ищет. Кнопка «Каталог» только открывает ссылку. Заказ сохраняет выбранные товары, телефон и получение.</p>'+
-      '<label class="flabel" for="assistPayment">Как оплатить</label>'+
-      assistArea('assistPayment', 1500, 5, 'Как платят. Не пишите то, чего нет.', reply && reply.payment)],
+      '<label class="flabel" for="assistPayment">Описание оплаты</label>'+
+      assistArea('assistPayment', 1500, 5, 'Наличные, карта, перевод, чек. Клиент прочитает этот текст целиком.', reply && reply.payment)+
+      '<p class="hint">Этот текст уходит клиенту по кнопке «Оплата» и на вопрос про оплату. Пример в пустое поле сам не подставляется.</p>'],
     ['road', '7. Доставка',
       '<p class="hint">Включите только то, что у вас реально есть. Стоимость доставки помощник называет только из поля ниже.</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistPickupOn" type="checkbox"'+(reply && reply.pickupOn ? ' checked' : '')+'> Самовывоз</label>'+
@@ -1310,7 +1507,7 @@ function assistDesk(reply, groupId){
       assistArea('assistBooking', 2500, 8, 'Что дописать к записи. Если правил нет, оставьте пустым.', reply && reply.booking)+
       assistScheduleHtml(reply)],
     ['keys', '9. Кнопки',
-      '<p class="hint">«Записаться» стоит всегда и на всю ширину. Её можно только переименовать. Свои кнопки — текст, ссылка, контакты или кнопки внутри. На телефоне в ряд помещаются две короткие кнопки, не длиннее 24 знаков. «Скрыть» убирает кнопку из чата, но не стирает её.</p>'+
+      '<p class="hint">«Записаться» стоит всегда и на всю ширину. Её можно только переименовать. Свои кнопки — текст, ссылка, контакты или кнопки внутри. На телефоне в ряд помещаются две короткие кнопки, не длиннее 24 знаков. «Скрыть» убирает кнопку из чата, но не стирает её. Если нужно проще, сверху выберите «Простой бот» или «Мастер настроек».</p>'+
       '<label class="flabel" for="assistBookLabel">Кнопка записи</label>'+
       '<input id="assistBookLabel" maxlength="24" placeholder="Записаться" value="'+esc(assistBookName(reply))+'">'+
       '<p class="hint">Эту кнопку нельзя удалить. Снять запись целиком можно на шаге 8.</p>'+
@@ -1324,10 +1521,19 @@ function assistDesk(reply, groupId){
   const chips = '<div class="aslices">'+parts.map(function(part){
     return '<button type="button" data-slice="'+part[0]+'" class="'+(assistSlice===part[0]?'on':'')+'">'+part[1]+'</button>';
   }).join('')+'</div>';
-  return '<div class="desk"><p class="hint">Сверху вниз: направление, цены, каталог, текст, кнопки. В конце одна кнопка «Сохранить карточку».</p>'+
+  const mode = assistDeskMode(reply);
+  const radio = function(value, title, note){
+    return '<label><input type="radio" name="assistDeskMode" value="'+value+'"'+(mode===value?' checked':'')+'><span><b>'+title+'</b><br><span class="hint">'+note+'</span></span></label>';
+  };
+  return '<div class="desk mode-'+mode+'"><p class="hint">Выберите, как настраивать. Простой бот прячет длинные шаги. Мастер задаёт по одному вопросу. Расширенный открывает цены, разделы и все кнопки.</p>'+
+    '<div class="modes">'+radio('simple','Простой бот','Пять кнопок. Лишние поля скрыты.')+radio('wizard','Мастер настроек','Один вопрос за раз, в конце сохранение.')+radio('full','Расширенный','Цены, разделы, доставка и все кнопки.')+'</div>'+
+    '<div id="assistWizardNav"><p class="now" id="wizTitle"></p><p class="hint" id="wizNote"></p><div class="wiznav"><button class="btn ghost" id="wizPrev" type="button">Назад</button><button class="btn" id="wizNext" type="button">Дальше</button></div></div>'+
+    '<div id="assistSimple">'+assistSimpleHtml(reply)+'</div>'+
+    '<div id="assistFull"><p class="hint">Сверху вниз: направление, цены, каталог, текст, кнопки. В конце одна кнопка «Сохранить карточку».</p>'+
     chips+parts.map(function(part){ return '<section class="astep" id="assist-step-'+part[0]+'" data-aslice="'+part[0]+'"><p class="now">Шаг '+part[1]+'</p>'+part[2]+'</section>'; }).join('')+
+    '</div>'+
     '<button class="btn" id="assistDesk" type="button" style="margin-top:12px">Сохранить карточку</button>'+
-    '<p class="hint">Одна кнопка сохраняет все шаги. Пустая цена клиенту не называется.</p>'+
+    '<p class="hint">Одна кнопка сохраняет всё, что сейчас на экране. Пустая цена клиенту не называется.</p>'+
     '<p id="deskmsg" class="hint"></p></div>';
 }
 function assistTabs(marks){
@@ -1855,6 +2061,9 @@ function assistScheduleValue(){
 async function saveDesk(){
   const msg = document.getElementById('deskmsg');
   const button = document.getElementById('assistDesk');
+  const pickedMode = document.querySelector('input[name="assistDeskMode"]:checked');
+  const deskMode = pickedMode && pickedMode.value === 'full' ? 'full' : 'simple';
+  if (deskMode === 'simple') copyDesk('simple');
   const greeting = (document.getElementById('assistGreeting') || {}).value || '';
   const about = (document.getElementById('assistAbout') || {}).value || '';
   const guide = (document.getElementById('assistGuide') || {}).value || '';
@@ -1882,22 +2091,30 @@ async function saveDesk(){
   const scenario = picked && picked.value === 'info' ? 'info' : 'funnel';
   const buttons = [];
   const seen = {};
-  document.querySelectorAll('#assistButtons > [data-brow]').forEach(function(row){
-    const item = assistReadButton(row);
-    if (!item || seen[item.label]) return;
-    seen[item.label] = true;
-    buttons.push(item);
-  });
-  const bookOn = !!(document.getElementById('assistBookingOn') || {}).checked;
-  const bookLabel = String((document.getElementById('assistBookLabel') || {}).value || '').replace(/\s+/g, ' ').trim().slice(0, 24) || 'Записаться';
-  if (bookOn && !seen[bookLabel]) buttons.push({ label: bookLabel, action: 'book', text: 'Открыть свободные дни' });
+  if (deskMode === 'simple') {
+    readPlainButtons().forEach(function(item){
+      if (!item || seen[item.label]) return;
+      seen[item.label] = true;
+      buttons.push(item);
+    });
+  } else {
+    document.querySelectorAll('#assistButtons > [data-brow]').forEach(function(row){
+      const item = assistReadButton(row);
+      if (!item || seen[item.label]) return;
+      seen[item.label] = true;
+      buttons.push(item);
+    });
+    const bookOn = !!(document.getElementById('assistBookingOn') || {}).checked;
+    const bookLabel = String((document.getElementById('assistBookLabel') || {}).value || '').replace(/\s+/g, ' ').trim().slice(0, 24) || 'Записаться';
+    if (bookOn && !seen[bookLabel]) buttons.push({ label: bookLabel, action: 'book', text: 'Открыть свободные дни' });
+  }
   if (button) button.disabled = true;
   if (msg) msg.textContent = 'Сохраняю ответы…';
   try {
     const response = await fetch('/api/vk/assistant/reply', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, choices: choices, payment: payment, booking: booking, pickup: pickup, pickupMap: pickupMap, delivery: delivery, deliveryPrice: deliveryPrice, pickupOn: pickupOn, deliveryOn: deliveryOn, goodsOn: goodsOn, orderOn: orderOn, bookingOn: scenario === 'info' ? false : bookingOn, linkOn: linkOn, trade: trade, services: services, products: products, handoff: handoff, buttons: buttons, schedule: assistScheduleValue(), scenario: scenario })
+      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, choices: choices, payment: payment, booking: booking, pickup: pickup, pickupMap: pickupMap, delivery: delivery, deliveryPrice: deliveryPrice, pickupOn: pickupOn, deliveryOn: deliveryOn, goodsOn: goodsOn, orderOn: orderOn, bookingOn: scenario === 'info' ? false : bookingOn, linkOn: linkOn, trade: trade, services: services, products: products, handoff: handoff, buttons: buttons, schedule: assistScheduleValue(), scenario: scenario, desk: deskMode })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Ответы не сохранились');
@@ -2269,6 +2486,63 @@ function onCoverFile(input){
   };
   reader.readAsDataURL(file);
 }
+function bindPlain(){
+  document.querySelectorAll('input[name="assistDeskMode"]').forEach(function(node){
+    node.onchange = function(){
+      const desk = document.querySelector('.desk');
+      if (!desk) return;
+      const wasFull = desk.classList.contains('mode-full');
+      const goFull = node.value === 'full';
+      if (wasFull && !goFull) copyDesk('full');
+      if (!wasFull && goFull) copyDesk('simple');
+      desk.classList.remove('mode-simple', 'mode-full', 'mode-wizard');
+      desk.classList.add(goFull ? 'mode-full' : (node.value === 'wizard' ? 'mode-wizard' : 'mode-simple'));
+      if (node.value === 'wizard') assistWizardAt = 0;
+      paintWizard();
+    };
+  });
+  document.querySelectorAll('[data-pnest]').forEach(function(box){
+    box.onchange = function(){
+      const row = box.closest('[data-plain]');
+      const wrap = row && row.querySelector('[data-pnestbox]');
+      if (!wrap) return;
+      wrap.hidden = !box.checked;
+      if (box.checked && !wrap.querySelector('[data-pchild]')) {
+        const kids = wrap.querySelector('[data-pkids]');
+        if (kids) kids.insertAdjacentHTML('beforeend', assistPlainChild({}));
+        bind();
+      }
+    };
+  });
+  document.querySelectorAll('[data-paddkid]').forEach(function(button){
+    button.onclick = function(){
+      const kids = button.parentElement && button.parentElement.querySelector('[data-pkids]');
+      if (!kids || kids.querySelectorAll('[data-pchild]').length >= 6) return;
+      kids.insertAdjacentHTML('beforeend', assistPlainChild({}));
+      bind();
+    };
+  });
+  document.querySelectorAll('[data-pdelkid]').forEach(function(button){
+    button.onclick = function(){
+      const child = button.closest('[data-pchild]');
+      if (child) child.remove();
+    };
+  });
+  const add = document.getElementById('assistPlainAdd');
+  if (add) add.onclick = function(){
+    const box = document.getElementById('assistSimple');
+    const content = box ? box.querySelectorAll('[data-plain]:not([data-role="hand"])').length : 0;
+    if (!box || content >= 8) return;
+    add.insertAdjacentHTML('beforebegin', assistPlainHtml({ role: 'own', title: 'Ещё кнопка', hint: 'Эта кнопка тоже стоит на главном экране.', textLabel: 'Текст клиенту', placeholder: 'Что клиент прочитает', label: '' }));
+    if (content >= 7) add.remove();
+    bind();
+  };
+  const prev = document.getElementById('wizPrev');
+  if (prev) prev.onclick = function(){ if (assistWizardAt > 0) assistWizardAt -= 1; paintWizard(); };
+  const next = document.getElementById('wizNext');
+  if (next) next.onclick = function(){ if (assistWizardAt < 6) assistWizardAt += 1; paintWizard(); };
+  paintWizard();
+}
 function bind(){
   const pin = document.getElementById('door-pin');
   if (pin) pin.onclick = placeCovers;
@@ -2365,6 +2639,7 @@ function bind(){
   });
   syncBookButton();
   paintAssistKeys();
+  bindPlain();
   document.querySelectorAll('[data-sdel]').forEach(function(button){
     button.onclick = function(){
       const row = button.closest('[data-srow]');

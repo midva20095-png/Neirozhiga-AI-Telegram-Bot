@@ -99,7 +99,8 @@ function cleanReply(input) {
         trade: picked.id,
         services: cleanServices(input.services, picked.id),
         products: cleanProducts(input.products),
-        pickupMap: pickupMap
+        pickupMap: pickupMap,
+        desk: input.desk === 'simple' || input.desk === 'full' ? input.desk : ''
     }, fields);
 }
 
@@ -523,7 +524,8 @@ async function saveDesk(account, input, fetchImpl) {
         handoff: reply.handoff,
         buttons: reply.buttons,
         schedule: reply.schedule,
-        scenario: reply.scenario
+        scenario: reply.scenario,
+        desk: reply.desk
     }, fetchImpl);
     const saved = await db.saveAssistantReply(row.group_id, ownerId, reply);
     await db.markAssistantCommunity(row.group_id, pushed.ok ? 'on' : 'fail', pushed.ok ? '' : 'Ответы сохранены и ждут передачи.');
@@ -875,6 +877,7 @@ function demoReply(groupId) {
         linkOn: false,
         pickupOn: true,
         deliveryOn: true,
+        desk: 'full',
         greeting: 'Здравствуйте, это шиномонтаж ИП Соколова. Напишите, что с колесом, или выберите кнопку.',
         about: 'ИП Соколов Артём Сергеевич. Шиномонтаж легковых и внедорожников, ремонт прокола, балансировка и сезонное хранение. Бокс на Люблинской, выезд по ЮВАО.',
         guide: 'Цены только из карточки. Скидку не обещать. Запись вести кнопкой, диаметр спрашивать из вариантов.',
@@ -882,7 +885,7 @@ function demoReply(groupId) {
         address: 'Москва, Люблинская улица, 161, бокс 3. Вход со двора, синяя вывеска.',
         order: 'Напишите диаметр и сколько колёс. Оставьте телефон, перезвоним и подтвердим время.',
         choices: 'Диаметр: R15, R16, R17, R18',
-        payment: 'Наличные и перевод на карту. Чек по запросу.',
+        payment: 'Оплата в боксе после работы: наличные или перевод на карту по номеру телефона. Предоплата не нужна. Чек отправим, если попросите. Выезд мастер принимает на месте отдельно от работы. Доставку по ЮВАО считаем 400 рублей, за МКАД от 700 рублей и называем сумму до выезда.',
         booking: 'Приезжайте за 10 минут. Если опоздание больше 15 минут, слот можем отдать следующему.',
         pickup: 'Бокс 3, Люблинская улица, 161. Выдача с 9:00 до 19:00, суббота до 17:00.',
         pickupMap: pin,

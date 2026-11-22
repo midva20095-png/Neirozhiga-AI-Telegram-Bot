@@ -42,6 +42,21 @@ test('карточка ИП заполняет те же поля, что чел
     assert.equal(reply.buttons.find(item => item.label === 'Запись онлайн').action, 'book');
     assert.ok(reply.guide);
     assert.equal(reply.schedule.places[0], 'Бокс');
+    assert.equal(reply.desk, 'full');
+    assert.match(reply.payment, /Предоплата не нужна/);
+    assert.ok(reply.payment.length > 80);
+});
+
+test('простой стол сохраняется отдельно от расширенного', () => {
+    const simple = assistant.cleanReply({
+        desk: 'simple',
+        payment: 'Наличные в боксе после работы. Перевод на карту. Предоплата не нужна.',
+        buttons: [{ label: 'Оплата', text: 'Показать способ оплаты' }]
+    });
+    assert.equal(simple.desk, 'simple');
+    assert.match(simple.payment, /Предоплата не нужна/);
+    assert.equal(assistant.cleanReply({ desk: 'full', greeting: 'Здравствуйте' }).desk, 'full');
+    assert.equal(assistant.cleanReply({ greeting: 'Здравствуйте' }).desk, '');
 });
 
 test('команда второму боту уходит с секретом и не кладёт его в тело', async () => {
