@@ -698,7 +698,7 @@ function publicOrders(list) {
 
 function publicBookings(list) {
     if (!Array.isArray(list)) return [];
-    return list.slice(0, 80).map(item => ({
+    return list.slice(0, 400).map(item => ({
         peerId: Number(item && item.peerId) || 0,
         day: String(item && item.day || '').slice(0, 10),
         when: bookingWhen(item && item.day),

@@ -273,6 +273,16 @@ body.vkapp .tabbar button.on{background:linear-gradient(135deg,#7c3aed,#4c1d95);
 .acab b{display:block}
 .acab span{display:block;margin-top:4px;color:var(--mut);font-size:12px;font-weight:600}
 .apanel[hidden],.aslice[hidden]{display:none}
+.calhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px}
+.calhead button{width:auto;min-width:44px;border:1px solid var(--line);background:#1c1233;border-radius:12px;padding:8px 12px;font-weight:800}
+.calhead strong{font-size:15px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:8px}
+.cal .dow{text-align:center;color:var(--mut);font-size:11px;font-weight:800;padding:4px 0}
+.cal button{min-height:40px;border:1px solid var(--line);background:#1c1233;border-radius:10px;padding:2px;font-weight:800;font-size:13px}
+.cal button.has{background:#2a1450;border-color:#b366ff}
+.cal button.on{background:linear-gradient(135deg,#7c3aed,#ff2d95);color:#fff;border-color:transparent}
+.cal button i{display:block;font-style:normal;font-size:10px;color:#ffb3e6}
+.cal button.on i{color:#fff}
 </style>
 </head>
 <body style="background:#0b0614;margin:0">
@@ -843,6 +853,9 @@ function viewMenu(){
 }
 let assistPane = 'home';
 let assistSlice = 'scenario';
+let assistMonth = '';
+let assistDay = '';
+let assistView = null;
 function assistGuide(opened){
   return '<details class="stepsbox"'+(opened ? ' open' : '')+'>'+
     '<summary>Как подключить сообщество</summary>'+
@@ -1082,6 +1095,7 @@ async function loadAssist(){
     bind();
     return;
   }
+  assistView = data;
   const community = data.community;
   const orders = ((data.orders && data.orders.rows) || []).length;
   const books = ((data.bookings && data.bookings.rows) || []).length;
@@ -1226,21 +1240,86 @@ function assistOrders(pack, clients, groupId){
     '<p class="hint">Это заявки только вашего сообщества: что заказали, телефон и самовывоз или доставка. Новая заявка приходит вам в сообщения сообщества. Цена в заявке не придумывается: бот берёт её из карточки.</p>'+
     list+'</div>';
 }
+function moscowToday(){
+  const shifted = new Date(Date.now() + 3 * 60 * 60 * 1000);
+  return { y: shifted.getUTCFullYear(), m: shifted.getUTCMonth() + 1, d: shifted.getUTCDate() };
+}
+function monthKey(year, month){
+  return year + '-' + (month < 10 ? '0' : '') + month;
+}
+function shiftMonth(key, delta){
+  const match = /^(\d{4})-(\d{2})$/.exec(key || '');
+  let year = match ? Number(match[1]) : 0;
+  let month = match ? Number(match[2]) : 0;
+  if (!year || !month) {
+    const now = moscowToday();
+    year = now.y;
+    month = now.m;
+  }
+  month += delta;
+  while (month < 1) { month += 12; year -= 1; }
+  while (month > 12) { month -= 12; year += 1; }
+  return monthKey(year, month);
+}
 function assistBookings(pack, clients, groupId){
   const rows = (pack && pack.rows) || [];
   const people = (clients && clients.people) || [];
-  const list = rows.length ? rows.map(function(item){
+  const now = moscowToday();
+  if (!/^\d{4}-\d{2}$/.test(assistMonth)) assistMonth = monthKey(now.y, now.m);
+  const year = Number(assistMonth.slice(0, 4));
+  const month = Number(assistMonth.slice(5, 7));
+  const titles = ['январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'];
+  const byDay = {};
+  rows.forEach(function(item){
+    const day = String(item.day || '');
+    if (day.slice(0, 7) !== assistMonth) return;
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(item);
+  });
+  const todayKey = monthKey(now.y, now.m) === assistMonth ? assistMonth + '-' + (now.d < 10 ? '0' : '') + now.d : '';
+  if (!assistDay || assistDay.slice(0, 7) !== assistMonth) {
+    const first = Object.keys(byDay).sort()[0] || '';
+    assistDay = (todayKey && byDay[todayKey]) ? todayKey : (first || todayKey || assistMonth + '-01');
+  }
+  const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const firstDow = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
+  const lead = firstDow === 0 ? 6 : firstDow - 1;
+  let cells = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(function(name){ return '<span class="dow">'+name+'</span>'; }).join('');
+  for (let blank = 0; blank < lead; blank += 1) cells += '<span></span>';
+  for (let day = 1; day <= days; day += 1) {
+    const key = assistMonth + '-' + (day < 10 ? '0' : '') + day;
+    const count = (byDay[key] || []).length;
+    cells += '<button type="button" data-bday="'+key+'" class="'+(key === assistDay ? 'on' : '')+(count ? ' has' : '')+'">'+day+(count ? '<i>'+count+'</i>' : '')+'</button>';
+  }
+  const chosen = (byDay[assistDay] || []).slice().sort(function(a, b){ return String(a.slot || '').localeCompare(String(b.slot || '')); });
+  const places = {};
+  chosen.forEach(function(item){
+    const name = item.place || 'Без места';
+    places[name] = (places[name] || 0) + 1;
+  });
+  const placeLine = Object.keys(places).map(function(name){ return name + ' · ' + places[name]; }).join(', ');
+  const list = chosen.length ? chosen.map(function(item){
     const person = people.find(function(one){ return Number(one.peerId) === Number(item.peerId); });
     const who = person && person.name ? person.name : ('ВК '+item.peerId);
-    const bits = [item.when || item.day, item.slot, item.place, item.way, item.address, item.phone].filter(Boolean);
+    const bits = [item.slot, item.place, item.way, item.address, item.phone].filter(Boolean);
     const map = item.map ? ' · <a href="'+esc(item.map)+'">карта</a>' : '';
     const dialog = communityDialog(groupId, item.peerId);
     const link = dialog ? ' · <a href="'+esc(dialog)+'" data-out="'+esc(dialog)+'">открыть диалог</a>' : '';
     return '<div class="note"><b>'+esc(bits.join(' · '))+'</b><div class="hint">'+esc(who)+link+map+'</div></div>';
-  }).join('') : '<p class="hint">'+(pack && pack.pending ? 'Список откроется, когда помощник будет на связи.' : 'Пока записей нет. Они появятся здесь, когда покупатель нажмёт «Записаться» и подтвердит время.')+'</p>';
-  return '<div class="desk"><p class="now">Записи</p>'+
-    '<p class="hint">Это записи только вашего сообщества. Список живёт здесь, в «Моё сообщество». Новая запись и напоминания приходят в сообщения сообщества: покупателю в этот чат, вам — от имени сообщества. «Открыть диалог» ведёт в переписку сообщества с этим клиентом. Напоминание приходит накануне после 18:00 и утром в день записи. Если вам сообщение не пришло, напишите сообществу со своей страницы один раз.</p>'+
+  }).join('') : '<p class="hint">'+(pack && pack.pending ? 'Календарь откроется, когда помощник будет на связи.' : 'В этот день записей нет.')+'</p>';
+  return '<div class="desk"><p class="now">Календарь записей</p>'+
+    '<p class="hint">Уведомление приходит вам в ВК от имени этого сообщества, на телефон в приложение ВК. Если его нет, напишите сообществу со своей страницы один раз. «Открыть диалог» — переписка с клиентом. Настройки бота — вкладка «Карточка».</p>'+
+    '<div class="calhead"><button type="button" data-bmonth="-1">‹</button><strong>'+titles[month - 1]+' '+year+'</strong><button type="button" data-bmonth="1">›</button></div>'+
+    '<div class="cal">'+cells+'</div>'+
+    (placeLine ? '<p class="hint">Места: '+esc(placeLine)+'</p>' : '')+
     list+'</div>';
+}
+function paintAssistBook(){
+  const panel = document.querySelector('[data-apanel="book"]');
+  const view = assistView || {};
+  if (!panel || !view.community) return;
+  panel.innerHTML = assistBookings(view.bookings, view.clients, view.community.groupId);
+  bind();
 }
 function assistBase(clients){
   const pack = clients || { total: 0, people: [] };
@@ -1771,6 +1850,19 @@ function bind(){
   });
   document.querySelectorAll('.aslices [data-slice]').forEach(function(button){
     button.onclick = function(){ showAssistSlice(button.getAttribute('data-slice')); };
+  });
+  document.querySelectorAll('[data-bmonth]').forEach(function(button){
+    button.onclick = function(){
+      assistMonth = shiftMonth(assistMonth, Number(button.getAttribute('data-bmonth')) || 0);
+      assistDay = '';
+      paintAssistBook();
+    };
+  });
+  document.querySelectorAll('[data-bday]').forEach(function(button){
+    button.onclick = function(){
+      assistDay = button.getAttribute('data-bday') || '';
+      paintAssistBook();
+    };
   });
   const assistMail = document.getElementById('assistMail');
   if (assistMail) assistMail.oninput = function(){ assistMailAt = 0; };
