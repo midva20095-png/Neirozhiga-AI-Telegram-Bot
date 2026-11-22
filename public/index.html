@@ -148,7 +148,10 @@ button,textarea,input,select{font:inherit;color:inherit}
 .gate.alt{animation-delay:-2.4s;background:linear-gradient(120deg,#140c24,#243b8f 38%,#00c2ff 78%,#b366ff)}
 .gate b,.niche b{display:block;position:relative;z-index:1;font-size:22px;font-weight:800}
 .gate span,.niche span{display:block;position:relative;z-index:1;margin-top:6px;font-size:14px;font-weight:600;color:rgba(255,255,255,.88)}
-.gate::after,.niche::after{content:"";position:absolute;z-index:0;top:0;bottom:0;width:42%;left:-60%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.38),transparent);animation:gateShine 3.4s ease-in-out infinite}
+.gate::after,.niche::after{content:"";position:absolute;z-index:0;pointer-events:none;top:0;bottom:0;width:42%;left:-60%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.38),transparent);animation:gateShine 3.4s ease-in-out infinite}
+.desk.mode-wizard.wiz-hello #assistWizardNav .wiznav,.desk.mode-wizard.wiz-hello #wizLeft,.desk.mode-wizard.wiz-hello #wizNote{display:none}
+.desk.mode-wizard #assistSimple,.desk.mode-wizard #assistFull{padding-bottom:120px}
+.textlink{display:block;width:100%;margin-top:8px;padding:12px 0;border:0;background:none;color:#c4b5fd;font-weight:700}
 #assistModeHint{display:none}
 .plain[data-role="welcome"]{background:transparent;border:0;padding:0}
 .niche:nth-child(2){animation-delay:-1s}
@@ -328,6 +331,7 @@ body.vkapp .tabbar button.on{background:linear-gradient(135deg,#7c3aed,#4c1d95);
 .cabrow{display:flex;width:100%;text-align:left;align-items:center;justify-content:space-between;background:#1c1233;border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:8px;font-weight:800}
 .cabrow:after{content:'›';color:var(--mut);font-size:22px}
 .atabs,.aslices{display:flex;gap:6px;overflow-x:auto;margin:10px 0;padding:8px 0}
+.atabs[hidden]{display:none}
 .atabs{position:sticky;top:0;z-index:3;background:var(--card)}
 .atabs button,.aslices button{flex:0 0 auto;border:1px solid var(--line);background:#1c1233;color:var(--mut);border-radius:999px;padding:8px 12px;font-weight:800;font-size:13px}
 .atabs button.on,.aslices button.on{color:#fff;border-color:transparent;background:linear-gradient(135deg,#7c3aed,#ff2d95)}
@@ -1402,9 +1406,10 @@ function assistWelcomeHtml(){
   return '<div class="plain" data-role="welcome">'+
     '<p class="gate-kicker">НейроЯга AI</p>'+
     '<p class="gate-title">Здравствуйте</p>'+
-    '<p class="hint">Я НейроЯга AI. Соберём бота сообщества по шагам: кнопки, оплата, адрес и запись. Карточка уйдёт в чат после сохранения на последнем шаге.</p>'+
+    '<p class="hint">Я НейроЯга AI. Нажмите нишу, и настройка начнётся.</p>'+
     '<p class="gate-title" style="font-size:22px;margin-top:18px">С какой ниши начнём</p>'+
     assistNicheButtons()+
+    '<button type="button" class="textlink" id="wizKindBack">Другой вид бота</button>'+
   '</div>';
 }
 function assistLobbyHtml(){
@@ -1525,6 +1530,15 @@ function paintSave(wizard){
   if (button) button.hidden = !show;
   if (hint) hint.hidden = !show;
 }
+function assistGoNext(){
+  if (assistWizardAt < wizardSteps().length - 1) assistWizardAt += 1;
+  paintWizard();
+  const shown = document.querySelector('#assistSimple .wiz, #assistFull .astep.wiz');
+  if (shown && shown.scrollIntoView) {
+    shown.style.scrollMarginTop = '16px';
+    shown.scrollIntoView({ block: 'start' });
+  }
+}
 function paintWizard(){
   const root = document.querySelector('.desk');
   const wizard = !!(root && root.classList.contains('mode-wizard'));
@@ -1538,6 +1552,7 @@ function paintWizard(){
     return;
   }
   root.classList.toggle('wiz-full', assistWizardKind === 'full');
+  root.classList.toggle('wiz-hello', !!step.welcome);
   root.querySelectorAll('#assistSimple .shello, #assistSimple .plain, #assistSimple .simple-extra').forEach(function(node){
     node.classList.remove('wiz');
   });
@@ -1577,8 +1592,7 @@ function paintWizard(){
   if (note) note.textContent = step.welcome ? 'Выберите нишу и нажмите «Начать настройку».' : (step.done ? 'Карточка уйдёт в бот после сохранения.' : '«Дальше» запоминает шаг. В бот карточка уйдёт на последнем шаге.');
   if (prev) { prev.disabled = false; prev.textContent = assistWizardAt === 0 ? 'К выбору бота' : 'Назад'; }
   if (next) { next.disabled = assistWizardAt >= steps.length - 1; next.textContent = step.welcome ? 'Начать настройку' : 'Дальше'; }
-  const nav = document.getElementById('assistWizardNav');
-  if (nav && nav.offsetParent) nav.scrollIntoView({ block: 'start' });
+  paintAssistTabs();
 }
 function copyDesk(from){
   [['#assistSimple [data-shello]', 'assistGreeting'], ['#assistSimple [data-role="contacts"] [data-ptext]', 'assistContacts'], ['#assistSimple [data-role="pay"] [data-ptext]', 'assistPayment'], ['#assistSimple [data-role="address"] [data-ptext]', 'assistAddress'], ['#assistSimple [data-role="address"] [data-pmap]', 'assistPickupMap']].forEach(function(pair){
@@ -1794,8 +1808,10 @@ function paintAssistTabs(){
   if (!tabs) return;
   const lobby = document.getElementById('assistLobby');
   const board = document.getElementById('assistManual');
+  const desk = document.getElementById('assistWizardNav') && document.getElementById('assistWizardNav').closest('.desk');
+  const focused = desk && (desk.classList.contains('mode-wizard') || desk.classList.contains('mode-pick'));
   const onEntry = assistPane === 'home' && (!lobby || !lobby.hidden) && (!board || board.hidden);
-  tabs.hidden = onEntry;
+  tabs.hidden = !!(focused || onEntry);
 }
 function openWizardPick(){
   showAssistPane('card');
@@ -1807,6 +1823,7 @@ function openWizardPick(){
   const hint = document.getElementById('assistSaveHint');
   if (button) button.hidden = true;
   if (hint) hint.hidden = true;
+  paintAssistTabs();
 }
 function beginWizard(kind){
   assistWizardKind = kind === 'full' ? 'full' : 'simple';
@@ -1823,6 +1840,7 @@ function beginWizard(kind){
   desk.classList.add('mode-wizard');
   assistWizardAt = 0;
   paintWizard();
+  paintAssistTabs();
 }
 function openManual(slice){
   const desk = document.querySelector('.desk');
@@ -1836,6 +1854,7 @@ function openManual(slice){
   if (button) button.hidden = false;
   if (hint) hint.hidden = false;
   if (slice) showAssistSlice(slice);
+  paintAssistTabs();
 }
 function openManualBoard(){
   const lobby = document.getElementById('assistLobby');
@@ -2781,8 +2800,14 @@ function bindPlain(){
     input.oninput = function(){ assistCount(input); };
   });
   document.querySelectorAll('[data-niche]').forEach(function(button){
-    button.onclick = function(){ applyNiche(button.getAttribute('data-niche')); };
+    button.onclick = function(){
+      applyNiche(button.getAttribute('data-niche'));
+      const desk = document.getElementById('assistWizardNav') && document.getElementById('assistWizardNav').closest('.desk');
+      if (desk && desk.classList.contains('mode-wizard') && assistWizardAt === 0) assistGoNext();
+    };
   });
+  const kindBack = document.getElementById('wizKindBack');
+  if (kindBack) kindBack.onclick = function(){ openWizardPick(); };
   document.querySelectorAll('input[name="assistWizardKind"]').forEach(function(radio){
     radio.onchange = function(){
       const nextKind = radio.value === 'full' ? 'full' : 'simple';
@@ -2813,7 +2838,7 @@ function bindPlain(){
     openWizardPick();
   };
   const next = document.getElementById('wizNext');
-  if (next) next.onclick = function(){ if (assistWizardAt < wizardSteps().length - 1) assistWizardAt += 1; paintWizard(); };
+  if (next) next.onclick = function(){ assistGoNext(); };
   paintWizard();
 }
 function bind(){
