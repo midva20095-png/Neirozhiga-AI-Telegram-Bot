@@ -114,8 +114,15 @@ function toPublic(item) {
     return out;
 }
 
-function attachChannelLink(item, username) {
-    const link = share.templateLink(username, item && item.id);
+function templateShareLink(item, username, audience, groupId) {
+    const own = item && item.audience;
+    const vk = own === 'vk' || (own !== 'tg' && audience === 'vk');
+    if (vk) return share.vkTemplateLink(item && item.id, groupId);
+    return share.templateLink(username, item && item.id);
+}
+
+function attachChannelLink(item, username, audience, groupId) {
+    const link = templateShareLink(item, username, audience, groupId);
     if (!item || !link) return item;
     return Object.assign({}, item, { link });
 }
@@ -144,4 +151,4 @@ async function getFull(id, audience) {
     return item;
 }
 
-module.exports = { listPublic, getFull, fromDb, toPublic, attachChannelLink, mapModel, wantsPhoto, savedMode, visibleFor, topicList };
+module.exports = { listPublic, getFull, fromDb, toPublic, attachChannelLink, templateShareLink, mapModel, wantsPhoto, savedMode, visibleFor, topicList };

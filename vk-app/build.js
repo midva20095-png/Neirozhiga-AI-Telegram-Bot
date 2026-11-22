@@ -122,6 +122,8 @@ window.addEventListener('message', function(event){
     });
     const id = String(bag.vk_group_id || (bridgeData && bridgeData.group_id) || '').replace(/\\D/g, '');
     if (id) tell({ type: 'ny-group', id: id });
+    const opened = tplOf(location.hash) || tplOf(location.search) || tplOf(bag.vk_ref) || tplOf(bridgeData && bridgeData.location) || tplOf(bridgeData && bridgeData.hash);
+    if (opened) tell({ type: 'ny-tpl', id: opened });
     tell({ type: 'ny-launch', params: bag });
     return;
   }

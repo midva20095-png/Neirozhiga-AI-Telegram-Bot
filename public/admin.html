@@ -1480,7 +1480,7 @@ async function loadTpl(){
     groupsData = md.groups||{};
     providersData = md.providers||{};
   }
-  const d = await api('/api/admin/templates?audience='+place);
+  const d = await api('/api/admin/templates?audience='+place+(place==='vk'?groupQuery():''));
   templates = d.templates||[];
   const editing = tplEdit;
   const preferred = modelsData.some(m=>m.key==='kie-banana-lite') ? 'kie-banana-lite' : 'nanobanana';
@@ -1537,8 +1537,8 @@ async function loadTpl(){
       const picked = saved && (saved.qualities||[]).find(x=>x.id===t.quality);
       const mode = picked ? ' · '+picked.name : (t.duration ? ' · '+t.duration+' сек' : '');
       const where = t.audience==='vk' ? 'Только ВК' : t.audience==='tg' ? 'Только Telegram' : 'Оба чата';
-      const channelLink = t.link ? '<div class="note" style="word-break:break-all">'+esc(t.link)+'</div><button class="ghost" type="button" data-admin-copy="'+esc(t.link)+'">Копировать ссылку</button>' : '';
-      const share = channelLink+'<button class="ghost" onclick="tplChannel('+t.id+')">В канал</button>';
+      const channelLink = t.link ? (place==='vk' ? '<div class="note">Ссылка открывает этот шаблон в приложении ВК.</div>' : '')+'<div class="note" style="word-break:break-all">'+esc(t.link)+'</div><button class="ghost" type="button" data-admin-copy="'+esc(t.link)+'">Копировать ссылку</button>' : '';
+      const share = channelLink+(t.audience==='vk' ? '' : '<button class="ghost" onclick="tplChannel('+t.id+')">В канал</button>');
       const themes = String(t.topics||'').trim();
       return '<div class="acard'+(t.active?'':' off')+'">'+(src?'<img src="'+esc(src)+'" alt="">':'<div class="ph"></div>')+
         '<div class="abody"><b>'+esc(t.title)+'</b><div><em>'+t.cost+' кр.</em></div><div class="note">'+esc(themes||'без категории')+' · '+esc(where)+' · '+esc(from)+' · '+esc((saved&&saved.name)||t.model||'')+esc(mode)+(t.active?'':' · скрыт')+'</div>'+
@@ -1678,7 +1678,7 @@ async function toggleTpl(id){
 async function delTpl(id){ if(!confirm('Удалить шаблон?'))return; await api('/api/admin/templates/delete',{method:'POST',body:JSON.stringify({id})}); loadTpl(); }
 async function tplLink(id){
   try {
-    const d = await api('/api/admin/templates/link',{method:'POST',body:JSON.stringify({id})});
+    const d = await api('/api/admin/templates/link',{method:'POST',body:JSON.stringify({id, audience: place})});
     if (!d.url) { alert(d.error||'Ссылка не собрана'); return; }
     try { await navigator.clipboard.writeText(d.url); alert('Ссылка скопирована:\n'+d.url); }
     catch (e) { prompt('Ссылка на шаблон', d.url); }
@@ -1687,7 +1687,7 @@ async function tplLink(id){
 async function tplChannel(id){
   if (!confirm('Опубликовать шаблон в канале? Текст задания в пост не попадёт.')) return;
   try {
-    const d = await api('/api/admin/templates/channel',{method:'POST',body:JSON.stringify({id})});
+    const d = await api('/api/admin/templates/channel',{method:'POST',body:JSON.stringify({id, audience: place})});
     alert(d.ok ? 'Шаблон опубликован в канале.' : (d.error||'Не удалось опубликовать'));
   } catch (e) { alert(e.message); }
 }

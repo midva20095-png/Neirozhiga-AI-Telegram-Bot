@@ -95,6 +95,8 @@ window.addEventListener('message', function(event){
     });
     const id = String(bag.vk_group_id || (bridgeData && bridgeData.group_id) || '').replace(/\D/g, '');
     if (id) vkTell({ type: 'ny-group', id: id });
+    const opened = hashTpl(location.hash) || hashTpl(location.search) || hashTpl(bag.vk_ref) || hashTpl(bridgeData && bridgeData.location) || hashTpl(bridgeData && bridgeData.hash);
+    if (opened) vkTell({ type: 'ny-tpl', id: opened });
     vkTell({ type: 'ny-launch', params: bag });
     return;
   }
@@ -951,7 +953,7 @@ window.addEventListener('message', function(event){
   const data = event.data || {};
   bridgeGoal(data);
   if (data.type === 'ny-launch') {
-    const refTpl = typeof hashTpl === 'function' ? hashTpl(data.params && data.params.vk_ref) : '';
+    const refTpl = typeof hashTpl === 'function' ? (hashTpl(data.params && data.params.vk_ref) || hashTpl(location.hash) || hashTpl(location.search)) : '';
     if (refTpl) {
       pendingTpl = pendingTpl || refTpl;
       openSharedTpl(refTpl, false);
@@ -3758,6 +3760,16 @@ function viewModels(){
 function tplTopics(t){
   return Array.isArray(t && t.cats) ? t.cats : [];
 }
+function vkAppTplLink(id){
+  const n = String(id || '').replace(/^local:/, '').replace(/\D/g, '');
+  if (!n) return '';
+  const group = String(window.__vkGroup || '214554778').replace(/\D/g, '') || '214554778';
+  return 'https://vk.com/app54901511_-' + group + '#t' + n;
+}
+function tplShareLink(t){
+  if (isVk() || inVkApp()) return vkAppTplLink(t && t.id);
+  return (t && t.link) || '';
+}
 function viewTpl(){
   if (openTpl) return viewTplRun();
   const q = tplQuery.trim().toLowerCase();
@@ -3792,7 +3804,8 @@ function viewTpl(){
     const face = src
       ? '<div class="tph">'+badge+'<img src="'+esc(src)+'" alt=""></div>'
       : '<div class="tph'+(cat==='chat'?' txt':'')+'">'+badge+'<span>'+mark+'</span></div>';
-    const link = t.link ? '<div class="tlink"><span>'+esc(t.link)+'</span><button type="button" data-copylink="'+esc(t.link)+'">Копировать</button></div>' : '';
+    const href = tplShareLink(t);
+    const link = href ? '<div class="tlink"><span>'+esc(href)+'</span><button type="button" data-copylink="'+esc(href)+'">Копировать</button></div>' : '';
     return '<div class="tcard"><button class="titem" data-tpl="'+esc(t.id)+'">'+face+
       '<div class="tcap"><b>'+esc(t.title)+'</b><em>'+(t.cost||0)+' кр.</em></div></button>'+link+'</div>';
   }).join('') : '<div class="empty">Пока здесь пусто</div>';
@@ -3816,8 +3829,9 @@ function viewTplRun(){
   const create = lack
     ? '<button class="btn" type="button" disabled>Недостаточно кредитов</button><p class="err">'+esc(lack)+'</p><button class="btn ghost" id="goTop" type="button">Пополнить</button>'
     : '<button class="btn" id="goTpl"'+(busy?' disabled':'')+'>'+(busy?'<span class="spin"></span>'+(video?'Делаю видео…':'Генерирую…'):(video?'Создать видео за ':'Создать за ')+(t.cost||0)+' кр.')+'</button>';
-  const pinned = t.link
-    ? '<div class="hint">Ссылка для канала НейроЯга. Скопируйте её и опубликуйте пост сами. Текст задания в ссылку не входит.</div><div class="tlink"><span>'+esc(t.link)+'</span><button type="button" id="copyTpl" data-copylink="'+esc(t.link)+'">Копировать</button></div>'
+  const href = tplShareLink(t);
+  const pinned = href
+    ? '<div class="hint">'+(isVk() || inVkApp() ? 'Ссылку можно отправить человеку во ВК. По ней откроется этот шаблон в приложении.' : 'Ссылка для канала НейроЯга. Скопируйте её и опубликуйте пост сами.')+' Текст задания в ссылку не входит.</div><div class="tlink"><span>'+esc(href)+'</span><button type="button" id="copyTpl" data-copylink="'+esc(href)+'">Копировать</button>'+(isVk() || inVkApp() ? '<button type="button" data-sharelink="'+esc(href)+'">Поделиться</button>' : '')+'</div>'
     : '<button class="btn ghost" id="shareTpl" type="button">Ссылка для канала</button>';
   return '<div class="card"><button class="back" id="back" type="button">← Шаблоны</button>'+
     (src?'<div class="thero"><img src="'+esc(src)+'" alt=""></div>':'')+
@@ -4393,6 +4407,13 @@ function bind(){
       copyTemplateLink(button.getAttribute('data-copylink') || '');
     };
   });
+  document.querySelectorAll('[data-sharelink]').forEach(function(button){
+    button.onclick = function(event){
+      event.preventDefault();
+      event.stopPropagation();
+      shareVkLink(button.getAttribute('data-sharelink') || '');
+    };
+  });
   document.querySelectorAll('[data-out]').forEach(function(el){ el.onclick = function(ev){ ev.preventDefault(); openOut(el.dataset.out); }; });
   document.querySelectorAll('[data-dl]').forEach(function(el){ el.onclick = function(){ downloadWork(el.dataset.dl, el.dataset.kind); }; });
   document.querySelectorAll('[data-ch]').forEach(function(el){ el.onclick = function(){ shareWork(el.dataset.ch, el); }; });
@@ -4535,6 +4556,16 @@ async function downloadWork(id, kind){
   }
   await saveInBrowser(id, name);
 }
+async function shareVkLink(url){
+  const value = String(url || '');
+  if (!value) return;
+  if (window.vkBridge && vkBridge.send) {
+    try { await vkBridge.send('VKWebAppShare', { link: value }); }
+    catch (e) {}
+    return;
+  }
+  await copyTemplateLink(value);
+}
 async function copyTemplateLink(url){
   const value = String(url || '');
   if (!value) return;
@@ -4546,6 +4577,7 @@ async function shareTemplate(id){
     const r = await fetch('/api/templates/'+encodeURIComponent(id)+'/link', {headers: authHeaders()});
     const d = await r.json().catch(function(){ return {}; });
     if (!r.ok || !d.url) throw new Error(d.error || 'Не удалось собрать ссылку');
+    if (isVk() || inVkApp()) { await shareVkLink(vkAppTplLink(id) || d.url); return; }
     const shareUrl = 'https://t.me/share/url?url='+encodeURIComponent(d.url)+'&text='+encodeURIComponent('Шаблон «'+(d.title||'НейроЯга')+'»');
     const w = tg();
     if (w && w.openTelegramLink) w.openTelegramLink(shareUrl);

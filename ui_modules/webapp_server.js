@@ -769,7 +769,8 @@ function startWebApp() {
         try {
             const tpl = await templatesSrc.getFull(req.params.id);
             if (!tpl) return res.status(404).json({ error: 'Шаблон не найден' });
-            const url = share.templateLink(botUsername(), tpl.id);
+            const place = String(req.userId).startsWith('-') ? 'vk' : 'tg';
+            const url = templatesSrc.templateShareLink(tpl, botUsername(), place);
             if (!url) return res.status(404).json({ error: 'Шаблон не найден' });
             res.json({ url, title: tpl.title });
         } catch (e) {
@@ -792,7 +793,8 @@ function startWebApp() {
             if (!claimed) return res.status(400).json({ error: 'Эта работа уже в канале.' });
             try {
                 const tpl = row.template_id ? await templatesSrc.getFull(row.template_id) : null;
-                const url = tpl ? share.templateLink(botUsername(), tpl.id) : `https://t.me/${botUsername()}`;
+                const place = String(req.userId).startsWith('-') ? 'vk' : 'tg';
+                const url = tpl ? templatesSrc.templateShareLink(tpl, botUsername(), place) : (place === 'vk' ? 'https://vk.com/app54901511' : `https://t.me/${botUsername()}`);
                 const posted = await share.sendChannel(gateBot.telegram, {
                     bytes: row.bytes,
                     mime: row.mime,
@@ -820,7 +822,7 @@ function startWebApp() {
         try {
             const audience = req.query.audience === 'vk' ? 'vk' : 'tg';
             const name = botUsername();
-            const templates = (await templatesSrc.listPublic(audience)).map(item => templatesSrc.attachChannelLink(item, name));
+            const templates = (await templatesSrc.listPublic(audience)).map(item => templatesSrc.attachChannelLink(item, name, audience));
             res.json({ templates });
         } catch (e) {
             res.status(500).json({ error: 'Не удалось открыть шаблоны', templates: [] });
@@ -1526,8 +1528,10 @@ function startWebApp() {
     app.get('/api/admin/templates', requireAdmin, async (req, res) => {
         try {
             const audience = req.query.audience === 'vk' ? 'vk' : req.query.audience === 'tg' ? 'tg' : undefined;
+            const place = req.query.audience === 'vk' ? 'vk' : 'tg';
+            const group = String(req.query.group || '').replace(/\D/g, '');
             const name = botUsername();
-            const templates = (await db.listTemplates(true, audience)).map(row => templatesSrc.attachChannelLink(row, name));
+            const templates = (await db.listTemplates(true, audience)).map(row => templatesSrc.attachChannelLink(row, name, place, group));
             res.json({ templates });
         } catch (e) { res.status(500).json({ error: e.message }); }
     });
@@ -1546,7 +1550,8 @@ function startWebApp() {
         try {
             const tpl = await templatesSrc.getFull(req.body && req.body.id);
             if (!tpl) return res.status(404).json({ error: 'Шаблон скрыт или не найден. Сначала включите показ в кабинете.' });
-            const url = share.templateLink(botUsername(), tpl.id);
+            const place = req.body && req.body.audience === 'vk' ? 'vk' : 'tg';
+            const url = templatesSrc.templateShareLink(tpl, botUsername(), place);
             res.json({ ok: true, url, title: tpl.title });
         } catch (e) {
             res.status(500).json({ error: e.message });
@@ -1557,6 +1562,9 @@ function startWebApp() {
         try {
             const tpl = await templatesSrc.getFull(req.body && req.body.id);
             if (!tpl) return res.status(404).json({ error: 'Шаблон скрыт или не найден. Сначала включите показ в кабинете.' });
+            if (tpl.audience === 'vk') {
+                return res.status(400).json({ error: 'Этот шаблон только во ВК. Скопируйте ссылку приложения и вставьте её в пост.' });
+            }
             const gateBot = app.locals.bot;
             if (!gateBot) return res.status(503).json({ error: 'Бот сейчас недоступен' });
             const url = share.templateLink(botUsername(), tpl.id);

@@ -73,6 +73,20 @@ test('ссылка канала крепится к шаблону и не за�
     assert.equal(hidden.link, undefined);
 });
 
+test('шаблон ВК открывается во ВК, а не в Telegram', () => {
+    const vk = templates.fromDb(row('nano-banana', { audience: 'vk' }));
+    const only = templates.attachChannelLink(vk, 'NeyroYaga_ai_bot', 'tg');
+    assert.equal(only.link, 'https://vk.com/app54901511_-214554778#t7');
+    assert.equal(only.link.includes('t.me'), false);
+    const both = templates.attachChannelLink(templates.fromDb(row('nano-banana', { audience: 'all' })), 'NeyroYaga_ai_bot', 'vk');
+    assert.equal(both.link, 'https://vk.com/app54901511_-214554778#t7');
+    const telegram = templates.attachChannelLink(templates.fromDb(row('nano-banana', { audience: 'tg' })), 'NeyroYaga_ai_bot', 'vk');
+    assert.equal(telegram.link, 'https://t.me/NeyroYaga_ai_bot?start=tpl_7');
+    const card = templates.attachChannelLink(templates.toPublic(vk), 'NeyroYaga_ai_bot', 'vk');
+    assert.equal(card.link, 'https://vk.com/app54901511_-214554778#t7');
+    assert.equal(JSON.stringify(card).includes('секретный запрос шаблона'), false);
+});
+
 test('текст запроса не уходит в кабинет', () => {
     const item = templates.fromDb(row('kie-banana-lite', { hide_prompt: false }));
     const pub = templates.toPublic(item);
