@@ -210,7 +210,8 @@ a.niche{display:block;text-decoration:none;box-sizing:border-box}
 .desk.mode-wizard .psec:not(.open) > :not([data-fold]){display:none !important}
 .desk.mode-wizard .srow > .hint,.desk.mode-wizard .prow > .hint,.desk.mode-wizard .psec > .hint{display:none !important}
 .desk.mode-wizard.wiz-full #assistFull .astep .hint{display:none}
-.desk.mode-wizard.wiz-full #assistFull .wiz-ask .hint{display:block}
+.desk.mode-wizard.wiz-full #assistFull .astep.wiz .hint{display:block}
+.desk.mode-wizard.wiz-keyask #wizKeyAdd{display:none}
 .desk.mode-wizard #assistBillPreview{display:none !important}
 .desk.mode-wizard .niche,.desk.mode-wizard .gate{animation:none;background:#1c1233;box-shadow:none;min-height:0;border:1px solid var(--line);border-radius:14px;padding:14px 16px}
 .desk.mode-wizard .niche::after,.desk.mode-wizard .gate::after{display:none}
@@ -1010,7 +1011,7 @@ function assistGuide(opened){
     '<li>Номер сообщества — цифры в адресе. У страницы vk.com/club1234567 номер 1234567. Тот же номер есть в Управление → Настройки.</li>'+
     '<li>Вставьте номер и ключ в блок «Подключить сообщество» и нажмите «Подключить».</li>'+
     '<li>Карточка идёт по шагам. Шаг 2 — услуги и цены. Шаг 3 — разделы каталога. Клиент жмёт «Каталог», открывает раздел или общий каталог, читает описание и добавляет позицию в счёт. В конце «Записаться» показывает итог. Пустое поле помощник не выдумывает.</li>'+
-    '<li>На шаге кнопок откройте нужную кнопку, например «Адрес», и нажмите «Нужны разделы». В поле «Название дополнительной кнопки» напишите имя. «Ещё раздел» добавляет следующую кнопку внутрь этой. «Ещё подраздел» добавляет кнопку внутрь раздела. Дальше бот не открывает. Без разделов кнопка «Адрес» показывает текст адреса из карточки.</li>'+
+    '<li>Мастер идёт по всем функциям: услуги, товары, текст, контакты, заказ, доставка, запись и главные кнопки. После главных кнопок он спрашивает у каждой: «Добавить разделы?». «Добавить разделы» открывает поле названия. «Ещё раздел» добавляет следующую кнопку внутри. «Ещё подраздел» добавляет кнопку внутрь раздела. Дальше бот не открывает. Без разделов кнопка показывает свой текст.</li>'+
     '<li>Люди, которые сами написали в сообщения, попадают во вкладку «Клиенты». Рассылка уходит только им. Заказы и записи лежат на своих вкладках и приходят сообщением вам и покупателю.</li>'+
     '</ol>'+
     '<p class="hint">Ключ нужен, чтобы помощник отвечал покупателям в этом сообществе. В кабинете он повторно не показывается и другим людям не виден. Пока действует донат НейроЯги, помощник отвечает. Когда срок закончится, он замолчит только в вашем сообществе.</p>'+
@@ -1587,8 +1588,8 @@ function assistPickHtml(){
   return '<div class="gate-pick" id="assistPick">'+
     '<p class="gate-kicker">НейроЯга AI</p>'+
     '<p class="gate-title">Какой бот собираем</p>'+
-    '<button type="button" class="gate" data-pick="simple"><b>Простой бот</b><span>Пять понятных кнопок. Мастер ведёт по одному шагу.</span></button>'+
-    '<button type="button" class="gate alt" data-pick="full"><b>Продвинутый бот</b><span>Услуги, товары, разделы, доставка и свои кнопки.</span></button>'+
+    '<button type="button" class="gate" data-pick="simple"><b>Собрать бота</b><span>Мастер проходит все функции: услуги, каталог, заказ, адрес, запись и разделы у каждой кнопки.</span></button>'+
+    '<button type="button" class="gate alt" data-pick="full"><b>Продвинутый бот</b><span>Тот же мастер: услуги, товары, доставка и вопрос про разделы у каждой главной кнопки.</span></button>'+
     '<button type="button" class="btn ghost" data-pick="back">К началу</button>'+
   '</div>';
 }
@@ -1632,6 +1633,7 @@ let assistWizardKind = 'simple';
 let assistNiche = '';
 let assistKeyOpen = '';
 let assistKeyFocus = false;
+let assistKeyAsk = -1;
 let assistSand = [];
 let assistSandStep = -1;
 function assistCount(input){
@@ -1718,6 +1720,15 @@ function applyNiche(id){
     applyTrade(trades[0].id);
   }
 }
+function wizardButtonAsks(){
+  const asks = [];
+  document.querySelectorAll('#assistButtons > [data-brow]').forEach(function(row, index){
+    const label = String((row.querySelector(':scope > [data-blabel]') || {}).value || '').replace(/\s+/g, ' ').trim();
+    if (!label || label === 'Записаться') return;
+    asks.push({ title: 'Разделы · '+label, step: 'keys', keyAsk: index });
+  });
+  return asks;
+}
 function wizardSteps(){
   const kind = document.querySelector('[name="assistWizardKind"]:checked');
   if (kind) assistWizardKind = kind.value === 'full' ? 'full' : 'simple';
@@ -1732,9 +1743,8 @@ function wizardSteps(){
       { title: 'Заказ', step: 'order' },
       { title: 'Как добраться', step: 'road' },
       { title: 'Запись', step: 'book' },
-      { title: 'Кнопки', step: 'keys' },
-      { title: 'Сохранение', done: true }
-    ];
+      { title: 'Главные кнопки', step: 'keys' }
+    ].concat(wizardButtonAsks(), [{ title: 'Сохранение', done: true }]);
   }
   return [
     { title: 'Знакомство', welcome: true },
@@ -1802,8 +1812,15 @@ function paintWizard(){
     if (slot) slot.classList.add('wiz');
   } else if (step.step) {
     const block = root.querySelector('#assistFull .astep[data-aslice="'+step.step+'"]');
-    if (block) block.classList.add('wiz');
+    if (block) {
+      block.classList.add('wiz');
+      if (step.step === 'prices' || step.step === 'products') {
+        block.querySelectorAll('.srow, .prow, .psec').forEach(function(node){ node.classList.add('open'); });
+      }
+    }
   }
+  assistKeyAsk = step.keyAsk >= 0 ? step.keyAsk : -1;
+  root.classList.toggle('wiz-keyask', assistKeyAsk >= 0);
   const title = document.getElementById('wizTitle');
   const left = document.getElementById('wizLeft');
   const fill = document.getElementById('wizFill');
@@ -1824,16 +1841,17 @@ function paintWizard(){
     contacts: 'Телефон и адрес. Кнопка «Контакты» покажет этот текст.',
     order: 'Как заказать и как платить. Клиент прочитает это по своим кнопкам.',
     road: 'Куда ехать или как доставить. Ссылка на карту уйдёт вместе с адресом.',
-    book: 'Дни и часы записи. Клиент выберет свободное время.',
+    book: 'Дни, часы и места записи. Клиент выберет свободное время. Кнопку записи можно выключить.',
     shello: 'Первая фраза. Клиент видит её после кнопки «Начать».',
     pay: 'Как платить. Клиент прочитает этот текст по кнопке «Оплата».',
     address: 'Куда ехать. Ссылка на карту уйдёт вместе с адресом.',
     menu: 'Кнопки ниже — основные, они на главном экране. Дополнительные стоят внутри основной: клиент видит их только после нажатия.',
-    keys: 'Кнопки ниже — основные, они на главном экране. Дополнительные стоят внутри основной: клиент видит их только после нажатия. Подпись под кнопкой показывает, куда она ведёт.',
+    keys: 'Это главные кнопки. Нажмите кнопку и напишите название и текст. Разделы внутри спросим дальше, отдельно у каждой кнопки.',
+    keyAsk: 'Добавить разделы в эту кнопку? Раздел клиент видит только после нажатия. «Ещё раздел» добавляет следующую кнопку внутри. «Ещё подраздел» добавляет кнопку внутрь раздела.',
     hand: 'Последний шаг. Ниже просмотр бота: можно нажать все кнопки до конца. В сообщество ничего не уходит.'
   };
   const lead = document.getElementById('wizLead');
-  const leadText = leads[step.step] || leads[step.role] || '';
+  const leadText = step.keyAsk >= 0 ? leads.keyAsk : (leads[step.step] || leads[step.role] || '');
   if (lead) { lead.hidden = !leadText; lead.textContent = leadText; }
   paintScenarioCards();
   paintWizardKeys();
@@ -2126,8 +2144,8 @@ function mountReadyHome(){
     };
   });
 }
-function beginWizard(kind){
-  assistWizardKind = kind === 'full' ? 'full' : 'simple';
+function beginWizard(){
+  assistWizardKind = 'full';
   const kindRadio = document.querySelector('input[name="assistWizardKind"][value="'+assistWizardKind+'"]');
   if (kindRadio) kindRadio.checked = true;
   const modeRadio = document.querySelector('input[name="assistDeskMode"][value="wizard"]');
@@ -2927,6 +2945,10 @@ function paintWizardKeys(){
       kids: wizardKids(row)
     });
   });
+  if (assistKeyAsk >= 0) {
+    const asked = wizardKeyPath(assistKeyOpen);
+    assistKeyOpen = asked.index === assistKeyAsk ? assistKeyOpen : ('b'+assistKeyAsk);
+  }
   let open = assistKeyOpen;
   if (open === 'new') {
     open = rows.length ? 'b'+(rows.length - 1) : '';
@@ -2938,26 +2960,36 @@ function paintWizardKeys(){
   const faces = rows.map(function(row, index){
     return wizardFace(row.label, wizardKeyNote(row), 'b'+index, row.color, path.index === index, row.hidden);
   });
-  let html = '<p class="flabel">Основные кнопки главного экрана</p>'+wizardPair(faces);
-  html += wizardFace(book, 'ведёт к выбору дня и времени', 'book', 'positive', open === 'book', false);
-  html += wizardFace('Администратор', adminOn ? 'ведёт к сообщению вам во ВК' : 'сейчас выключена', 'admin', 'primary', open === 'admin', !adminOn);
-  if (open === 'book') {
-    html += '<div class="plain"><p class="flabel">Кнопка записи</p><p class="hint">Ведёт к выбору дня и времени. Её нельзя убрать.</p><label class="flabel">Надпись</label><input id="wizBookName" maxlength="24" value="'+esc(book)+'"><button type="button" class="textlink" data-kopen="">Закрыть</button></div>';
-  } else if (open === 'admin') {
-    html += '<div class="plain"><p class="flabel">Администратор</p><p class="hint">Ведёт к сообщению вам во ВК. Пока вы отвечаете, бот молчит.</p><label style="display:block"><input id="wizAdmin" type="checkbox"'+(adminOn ? ' checked' : '')+'> Показывать кнопку</label><button type="button" class="textlink" data-kopen="">Закрыть</button></div>';
+  let html = '';
+  if (assistKeyAsk < 0) {
+    html = '<p class="flabel">Основные кнопки главного экрана</p>'+wizardPair(faces);
+    html += wizardFace(book, 'ведёт к выбору дня и времени', 'book', 'positive', open === 'book', false);
+    html += wizardFace('Администратор', adminOn ? 'ведёт к сообщению вам во ВК' : 'сейчас выключена', 'admin', 'primary', open === 'admin', !adminOn);
+    if (open === 'book') {
+      html += '<div class="plain"><p class="flabel">Кнопка записи</p><p class="hint">Ведёт к выбору дня и времени. Её нельзя убрать.</p><label class="flabel">Надпись</label><input id="wizBookName" maxlength="24" value="'+esc(book)+'"><button type="button" class="textlink" data-kopen="">Закрыть</button></div>';
+    } else if (open === 'admin') {
+      html += '<div class="plain"><p class="flabel">Администратор</p><p class="hint">Ведёт к сообщению вам во ВК. Пока вы отвечаете, бот молчит.</p><label style="display:block"><input id="wizAdmin" type="checkbox"'+(adminOn ? ' checked' : '')+'> Показывать кнопку</label><button type="button" class="textlink" data-kopen="">Закрыть</button></div>';
+    }
   }
   const row = path.index >= 0 ? document.querySelectorAll('#assistButtons > [data-brow]')[path.index] : null;
   const data = path.index >= 0 ? rows[path.index] : null;
-  if (row && data) {
+  if (assistKeyAsk >= 0 && data) {
+    html += '<div class="wiz-ask"><p class="gate-kicker">НейроЯга AI</p><p class="gate-title" style="font-size:22px">Добавить разделы в «'+esc(data.label || 'кнопку')+'»?</p><p class="hint">Без разделов клиент сразу читает текст этой кнопки. С разделами сначала видит кнопки внутри.</p></div>';
+  }
+  if (row && data && (assistKeyAsk < 0 ? open !== 'book' && open !== 'admin' : true)) {
     const nested = data.kind === 'menu';
+    const ask = assistKeyAsk >= 0;
     html += '<div class="plain"><label class="flabel">Надпись на кнопке</label><input data-kname maxlength="24" value="'+esc(data.label)+'">'+wizardToneButtons(data.color);
-    html += '<p class="flabel">Куда ведёт кнопка</p><div class="botmap">';
-    html += '<button type="button" class="botkey'+(!nested ? ' on' : '')+'" data-knest="0"><b>Без разделов</b><small>ведёт сразу в текст</small></button>';
-    html += '<button type="button" class="botkey'+(nested ? ' on' : '')+'" data-knest="1"><b>Нужны разделы</b><small>сначала раздел, потом текст или подраздел</small></button></div>';
+    if (ask) {
+      html += '<div class="botmap">';
+      html += '<button type="button" class="botkey'+(!nested ? ' on' : '')+'" data-knest="0"><b>Без разделов</b><small>сразу текст этой кнопки</small></button>';
+      html += '<button type="button" class="botkey'+(nested ? ' on' : '')+'" data-knest="1"><b>Добавить разделы</b><small>клиент сначала выбирает раздел</small></button></div>';
+    }
     if (data.kind === 'link') html += '<label class="flabel">Ссылка https</label><input data-klink maxlength="300" value="'+esc(data.link)+'">';
     else if (data.kind === 'contact') html += '<p class="hint">Ведёт в контакты из карточки.</p>';
-    else if (!nested) html += '<label class="flabel">Текст, куда ведёт кнопка</label><textarea data-ktext maxlength="900" rows="3">'+esc(data.text)+'</textarea>';
-    if (nested) {
+    else if (!nested || !ask) html += '<label class="flabel">Текст, куда ведёт кнопка</label><textarea data-ktext maxlength="900" rows="3">'+esc(data.text)+'</textarea>';
+    if (!ask) html += '<p class="hint">Разделы этой кнопки спросим отдельным шагом.</p>';
+    if (ask && nested) {
       html += '<p class="flabel">Дополнительные кнопки. Клиент видит их после нажатия основной</p>'+wizardPair(data.kids.map(function(kid, kidIndex){
         const note = kid.subs ? 'ведёт в: '+kid.subs : (kid.text ? 'ведёт в текст' : 'ведёт в текст, его ещё нет');
         return wizardFace(kid.label, note, 'b'+path.index+'.c'+kidIndex, 'secondary', path.child === kidIndex, false);
@@ -3008,6 +3040,14 @@ function paintWizardKeys(){
       if (real) real.value = name.value;
       const face = box.querySelector('[data-kopen="b'+path.index+'"] b');
       if (face) face.textContent = name.value || 'Без названия';
+      if (assistKeyAsk >= 0) {
+        const title = document.getElementById('wizTitle');
+        const steps = wizardSteps();
+        const current = steps[assistWizardAt];
+        if (title && current) title.textContent = 'Шаг '+(assistWizardAt + 1)+' из '+steps.length+'. '+current.title;
+        const askTitle = box.querySelector('.wiz-ask .gate-title');
+        if (askTitle) askTitle.textContent = 'Добавить разделы в «'+(name.value.trim() || 'кнопку')+'»?';
+      }
       paintAssistKeys();
       paintWizardSandbox();
     };
@@ -3246,7 +3286,7 @@ function syncBookButton(){
 function addAssistButton(){
   const list = document.getElementById('assistButtons');
   if (!list || list.querySelectorAll(':scope > [data-brow]').length >= 8) return;
-  list.insertAdjacentHTML('beforeend', assistButtonHtml({ label: '' }));
+  list.insertAdjacentHTML('beforeend', assistButtonHtml({ label: 'Новая кнопка', text: 'Напишите, что увидит клиент.' }));
   ensureAssistAdd();
   bind();
 }
