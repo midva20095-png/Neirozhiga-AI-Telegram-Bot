@@ -49,8 +49,11 @@ function goalOf(value){
   return goal === 'rate' || goal === 'site' || goal === 'shop' || goal === 'sub' || goal === 'help' ? goal : '';
 }
 function tplOf(value){
-  const match = String(value || '').match(/tpl=(?:local:)?(\d{1,12})(?!\d)/);
-  return match ? match[1] : '';
+  const text = String(value || '');
+  const direct = text.match(/tpl=(?:local:)?(\d{1,12})(?!\d)/);
+  if (direct) return direct[1];
+  const ref = text.match(/(?:^|[?&#]|vk_ref=|ref=)tpl_?(\d{1,12})(?!\d)/);
+  return ref ? ref[1] : '';
 }
 window.__nyHost = function(msg){
   if (!msg || !msg.type) return;

@@ -2752,6 +2752,61 @@ function wallResult(groupId, posted, url) {
     return { ok: true, url, postUrl: postId ? `https://vk.com/wall-${groupId}_${postId}` : '' };
 }
 
+function wallPhotoTokens(groupToken) {
+    const list = lessonWriters(groupToken);
+    const user = String(process.env.VK_AUDIT_TOKEN || '').trim();
+    if (user && !list.includes(user)) list.push(user);
+    return list;
+}
+
+async function wallPicture(buffer) {
+    const file = await prepareCover(buffer);
+    if (file.type === 'image/jpeg') return file;
+    const jpeg = await sharp(file.buffer, { failOn: 'none' }).jpeg({ quality: 90, progressive: false }).toBuffer();
+    return { buffer: jpeg, filename: 'neuroyaga.jpg', type: 'image/jpeg' };
+}
+
+async function storyFrame(buffer) {
+    const file = await wallPicture(buffer);
+    const jpeg = await sharp(file.buffer, { failOn: 'none', limitInputPixels: false }).resize({
+        width: 1080,
+        height: 1920,
+        fit: 'contain',
+        background: { r: 11, g: 6, b: 20 }
+    }).jpeg({ quality: 90, progressive: false }).toBuffer();
+    return { buffer: jpeg, filename: 'neuroyaga.jpg', type: 'image/jpeg' };
+}
+
+async function publishTemplateStory(token, groupId, file, url) {
+    const server = await call(token, 'stories.getPhotoUploadServer', {
+        add_to_news: '1',
+        group_id: String(groupId),
+        link_text: 'open',
+        link_url: url
+    });
+    if (!server || !server.upload_url) throw new Error('vk story');
+    const uploaded = await postUpload(server.upload_url, 'file', file);
+    const result = String(uploaded.upload_result || (uploaded.response && uploaded.response.upload_result) || '');
+    if (!result) throw new Error('vk story');
+    await call(token, 'stories.save', { upload_results: result });
+}
+
+async function postTemplateWall(token, groupId, message, attachment, url) {
+    const params = {
+        owner_id: String(-Number(groupId)),
+        from_group: '1',
+        message,
+        attachments: `${attachment},${url}`
+    };
+    try {
+        return await call(token, 'wall.post', params);
+    } catch (error) {
+        if (Number(error && error.code) === 15) throw error;
+        params.attachments = attachment;
+        return await call(token, 'wall.post', params);
+    }
+}
+
 async function publishTemplate(tpl) {
     const groupId = neuroyagaId();
     const url = share.vkTemplateLink(tpl && tpl.id, groupId);
@@ -2761,6 +2816,7 @@ async function publishTemplate(tpl) {
     const message = share.vkTemplateText(tpl, url);
     const secret = String(tpl && tpl.prompt || '').trim();
     if (secret && message.includes(secret)) return { ok: false, error: 'Текст задания нельзя публиковать.' };
+    if (!url.includes('ref=tpl') || url.includes('#')) return { ok: false, error: 'Ссылка на шаблон собралась с обрывком, который ВК срезает.' };
     let bytes;
     try {
         bytes = await templateImage(tpl && tpl.image);
@@ -2768,39 +2824,45 @@ async function publishTemplate(tpl) {
         return { ok: false, error: 'Картинку шаблона не удалось открыть.' };
     }
     if (!bytes || !bytes.length) return { ok: false, error: 'У шаблона нет картинки.' };
-    const id = share.numericId(tpl.id);
-    const page = `${appBase()}/api/templates/${id}/card`;
-    try {
-        const posted = await call(item.token, 'wall.post', {
-            owner_id: String(-Number(groupId)),
-            from_group: '1',
-            message,
-            attachments: page
-        });
-        return wallResult(groupId, posted, url);
-    } catch (error) {
-        const code = Number(error && error.code);
-        if (code === 15) return { ok: false, error: 'Ключ сообщества не может публиковать на стене. Включите право «Стена».' };
-    }
     let file;
     try {
-        file = await prepareCover(bytes);
+        file = await wallPicture(bytes);
         file.title = String(tpl.title || 'Шаблон').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Шаблон';
     } catch (error) {
         return { ok: false, error: 'Картинка шаблона не открылась.' };
     }
+    let attachment = '';
     try {
-        const attachment = await uploadWallDoc(item.token, groupId, file);
-        const posted = await call(item.token, 'wall.post', {
-            owner_id: String(-Number(groupId)),
-            from_group: '1',
-            message,
-            attachments: attachment
-        });
-        return wallResult(groupId, posted, url);
+        attachment = await uploadWallPhoto(wallPhotoTokens(item.token), groupId, null, file);
     } catch (error) {
-        const code = Number(error && error.code);
-        if (code === 15) return { ok: false, error: 'У ключа сообщества нет права прикрепить картинку. Включите «Документы» и «Стена».' };
+        attachment = '';
+    }
+    if (!attachment) {
+        try {
+            attachment = await uploadWallDoc(item.token, groupId, file);
+        } catch (error) {
+            attachment = '';
+        }
+    }
+    if (attachment) {
+        try {
+            const posted = await postTemplateWall(item.token, groupId, message, attachment, url);
+            if (!attachment.startsWith('photo')) {
+                try {
+                    await publishTemplateStory(item.token, groupId, await storyFrame(bytes), url);
+                } catch (error) {}
+            }
+            return Object.assign(wallResult(groupId, posted, url), { place: 'wall' });
+        } catch (error) {
+            const code = Number(error && error.code);
+            if (code === 15) return { ok: false, error: 'Ключ сообщества не может публиковать на стене. Включите право «Стена».' };
+        }
+    }
+    try {
+        const frame = await storyFrame(bytes);
+        await publishTemplateStory(item.token, groupId, frame, url);
+        return { ok: true, url, postUrl: '', place: 'story' };
+    } catch (error) {
         return { ok: false, error: 'ВК не принял картинку, запись не опубликована.' };
     }
 }

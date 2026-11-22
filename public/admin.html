@@ -1441,7 +1441,10 @@ async function tplVk(id){
   try {
     const d = await api('/api/admin/templates/vk',{method:'POST',timeout:45000,body:JSON.stringify({id})});
     if (!d.ok) { alert(d.error||'Не удалось опубликовать'); return; }
-    alert('Шаблон на стене НейроЯги.'+(d.postUrl?'\n'+d.postUrl:'')+(d.url?'\n'+d.url:''));
+    const lead = d.place === 'story'
+        ? 'Картинка опубликована в историях НейроЯги. Кнопка на ней открывает шаблон.'
+        : 'Шаблон на стене НейроЯги.';
+    alert(lead+(d.postUrl?'\n'+d.postUrl:'')+(d.url?'\n'+d.url:''));
   } catch (e) { alert(e.message); }
 }
 

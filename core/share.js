@@ -19,7 +19,15 @@ function vkTemplateLink(id, groupId) {
     const n = numericId(id);
     const group = String(groupId || '214554778').replace(/\D/g, '');
     if (!n || !group) return '';
-    return `https://vk.com/app54901511_-${group}#tpl=${n}`;
+    return `https://vk.com/app54901511_-${group}?ref=tpl${n}`;
+}
+
+function vkTemplateId(value) {
+    const text = String(value || '');
+    const direct = text.match(/tpl=(?:local:)?(\d{1,12})(?!\d)/);
+    if (direct) return direct[1];
+    const ref = text.match(/(?:^|[?&#]|vk_ref=|ref=)tpl_?(\d{1,12})(?!\d)/);
+    return ref ? ref[1] : '';
 }
 
 function vkTemplateText(tpl, url) {
@@ -133,6 +141,7 @@ module.exports = {
     numericId,
     templateLink,
     vkTemplateLink,
+    vkTemplateId,
     vkTemplateText,
     templateCard,
     parseStart,

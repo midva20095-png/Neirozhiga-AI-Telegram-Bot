@@ -23,8 +23,11 @@ function vkTell(msg){
   window.dispatchEvent(new MessageEvent('message', { data: msg }));
 }
 function hashTpl(value){
-  const match = String(value || '').match(/tpl=(?:local:)?(\d{1,12})(?!\d)/);
-  return match ? match[1] : '';
+  const text = String(value || '');
+  const direct = text.match(/tpl=(?:local:)?(\d{1,12})(?!\d)/);
+  if (direct) return direct[1];
+  const ref = text.match(/(?:^|[?&#]|vk_ref=|ref=)tpl_?(\d{1,12})(?!\d)/);
+  return ref ? ref[1] : '';
 }
 window.__nyHost = function(msg){
   if (!msg || !msg.type) return;
@@ -334,7 +337,8 @@ function detectAuth(){
   const sp = new URLSearchParams(location.search);
   if (hp.get('tk')) token = hp.get('tk');
   else if (sp.get('tk')) token = sp.get('tk');
-  if (hp.get('tpl') || sp.get('tpl')) pendingTpl = hp.get('tpl') || sp.get('tpl');
+  const namedTpl = String(hp.get('tpl') || sp.get('tpl') || '').replace(/^local:/, '');
+  pendingTpl = /^\d{1,12}$/.test(namedTpl) ? namedTpl : (hashTpl(location.hash) || hashTpl(location.search));
   if (hp.get('pkg') || sp.get('pkg')) pendingPkg = hp.get('pkg') || sp.get('pkg');
   window.__vkPaid = hp.get('paid') === '1' || sp.get('paid') === '1';
   const goal = hash.split('&')[0].split('?')[0];
@@ -768,6 +772,11 @@ window.addEventListener('message', function(event){
   const data = event.data || {};
   bridgeGoal(data);
   if (data.type === 'ny-launch') {
+    const refTpl = typeof hashTpl === 'function' ? hashTpl(data.params && data.params.vk_ref) : '';
+    if (refTpl) {
+      pendingTpl = pendingTpl || refTpl;
+      openSharedTpl(refTpl, false);
+    }
     window.__vkLaunchSeen = true;
     if (userId && me && me.user_id && !me.error) return;
     const had = !!userId;
