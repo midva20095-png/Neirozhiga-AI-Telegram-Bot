@@ -63,6 +63,16 @@ test('категории шаблона приходят в кабинет сп�
     assert.deepEqual(many.cats, ['Осень', 'Зима', 'Весна', 'Лето', 'Праздник']);
 });
 
+test('ссылка канала крепится к шаблону и не забирает текст задания', () => {
+    const item = templates.fromDb(row('nano-banana'));
+    const pub = templates.attachChannelLink(templates.toPublic(item), 'NeyroYaga_ai_bot');
+    assert.equal(pub.link, 'https://t.me/NeyroYaga_ai_bot?start=tpl_7');
+    assert.equal(Object.prototype.hasOwnProperty.call(pub, 'prompt'), false);
+    assert.equal(JSON.stringify(pub).includes('секретный запрос шаблона'), false);
+    const hidden = templates.attachChannelLink(templates.toPublic(item), '');
+    assert.equal(hidden.link, undefined);
+});
+
 test('текст запроса не уходит в кабинет', () => {
     const item = templates.fromDb(row('kie-banana-lite', { hide_prompt: false }));
     const pub = templates.toPublic(item);

@@ -11,7 +11,7 @@ function numericId(id) {
 function templateLink(username, id) {
     const name = String(username || '').replace(/^@/, '').trim();
     const n = numericId(id);
-    if (!name || !n) return '';
+    if (!/^[A-Za-z0-9_]{5,32}$/.test(name) || !n) return '';
     return `https://t.me/${name}?start=tpl_${n}`;
 }
 

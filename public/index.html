@@ -203,6 +203,11 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .tcap{padding:10px 12px 12px}
 .tcap b{display:block;font-size:14px;line-height:1.2;font-weight:800}
 .tcap em{display:inline-block;margin-top:5px;font-style:normal;font-size:13px;font-weight:800;color:#22e1ff}
+.tcard{min-width:0;display:flex;flex-direction:column;border:1px solid #31205a;background:#130a26;border-radius:16px;overflow:hidden}
+.tcard .titem{border:0;border-radius:0;background:transparent;width:100%}
+.tlink{display:flex;gap:6px;align-items:center;padding:0 10px 10px}
+.tlink span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#b9a7e6}
+.tlink button{flex:none;border:0;background:#241447;color:#fff;border-radius:8px;padding:6px 8px;font-size:11px;font-weight:700}
 .thero{position:relative;z-index:1;margin:8px -14px 14px;height:min(52vh,420px);background:#07041a;overflow:hidden;border-radius:16px}
 .thero img{display:block;width:100%;height:100%;object-fit:cover;object-position:center top}
 .thero:after{content:'';position:absolute;left:0;right:0;bottom:0;height:80px;background:linear-gradient(transparent,#140c24)}
@@ -1721,8 +1726,9 @@ function viewTpl(){
     const face = src
       ? '<div class="tph">'+badge+'<img src="'+esc(src)+'" alt=""></div>'
       : '<div class="tph'+(cat==='chat'?' txt':'')+'">'+badge+'<span>'+mark+'</span></div>';
-    return '<button class="titem" data-tpl="'+esc(t.id)+'">'+face+
-      '<div class="tcap"><b>'+esc(t.title)+'</b><em>'+(t.cost||0)+' кр.</em></div></button>';
+    const link = t.link ? '<div class="tlink"><span>'+esc(t.link)+'</span><button type="button" data-copylink="'+esc(t.link)+'">Копировать</button></div>' : '';
+    return '<div class="tcard"><button class="titem" data-tpl="'+esc(t.id)+'">'+face+
+      '<div class="tcap"><b>'+esc(t.title)+'</b><em>'+(t.cost||0)+' кр.</em></div></button>'+link+'</div>';
   }).join('') : '<div class="empty">Пока здесь пусто</div>';
   return '<input class="tsearch" id="tq" placeholder="Найти шаблон" value="'+esc(tplQuery)+'">'+
     kindRow+topicRow+
@@ -1744,6 +1750,9 @@ function viewTplRun(){
   const create = lack
     ? '<button class="btn" type="button" disabled>Недостаточно кредитов</button><p class="err">'+esc(lack)+'</p><button class="btn ghost" id="goTop" type="button">Пополнить</button>'
     : '<button class="btn" id="goTpl"'+(busy?' disabled':'')+'>'+(busy?'<span class="spin"></span>'+(video?'Делаю видео…':'Генерирую…'):(video?'Создать видео за ':'Создать за ')+(t.cost||0)+' кр.')+'</button>';
+  const pinned = t.link
+    ? '<div class="hint">Ссылка для канала НейроЯга. Скопируйте её и опубликуйте пост сами. Текст задания в ссылку не входит.</div><div class="tlink"><span>'+esc(t.link)+'</span><button type="button" id="copyTpl" data-copylink="'+esc(t.link)+'">Копировать</button></div>'
+    : '<button class="btn ghost" id="shareTpl" type="button">Ссылка для канала</button>';
   return '<div class="card"><button class="back" id="back" type="button">← Шаблоны</button>'+
     (src?'<div class="thero"><img src="'+esc(src)+'" alt=""></div>':'')+
     '<div class="name">'+esc(t.title)+'</div>'+
@@ -1751,7 +1760,7 @@ function viewTplRun(){
     '<div class="meta" style="margin:6px 0 12px">'+esc(lead)+'</div>'+
     sizeChips+photo+
     create+
-    '<button class="btn ghost" id="shareTpl" type="button">Ссылка для канала</button>'+res+'</div>';
+    pinned+res+'</div>';
 }
 function ensureWorks(){
   if (works || worksLoading) return;
@@ -2073,6 +2082,13 @@ function bind(){
   const goTpl=document.getElementById('goTpl'); if (goTpl) goTpl.onclick=generateTemplate;
   const goTop=document.getElementById('goTop'); if (goTop) goTop.onclick=function(){ tab='top'; last=null; draw(); };
   const shareTpl=document.getElementById('shareTpl'); if (shareTpl) shareTpl.onclick=function(){ shareTemplate(openTpl); };
+  document.querySelectorAll('[data-copylink]').forEach(function(button){
+    button.onclick = function(event){
+      event.preventDefault();
+      event.stopPropagation();
+      copyTemplateLink(button.getAttribute('data-copylink') || '');
+    };
+  });
   document.querySelectorAll('[data-out]').forEach(function(el){ el.onclick = function(ev){ ev.preventDefault(); openOut(el.dataset.out); }; });
   document.querySelectorAll('[data-dl]').forEach(function(el){ el.onclick = function(){ downloadWork(el.dataset.dl, el.dataset.kind); }; });
   document.querySelectorAll('[data-ch]').forEach(function(el){ el.onclick = function(){ shareWork(el.dataset.ch, el); }; });
@@ -2214,6 +2230,12 @@ async function downloadWork(id, kind){
     return;
   }
   await saveInBrowser(id, name);
+}
+async function copyTemplateLink(url){
+  const value = String(url || '');
+  if (!value) return;
+  try { await navigator.clipboard.writeText(value); alert('Ссылка скопирована'); }
+  catch (e) { prompt('Ссылка на шаблон', value); }
 }
 async function shareTemplate(id){
   try {

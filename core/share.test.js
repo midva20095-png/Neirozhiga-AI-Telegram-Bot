@@ -6,6 +6,8 @@ test('ссылка на шаблон ведёт в бота и не содерж
     assert.equal(share.templateLink('NeyroYaga_ai_bot', 'local:15'), 'https://t.me/NeyroYaga_ai_bot?start=tpl_15');
     assert.equal(share.templateLink('@NeyroYaga_ai_bot', 15), 'https://t.me/NeyroYaga_ai_bot?start=tpl_15');
     assert.equal(share.templateLink('bot', 'abc'), '');
+    assert.equal(share.templateLink('bot/evil', 15), '');
+    assert.equal(share.templateLink('bad name', 15), '');
     assert.equal(share.parseStart('tpl_15'), '15');
     assert.equal(share.parseStart('tpl_'), '');
     assert.equal(share.parseStart('start'), '');

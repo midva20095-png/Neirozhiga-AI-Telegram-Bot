@@ -94,6 +94,8 @@ function fromDb(row) {
     };
 }
 
+const share = require('./share');
+
 function toPublic(item) {
     const out = {
         id: item.id,
@@ -110,6 +112,12 @@ function toPublic(item) {
         hidePrompt: true
     };
     return out;
+}
+
+function attachChannelLink(item, username) {
+    const link = share.templateLink(username, item && item.id);
+    if (!item || !link) return item;
+    return Object.assign({}, item, { link });
 }
 
 function visibleFor(item, audience) {
@@ -136,4 +144,4 @@ async function getFull(id, audience) {
     return item;
 }
 
-module.exports = { listPublic, getFull, fromDb, toPublic, mapModel, wantsPhoto, savedMode, visibleFor, topicList };
+module.exports = { listPublic, getFull, fromDb, toPublic, attachChannelLink, mapModel, wantsPhoto, savedMode, visibleFor, topicList };

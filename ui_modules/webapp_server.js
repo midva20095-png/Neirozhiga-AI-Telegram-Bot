@@ -802,9 +802,11 @@ function startWebApp() {
     app.get('/api/templates', async (req, res) => {
         try {
             const audience = req.query.audience === 'vk' ? 'vk' : 'tg';
-            res.json({ templates: await templatesSrc.listPublic(audience) });
+            const name = botUsername();
+            const templates = (await templatesSrc.listPublic(audience)).map(item => templatesSrc.attachChannelLink(item, name));
+            res.json({ templates });
         } catch (e) {
-            res.status(500).json({ error: e.message, templates: [] });
+            res.status(500).json({ error: 'Не удалось открыть шаблоны', templates: [] });
         }
     });
 
@@ -1475,7 +1477,9 @@ function startWebApp() {
     app.get('/api/admin/templates', requireAdmin, async (req, res) => {
         try {
             const audience = req.query.audience === 'vk' ? 'vk' : req.query.audience === 'tg' ? 'tg' : undefined;
-            res.json({ templates: await db.listTemplates(true, audience) });
+            const name = botUsername();
+            const templates = (await db.listTemplates(true, audience)).map(row => templatesSrc.attachChannelLink(row, name));
+            res.json({ templates });
         } catch (e) { res.status(500).json({ error: e.message }); }
     });
 

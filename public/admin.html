@@ -1360,7 +1360,8 @@ async function loadTpl(){
       const picked = saved && (saved.qualities||[]).find(x=>x.id===t.quality);
       const mode = picked ? ' · '+picked.name : (t.duration ? ' · '+t.duration+' сек' : '');
       const where = t.audience==='vk' ? 'Только ВК' : t.audience==='tg' ? 'Только Telegram' : 'Оба чата';
-      const share = '<button class="ghost" onclick="tplLink('+t.id+')">Ссылка</button><button class="ghost" onclick="tplChannel('+t.id+')">В канал</button>';
+      const channelLink = t.link ? '<div class="note" style="word-break:break-all">'+esc(t.link)+'</div><button class="ghost" type="button" data-admin-copy="'+esc(t.link)+'">Копировать ссылку</button>' : '';
+      const share = channelLink+'<button class="ghost" onclick="tplChannel('+t.id+')">В канал</button>';
       const themes = String(t.topics||'').trim();
       return '<div class="acard'+(t.active?'':' off')+'">'+(src?'<img src="'+esc(src)+'" alt="">':'<div class="ph"></div>')+
         '<div class="abody"><b>'+esc(t.title)+'</b><div><em>'+t.cost+' кр.</em></div><div class="note">'+esc(themes||'без категории')+' · '+esc(where)+' · '+esc(from)+' · '+esc((saved&&saved.name)||t.model||'')+esc(mode)+(t.active?'':' · скрыт')+'</div>'+
@@ -1370,6 +1371,13 @@ async function loadTpl(){
         '<button class="danger" onclick="delTpl('+t.id+')">Удалить</button></div></div></div>';
     }).join('')+'</div>' : '<p class="note">Пока пусто. Загрузите фото, напишите название и нажмите «Добавить шаблон в кабинет».</p>')+
     '</div>';
+  document.querySelectorAll('[data-admin-copy]').forEach(function(button){
+    button.onclick = function(){
+      const url = button.getAttribute('data-admin-copy') || '';
+      if (!url) return;
+      navigator.clipboard.writeText(url).then(function(){ alert('Ссылка скопирована:\n'+url); }).catch(function(){ prompt('Ссылка на шаблон', url); });
+    };
+  });
   const file = document.getElementById('tfile');
   if (file) file.onchange = () => onTplPhoto(file);
   paintTopics();
