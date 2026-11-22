@@ -15,6 +15,7 @@ const bridge = require('../core/bridge');
 const activity = require('../core/activity');
 const shop = require('../core/shop');
 const assistant = require('../core/assistant');
+const communityGoods = require('../core/community-goods');
 const promo = require('../core/promo');
 const maintenance = require('../core/maintenance');
 const saveWork = require('../public/save-work');
@@ -364,6 +365,22 @@ function startWebApp() {
             res.json(view);
         } catch (e) {
             res.status(500).json({ error: 'Раздел сообщества не открылся.' });
+        }
+    });
+
+    app.post('/api/assistant/goods', async (req, res) => {
+        const cfg = assistant.assistantConfig();
+        const secret = String(req.headers['x-donut-secret'] || '');
+        if (!cfg.secret || secret !== cfg.secret) return res.status(401).json({ ok: false });
+        const groupId = Number(req.body && req.body.groupId);
+        try {
+            const rows = await db.listAssistantCommunities();
+            const known = rows.some(row => Number(row.group_id) === groupId);
+            if (!known) return res.status(404).json({ ok: false });
+            const goods = await communityGoods.communityGoods(groupId);
+            return res.json({ ok: true, goods });
+        } catch (error) {
+            return res.status(200).json({ ok: true, goods: '' });
         }
     });
 
