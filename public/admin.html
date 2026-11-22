@@ -578,6 +578,7 @@ function openSetup(userId){
       '<label class="check"><input type="radio" name="setupScenario" value="info"'+(reply.scenario==='info'?' checked':'')+'> Только информация</label>'+
       '<input type="hidden" id="setupTrade" value="'+esc(reply.trade||'shop')+'">'+
       '<input type="hidden" id="setupServices" value="'+esc(setupServicesText(reply.services))+'">'+
+      '<input type="hidden" id="setupProducts" value="'+esc(setupServicesText(reply.products))+'">'+
       '<input type="hidden" id="setupGoodsOn" value="'+(reply.goodsOn===false?'0':'1')+'">'+
       '<input type="hidden" id="setupOrderOn" value="'+(reply.orderOn===false?'0':'1')+'">'+
       '<input type="hidden" id="setupBookingOn" value="'+((reply.bookingOn===false||reply.scenario==='info')?'0':'1')+'">'+
@@ -643,6 +644,16 @@ function setupServicesText(services){
   if (typeof services[0] === 'string') return services.join(', ');
   return JSON.stringify(services);
 }
+function setupProductsField(){
+  const raw = String((document.getElementById('setupProducts') || {}).value || '').trim();
+  if (raw.charAt(0) === '[') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    } catch (error) {}
+  }
+  return [];
+}
 function setupServicesField(){
   const raw = String((document.getElementById('setupServices') || {}).value || '').trim();
   if (raw.charAt(0) === '[') {
@@ -690,6 +701,7 @@ function setupBody(){
     linkOn: (document.getElementById('setupLinkOn') || {}).value !== '0',
     trade: (document.getElementById('setupTrade') || {}).value || 'shop',
     services: setupServicesField(),
+    products: setupProductsField(),
     handoff: !!(document.getElementById('setupHandoff') || {}).checked,
     buttons: buttons,
     schedule: {

@@ -1,5 +1,5 @@
 const db = require('./db');
-const { cleanServices, tradeById } = require('../public/trades');
+const { cleanProducts, cleanServices, tradeById } = require('../public/trades');
 
 const JOIN_URL = 'https://vk.com/donut/club214554778';
 const HOLD_MS = 10 * 24 * 60 * 60 * 1000;
@@ -97,6 +97,7 @@ function cleanReply(input) {
         orderOn: orderOn,
         trade: picked.id,
         services: cleanServices(input.services, picked.id),
+        products: cleanProducts(input.products),
         pickupMap: pickupMap
     }, fields);
 }
@@ -490,6 +491,7 @@ async function saveDesk(account, input, fetchImpl) {
         orderOn: reply.orderOn,
         trade: reply.trade,
         services: reply.services,
+        products: reply.products,
         handoff: reply.handoff,
         buttons: reply.buttons,
         schedule: reply.schedule,

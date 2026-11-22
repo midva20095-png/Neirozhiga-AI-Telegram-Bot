@@ -123,6 +123,8 @@ button,textarea,input,select{font:inherit;color:inherit}
 .srow{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(72px,.6fr) minmax(0,1.2fr) auto;gap:6px;margin:6px 0;align-items:center}
 .srow input{width:100%;border-radius:10px;border:1px solid var(--line);background:#1c1233;padding:8px}
 .srow label{font-size:12px;color:var(--mut);white-space:nowrap}
+.astep{margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
+.astep:first-child{border-top:0;margin-top:0}
 @media(max-width:640px){.srow{grid-template-columns:1fr 1fr}.srow input[data-slink]{grid-column:1 / -1}}
 .top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .logo{font-family:Unbounded,sans-serif;font-weight:700;font-size:18px;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;flex:1}
@@ -881,20 +883,19 @@ function assistGuide(opened){
     '<li>На этой же странице нажмите «Создать ключ». В правах отметьте «Сообщения», «Стена», «Товары» и, если есть, «Управление». Ключ показывается один раз: скопируйте его сразу. Право «Управление» нужно, чтобы помощник сам включил кнопки и события.</li>'+
     '<li>Номер сообщества — цифры в адресе. У страницы vk.com/club1234567 номер 1234567. Тот же номер есть в Управление → Настройки.</li>'+
     '<li>Вставьте номер и ключ в блок «Подключить сообщество» и нажмите «Подключить».</li>'+
-    '<li>Карточка открывается своей вкладкой: сценарий, фраза, контакты, заказ, доставка, запись и кнопки. Пустое поле помощник не выдумывает. Под постом ВК клавиатуры нет: комментарий даёт ссылку на чат и на каталог товаров.</li>'+
+    '<li>Карточка идёт по шагам. Шаг 2 — цены услуг. Шаг 3 — цены товаров: бот сам витрину не ищет, цену и ссылку пишете вы. «Каталог» только открывает ссылку. Пустое поле помощник не выдумывает.</li>'+
     '<li>Люди, которые сами написали в сообщения, попадают во вкладку «Клиенты». Рассылка уходит только им. Заказы и записи лежат на своих вкладках и приходят сообщением вам и покупателю.</li>'+
     '</ol>'+
     '<p class="hint">Ключ нужен, чтобы помощник отвечал покупателям в этом сообществе. В кабинете он повторно не показывается и другим людям не виден. Пока действует донат НейроЯги, помощник отвечает. Когда срок закончится, он замолчит только в вашем сообществе.</p>'+
     '</details>';
 }
 function assistButtonHtml(button){
-  const kind = button && button.goods ? 'goods' : (button && button.text ? 'text' : 'link');
+  const kind = button && button.text && !button.goods ? 'text' : 'link';
   const value = kind === 'link' ? ((button && button.link) || '') : (kind === 'text' ? (button.text || '') : '');
   return '<div class="brow" data-brow>'+
     '<label class="flabel">Надпись на кнопке</label><input data-blabel maxlength="40" placeholder="Например: Каталог" value="'+esc(button && button.label || '')+'">'+
     '<label class="flabel">Что делает кнопка</label><select data-bkind>'+
     '<option value="link"'+(kind==='link'?' selected':'')+'>Прямая ссылка</option>'+
-    '<option value="goods"'+(kind==='goods'?' selected':'')+'>Ответ: бот ищет товары</option>'+
     '<option value="text"'+(kind==='text'?' selected':'')+'>Свой текст</option></select>'+
     '<label class="flabel" data-bcap>'+(kind==='goods'?'Поиск':(kind==='link'?'Ваша ссылка https':'Текст ответа'))+'</label>'+
     '<input data-bvalue placeholder="'+(kind==='goods'?'Бот сам покажет товары кнопками':(kind==='link'?'https://vk.com/...':'Например: доставка по городу в день заказа'))+'" value="'+esc(value)+'"'+(kind==='goods'?' disabled':'')+'>'+
@@ -949,6 +950,35 @@ function assistHourOptions(selected, from, to){
   }
   return html;
 }
+function assistMoney(value){
+  const text = String(value == null ? '' : value).replace(/\s+/g, '').replace(/₽/g, '').replace(/руб\.?/gi, '').replace(/р$/i, '');
+  if (!/^\d{1,7}$/.test(text)) return 0;
+  const price = Number(text);
+  if (!isFinite(price) || price < 1 || price > 1000000) return 0;
+  return price;
+}
+function assistBillPreviewHtml(items){
+  const list = (items || []).filter(function(item){ return item && String(item.name || '').trim(); });
+  if (!list.length) return '<p class="err">Услуг нет. Клиент нажмёт «Услуги» и не узнает, за что платит.</p>';
+  let total = 0;
+  let priced = 0;
+  const lines = list.map(function(item){
+    const price = assistMoney(item.price);
+    if (price) { total += price; priced += 1; }
+    const cost = price ? price + ' ₽' : 'цена не указана';
+    const extra = item.extra ? ' · доп' : '';
+    const link = item.link ? ' · ссылка' : '';
+    return '<div>'+esc(item.name)+' — '+esc(String(cost))+extra+link+'</div>';
+  }).join('');
+  const sum = priced
+    ? '<p class="now"><b>Если клиент выберет всё, итог '+total+' ₽.</b> Пустая цена в эту сумму не входит.</p>'
+    : '<p class="err">Цены пустые. Клиент запишется и суммы не увидит. Впишите цену в рублях.</p>';
+  return '<div class="sale"><p class="now">Так клиент увидит услуги</p>'+lines+sum+'</div>';
+}
+function paintAssistBill(){
+  const box = document.getElementById('assistBillPreview');
+  if (box) box.innerHTML = assistBillPreviewHtml(assistServiceValue());
+}
 function assistServiceItems(value){
   if (!Array.isArray(value)) return [];
   return value.map(function(item){
@@ -964,16 +994,17 @@ function assistServiceItems(value){
 function assistServiceRow(item){
   const row = item || { name: '', price: '', link: '', extra: false };
   return '<div class="srow" data-srow>'+
-    '<input data-sname maxlength="40" placeholder="Название" value="'+esc(row.name || '')+'">'+
-    '<input data-sprice inputmode="numeric" maxlength="7" placeholder="Цена, ₽" value="'+esc(row.price ? String(row.price) : '')+'">'+
-    '<input data-slink maxlength="300" placeholder="https://..." value="'+esc(row.link || '')+'">'+
-    '<label><input data-sextra type="checkbox"'+(row.extra ? ' checked' : '')+'> Доп</label></div>';
+    '<input data-sname maxlength="40" placeholder="Название" value="'+esc(row.name || '')+'" oninput="paintAssistBill()">'+
+    '<input data-sprice inputmode="numeric" maxlength="7" placeholder="Цена, ₽" value="'+esc(row.price ? String(row.price) : '')+'" oninput="paintAssistBill()">'+
+    '<input data-slink maxlength="300" placeholder="https://..." value="'+esc(row.link || '')+'" oninput="paintAssistBill()">'+
+    '<label><input data-sextra type="checkbox"'+(row.extra ? ' checked' : '')+' onchange="paintAssistBill()"> Доп</label></div>';
 }
 function assistServiceEditor(reply){
   const items = assistServiceItems(reply && reply.services);
   const rows = (items.length ? items : [{ name: '', price: '', link: '', extra: false }]).slice(0, 8).map(assistServiceRow).join('');
   return '<label class="flabel">Услуги, цены и допы</label>'+
-    '<p class="hint">Название, цена в рублях и ссылка https, если она есть. Пустая цена клиенту не называется и в итог не входит. «Доп» — добавка к основной услуге: её нажимают при записи, бот пишет сумму. Если цены не заполнены, итога не будет.</p>'+
+    '<p class="hint">Название, цена в рублях и ссылка https, если она есть. Клиент жмёт «Услуги», видит эти кнопки и сумму. Пустая цена в итог не входит. «Доп» прибавляется к основной услуге.</p>'+
+    '<div id="assistBillPreview">'+assistBillPreviewHtml(items)+'</div>'+
     '<div id="assistServiceRows">'+rows+'</div>'+
     (items.length < 8 ? '<button class="btn ghost" id="assistServiceAdd" type="button" style="margin-top:8px">Добавить услугу</button>' : '');
 }
@@ -1004,6 +1035,44 @@ function fillAssistServices(list){
     box.insertAdjacentHTML('afterend', '<button class="btn ghost" id="assistServiceAdd" type="button" style="margin-top:8px">Добавить услугу</button>');
   }
 }
+function assistProductRow(item){
+  const row = item || { name: '', price: '', link: '' };
+  return '<div class="srow" data-prow>'+
+    '<input data-pname maxlength="40" placeholder="Название товара" value="'+esc(row.name || '')+'">'+
+    '<input data-pprice inputmode="numeric" maxlength="7" placeholder="Цена, ₽" value="'+esc(row.price ? String(row.price) : '')+'">'+
+    '<input data-plink maxlength="300" placeholder="https://..." value="'+esc(row.link || '')+'">'+
+    '</div>';
+}
+function assistProductEditor(reply){
+  const items = assistServiceItems(reply && reply.products);
+  const rows = (items.length ? items : [{ name: '', price: '', link: '' }]).slice(0, 8).map(assistProductRow).join('');
+  return '<p class="hint">Здесь задаётся цена товара. Бот витрину ВК сам не открывает и не ищет. Клиент нажмёт «Товары», увидит эти кнопки и сумму. «Каталог» — отдельная ссылка на витрину.</p>'+
+    '<div id="assistProductRows">'+rows+'</div>'+
+    (items.length < 8 ? '<button class="btn ghost" id="assistProductAdd" type="button" style="margin-top:8px">Добавить товар</button>' : '');
+}
+function assistProductValue(){
+  const products = [];
+  document.querySelectorAll('[data-prow]').forEach(function(row){
+    const name = (row.querySelector('[data-pname]') || {}).value || '';
+    if (!String(name).trim()) return;
+    products.push({
+      name: name,
+      price: (row.querySelector('[data-pprice]') || {}).value || '',
+      link: (row.querySelector('[data-plink]') || {}).value || ''
+    });
+  });
+  return products;
+}
+function addAssistProduct(){
+  const box = document.getElementById('assistProductRows');
+  if (!box || box.querySelectorAll('[data-prow]').length >= 8) return;
+  box.insertAdjacentHTML('beforeend', assistProductRow({ name: '', price: '', link: '' }));
+  if (box.querySelectorAll('[data-prow]').length >= 8) {
+    const add = document.getElementById('assistProductAdd');
+    if (add) add.remove();
+  }
+  bind();
+}
 function addAssistService(){
   const box = document.getElementById('assistServiceRows');
   if (!box || box.querySelectorAll('[data-srow]').length >= 8) return;
@@ -1030,7 +1099,7 @@ function assistScheduleHtml(reply){
       '<label style="display:block;margin:8px 0"><input id="assistBookingOn" type="checkbox"'+(!reply || (reply.bookingOn !== false && reply.scenario !== 'info') ? ' checked' : '')+'> Кнопка «Записаться»</label>'+
       '<label style="display:block;margin:8px 0"><input id="assistLinkOn" type="checkbox"'+(assistLinkChecked(reply) ? ' checked' : '')+'> Спрашивать ссылку на товар</label>'+
       '<p class="hint">Снимите «Записаться», чтобы убрать кнопку и не принимать бронь. Снимите ссылку на товар, если при записи она не нужна. Для шиномонтажа, маникюра и других услуг ссылка выключена, а запись идёт на услугу из списка.</p>'+
-      assistServiceEditor(reply)+
+      '<p class="hint">Цены услуг задаются на шаге 2. Здесь только календарь: в какие дни и часы можно записаться.</p>'+
     '<label class="flabel">Рабочие дни</label><div>'+checks+'</div>'+
     '<label class="flabel" for="assistStart">Начало</label><select id="assistStart">'+assistHourOptions(plan.start == null ? 10 : plan.start, 0, 22)+'</select>'+
     '<label class="flabel" for="assistEnd">Конец, это время уже не записывают</label><select id="assistEnd">'+assistHourOptions(plan.end == null ? 19 : plan.end, 1, 23)+'</select>'+
@@ -1060,30 +1129,31 @@ function assistDesk(reply, groupId){
   const buttons = assistButtonList(reply, groupId);
   const handoff = !reply || reply.handoff !== false;
   const parts = [
-    ['scenario', 'Сценарий', assistScenarioHtml(reply)],
-    ['about', 'Фраза',
+    ['scenario', '1. Направление', assistScenarioHtml(reply)],
+    ['prices', '2. Цены услуг', assistServiceEditor(reply)],
+    ['products', '3. Цены товаров', assistProductEditor(reply)],
+    ['about', '4. Фраза',
       '<p class="hint">Первая фраза уходит клиенту по кнопке «Начать». Остальной текст клиент видит только из заполненных полей. Пустое поле бот не выдумывает и не подставляет чужой пример.</p>'+
       '<label class="flabel" for="assistGreeting">Первая фраза клиенту</label>'+
       assistArea('assistGreeting', 2500, 6, 'Здравствуйте. Выберите кнопку ниже.', reply && reply.greeting)+
       '<label class="flabel" for="assistAbout">Ответ клиенту своими словами</label>'+
       assistArea('assistAbout', 2500, 8, 'Чем занимаетесь и что клиент может выбрать. Цену пишите только если её можно называть.', reply && reply.about)],
-    ['contacts', 'Контакты',
+    ['contacts', '5. Контакты',
       '<label class="flabel" for="assistContacts">Контакты</label>'+
       assistArea('assistContacts', 1500, 5, 'Телефон, мессенджер или почта.', reply && reply.contacts)+
       '<label class="flabel" for="assistAddress">Адрес</label>'+
       assistArea('assistAddress', 1500, 5, 'Где вы находитесь или что работаете онлайн.', reply && reply.address)],
-    ['order', 'Заказ',
+    ['order', '6. Заказ',
       '<label class="flabel" for="assistOrder">Текст для клиента перед выбором</label>'+
       assistArea('assistOrder', 2500, 8, 'Клиент прочитает это и поймёт, что написать. Поле можно оставить пустым.', reply && reply.order)+
       '<label class="flabel" for="assistChoices">Варианты кнопками для клиента</label>'+
       assistArea('assistChoices', 1500, 6, 'Название: первый, второй, третий', reply && reply.choices)+
       '<p class="hint">Клиент увидит название и нажмёт один вариант. Одна строка подходит и товару, и услуге. Пустое поле клиенту не показывается.</p>'+
-      '<label style="display:block;margin:8px 0"><input id="assistGoodsOn" type="checkbox"'+(!reply || reply.goodsOn !== false ? ' checked' : '')+'> Искать товары сообщества</label>'+
       '<label style="display:block;margin:8px 0"><input id="assistOrderOn" type="checkbox"'+(!reply || reply.orderOn !== false ? ' checked' : '')+'> Принимать заказ</label>'+
-      '<p class="hint">Поиск показывает найденные товары кнопками. Заказ сохраняет товар, телефон и получение. Для записи на услугу оба пункта выключены: остаётся кнопка «Записаться» и список услуг.</p>'+
+      '<p class="hint">Цены товаров пишутся на шаге 3. Бот витрину сообщества сам не ищет. Кнопка «Каталог» только открывает ссылку. Заказ сохраняет выбранные товары, телефон и получение.</p>'+
       '<label class="flabel" for="assistPayment">Как оплатить</label>'+
       assistArea('assistPayment', 1500, 5, 'Карта, перевод или наличные. Не пишите то, чего нет.', reply && reply.payment)],
-    ['road', 'Доставка',
+    ['road', '7. Доставка',
       '<p class="hint">Включите только то, что у вас реально есть. Стоимость доставки помощник называет только из поля ниже.</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistPickupOn" type="checkbox"'+(reply && reply.pickupOn ? ' checked' : '')+'> Самовывоз</label>'+
       assistArea('assistPickup', 1500, 5, 'Откуда забрать и с какого часа.', reply && reply.pickup)+
@@ -1095,12 +1165,12 @@ function assistDesk(reply, groupId){
       '<label class="flabel" for="assistDeliveryPrice">Стоимость доставки</label>'+
       '<input id="assistDeliveryPrice" maxlength="400" placeholder="Например: 400 рублей по городу" value="'+esc(reply && reply.deliveryPrice || '')+'">'+
       '<p class="count">'+String(reply && reply.deliveryPrice || '').length+' из 400</p>'],
-    ['book', 'Запись',
+    ['book', '8. Запись',
       '<label class="flabel" for="assistBooking">Что дописать к подтверждению записи</label>'+
       assistArea('assistBooking', 2500, 8, 'Предоплата, что взять с собой. Если правил нет, оставьте пустым.', reply && reply.booking)+
       assistScheduleHtml(reply)],
-    ['keys', 'Кнопки',
-      '<p class="hint">«Каталог» — прямая ссылка на витрину сообщества, её можно заменить своим адресом https. «Свой текст» присылает вашу фразу. «Ответ: бот ищет товары» — отдельная кнопка, если нужен поиск по сообществу. Кнопку «Записаться» убирает галочка в разделе «Запись».</p>'+
+    ['keys', '9. Кнопки',
+      '<p class="hint">Кнопка — это либо ссылка https, либо ваш текст. Поиска товаров ботом нет: цены задаются на шаге 3, «Каталог» только открывает ссылку. Кнопку «Записаться» убирает галочка на шаге 8.</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistHandoff" type="checkbox"'+(handoff ? ' checked' : '')+'> Кнопка «Администратор»</label>'+
       '<p class="hint">Покупатель жмёт её, вам приходит сообщение ВК, а в списке клиентов появляется пометка «Ждёт администратора». Пока вы отвечаете, помощник молчит. Покупатель возвращает меню кнопкой «К помощнику».</p>'+
       '<div id="assistButtons">'+buttons.map(assistButtonHtml).join('')+'</div>'+
@@ -1110,9 +1180,10 @@ function assistDesk(reply, groupId){
   const chips = '<div class="aslices">'+parts.map(function(part){
     return '<button type="button" data-slice="'+part[0]+'" class="'+(assistSlice===part[0]?'on':'')+'">'+part[1]+'</button>';
   }).join('')+'</div>';
-  return '<div class="desk">'+chips+parts.map(function(part){ return assistSliceBox(part[0], part[2]); }).join('')+
+  return '<div class="desk"><p class="hint">Идите по шагам сверху вниз. Цены услуг — шаг 2, цены товаров — шаг 3. Бот сам товары сообщества не ищет.</p>'+
+    chips+parts.map(function(part){ return '<section class="astep" id="assist-step-'+part[0]+'" data-aslice="'+part[0]+'"><p class="now">Шаг '+part[1]+'</p>'+part[2]+'</section>'; }).join('')+
     '<button class="btn" id="assistDesk" type="button" style="margin-top:12px">Сохранить карточку</button>'+
-    '<p class="hint">Сохраняются все разделы сразу: сценарий, фраза, контакты, заказ, доставка, запись и кнопки.</p>'+
+    '<p class="hint">Одна кнопка сохраняет все шаги. Пустая цена клиенту не называется.</p>'+
     '<p id="deskmsg" class="hint"></p></div>';
 }
 function assistTabs(marks){
@@ -1134,14 +1205,23 @@ function assistQuick(data){
   const books = ((data.bookings && data.bookings.rows) || []).length;
   const people = Number(data.clients && (data.clients.total || (data.clients.people || []).length)) || 0;
   const ask = data.setup && data.setup.open ? 'есть заявка' : 'настроить за вас';
+  const reply = data.community && data.community.reply;
+  const list = assistServiceItems(reply && reply.services);
+  const goods = assistServiceItems(reply && reply.products);
+  const pricedCount = list.filter(function(item){ return assistMoney(item.price) > 0; }).length;
+  const goodCount = goods.filter(function(item){ return assistMoney(item.price) > 0; }).length;
+  const saleNote = !list.length ? 'не заданы' : (pricedCount ? pricedCount + ' с ценой' : 'цены пустые');
+  const goodNote = !goods.length ? 'не заданы' : (goodCount ? goodCount + ' с ценой' : 'цены пустые');
   const items = [
-    ['card','Сценарий','scenario','Запись или информация'],
-    ['card','Фраза','about','Первое сообщение'],
-    ['card','Контакты','contacts','Телефон и адрес'],
-    ['card','Заказ','order','Как купить и оплата'],
-    ['card','Доставка','road','Самовывоз и цена'],
-    ['card','Запись','book','Дни и время'],
-    ['card','Кнопки','keys','Меню покупателя'],
+    ['card','1. Направление','scenario','Кто вы'],
+    ['card','2. Цены услуг','prices',saleNote],
+    ['card','3. Цены товаров','products',goodNote],
+    ['card','4. Фраза','about','Первое сообщение'],
+    ['card','5. Контакты','contacts','Телефон и адрес'],
+    ['card','6. Заказ','order','Как купить'],
+    ['card','7. Доставка','road','Самовывоз'],
+    ['card','8. Запись','book','Дни и время'],
+    ['card','9. Кнопки','keys','Меню клиента'],
     ['orders','Заказы','',orders ? String(orders) : 'пока нет'],
     ['book','Записи','',books ? String(books) : 'пока нет'],
     ['people','Клиенты','',String(people)],
@@ -1175,14 +1255,13 @@ function showAssistPane(name, slice){
   if (current && current.scrollIntoView) current.scrollIntoView({ inline:'center', block:'nearest' });
 }
 function showAssistSlice(name){
-  const names = ['scenario','about','contacts','order','road','book','keys'];
+  const names = ['scenario','prices','products','about','contacts','order','road','book','keys'];
   assistSlice = names.indexOf(name) >= 0 ? name : 'scenario';
-  document.querySelectorAll('.aslice').forEach(function(node){
-    node.hidden = node.getAttribute('data-aslice') !== assistSlice;
-  });
   document.querySelectorAll('.aslices [data-slice]').forEach(function(button){
     button.classList.toggle('on', button.getAttribute('data-slice') === assistSlice);
   });
+  const step = document.getElementById('assist-step-' + assistSlice);
+  if (step && step.scrollIntoView) step.scrollIntoView({ block: 'start' });
   fitCardText();
 }
 function fitCardText(){
@@ -1239,7 +1318,7 @@ async function loadAssist(){
   const status = community
     ? '<p class="now">Подключено: '+esc(community.title || ('сообщество '+community.groupId))+' · '+esc(community.groupId)+'</p>'+(community.error ? '<p class="err">'+esc(community.error)+'</p>' : '<p class="hint">Помощник слушает сообщения. Напишите ему со своей личной страницы, не от имени сообщества.</p>')
     : '<p class="now">Помощник пока нигде не отвечает. Подключите своё сообщество.</p>';
-  const home = status+(community ? assistQuick(data) : '<p class="hint">После подключения здесь будут карточка, заказы, записи и клиенты.</p>')+
+  const home = status+(community ? assistBillPreviewHtml(assistServiceItems(community.reply && community.reply.services)) : '')+(community ? assistQuick(data) : '<p class="hint">После подключения здесь будут карточка, заказы, записи и клиенты.</p>')+
     assistConnect(community)+assistGuide(!community);
   box.innerHTML = '<div class="card">'+
     '<div class="kicker">Моё сообщество</div>'+
@@ -1612,7 +1691,8 @@ async function saveDesk(){
   const pickupOn = !!(document.getElementById('assistPickupOn') || {}).checked;
   const deliveryOn = !!(document.getElementById('assistDeliveryOn') || {}).checked;
   const handoff = !!(document.getElementById('assistHandoff') || {}).checked;
-  const goodsOn = !!(document.getElementById('assistGoodsOn') || {}).checked;
+  const goodsOn = false;
+  const products = assistProductValue();
   const orderOn = !!(document.getElementById('assistOrderOn') || {}).checked;
   const bookingOn = !!(document.getElementById('assistBookingOn') || {}).checked;
   const linkOn = !!(document.getElementById('assistLinkOn') || {}).checked;
@@ -1626,10 +1706,7 @@ async function saveDesk(){
     const kind = (row.querySelector('[data-bkind]') || {}).value || 'link';
     const value = (row.querySelector('[data-bvalue]') || {}).value || '';
     if (!String(label).trim()) return;
-    if (kind === 'goods') {
-      buttons.push({ label: label, goods: true });
-      return;
-    }
+    if (kind === 'goods') return;
     if (!String(value).trim()) return;
     const item = { label: label };
     item[kind === 'text' ? 'text' : 'link'] = value;
@@ -1641,7 +1718,7 @@ async function saveDesk(){
     const response = await fetch('/api/vk/assistant/reply', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, choices: choices, payment: payment, booking: booking, pickup: pickup, pickupMap: pickupMap, delivery: delivery, deliveryPrice: deliveryPrice, pickupOn: pickupOn, deliveryOn: deliveryOn, goodsOn: goodsOn, orderOn: orderOn, bookingOn: scenario === 'info' ? false : bookingOn, linkOn: linkOn, trade: trade, services: services, handoff: handoff, buttons: buttons, schedule: assistScheduleValue(), scenario: scenario })
+      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, choices: choices, payment: payment, booking: booking, pickup: pickup, pickupMap: pickupMap, delivery: delivery, deliveryPrice: deliveryPrice, pickupOn: pickupOn, deliveryOn: deliveryOn, goodsOn: goodsOn, orderOn: orderOn, bookingOn: scenario === 'info' ? false : bookingOn, linkOn: linkOn, trade: trade, services: services, products: products, handoff: handoff, buttons: buttons, schedule: assistScheduleValue(), scenario: scenario })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Ответы не сохранились');
@@ -2040,6 +2117,8 @@ function bind(){
   if (assistAdd) assistAdd.onclick = addAssistButton;
   const assistServiceAdd = document.getElementById('assistServiceAdd');
   if (assistServiceAdd) assistServiceAdd.onclick = addAssistService;
+  const assistProductAdd = document.getElementById('assistProductAdd');
+  if (assistProductAdd) assistProductAdd.onclick = addAssistProduct;
   const assistReset = document.getElementById('assistReset');
   if (assistReset) assistReset.onclick = resetAssistButtons;
   const assistMailSend = document.getElementById('assistMailSend');

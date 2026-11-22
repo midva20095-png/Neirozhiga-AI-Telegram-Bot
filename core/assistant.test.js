@@ -66,6 +66,10 @@ test('фраза дона принимает ссылку и ответ и от�
     assert.equal(assistant.cleanReply({}).orderOn, true);
     assert.equal(assistant.cleanReply({}).trade, 'shop');
     assert.deepEqual(assistant.cleanReply({}).services, []);
+    assert.deepEqual(assistant.cleanReply({}).products, []);
+    assert.deepEqual(assistant.cleanReply({ products: [{ name: 'Торт', price: '1500', link: 'https://vk.com/market-1' }] }).products, [
+        { name: 'Торт', price: 1500, link: 'https://vk.com/market-1' }
+    ]);
     const tire = assistant.cleanReply({ trade: 'tire' });
     assert.equal(tire.trade, 'tire');
     assert.equal(tire.linkOn, false);

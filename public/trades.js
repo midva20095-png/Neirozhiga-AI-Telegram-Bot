@@ -146,5 +146,20 @@
     return out;
   }
 
-  return { trades, groups, tradeById, cleanServices, buttonsFor };
+  function cleanProducts(value) {
+    if (!Array.isArray(value)) return [];
+    const out = [];
+    const seen = {};
+    for (var index = 0; index < value.length; index += 1) {
+      const clean = serviceItem(value[index]);
+      const key = clean && clean.name.toLowerCase();
+      if (!clean || seen[key]) continue;
+      seen[key] = true;
+      out.push({ name: clean.name, price: clean.price, link: clean.link });
+      if (out.length >= 8) break;
+    }
+    return out;
+  }
+
+  return { trades, groups, tradeById, cleanServices, cleanProducts, buttonsFor };
 });
