@@ -124,7 +124,9 @@
       const extra = raw.extra === true || raw.extra === 'true' || raw.extra === 1 || raw.extra === '1';
       const text = String(raw.text || raw.about || '').replace(/\s+/g, ' ').trim().slice(0, 300);
       const hidden = raw.hidden === true || raw.hidden === 'true' || raw.hidden === 1 || raw.hidden === '1';
+      const minutes = Number(raw.minutes);
       const row = { name: name, price: servicePrice(raw.price), link: serviceLink(raw.link), extra: extra };
+      if (Number.isInteger(minutes) && minutes >= 5 && minutes <= 480) row.minutes = minutes;
       if (text) row.text = text;
       if (hidden) row.hidden = true;
       return row;

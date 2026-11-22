@@ -137,6 +137,17 @@ button,textarea,input,select{font:inherit;color:inherit}
 .desk.mode-wizard #assistFull{display:none}
 .desk.mode-wizard #assistSimple .simple-help,.desk.mode-wizard #assistSimple .shello,.desk.mode-wizard #assistSimple .plain,.desk.mode-wizard #assistSimple .simple-extra{display:none}
 .desk.mode-wizard #assistSimple .shello.wiz,.desk.mode-wizard #assistSimple .plain.wiz,.desk.mode-wizard #assistSimple .simple-extra.wiz{display:block}
+#assistWizardNav{position:sticky;top:0;z-index:4;background:var(--bg);padding:8px 0 4px}
+.wizbar{height:8px;border-radius:999px;background:#1c1233;overflow:hidden;margin:8px 0}
+.wizbar span{display:block;height:100%;background:linear-gradient(90deg,#7c3aed,#ff2d95)}
+.niches{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.niches button{flex:1 1 40%;border:1px solid var(--line);background:#1c1233;border-radius:12px;padding:10px}
+.desk.mode-wizard.wiz-full #assistFull{display:block}
+.desk.mode-wizard.wiz-full #assistFull > .hint,.desk.mode-wizard.wiz-full #assistFull .aslices{display:none}
+.desk.mode-wizard.wiz-full #assistFull .astep{display:none}
+.desk.mode-wizard.wiz-full #assistFull .astep.wiz{display:block;border-top:0;margin-top:0;padding-top:0}
+.desk.mode-wizard.wiz-full #assistFull .astep > .now{display:none}
+.desk.mode-wizard.wiz-full #assistSimple .plain.wiz,.desk.mode-wizard.wiz-full #assistSimple .shello.wiz{display:block}
 .astep{margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
 .astep:first-child{border-top:0;margin-top:0}
 .top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
@@ -1056,11 +1067,17 @@ function assistBillPreviewHtml(items){
     if (price) { total += price; priced += 1; }
     const cost = item.hidden ? 'скрыта' : (price ? price + ' ₽' : 'цена не указана');
     const extra = item.extra ? ' · доп' : '';
+    const minutes = item.minutes ? ' · '+item.minutes+' мин' : '';
     const link = item.link ? ' · ссылка' : '';
-    return '<div>'+esc(item.name)+' — '+esc(String(cost))+extra+link+'</div>';
+    return '<div>'+esc(item.name)+' — '+esc(String(cost))+extra+minutes+link+'</div>';
   }).join('');
+  const bases = list.filter(function(item){ return item && !item.hidden && !item.extra; });
+  const extras = list.filter(function(item){ return item && !item.hidden && item.extra; });
+  const basePrice = bases.reduce(function(max, item){ return Math.max(max, assistMoney(item.price)); }, 0);
+  const extraPrice = extras.reduce(function(sum, item){ return sum + assistMoney(item.price); }, 0);
+  const sample = basePrice + extraPrice;
   const sum = priced
-    ? '<p class="now"><b>Если клиент выберет всё, итог '+total+' ₽.</b> Пустая цена в эту сумму не входит.</p>'
+    ? '<p class="now"><b>Клиент берёт одну основную услугу'+(extras.length ? ' и допы сверху' : '')+'. Например, '+sample+' ₽.</b> Пустая цена в сумму не входит.</p>'
     : '<p class="err">Цены пустые. Клиент запишется и суммы не увидит. Впишите цену в рублях.</p>';
   return '<div class="sale"><p class="now">Так клиент увидит услуги</p>'+lines+sum+'</div>';
 }
@@ -1078,6 +1095,7 @@ function assistServiceItems(value){
       link: item && item.link ? item.link : '',
       text: item && item.text ? item.text : '',
       extra: !!(item && item.extra),
+      minutes: item && item.minutes ? item.minutes : '',
       hidden: !!(item && item.hidden)
     };
   }).filter(function(item){ return item.name || item.price || item.link || item.text; });
@@ -1093,6 +1111,10 @@ function assistServiceRow(item){
     '<input data-slink maxlength="300" placeholder="https://..." value="'+esc(row.link || '')+'" oninput="paintAssistBill()">'+
     '<label class="flabel">Что входит</label>'+
     '<input class="snote" data-stext maxlength="300" placeholder="Коротко, что получает клиент" value="'+esc(row.text || '')+'">'+
+    '<label class="flabel">Длительность, минут</label>'+
+    '<input data-smin inputmode="numeric" maxlength="3" placeholder="40" value="'+esc(row.minutes ? String(row.minutes) : '')+'">'+
+    '<label><input data-sextra type="checkbox"'+(row.extra ? ' checked' : '')+' onchange="paintAssistBill()"> Доп к основной услуге</label>'+
+    '<p class="hint">Без галочки клиент выбирает одну услугу. С галочкой её можно добавить сверху.</p>'+
     '<label><input data-shide type="checkbox"'+(row.hidden ? ' checked' : '')+' onchange="paintAssistBill()"> Скрыть от клиента</label>'+
     '<button class="btn ghost" type="button" data-sdel>Удалить услугу</button></div>';
 }
@@ -1116,6 +1138,7 @@ function assistServiceValue(){
       link: (row.querySelector('[data-slink]') || {}).value || '',
       text: (row.querySelector('[data-stext]') || {}).value || '',
       extra: !!(row.querySelector('[data-sextra]') || {}).checked,
+      minutes: (row.querySelector('[data-smin]') || {}).value || '',
       hidden: !!(row.querySelector('[data-shide]') || {}).checked
     });
   });
@@ -1315,9 +1338,13 @@ function assistPlainHtml(slot){
   return '<div class="plain" data-plain data-role="'+slot.role+'">'+
     '<p class="now">'+esc(slot.title)+'</p>'+
     (slot.hint ? '<p class="hint">'+esc(slot.hint)+'</p>' : '')+
-    (book ? '<label style="display:block;margin:8px 0"><input data-pbook type="checkbox"'+(slot.on ? ' checked' : '')+'> Показывать кнопку записи</label>' : '')+
+    (book ? '<label style="display:block;margin:8px 0"><input data-pbook type="checkbox"'+(slot.on ? ' checked' : '')+'> Показывать кнопку записи</label>'+
+      '<label style="display:block;margin:8px 0"><input data-plinkon type="checkbox"'+(slot.linkOn ? ' checked' : '')+'> Спрашивать товар при записи</label>'+
+      '<p class="hint">Так в записи остаются кнопки выбора товара и «Без товара».</p>' : '')+
     '<label class="flabel">Надпись на кнопке</label>'+
     '<input data-plabel maxlength="24" value="'+esc(slot.label || '')+'">'+
+    '<p class="count" data-pcount>'+String(slot.label || '').length+' из 24</p>'+
+    '<p class="hint">На телефоне длинная надпись обрежется. До 24 знаков.</p>'+
     (book ? '' :
       '<label class="flabel">'+esc(slot.textLabel)+'</label>'+
       '<textarea data-ptext maxlength="'+limit+'" rows="4" placeholder="'+esc(slot.placeholder || '')+'">'+esc(slot.text || '')+'</textarea>')+
@@ -1330,6 +1357,24 @@ function assistPlainHtml(slot){
       '<button class="btn ghost" type="button" data-paddkid style="margin-top:8px">Добавить кнопку внутри</button></div>')+
     '</div>';
 }
+function assistKindHtml(reply){
+  const kind = assistDeskMode(reply) === 'full' ? 'full' : 'simple';
+  return '<div class="plain" data-role="kind">'+
+    '<p class="flabel">Какой бот настраиваем</p>'+
+    '<label class="mode"><input type="radio" name="assistWizardKind" value="simple"'+(kind === 'simple' ? ' checked' : '')+'> Простой бот</label>'+
+    '<label class="mode"><input type="radio" name="assistWizardKind" value="full"'+(kind === 'full' ? ' checked' : '')+'> Расширенный бот</label>'+
+    '<p class="hint">Простой бот — пять кнопок. Расширенный — услуги, товары, разделы и свои кнопки.</p>'+
+    '<p class="flabel">Ниша</p>'+
+    '<div class="niches">'+
+      '<button type="button" data-niche="service">Услуги</button>'+
+      '<button type="button" data-niche="auto">Авто</button>'+
+      '<button type="button" data-niche="beauty">Бьюти</button>'+
+      '<button type="button" data-niche="food">Еда</button>'+
+      '<button type="button" data-niche="shop">Магазин</button>'+
+    '</div>'+
+    '<p class="hint">Ниша подставит названия кнопок. Свой текст карточки останется.</p>'+
+  '</div>';
+}
 function assistSimpleHtml(reply){
   const saved = reply && reply.desk === 'simple' && Array.isArray(reply.buttons) ? reply.buttons : [];
   const used = {};
@@ -1341,17 +1386,18 @@ function assistSimpleHtml(reply){
   const rest = saved.filter(function(button, index){ return !used[index]; });
   const bookOn = !reply || (reply.bookingOn !== false && reply.scenario !== 'info');
   const slots = [
-    { role: 'contacts', title: '1. Контакты', hint: 'Клиент получит этот текст по кнопке «Контакты».', textLabel: 'Телефон и связь', placeholder: 'Телефон, мессенджер или почта.', label: contacts && contacts.label || 'Контакты', text: reply && reply.contacts || '', items: contacts && contacts.items },
-    { role: 'menu', title: '2. Меню', hint: 'Галочка «Кнопки внутри» стоит на этой кнопке. Пока она пустая, клиент сразу читает текст. Если отметить, кнопка откроет свои кнопки, например «Каталог».', textLabel: 'Текст клиенту', placeholder: 'Напишите, что вам нужно.', label: menu && menu.label || 'Меню', text: assistOwnText(menu), items: menu && menu.items },
-    { role: 'pay', title: '3. Оплата', hint: 'Это описание оплаты. Клиент прочитает его целиком по кнопке «Оплата». Напишите своими словами: наличные, карта, перевод, чек, нужна ли предоплата.', textLabel: 'Описание оплаты', placeholder: 'Наличные после работы, перевод на карту, чек по просьбе. Предоплата не нужна.', label: pay && pay.label || 'Оплата', text: reply && reply.payment || '', items: pay && pay.items },
-    { role: 'address', title: '4. Адрес', hint: 'Куда ехать. Ссылка на Яндекс Карты уйдёт вместе с адресом.', textLabel: 'Адрес', placeholder: 'Улица, дом, как найти вход.', label: address && address.label || 'Адрес', text: reply && reply.address || '', map: reply && reply.pickupMap || '', items: address && address.items },
-    { role: 'book', title: '5. Записаться', hint: 'Клиент выберет день и время. Кнопку можно переименовать.', label: book && book.label || 'Записаться', on: saved.length ? !!book : bookOn }
+    { role: 'contacts', title: 'Контакты', hint: 'Клиент получит этот текст по кнопке «Контакты».', textLabel: 'Телефон и связь', placeholder: 'Телефон, мессенджер или почта.', label: contacts && contacts.label || 'Контакты', text: reply && reply.contacts || '', items: contacts && contacts.items },
+    { role: 'menu', title: 'Услуги или меню', hint: 'Галочка «Кнопки внутри» стоит на этой кнопке. Пока она пустая, клиент сразу читает текст. Если отметить, кнопка откроет свои кнопки, например «Каталог».', textLabel: 'Текст клиенту', placeholder: 'Напишите, что вам нужно.', label: menu && menu.label || 'Услуги и цены', text: assistOwnText(menu), items: menu && menu.items },
+    { role: 'pay', title: 'Оплата', hint: 'Это описание оплаты. Клиент прочитает его целиком по кнопке «Оплата». Напишите своими словами: наличные, карта, перевод, чек, нужна ли предоплата.', textLabel: 'Описание оплаты', placeholder: 'Наличные после работы, перевод на карту, чек по просьбе. Предоплата не нужна.', label: pay && pay.label || 'Оплата', text: reply && reply.payment || '', items: pay && pay.items },
+    { role: 'address', title: 'Адрес', hint: 'Куда ехать. Ссылка на Яндекс Карты уйдёт вместе с адресом.', textLabel: 'Адрес', placeholder: 'Улица, дом, как найти вход.', label: address && address.label || 'Адрес', text: reply && reply.address || '', map: reply && reply.pickupMap || '', items: address && address.items },
+    { role: 'book', title: 'Запись', hint: 'Клиент выберет день и время. Кнопку можно переименовать.', label: book && book.label || 'Записаться', on: saved.length ? !!book : bookOn, linkOn: !reply || reply.linkOn !== false }
   ];
   rest.forEach(function(button){
     slots.push({ role: 'own', title: 'Ещё кнопка', hint: 'Эта кнопка тоже стоит на главном экране.', textLabel: 'Текст клиенту', placeholder: 'Что клиент прочитает', label: button.label, text: assistOwnText(button), items: button.items });
   });
   const hand = !reply || reply.handoff !== false;
-  return '<p class="hint simple-help">Пять кнопок, как раньше: Контакты, Меню, Оплата, Адрес и Записаться. Дополнительные кнопки появляются только у той кнопки, где стоит галочка «Кнопки внутри».</p>'+
+  return '<p class="hint simple-help">Пять кнопок: Контакты, услуги или меню, Оплата, Адрес и Записаться. Дополнительные кнопки появляются только у той кнопки, где стоит галочка «Кнопки внутри».</p>'+
+    assistKindHtml(reply)+
     '<div class="shello plain">'+
     '<p class="now">Первая фраза</p>'+
     '<p class="hint">Клиент видит её после «Начать».</p>'+
@@ -1363,49 +1409,122 @@ function assistSimpleHtml(reply){
     (slots.length < 8 ? '<button class="btn ghost simple-extra" id="assistPlainAdd" type="button" style="margin-top:8px">Ещё кнопка на главном экране</button>' : '');
 }
 let assistWizardAt = 0;
+let assistWizardKind = 'simple';
+function assistCount(input){
+  if (!input) return;
+  const note = input.parentElement && input.parentElement.querySelector('[data-pcount]');
+  if (note) note.textContent = String(input.value || '').length+' из 24';
+}
+function applyNiche(id){
+  const picks = {
+    service: ['Услуги и цены', 'Записаться', 'Напишите, какая услуга нужна.'],
+    auto: ['Услуги и цены', 'Запись на шиномонтаж', 'Напишите, что сделать с машиной.'],
+    beauty: ['Услуги', 'Записаться', 'Напишите, какая услуга нужна.'],
+    food: ['Меню', 'Заказать', 'Напишите, что хотите заказать.'],
+    shop: ['Каталог', 'Заказать', 'Напишите, какой товар нужен.']
+  };
+  const pick = picks[id];
+  if (!pick) return;
+  const menu = document.querySelector('#assistSimple [data-role="menu"]');
+  const book = document.querySelector('#assistSimple [data-role="book"]');
+  const menuLabel = menu && menu.querySelector('[data-plabel]');
+  const menuText = menu && menu.querySelector('[data-ptext]');
+  const bookLabel = book && book.querySelector('[data-plabel]');
+  if (menuLabel) { menuLabel.value = pick[0]; assistCount(menuLabel); }
+  if (menuText) menuText.placeholder = pick[2];
+  if (bookLabel) { bookLabel.value = pick[1]; assistCount(bookLabel); }
+}
+function wizardSteps(){
+  const kind = document.querySelector('[name="assistWizardKind"]:checked');
+  if (kind) assistWizardKind = kind.value === 'full' ? 'full' : 'simple';
+  if (assistWizardKind === 'full') {
+    return [
+      { title: 'Вид бота', kind: true },
+      { title: 'Сценарий', step: 'scenario' },
+      { title: 'Услуги', step: 'prices' },
+      { title: 'Товары', step: 'products' },
+      { title: 'О себе', step: 'about' },
+      { title: 'Контакты', step: 'contacts' },
+      { title: 'Заказ', step: 'order' },
+      { title: 'Как добраться', step: 'road' },
+      { title: 'Запись', step: 'book' },
+      { title: 'Кнопки', step: 'keys' },
+      { title: 'Сохранение', done: true }
+    ];
+  }
+  return [
+    { title: 'Вид бота', kind: true },
+    { title: 'Приветствие', role: 'shello' },
+    { title: 'Контакты', role: 'contacts' },
+    { title: 'Оплата', role: 'pay' },
+    { title: 'Адрес', role: 'address' },
+    { title: 'Запись', role: 'book' },
+    { title: 'Кнопки', role: 'menu' },
+    { title: 'Сохранение', role: 'hand' }
+  ];
+}
+function paintSave(wizard){
+  const steps = wizardSteps();
+  const show = !wizard || assistWizardAt >= steps.length - 1;
+  const button = document.getElementById('assistDesk');
+  const hint = document.getElementById('assistSaveHint');
+  if (button) button.hidden = !show;
+  if (hint) hint.hidden = !show;
+}
 function paintWizard(){
   const root = document.querySelector('.desk');
-  if (!root || !root.classList.contains('mode-wizard')) return;
-  const titles = ['Как бот здоровается', 'Телефон и связь', 'Адрес', 'Описание оплаты', 'Запись', 'Кнопки внутри', 'Проверьте и сохраните'];
-  const notes = [
-    'Эту фразу клиент видит после «Начать».',
-    'Напишите телефон или мессенджер. Клиент прочитает это по кнопке «Контакты».',
-    'Куда ехать. Ссылку на Яндекс Карты можно вставить ниже.',
-    'Напишите своими словами, как принимаете деньги. Клиент получит этот текст целиком по кнопке «Оплата». Пример сам не подставится.',
-    'Если запись нужна, оставьте галочку. Клиент выберет день и время.',
-    'Галочка «Кнопки внутри» стоит на конкретной кнопке. Пустая галочка — клиент сразу читает текст. Отмеченная — кнопка открывает свои кнопки. Например, «Меню» открывает «Каталог».',
-    'Нажмите «Сохранить карточку». В чате останутся эти кнопки.'
-  ];
-  const order = ['shello', 'contacts', 'address', 'pay', 'book', 'menu', 'done'];
-  const at = Math.max(0, Math.min(assistWizardAt, titles.length - 1));
-  assistWizardAt = at;
-  root.querySelectorAll('#assistSimple .shello, #assistSimple .plain, #assistSimple .simple-extra').forEach(function(node){ node.classList.remove('wiz'); });
-  const key = order[at];
-  if (key === 'shello') {
-    const node = root.querySelector('#assistSimple .shello');
-    if (node) node.classList.add('wiz');
-  } else if (key === 'menu') {
+  const wizard = !!(root && root.classList.contains('mode-wizard'));
+  const steps = wizardSteps();
+  if (assistWizardAt >= steps.length) assistWizardAt = steps.length - 1;
+  if (assistWizardAt < 0) assistWizardAt = 0;
+  const step = steps[assistWizardAt] || steps[0];
+  paintSave(wizard);
+  if (!root || !wizard) {
+    if (root) root.classList.remove('wiz-full');
+    return;
+  }
+  root.classList.toggle('wiz-full', assistWizardKind === 'full');
+  root.querySelectorAll('#assistSimple .shello, #assistSimple .plain, #assistSimple .simple-extra').forEach(function(node){
+    node.classList.remove('wiz');
+  });
+  root.querySelectorAll('#assistFull .astep').forEach(function(node){
+    node.classList.remove('wiz');
+  });
+  if (step.kind) {
+    const kind = root.querySelector('#assistSimple [data-role="kind"]');
+    if (kind) kind.classList.add('wiz');
+  } else if (step.role === 'shello') {
+    const hello = root.querySelector('#assistSimple .shello');
+    if (hello) hello.classList.add('wiz');
+  } else if (step.role === 'menu') {
     root.querySelectorAll('#assistSimple .plain').forEach(function(node){
-      if (node.classList.contains('shello') || node.getAttribute('data-role') === 'hand') return;
-      node.classList.add('wiz');
+      const role = node.getAttribute('data-role');
+      if (role === 'menu' || role === 'own') node.classList.add('wiz');
     });
     const extra = root.querySelector('#assistSimple .simple-extra');
     if (extra) extra.classList.add('wiz');
-  } else if (key === 'done') {
-    const node = root.querySelector('#assistSimple [data-role="hand"]');
-    if (node) node.classList.add('wiz');
-  } else {
-    const node = root.querySelector('#assistSimple [data-role="'+key+'"]');
-    if (node) node.classList.add('wiz');
+  } else if (step.role) {
+    const slot = root.querySelector('#assistSimple [data-role="'+step.role+'"]');
+    if (slot) slot.classList.add('wiz');
+  } else if (step.step) {
+    const block = root.querySelector('#assistFull .astep[data-aslice="'+step.step+'"]');
+    if (block) block.classList.add('wiz');
   }
   const title = document.getElementById('wizTitle');
+  const left = document.getElementById('wizLeft');
+  const fill = document.getElementById('wizFill');
   const note = document.getElementById('wizNote');
-  if (title) title.textContent = (at + 1) + ' из ' + titles.length + '. ' + titles[at];
-  if (note) note.textContent = notes[at];
   const prev = document.getElementById('wizPrev');
   const next = document.getElementById('wizNext');
-  if (prev) prev.disabled = at === 0;
-  if (next) next.disabled = at === titles.length - 1;
+  const rest = steps.length - assistWizardAt - 1;
+  if (title) title.textContent = 'Шаг '+(assistWizardAt + 1)+' из '+steps.length+'. '+step.title;
+  if (left) left.textContent = rest ? 'Осталось шагов: '+rest : 'Последний шаг. Нажмите «Сохранить карточку».';
+  if (fill) fill.style.width = Math.round(((assistWizardAt + 1) / steps.length) * 100)+'%';
+  if (note) note.textContent = step.done ? 'Карточка уйдёт в бот после сохранения.' : '«Дальше» запоминает шаг. В бот карточка уйдёт на последнем шаге.';
+  if (prev) prev.disabled = assistWizardAt === 0;
+  if (next) next.disabled = assistWizardAt >= steps.length - 1;
+  const nav = document.getElementById('assistWizardNav');
+  if (nav && nav.offsetParent) nav.scrollIntoView({ block: 'start' });
 }
 function copyDesk(from){
   [['#assistSimple [data-shello]', 'assistGreeting'], ['#assistSimple [data-role="contacts"] [data-ptext]', 'assistContacts'], ['#assistSimple [data-role="pay"] [data-ptext]', 'assistPayment'], ['#assistSimple [data-role="address"] [data-ptext]', 'assistAddress'], ['#assistSimple [data-role="address"] [data-pmap]', 'assistPickupMap']].forEach(function(pair){
@@ -1424,6 +1543,9 @@ function copyDesk(from){
   const hand = document.querySelector('#assistSimple [data-phand]');
   const handFull = document.getElementById('assistHandoff');
   if (hand && handFull) { if (from === 'simple') handFull.checked = hand.checked; else hand.checked = handFull.checked; }
+  const plainLink = document.querySelector('#assistSimple [data-plinkon]');
+  const fullLink = document.getElementById('assistLinkOn');
+  if (plainLink && fullLink) { if (from === 'simple') fullLink.checked = plainLink.checked; else plainLink.checked = fullLink.checked; }
 }
 function readPlainButtons(){
   const buttons = [];
@@ -1462,6 +1584,7 @@ function readPlainButtons(){
   return buttons;
 }
 function assistDesk(reply, groupId){
+  assistWizardKind = assistDeskMode(reply) === 'full' ? 'full' : 'simple';
   const buttons = assistButtonList(reply, groupId);
   const handoff = !reply || reply.handoff !== false;
   const parts = [
@@ -1527,13 +1650,13 @@ function assistDesk(reply, groupId){
   };
   return '<div class="desk mode-'+mode+'"><p class="hint">Выберите, как настраивать. Простой бот прячет длинные шаги. Мастер задаёт по одному вопросу. Расширенный открывает цены, разделы и все кнопки.</p>'+
     '<div class="modes">'+radio('simple','Простой бот','Пять кнопок. Лишние поля скрыты.')+radio('wizard','Мастер настроек','Один вопрос за раз, в конце сохранение.')+radio('full','Расширенный','Цены, разделы, доставка и все кнопки.')+'</div>'+
-    '<div id="assistWizardNav"><p class="now" id="wizTitle"></p><p class="hint" id="wizNote"></p><div class="wiznav"><button class="btn ghost" id="wizPrev" type="button">Назад</button><button class="btn" id="wizNext" type="button">Дальше</button></div></div>'+
+    '<div id="assistWizardNav"><p class="now" id="wizTitle"></p><div class="wizbar" aria-hidden="true"><span id="wizFill"></span></div><p class="hint" id="wizLeft"></p><p class="hint" id="wizNote"></p><div class="wiznav"><button class="btn ghost" id="wizPrev" type="button">Назад</button><button class="btn" id="wizNext" type="button">Дальше</button></div></div>'+
     '<div id="assistSimple">'+assistSimpleHtml(reply)+'</div>'+
     '<div id="assistFull"><p class="hint">Сверху вниз: направление, цены, каталог, текст, кнопки. В конце одна кнопка «Сохранить карточку».</p>'+
     chips+parts.map(function(part){ return '<section class="astep" id="assist-step-'+part[0]+'" data-aslice="'+part[0]+'"><p class="now">Шаг '+part[1]+'</p>'+part[2]+'</section>'; }).join('')+
     '</div>'+
     '<button class="btn" id="assistDesk" type="button" style="margin-top:12px">Сохранить карточку</button>'+
-    '<p class="hint">Одна кнопка сохраняет всё, что сейчас на экране. Пустая цена клиенту не называется.</p>'+
+    '<p class="hint" id="assistSaveHint">Одна кнопка сохраняет всё, что сейчас на экране. Пустая цена клиенту не называется.</p>'+
     '<p id="deskmsg" class="hint"></p></div>';
 }
 function assistTabs(marks){
@@ -2062,7 +2185,8 @@ async function saveDesk(){
   const msg = document.getElementById('deskmsg');
   const button = document.getElementById('assistDesk');
   const pickedMode = document.querySelector('input[name="assistDeskMode"]:checked');
-  const deskMode = pickedMode && pickedMode.value === 'full' ? 'full' : 'simple';
+  const wizardFull = pickedMode && pickedMode.value === 'wizard' && assistWizardKind === 'full';
+  const deskMode = (pickedMode && pickedMode.value === 'full') || wizardFull ? 'full' : 'simple';
   if (deskMode === 'simple') copyDesk('simple');
   const greeting = (document.getElementById('assistGreeting') || {}).value || '';
   const about = (document.getElementById('assistAbout') || {}).value || '';
@@ -2080,11 +2204,11 @@ async function saveDesk(){
   const pickupOn = !!(document.getElementById('assistPickupOn') || {}).checked;
   const deliveryOn = !!(document.getElementById('assistDeliveryOn') || {}).checked;
   const handoff = !!(document.getElementById('assistHandoff') || {}).checked;
-  const goodsOn = false;
   const products = assistProductValue();
   const orderOn = !!(document.getElementById('assistOrderOn') || {}).checked;
   const bookingOn = !!(document.getElementById('assistBookingOn') || {}).checked;
   const linkOn = !!(document.getElementById('assistLinkOn') || {}).checked;
+  const goodsOn = linkOn;
   const trade = (document.getElementById('assistTrade') || {}).value || 'shop';
   const services = assistServiceValue();
   const picked = document.querySelector('input[name="assistScenario"]:checked');
@@ -2491,12 +2615,12 @@ function bindPlain(){
     node.onchange = function(){
       const desk = document.querySelector('.desk');
       if (!desk) return;
-      const wasFull = desk.classList.contains('mode-full');
-      const goFull = node.value === 'full';
-      if (wasFull && !goFull) copyDesk('full');
-      if (!wasFull && goFull) copyDesk('simple');
-      desk.classList.remove('mode-simple', 'mode-full', 'mode-wizard');
-      desk.classList.add(goFull ? 'mode-full' : (node.value === 'wizard' ? 'mode-wizard' : 'mode-simple'));
+      const wasFull = desk.classList.contains('mode-full') || desk.classList.contains('wiz-full');
+      const nextFull = node.value === 'full' || (node.value === 'wizard' && assistWizardKind === 'full');
+      if (wasFull && !nextFull) copyDesk('full');
+      if (!wasFull && nextFull) copyDesk('simple');
+      desk.classList.remove('mode-simple', 'mode-full', 'mode-wizard', 'wiz-full');
+      desk.classList.add(node.value === 'full' ? 'mode-full' : (node.value === 'wizard' ? 'mode-wizard' : 'mode-simple'));
       if (node.value === 'wizard') assistWizardAt = 0;
       paintWizard();
     };
@@ -2537,10 +2661,25 @@ function bindPlain(){
     if (content >= 7) add.remove();
     bind();
   };
+  document.querySelectorAll('[data-plabel]').forEach(function(input){
+    input.oninput = function(){ assistCount(input); };
+  });
+  document.querySelectorAll('[data-niche]').forEach(function(button){
+    button.onclick = function(){ applyNiche(button.getAttribute('data-niche')); };
+  });
+  document.querySelectorAll('input[name="assistWizardKind"]').forEach(function(radio){
+    radio.onchange = function(){
+      const nextKind = radio.value === 'full' ? 'full' : 'simple';
+      if (nextKind !== assistWizardKind) copyDesk(assistWizardKind === 'full' ? 'full' : 'simple');
+      assistWizardKind = nextKind;
+      assistWizardAt = 0;
+      paintWizard();
+    };
+  });
   const prev = document.getElementById('wizPrev');
   if (prev) prev.onclick = function(){ if (assistWizardAt > 0) assistWizardAt -= 1; paintWizard(); };
   const next = document.getElementById('wizNext');
-  if (next) next.onclick = function(){ if (assistWizardAt < 6) assistWizardAt += 1; paintWizard(); };
+  if (next) next.onclick = function(){ if (assistWizardAt < wizardSteps().length - 1) assistWizardAt += 1; paintWizard(); };
   paintWizard();
 }
 function bind(){
