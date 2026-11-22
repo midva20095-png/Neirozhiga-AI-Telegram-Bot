@@ -948,6 +948,7 @@ function assistScheduleHtml(reply){
     '<option value="14"'+(horizon===14?' selected':'')+'>14 дней</option></select>'+
     '<label class="flabel" for="assistPlaces">Места через запятую, до четырёх</label>'+
     '<input id="assistPlaces" maxlength="180" placeholder="На месте, Выезд" value="'+esc(places)+'">'+
+    '<p class="hint">Если место одно и называется «На месте», в списке дней покупатель видит «свободно». Свои названия, например «Зал, Выезд», показываются как есть.</p>'+
     '<label class="flabel" for="assistSeats">Мест на день</label>'+
     '<input id="assistSeats" inputmode="numeric" maxlength="2" placeholder="Пусто — без ограничений" value="'+esc(seats)+'">'+
     '<p class="hint">Сколько записей принять в один день. Пустое поле не ограничивает: клиент видит свободные дни и места, а занять можно всё, что не занято по времени.</p>';
