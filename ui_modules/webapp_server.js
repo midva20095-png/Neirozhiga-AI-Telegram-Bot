@@ -1482,19 +1482,6 @@ function startWebApp() {
         }
     });
 
-    app.post('/api/admin/templates/vk', requireAdmin, async (req, res) => {
-        try {
-            const tpl = await templatesSrc.getFull(req.body && req.body.id, 'vk');
-            if (!tpl) return res.status(404).json({ error: 'Шаблон не показывается во ВК. Включите показ и выберите «Только ВК» или «Telegram и ВК».' });
-            const posted = await vk.publishTemplate(tpl);
-            if (!posted.ok) return res.status(502).json({ error: posted.error });
-            db.note('tpl', `в сообщество шаблон «${tpl.title}»`).catch(() => {});
-            res.json({ ok: true, url: posted.url, postUrl: posted.postUrl });
-        } catch (e) {
-            res.status(500).json({ error: 'Не удалось опубликовать шаблон в сообществе' });
-        }
-    });
-
     app.post('/api/admin/templates/delete', requireAdmin, async (req, res) => {
         try { await db.deleteTemplate(req.body.id); res.json({ ok: true }); }
         catch (e) { res.status(500).json({ error: e.message }); }

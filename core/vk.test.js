@@ -310,29 +310,3 @@ test('большая картинка шаблона для стены оста�
     assert.equal(file.buffer, jpeg);
     assert.equal(file.type, 'image/jpeg');
 });
-
-test('шаблон на стену НейроЯги требует её ключ и картинку', async () => {
-    const saved = {
-        VK_GROUP_ID: process.env.VK_GROUP_ID,
-        VK_GROUP_TOKEN: process.env.VK_GROUP_TOKEN,
-        VK_GROUP_ID_2: process.env.VK_GROUP_ID_2,
-        VK_GROUP_TOKEN_2: process.env.VK_GROUP_TOKEN_2
-    };
-    process.env.VK_GROUP_ID = '230706467';
-    process.env.VK_GROUP_TOKEN = 'token-one';
-    process.env.VK_GROUP_ID_2 = '';
-    process.env.VK_GROUP_TOKEN_2 = '';
-    const missing = await vk.publishTemplate({ id: 'local:15', title: 'Обложка', prompt: 'секрет задания', image: '' });
-    assert.equal(missing.ok, false);
-    assert.equal(missing.error, 'Нет ключа сообщества НейроЯга.');
-    process.env.VK_GROUP_ID_2 = '214554778';
-    process.env.VK_GROUP_TOKEN_2 = 'token-two';
-    const noPhoto = await vk.publishTemplate({ id: 15, title: 'Обложка', prompt: 'секрет задания', desc: 'Для поста', cost: 20, image: '' });
-    assert.equal(noPhoto.ok, false);
-    assert.equal(noPhoto.error, 'У шаблона нет картинки.');
-    assert.equal(JSON.stringify(noPhoto).includes('секрет задания'), false);
-    for (const key of Object.keys(saved)) {
-        if (saved[key] == null) delete process.env[key];
-        else process.env[key] = saved[key];
-    }
-});

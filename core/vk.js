@@ -2685,15 +2685,6 @@ async function publishWeeklyRatings(now) {
     }
 }
 
-function neuroyagaId() {
-    const configuredHome = String(process.env.VK_GROUP_ID || '').replace(/\D/g, '');
-    const configuredClub = String(process.env.VK_GROUP_ID_2 || '').replace(/\D/g, '');
-    const linesId = configuredHome && configuredHome !== '214554778' ? configuredHome : '230706467';
-    let clubId = configuredClub && configuredClub !== linesId ? configuredClub : '214554778';
-    if (clubId === linesId) clubId = '214554778';
-    return clubId;
-}
-
 async function prepareCover(buffer) {
     const file = await fileForVk(buffer);
     const meta = await sharp(file.buffer, { failOn: 'none' }).metadata();
@@ -2727,172 +2718,6 @@ async function templateCoverFile(image) {
     const bytes = await templateImage(image);
     if (!bytes || !bytes.length) return null;
     return prepareCover(bytes);
-}
-
-async function uploadWallDoc(token, groupId, file) {
-    let server;
-    try {
-        server = await call(token, 'docs.getWallUploadServer', { group_id: String(groupId) });
-    } catch (error) {
-        if (Number(error && error.code) !== 15) throw error;
-        await call(token, 'groups.edit', { group_id: String(groupId), docs: '1' });
-        server = await call(token, 'docs.getWallUploadServer', { group_id: String(groupId) });
-    }
-    if (!server || !server.upload_url) throw new Error('vk doc server');
-    const uploaded = await postUpload(server.upload_url, 'file', file);
-    if (!uploaded.file) throw new Error('vk doc file');
-    const saved = await call(token, 'docs.save', { file: uploaded.file, title: file.title || 'Шаблон' });
-    const doc = saved && (saved.doc || saved);
-    if (!doc || doc.id == null || doc.owner_id == null) throw new Error('vk doc');
-    return `doc${doc.owner_id}_${doc.id}`;
-}
-
-function wallResult(groupId, posted, url) {
-    const postId = Number(posted && (posted.post_id || posted.postId));
-    return { ok: true, url, postUrl: postId ? `https://vk.com/wall-${groupId}_${postId}` : '' };
-}
-
-function wallPhotoTokens(groupToken) {
-    const list = lessonWriters(groupToken);
-    const user = String(process.env.VK_AUDIT_TOKEN || '').trim();
-    if (user && !list.includes(user)) list.push(user);
-    return list;
-}
-
-async function wallPicture(buffer) {
-    const file = await prepareCover(buffer);
-    if (file.type === 'image/jpeg') return file;
-    const jpeg = await sharp(file.buffer, { failOn: 'none' }).jpeg({ quality: 90, progressive: false }).toBuffer();
-    return { buffer: jpeg, filename: 'neuroyaga.jpg', type: 'image/jpeg' };
-}
-
-async function storyFrame(buffer) {
-    const file = await wallPicture(buffer);
-    const jpeg = await sharp(file.buffer, { failOn: 'none', limitInputPixels: false }).resize({
-        width: 1080,
-        height: 1920,
-        fit: 'contain',
-        background: { r: 11, g: 6, b: 20 }
-    }).jpeg({ quality: 90, progressive: false }).toBuffer();
-    return { buffer: jpeg, filename: 'neuroyaga.jpg', type: 'image/jpeg' };
-}
-
-async function publishTemplateStory(token, groupId, file, url) {
-    const server = await call(token, 'stories.getPhotoUploadServer', {
-        add_to_news: '1',
-        group_id: String(groupId),
-        link_text: 'open',
-        link_url: url
-    });
-    if (!server || !server.upload_url) throw new Error('vk story');
-    const uploaded = await postUpload(server.upload_url, 'file', file);
-    const result = String(uploaded.upload_result || (uploaded.response && uploaded.response.upload_result) || '');
-    if (!result) throw new Error('vk story');
-    await call(token, 'stories.save', { upload_results: result });
-}
-
-async function uploadChatPhoto(token, groupId, file) {
-    const peers = ['', String(-Number(groupId)), String(groupId)];
-    let server = null;
-    let last = null;
-    for (const peer of peers) {
-        try {
-            const params = peer ? { peer_id: peer } : {};
-            server = await call(token, 'photos.getMessagesUploadServer', params);
-            if (server && server.upload_url) break;
-        } catch (error) {
-            last = error;
-            server = null;
-        }
-    }
-    if (!server || !server.upload_url) throw last || new Error('vk photo');
-    const uploaded = await postUpload(server.upload_url, 'photo', file);
-    const field = uploadPhotoField(uploaded && uploaded.photo);
-    if (!field) throw new Error('vk photo');
-    const saved = await call(token, 'photos.saveMessagesPhoto', {
-        photo: field,
-        server: String(uploaded.server),
-        hash: uploaded.hash
-    });
-    const list = Array.isArray(saved) ? saved : [saved];
-    const attachment = photoAttachment(list[0]);
-    if (!attachment) throw new Error('vk photo');
-    return attachment;
-}
-
-async function imageStuck(groupId, postId) {
-    let seen = false;
-    for (let attempt = 0; attempt < 3; attempt++) {
-        const post = await readLessonPost(groupId, postId);
-        if (post && postHasPicture(post)) return true;
-        if (post && /deleted/i.test(String(post.text || ''))) return false;
-        if (post) seen = true;
-        if (attempt < 2) await sleep(500);
-    }
-    return !seen;
-}
-
-async function dropPost(token, groupId, postId) {
-    try {
-        await call(token, 'wall.delete', { owner_id: String(-Number(groupId)), post_id: String(postId) });
-    } catch (error) {}
-}
-
-async function publishTemplate(tpl) {
-    const groupId = neuroyagaId();
-    const url = share.vkTemplateLink(tpl && tpl.id, groupId);
-    if (!url) return { ok: false, error: 'Ссылка на шаблон не собралась.' };
-    const item = communityList().find(entry => entry.id === groupId);
-    if (!item || !item.token) return { ok: false, error: 'Нет ключа сообщества НейроЯга.' };
-    const message = share.vkTemplateText(tpl, url);
-    const secret = String(tpl && tpl.prompt || '').trim();
-    if (secret && message.includes(secret)) return { ok: false, error: 'Текст задания нельзя публиковать.' };
-    if (!/#t\d+$/.test(url)) return { ok: false, error: 'Ссылка на шаблон собралась не так, как ВК открывает шаблоны.' };
-    let bytes;
-    try {
-        bytes = await templateImage(tpl && tpl.image);
-    } catch (error) {
-        return { ok: false, error: 'Картинку шаблона не удалось открыть.' };
-    }
-    if (!bytes || !bytes.length) return { ok: false, error: 'У шаблона нет картинки.' };
-    let file;
-    try {
-        file = await wallPicture(bytes);
-        file.title = String(tpl.title || 'Шаблон').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Шаблон';
-    } catch (error) {
-        return { ok: false, error: 'Картинка шаблона не открылась.' };
-    }
-    const attachments = [];
-    const addAttachment = value => {
-        const next = String(value || '');
-        if (next && !attachments.includes(next)) attachments.push(next);
-    };
-    try { addAttachment(await uploadWallPhoto(wallPhotoTokens(item.token), groupId, null, file)); } catch (error) {}
-    try { addAttachment(await uploadChatPhoto(item.token, groupId, file)); } catch (error) {}
-    try { addAttachment(await uploadWallDoc(item.token, groupId, file)); } catch (error) {}
-    if (!attachments.length) return { ok: false, error: 'ВК не принял картинку, запись не опубликована.' };
-    let denied = false;
-    for (const attachment of attachments) {
-        let posted;
-        try {
-            posted = await call(item.token, 'wall.post', {
-                owner_id: String(-Number(groupId)),
-                from_group: '1',
-                message,
-                attachments: attachment
-            });
-        } catch (error) {
-            if (Number(error && error.code) === 15) denied = true;
-            continue;
-        }
-        const postId = Number(posted && (posted.post_id || posted.postId));
-        if (postId && await imageStuck(groupId, postId)) {
-            return Object.assign(wallResult(groupId, posted, url), { place: 'wall' });
-        }
-        if (postId) await dropPost(item.token, groupId, postId);
-    }
-    if (denied) return { ok: false, error: 'Ключ сообщества не может публиковать на стене. Включите право «Стена».' };
-    return { ok: false, error: 'ВК не оставил картинку в записи. Пост не опубликован.' };
 }
 
 async function publishPrize(groupId, range, winners) {
@@ -3440,5 +3265,5 @@ async function ensureCommunityWidget(groupId) {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, clubGroupId, communityStatus, adminHomes, communityDonut, checkCommunityToken, monthActivity, setRatingHidden, publishPrize, publishTemplate, prepareCover, templateCoverFile, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos, WALL_RECOUNT_MS
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, clubGroupId, communityStatus, adminHomes, communityDonut, checkCommunityToken, monthActivity, setRatingHidden, publishPrize, prepareCover, templateCoverFile, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos, WALL_RECOUNT_MS
 };
