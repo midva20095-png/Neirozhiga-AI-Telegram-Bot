@@ -1725,7 +1725,7 @@ function assistPaneBox(id, html){
   return '<div class="apanel" data-apanel="'+id+'"'+(assistPane===id?'':' hidden')+'>'+html+'</div>';
 }
 function assistLocked(){
-  return '<p class="hint">Сначала подключите сообщество на вкладке «Обзор».</p>'+
+  return '<p class="hint">Сначала подключите сообщество.</p>'+
     '<button type="button" class="btn ghost" data-apane="home">К подключению</button>';
 }
 function assistQuick(data){
@@ -1785,8 +1785,17 @@ function showAssistPane(name, slice){
   });
   if (slice && assistPane === 'card') openManual(slice);
   else if (slice) showAssistSlice(slice);
+  paintAssistTabs();
   const current = document.querySelector('.atabs button.on');
   if (current && current.scrollIntoView) current.scrollIntoView({ inline:'center', block:'nearest' });
+}
+function paintAssistTabs(){
+  const tabs = document.querySelector('.atabs');
+  if (!tabs) return;
+  const lobby = document.getElementById('assistLobby');
+  const board = document.getElementById('assistManual');
+  const onEntry = assistPane === 'home' && (!lobby || !lobby.hidden) && (!board || board.hidden);
+  tabs.hidden = onEntry;
 }
 function openWizardPick(){
   showAssistPane('card');
@@ -1834,6 +1843,7 @@ function openManualBoard(){
   if (lobby) lobby.hidden = true;
   if (board) board.hidden = false;
   showAssistPane('home');
+  paintAssistTabs();
 }
 function showAssistSlice(name){
   const names = ['scenario','prices','products','about','contacts','order','road','book','keys'];
@@ -1906,7 +1916,7 @@ async function loadAssist(){
     assistConnect(community)+assistGuide(!community);
   box.innerHTML = '<div class="card">'+
     '<div class="kicker">Моё сообщество</div>'+
-    assistTabs(marks)+
+    (community ? assistTabs(marks) : '')+
     assistPaneBox('home', home)+
     assistPaneBox('card', community ? assistDesk(community.reply, community.groupId) : assistLocked())+
     assistPaneBox('orders', community ? assistOrders(data.orders, data.clients, community.groupId) : assistLocked())+
@@ -2791,6 +2801,7 @@ function bindPlain(){
         const board = document.getElementById('assistManual');
         if (lobby) lobby.hidden = false;
         if (board) board.hidden = true;
+        paintAssistTabs();
         return;
       }
       beginWizard(pick);
@@ -2861,6 +2872,7 @@ function bind(){
     const board = document.getElementById('assistManual');
     if (lobby) lobby.hidden = false;
     if (board) board.hidden = true;
+    paintAssistTabs();
   };
   document.querySelectorAll('.aslices [data-slice]').forEach(function(button){
     button.onclick = function(){ showAssistSlice(button.getAttribute('data-slice')); };
@@ -2915,6 +2927,7 @@ function bind(){
   syncBookButton();
   paintAssistKeys();
   bindPlain();
+  paintAssistTabs();
   document.querySelectorAll('[data-sdel]').forEach(function(button){
     button.onclick = function(){
       const row = button.closest('[data-srow]');
