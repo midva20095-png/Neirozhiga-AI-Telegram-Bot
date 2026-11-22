@@ -1191,6 +1191,14 @@ function assistBillPreviewHtml(items){
     : '<p class="err">Цены пустые. Клиент запишется и суммы не увидит. Впишите цену в рублях.</p>';
   return '<div class="sale"><p class="now">Так клиент увидит услуги</p>'+lines+sum+'</div>';
 }
+function assistMultiOn(){
+  const box = document.querySelector('[data-multi]');
+  return !!(box && box.checked);
+}
+function syncAssistMulti(box){
+  document.querySelectorAll('[data-multi]').forEach(function(other){ other.checked = !!box.checked; });
+  paintAssistBill();
+}
 function paintAssistBill(){
   const box = document.getElementById('assistBillPreview');
   if (box) box.innerHTML = assistBillPreviewHtml(assistServiceValue());
@@ -1202,7 +1210,7 @@ function paintFoldHeads(){
     const price = String((row.querySelector('[data-sprice]') || {}).value || '').trim();
     const title = row.querySelector('[data-fold] b');
     const note = row.querySelector('[data-fold] small');
-    const many = !!((document.getElementById('assistMulti') || {}).checked);
+    const many = assistMultiOn();
     const together = many || !!((row.querySelector('[data-sextra]') || {}).checked);
     if (title) title.textContent = name || 'Новая услуга';
     if (note) note.textContent = (price ? 'ведёт к цене '+price+' ₽' : 'цену ещё не написали')+' · '+(together ? 'можно несколько' : 'одна');
@@ -1267,7 +1275,7 @@ function assistServiceRow(item){
 function assistServiceEditor(reply){
   const items = assistServiceItems(reply && reply.services);
   const rows = (items.length ? items : [{ name: '', price: '', link: '', extra: false }]).slice(0, 8).map(assistServiceRow).join('');
-  return '<label class="check"><input id="assistMulti" type="checkbox"'+(reply && reply.multi ? ' checked' : '')+' onchange="paintAssistBill()"> Несколько услуг сразу</label>'+
+  return '<label class="check"><input data-multi type="checkbox"'+(!(reply && reply.multi === false) ? ' checked' : '')+'> Несколько услуг сразу. Клиент отмечает несколько, сумма складывается.</label>'+
     '<p class="hint">Включите, если клиент отмечает несколько услуг и сумма складывается. Выключите, если нужна одна услуга. «Можно выбрать вместе» на отдельной услуге добавляет её сверху, даже когда общая галочка выключена.</p>'+
     '<label class="flabel">Услуги, цены и допы</label>'+
     '<p class="hint">Напишите название и цену. «Скрыть от клиента» оставляет строку здесь, в чате её не будет. Пустая цена в сумму не входит.</p>'+
@@ -1613,6 +1621,7 @@ function assistSimpleHtml(reply){
     '<textarea data-shello maxlength="2500" rows="4" placeholder="Здравствуйте. Напишите, что вас интересует.">'+esc(reply && reply.greeting || '')+'</textarea></div>'+
     slots.map(assistPlainHtml).join('')+
     '<div class="plain" data-plain data-role="hand">'+
+    '<label style="display:block"><input data-multi type="checkbox"'+(!(reply && reply.multi === false) ? ' checked' : '')+'> Несколько услуг сразу. Клиент отмечает несколько, сумма складывается.</label>'+
     '<label style="display:block"><input data-phand type="checkbox"'+(hand ? ' checked' : '')+'> Кнопка «Администратор»</label>'+
     '<p class="hint">Клиент нажмёт её, и вам придёт сообщение во ВК. Пока вы отвечаете, бот молчит.</p></div>'+
     (slots.length < 8 ? '<button class="btn ghost simple-extra" id="assistPlainAdd" type="button" style="margin-top:8px">Ещё кнопка на главном экране</button>' : '');
@@ -2622,7 +2631,7 @@ function wizardBotNow(){
     orderOn: !document.getElementById('assistOrderOn') || document.getElementById('assistOrderOn').checked,
     buttons: buttons,
     services: services,
-    multi: !!((document.getElementById('assistMulti') || {}).checked),
+    multi: assistMultiOn(),
     products: products,
     schedule: schedule
   };
@@ -3315,7 +3324,7 @@ async function saveDesk(){
     const response = await fetch('/api/vk/assistant/reply', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, choices: choices, payment: payment, booking: booking, pickup: pickup, pickupMap: pickupMap, delivery: delivery, deliveryPrice: deliveryPrice, pickupOn: pickupOn, deliveryOn: deliveryOn, goodsOn: goodsOn, orderOn: orderOn, bookingOn: scenario === 'info' ? false : bookingOn, linkOn: linkOn, trade: trade, services: services, multi: !!((document.getElementById('assistMulti') || {}).checked), products: products, handoff: handoff, buttons: buttons, schedule: assistScheduleValue(), scenario: scenario, desk: deskMode })
+      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, choices: choices, payment: payment, booking: booking, pickup: pickup, pickupMap: pickupMap, delivery: delivery, deliveryPrice: deliveryPrice, pickupOn: pickupOn, deliveryOn: deliveryOn, goodsOn: goodsOn, orderOn: orderOn, bookingOn: scenario === 'info' ? false : bookingOn, linkOn: linkOn, trade: trade, services: services, multi: assistMultiOn(), products: products, handoff: handoff, buttons: buttons, schedule: assistScheduleValue(), scenario: scenario, desk: deskMode })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Ответы не сохранились');
@@ -3824,6 +3833,9 @@ function bind(){
   if (shopDoor) shopDoor.onclick = function(){ tab = 'shop'; wantMenu = false; draw(); };
   document.querySelectorAll('[data-go]').forEach(function(button){
     button.onclick = function(){ tab = button.dataset.go; draw(); };
+  });
+  document.querySelectorAll('[data-multi]').forEach(function(box){
+    box.onchange = function(){ syncAssistMulti(box); };
   });
   const assistBackBtn = document.getElementById('assistBack');
   if (assistBackBtn) assistBackBtn.onclick = assistBack;

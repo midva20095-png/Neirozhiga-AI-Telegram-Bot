@@ -132,7 +132,8 @@ test('фраза дона принимает ссылку и ответ и от�
     assert.equal(modes.goodsOn, false);
     assert.equal(modes.bookingOn, false);
     assert.equal(assistant.cleanReply({ scenario: 'info', bookingOn: true }).bookingOn, false);
-    assert.equal(assistant.cleanReply({}).multi, false);
+    assert.equal(assistant.cleanReply({}).multi, true);
+    assert.equal(assistant.cleanReply({ multi: false }).multi, false);
     assert.equal(assistant.cleanReply({ multi: true }).multi, true);
     assert.equal(assistant.cleanReply({}).goodsOn, true);
     assert.equal(assistant.cleanReply({}).bookingOn, true);
@@ -256,6 +257,7 @@ test('после перезапуска помощника касса снова
     assert.equal(calls[1].body.groupId, 50);
     assert.equal(calls[1].body.title, 'Сообщество 50');
     assert.equal(calls[1].body.reply.about, 'Торты');
+    assert.equal(calls[1].body.reply.multi, true);
     assert.equal(calls[2].body.active, false);
     assert.equal(calls.some(call => call.body.groupId === 60), false);
 });

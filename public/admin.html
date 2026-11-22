@@ -743,7 +743,7 @@ function openSetup(userId){
       '<label>Места через запятую</label><input id="setupPlaces" maxlength="180" value="'+esc((plan.places||['На месте']).join(', '))+'">'+
       '<label>Мест на день, пусто — без ограничений</label><input id="setupSeats" inputmode="numeric" maxlength="2" placeholder="Пусто — без ограничений" value="'+esc(Number(plan.seats) > 0 ? plan.seats : '')+'">'+
       '<label class="check"><input id="setupHandoff" type="checkbox"'+(reply.handoff===false?'':' checked')+'> Кнопка «Администратор»</label>'+
-      '<label class="check"><input id="setupMulti" type="checkbox"'+(reply.multi?' checked':'')+'> Несколько услуг сразу: клиент отмечает больше одной, сумма складывается</label>'+
+      '<label class="check"><input id="setupMulti" type="checkbox"'+(reply.multi===false?'':' checked')+'> Несколько услуг сразу: клиент отмечает больше одной, сумма складывается. Снимите, если нужна одна услуга.</label>'+
       '<label>Кнопки. Основные стоят на главном экране. Дополнительная открывается только внутри основной</label>'+setupButtons(reply)+
       '<div class="row" style="margin-top:12px"><button type="button" id="setupSave">Сохранить карточку</button></div>'
     : '<p class="note">Сообщество ещё не подключено. Карточку можно заполнить после того, как человек вставит номер и ключ в своём кабинете.</p>';

@@ -40,7 +40,7 @@ const REPLY_FIELDS = [
 ];
 
 function emptyReply() {
-    const reply = { greeting: '', buttons: [], pickupMap: '' };
+    const reply = { greeting: '', buttons: [], pickupMap: '', multi: true };
     REPLY_FIELDS.forEach(item => {
         reply[item[0]] = '';
     });
@@ -96,7 +96,7 @@ function cleanReply(input) {
         bookingOn: bookingOn,
         linkOn: linkOn,
         orderOn: orderOn,
-        multi: input.multi === true || input.multi === 'true',
+        multi: !(input.multi === false || input.multi === 'false'),
         trade: picked.id,
         services: cleanServices(input.services, picked.id),
         products: cleanProducts(input.products),
