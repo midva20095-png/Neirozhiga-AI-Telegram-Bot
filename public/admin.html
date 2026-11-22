@@ -473,7 +473,11 @@ async function loadAssist(){
     ? '<span class="ok">второй бот на связи</span>'
     : '<span class="bad">'+(health.error || 'второй бот не на связи')+'</span>';
   const demo = data.demo || null;
-  el.innerHTML = '<div class="card"><h3>Демонстрация</h3>'+
+  el.innerHTML = '<div class="card"><h3>Вход в «Моё сообщество»</h3>'+
+    '<p class="note">'+(data.closed ? '<span class="bad">Закрыто на разработку.</span> В кабинете вместо раздела этот текст.' : '<span class="ok">Вход открыт.</span> Люди с донатом заходят в раздел как обычно.')+'</p>'+
+    '<div class="row"><button type="button" class="'+(data.closed ? '' : 'ghost')+'" onclick="setCommunityGate('+(data.closed ? 'false' : 'true')+')">'+(data.closed ? 'Открыть вход' : 'Закрыть на разработку')+'</button></div>'+
+    '<p id="gatemsg" class="note"></p></div>'+
+    '<div class="card"><h3>Демонстрация</h3>'+
     '<p class="note">Вставьте номер и ключ тестового сообщества. Карточка как у ИП Соколова. На главном экране основные кнопки: услуги, каталог, прайс, дорога, оплата, отзывы и запись. Внутри «Прайс» дополнительные: легковые и внедорожник, а в них размеры. Клиент может отметить несколько услуг, сумма складывается. Адрес, точка на Яндекс Картах, доставка и оплата тоже в карточке.</p>'+
     (demo ? '<p class="note"><span class="ok">'+esc(demo.title)+'</span> · '+esc(demo.groupId)+' · '+esc(demo.syncLabel)+'</p>'+
       '<p class="note"><a href="'+esc(demo.link)+'" target="_blank" rel="noopener">Открыть переписку с демонстрацией</a></p>'+
@@ -518,6 +522,16 @@ async function loadAssist(){
         '<div class="row" style="margin-top:8px"><button type="button" onclick="openSetup('+Number(item.userId)+')">Настроить</button><button type="button" onclick="setAssist('+item.userId+','+(item.active?'false':'true')+')">'+(item.active?'Выключить':'Включить')+'</button></div></div>';
     }).join('') : '<p class="note">Донов пока нет. Нажмите «Взять донов из ВК» или дождитесь новой подписки.</p>')+
     '</div>';
+}
+async function setCommunityGate(closed){
+  const msg = document.getElementById('gatemsg');
+  if (msg) msg.textContent = closed ? 'Закрываю вход…' : 'Открываю вход…';
+  const data = await api('/api/admin/vk/assistant/gate', { method:'POST', body: JSON.stringify({ closed: !!closed }) });
+  if (!data.ok) {
+    if (msg) msg.textContent = data.error || 'Не получилось';
+    return;
+  }
+  await loadAssist();
 }
 async function saveDemo(){
   const msg = document.getElementById('demomsg');

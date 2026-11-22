@@ -339,8 +339,19 @@ function startWebApp() {
         }
     });
 
+    function communityClosed() {
+        return catalog.getGeneral().community_closed === true;
+    }
+
+    function refuseCommunity(res) {
+        if (!communityClosed()) return false;
+        res.status(403).json({ ok: false, closed: true, error: 'Закрыто на разработку.' });
+        return true;
+    }
+
     app.get('/api/vk/assistant', requireUser, async (req, res) => {
         try {
+            if (communityClosed()) return res.json({ closed: true, don: false, active: false, community: null });
             const userId = assistant.vkId(req.userId);
             if (!userId) return res.json({ don: false, active: false, join: assistant.JOIN_URL, community: null });
             let view = await assistant.cabinet(userId);
@@ -386,6 +397,7 @@ function startWebApp() {
 
     app.post('/api/vk/assistant/community', requireUser, async (req, res) => {
         try {
+            if (refuseCommunity(res)) return;
             const userId = assistant.vkId(req.userId);
             const body = req.body || {};
             const checked = await vk.checkCommunityToken(body.token, body.groupId);
@@ -399,6 +411,7 @@ function startWebApp() {
 
     app.post('/api/vk/assistant/reply', requireUser, async (req, res) => {
         try {
+            if (refuseCommunity(res)) return;
             const saved = await assistant.saveDesk(req.userId, req.body || {});
             res.json(saved);
         } catch (e) {
@@ -409,6 +422,7 @@ function startWebApp() {
 
     app.post('/api/vk/assistant/broadcast', requireUser, async (req, res) => {
         try {
+            if (refuseCommunity(res)) return;
             const body = req.body || {};
             const result = await assistant.sendBroadcast(req.userId, body.text, body.offset);
             res.json(result);
@@ -420,6 +434,7 @@ function startWebApp() {
 
     app.post('/api/vk/assistant/setup', requireUser, async (req, res) => {
         try {
+            if (refuseCommunity(res)) return;
             await assistant.askSetup(req.userId, req.body || {});
             res.json({ ok: true });
         } catch (e) {
@@ -430,6 +445,7 @@ function startWebApp() {
 
     app.post('/api/vk/assistant/setup/message', requireUser, async (req, res) => {
         try {
+            if (refuseCommunity(res)) return;
             await assistant.addSetupTalk(req.userId, req.body && req.body.text, 'don');
             res.json({ ok: true });
         } catch (e) {
@@ -440,6 +456,7 @@ function startWebApp() {
 
     app.post('/api/vk/assistant/community/remove', requireUser, async (req, res) => {
         try {
+            if (refuseCommunity(res)) return;
             const userId = assistant.vkId(req.userId);
             const result = await assistant.disconnectCommunity(userId, req.body && req.body.groupId);
             if (!result.ok) return res.status(400).json(result);
@@ -1087,9 +1104,21 @@ function startWebApp() {
 
     app.get('/api/admin/vk/assistant', requireAdmin, async (req, res) => {
         try {
-            res.json(await assistant.adminList());
+            const pack = await assistant.adminList();
+            pack.closed = communityClosed();
+            res.json(pack);
         } catch (e) {
             res.status(500).json({ error: 'Помощник доната не открылся.' });
+        }
+    });
+
+    app.post('/api/admin/vk/assistant/gate', requireAdmin, async (req, res) => {
+        try {
+            const closed = !!(req.body && req.body.closed);
+            const general = await catalog.saveGeneral(db, { community_closed: closed });
+            res.json({ ok: true, closed: general.community_closed === true });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Вход не переключился.' });
         }
     });
 

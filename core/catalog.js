@@ -150,6 +150,7 @@ const BASE_GENERAL = {
         '«Поддержка» передаёт сообщение команде. Ответ придёт в этот чат.\n\n' +
         'Цены на кнопках — это стоимость для вас в кредитах. Один кредит равен одному рублю.',
     support_enabled: true,
+    community_closed: false,
     site_url: 'https://babayagaland.ru'
 };
 
@@ -462,6 +463,7 @@ function sanitizeGeneral(input) {
     if (typeof g.default_model === 'string' && BASE_MODELS.some(m => m.key === g.default_model)) out.default_model = g.default_model;
     if (typeof g.help_text === 'string' && g.help_text.trim()) out.help_text = g.help_text.trim().slice(0, 3900);
     if (typeof g.support_enabled === 'boolean') out.support_enabled = g.support_enabled;
+    if (typeof g.community_closed === 'boolean') out.community_closed = g.community_closed;
     if (typeof g.site_url === 'string') out.site_url = g.site_url.trim().slice(0, 200);
     return out;
 }

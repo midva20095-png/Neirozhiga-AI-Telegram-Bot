@@ -22,6 +22,10 @@ const SITE_KEYS = [
     'seedance-1-0', 'seedance-2-0-apimart', 'wan-2-2-avatar', 'sora-2', 'pruna-ai-p-video-2-pro'
 ];
 
+test('вход в моё сообщество по умолчанию открыт', () => {
+    assert.equal(catalog.getGeneral().community_closed, false);
+});
+
 test('модели сайта есть в боте и помечены как запрос с сайта', () => {
     for (const key of SITE_KEYS) {
         const m = model(key);

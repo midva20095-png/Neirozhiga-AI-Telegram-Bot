@@ -2219,6 +2219,12 @@ async function loadAssist(){
     bind();
     return;
   }
+  if (data.closed) {
+    assistPane = 'home';
+    box.innerHTML = '<div class="card"><button type="button" class="back" id="assistBack">В кабинет</button><div class="kicker">Моё сообщество</div><p class="now">Закрыто на разработку.</p></div>';
+    bind();
+    return;
+  }
   if (!data.don) {
     const note = data.check === false
       ? 'Не удалось сверить донат. Откройте раздел ещё раз.'
