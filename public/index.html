@@ -164,6 +164,13 @@ button,textarea,input,select{font:inherit;color:inherit}
 .desk.mode-wizard .wiz-scene{display:block}
 .desk.mode-wizard .scene-raw{display:none}
 .niche.alt{background:linear-gradient(120deg,#140c24,#243b8f 38%,#00c2ff 78%,#b366ff);background-size:240% 240%}
+.wiz-keys{display:none}
+.desk.mode-wizard .wiz-keys{display:block}
+.desk.mode-wizard .keys-raw{display:none}
+#wizDone{display:none}
+.desk.wiz-done #assistWizardNav,.desk.wiz-done #assistSimple,.desk.wiz-done #assistFull,.desk.wiz-done #assistDesk,.desk.wiz-done #assistSaveHint,.desk.wiz-done #deskmsg{display:none !important}
+.desk.wiz-done #wizDone{display:block}
+a.niche{display:block;text-decoration:none;box-sizing:border-box}
 .textlink{display:block;width:100%;margin-top:8px;padding:12px 0;border:0;background:none;color:#c4b5fd;font-weight:700}
 #assistModeHint{display:none}
 .plain[data-role="welcome"]{background:transparent;border:0;padding:0}
@@ -1108,7 +1115,7 @@ function assistMoney(value){
 }
 function assistBillPreviewHtml(items){
   const list = (items || []).filter(function(item){ return item && String(item.name || '').trim(); });
-  if (!list.length) return '<p class="err">Услуг нет. Клиент нажмёт «Услуги» и не узнает, за что платит.</p>';
+  if (!list.length) return '<p class="hint">Заполните поля и сохраните карточку, чтобы услуга появилась у клиента.</p>';
   let total = 0;
   let priced = 0;
   const lines = list.map(function(item){
@@ -1465,7 +1472,7 @@ function assistSimpleHtml(reply){
   const bookOn = !reply || (reply.bookingOn !== false && reply.scenario !== 'info');
   const slots = [
     { role: 'contacts', title: 'Контакты', hint: 'Клиент получит этот текст по кнопке «Контакты».', textLabel: 'Телефон и связь', placeholder: 'Телефон, мессенджер или почта.', label: contacts && contacts.label || 'Контакты', text: reply && reply.contacts || '', items: contacts && contacts.items },
-    { role: 'menu', title: 'Услуги или меню', hint: 'Галочка «Кнопки внутри» стоит на этой кнопке. Пока она пустая, клиент сразу читает текст. Если отметить, кнопка откроет свои кнопки, например «Каталог».', textLabel: 'Текст клиенту', placeholder: 'Напишите, что вам нужно.', label: menu && menu.label || 'Услуги и цены', text: assistOwnText(menu), items: menu && menu.items },
+    { role: 'menu', title: 'Кнопка меню', hint: 'Напишите, что клиент прочитает по этой кнопке. Галочка ниже прячет внутри неё дополнительные кнопки.', textLabel: 'Текст клиенту', placeholder: 'Напишите, что вам нужно.', label: menu && menu.label || 'Услуги и цены', text: assistOwnText(menu), items: menu && menu.items },
     { role: 'pay', title: 'Оплата', hint: 'Это описание оплаты. Клиент прочитает его целиком по кнопке «Оплата». Напишите своими словами: наличные, карта, перевод, чек, нужна ли предоплата.', textLabel: 'Описание оплаты', placeholder: 'Наличные после работы, перевод на карту, чек по просьбе. Предоплата не нужна.', label: pay && pay.label || 'Оплата', text: reply && reply.payment || '', items: pay && pay.items },
     { role: 'address', title: 'Адрес', hint: 'Куда ехать. Ссылка на Яндекс Карты уйдёт вместе с адресом.', textLabel: 'Адрес', placeholder: 'Улица, дом, как найти вход.', label: address && address.label || 'Адрес', text: reply && reply.address || '', map: reply && reply.pickupMap || '', items: address && address.items },
     { role: 'book', title: 'Запись', hint: 'Клиент выберет день и время. Кнопку можно переименовать.', label: book && book.label || 'Записаться', on: saved.length ? !!book : bookOn, linkOn: !reply || reply.linkOn !== false }
@@ -1490,6 +1497,7 @@ function assistSimpleHtml(reply){
 let assistWizardAt = 0;
 let assistWizardKind = 'simple';
 let assistNiche = '';
+let assistKeyOpen = '';
 function assistCount(input){
   if (!input) return;
   const note = input.parentElement && input.parentElement.querySelector('[data-pcount]');
@@ -1674,6 +1682,7 @@ function paintWizard(){
   if (prev) { prev.disabled = false; prev.textContent = assistWizardAt === 0 ? 'К выбору бота' : 'Назад'; }
   if (next) { next.disabled = assistWizardAt >= steps.length - 1; next.textContent = step.welcome ? 'Начать настройку' : 'Дальше'; }
   paintScenarioCards();
+  paintWizardKeys();
   paintAssistTabs();
 }
 function copyDesk(from){
@@ -1780,7 +1789,14 @@ function assistDesk(reply, groupId){
       assistArea('assistBooking', 2500, 8, 'Что дописать к записи. Если правил нет, оставьте пустым.', reply && reply.booking)+
       assistScheduleHtml(reply)],
     ['keys', '9. Кнопки',
-      '<p class="hint">«Записаться» стоит всегда и на всю ширину. Её можно только переименовать. Свои кнопки — текст, ссылка, контакты или кнопки внутри. На телефоне в ряд помещаются две короткие кнопки, не длиннее 24 знаков. «Скрыть» убирает кнопку из чата, но не стирает её. Если нужно проще, сверху выберите «Простой бот» или «Мастер настроек».</p>'+
+      '<div class="wiz-keys">'+
+      '<p class="gate-kicker">НейроЯга AI</p>'+
+      '<p class="gate-title">Кнопки в чате</p>'+
+      '<p class="hint">Это меню под полем сообщения. Нажмите кнопку и напишите, что клиент прочитает.</p>'+
+      '<div class="niches" id="wizKeyBoard"></div>'+
+      '<button type="button" class="textlink" id="wizKeyAdd">Своя кнопка</button></div>'+
+      '<div class="keys-raw">'+
+      '<p class="hint">«Записаться» стоит всегда и на всю ширину. Её можно только переименовать. Свои кнопки — текст, ссылка, контакты или кнопки внутри. На телефоне в ряд помещаются две короткие кнопки, не длиннее 24 знаков. «Скрыть» убирает кнопку из чата, но не стирает её.</p>'+
       '<label class="flabel" for="assistBookLabel">Кнопка записи</label>'+
       '<input id="assistBookLabel" maxlength="24" placeholder="Записаться" value="'+esc(assistBookName(reply))+'">'+
       '<p class="hint">Эту кнопку нельзя удалить. Снять запись целиком можно на шаге 8.</p>'+
@@ -1789,7 +1805,7 @@ function assistDesk(reply, groupId){
       '<div id="assistButtons">'+assistCustomButtons(reply, groupId).map(function(button){ return assistButtonHtml(button); }).join('')+'</div>'+
       (assistCustomButtons(reply, groupId).length < 8 ? '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>' : '')+
       '<div id="assistKeyPreview"></div>'+
-      '<button class="btn ghost" id="assistReset" type="button" style="margin-top:8px">Вернуть кнопки по умолчанию</button>']
+      '<button class="btn ghost" id="assistReset" type="button" style="margin-top:8px">Вернуть кнопки по умолчанию</button></div>']
   ];
   const chips = '<div class="aslices">'+parts.map(function(part){
     return '<button type="button" data-slice="'+part[0]+'" class="'+(assistSlice===part[0]?'on':'')+'">'+part[1]+'</button>';
@@ -1806,6 +1822,7 @@ function assistDesk(reply, groupId){
     '<div id="assistFull"><p class="hint">Сверху вниз: направление, цены, каталог, текст, кнопки. В конце одна кнопка «Сохранить карточку».</p>'+
     chips+parts.map(function(part){ return '<section class="astep" id="assist-step-'+part[0]+'" data-aslice="'+part[0]+'"><p class="now">Шаг '+part[1]+'</p>'+part[2]+'</section>'; }).join('')+
     '</div>'+
+    '<div id="wizDone" hidden></div>'+
     '<button class="btn" id="assistDesk" type="button" style="margin-top:12px">Сохранить карточку</button>'+
     '<p class="hint" id="assistSaveHint">Одна кнопка сохраняет всё, что сейчас на экране. Пустая цена клиенту не называется.</p>'+
     '<p id="deskmsg" class="hint"></p></div>';
@@ -1891,7 +1908,7 @@ function paintAssistTabs(){
   const lobby = document.getElementById('assistLobby');
   const board = document.getElementById('assistManual');
   const desk = document.getElementById('assistWizardNav') && document.getElementById('assistWizardNav').closest('.desk');
-  const focused = desk && (desk.classList.contains('mode-wizard') || desk.classList.contains('mode-pick'));
+  const focused = desk && !desk.classList.contains('wiz-done') && (desk.classList.contains('mode-wizard') || desk.classList.contains('mode-pick'));
   const onEntry = assistPane === 'home' && (!lobby || !lobby.hidden) && (!board || board.hidden);
   tabs.hidden = !!(focused || onEntry);
 }
@@ -2297,6 +2314,149 @@ function ensureAssistAdd(){
   }
   if (add) add.onclick = addAssistButton;
 }
+function wizardKeyNote(row){
+  if (row.hidden) return 'Скрыта из чата';
+  if (row.kind === 'link') return row.link ? 'Откроет ссылку' : 'Нужна ссылка https';
+  if (row.kind === 'contact') return 'Покажет контакты из карточки';
+  if (row.kind === 'menu') return 'Откроет кнопки внутри';
+  if (row.label === 'Контакты') return 'Покажет телефон и адрес из карточки';
+  if (row.label === 'Оплата') return 'Покажет, как платить';
+  if (row.label === 'Адрес') return 'Покажет, куда ехать';
+  if (row.label === 'Услуги' || row.label === 'Каталог') return 'Покажет цены и список';
+  return row.text ? 'Клиент прочитает ваш текст' : 'Напишите, что клиент прочитает';
+}
+function paintWizardKeys(){
+  const box = document.getElementById('wizKeyBoard');
+  if (!box) return;
+  const rows = [];
+  document.querySelectorAll('#assistButtons > [data-brow]').forEach(function(row){
+    rows.push({
+      label: String((row.querySelector(':scope > [data-blabel]') || {}).value || '').trim(),
+      kind: (row.querySelector(':scope > [data-bkind]') || {}).value || 'text',
+      text: String((row.querySelector(':scope > [data-btextwrap] [data-btext]') || {}).value || ''),
+      link: String((row.querySelector(':scope > [data-blinkwrap] [data-blink]') || {}).value || '').trim(),
+      hidden: !!((row.querySelector(':scope > label > [data-bhide]') || {}).checked)
+    });
+  });
+  let open = assistKeyOpen;
+  if (open === 'new') {
+    open = rows.length ? 'b'+(rows.length - 1) : '';
+    assistKeyOpen = open;
+  }
+  const book = String((document.getElementById('assistBookLabel') || {}).value || '').trim() || 'Записаться';
+  const adminOn = (document.getElementById('assistHandoff') || {}).checked !== false;
+  let html = '';
+  if (open === 'book') {
+    html += '<div class="plain"><p class="gate-title" style="font-size:22px">Кнопка записи</p><p class="hint">Клиент выбирает день и время. Эту кнопку нельзя убрать.</p><label class="flabel">Надпись</label><input id="wizBookName" maxlength="24" value="'+esc(book)+'"><button type="button" class="textlink" data-kopen="">Закрыть</button></div>';
+  } else html += '<button type="button" class="niche" data-kopen="book"><b>'+esc(book)+'</b><span>Клиент выбирает день и время</span></button>';
+  rows.forEach(function(row, index){
+    const id = 'b'+index;
+    if (open === id) {
+      html += '<div class="plain"><label class="flabel">Надпись на кнопке</label><input data-kname maxlength="24" value="'+esc(row.label)+'">';
+      if (row.kind === 'link') html += '<label class="flabel">Ссылка https</label><input data-klink maxlength="300" value="'+esc(row.link)+'">';
+      else if (row.kind === 'menu') html += '<p class="hint">Эта кнопка открывает кнопки внутри. Название можно поменять здесь.</p>';
+      else if (row.kind === 'contact') html += '<p class="hint">Клиент увидит контакты из карточки.</p>';
+      else html += '<label class="flabel">Что клиент прочитает</label><textarea data-ktext maxlength="900" rows="3">'+esc(row.text)+'</textarea>';
+      html += '<button type="button" class="textlink" data-khide>'+(row.hidden ? 'Вернуть в чат' : 'Скрыть из чата')+'</button><button type="button" class="textlink" data-kdel>Убрать кнопку</button><button type="button" class="textlink" data-kopen="">Закрыть</button></div>';
+    } else html += '<button type="button" class="niche'+(row.hidden ? '' : '')+'" data-kopen="'+id+'"><b>'+esc(row.label || 'Без названия')+'</b><span>'+esc(wizardKeyNote(row))+'</span></button>';
+  });
+  if (open === 'admin') {
+    html += '<div class="plain"><p class="gate-title" style="font-size:22px">Администратор</p><p class="hint">Клиент нажмёт, и вам придёт сообщение во ВК. Пока вы отвечаете, бот молчит.</p><label style="display:block"><input id="wizAdmin" type="checkbox"'+(adminOn ? ' checked' : '')+'> Показывать кнопку</label><button type="button" class="textlink" data-kopen="">Закрыть</button></div>';
+  } else html += '<button type="button" class="niche alt" data-kopen="admin"><b>Администратор</b><span>'+(adminOn ? 'Вам придёт сообщение во ВК' : 'Сейчас выключена')+'</span></button>';
+  box.innerHTML = html;
+  box.querySelectorAll('[data-kopen]').forEach(function(node){
+    node.onclick = function(){
+      assistKeyOpen = node.getAttribute('data-kopen') || '';
+      paintWizardKeys();
+    };
+  });
+  const bookName = document.getElementById('wizBookName');
+  if (bookName) bookName.oninput = function(){
+    const real = document.getElementById('assistBookLabel');
+    if (real) real.value = bookName.value;
+    paintAssistKeys();
+  };
+  const admin = document.getElementById('wizAdmin');
+  if (admin) admin.onchange = function(){
+    const real = document.getElementById('assistHandoff');
+    if (real) real.checked = admin.checked;
+    paintAssistKeys();
+  };
+  const index = open.indexOf('b') === 0 ? Number(open.slice(1)) : -1;
+  const row = index >= 0 ? document.querySelectorAll('#assistButtons > [data-brow]')[index] : null;
+  if (row) {
+    const name = box.querySelector('[data-kname]');
+    const text = box.querySelector('[data-ktext]');
+    const link = box.querySelector('[data-klink]');
+    if (name) name.oninput = function(){
+      const real = row.querySelector(':scope > [data-blabel]');
+      if (real) real.value = name.value;
+      paintAssistKeys();
+    };
+    if (text) text.oninput = function(){
+      const real = row.querySelector(':scope > [data-btextwrap] [data-btext]');
+      if (real) real.value = text.value;
+      paintAssistKeys();
+    };
+    if (link) link.oninput = function(){
+      const real = row.querySelector(':scope > [data-blinkwrap] [data-blink]');
+      if (real) real.value = link.value;
+    };
+    const hide = box.querySelector('[data-khide]');
+    if (hide) hide.onclick = function(){
+      const real = row.querySelector(':scope > label > [data-bhide]');
+      if (real) real.checked = !real.checked;
+      paintAssistKeys();
+      paintWizardKeys();
+    };
+    const del = box.querySelector('[data-kdel]');
+    if (del) del.onclick = function(){
+      assistKeyOpen = '';
+      const real = row.querySelector(':scope > [data-bdel]');
+      if (real) real.click();
+    };
+  }
+  const add = document.getElementById('wizKeyAdd');
+  if (add) add.onclick = function(){
+    assistKeyOpen = 'new';
+    const raw = document.getElementById('assistAdd');
+    if (raw) raw.click();
+  };
+}
+function showWizardDone(pending){
+  const desk = document.querySelector('.desk');
+  const box = document.getElementById('wizDone');
+  if (!desk || !box || !desk.classList.contains('mode-wizard')) return false;
+  desk.classList.add('wiz-done');
+  const typed = String((document.getElementById('assistGroup') || {}).value || '').replace(/\D/g, '');
+  const saved = assistView && assistView.community ? String(assistView.community.groupId || '').replace(/\D/g, '') : '';
+  const group = typed || saved;
+  const chat = group ? 'https://vk.com/im?sel=-'+group : '';
+  box.hidden = false;
+  box.innerHTML = '<p class="gate-kicker">НейроЯга AI</p>'+
+    '<p class="gate-title">Карточка сохранена</p>'+
+    '<p class="hint">'+(pending ? 'Покупатели увидят её, когда помощник будет на связи.' : 'Покупатель пишет в сообщения сообщества и нажимает кнопки.')+'</p>'+
+    '<p class="gate-title" style="font-size:22px;margin-top:18px">Куда приходит новое</p>'+
+    '<p class="hint">Запись и заказ приходят вам личным сообщением во ВК от сообщества. Те же заявки лежат в кабинете.</p>'+
+    '<div class="niches">'+
+    '<button type="button" class="niche" data-after="book"><b>Записи</b><span>Новая запись лежит здесь</span></button>'+
+    '<button type="button" class="niche alt" data-after="orders"><b>Заказы</b><span>Новый заказ лежит здесь</span></button>'+
+    (chat ? '<a class="niche" href="'+esc(chat)+'" target="_blank" rel="noopener"><b>Сообщения сообщества</b><span>Здесь клиент видит кнопки, а вам приходит уведомление</span></a>' : '')+
+    '</div>';
+  box.querySelectorAll('[data-after]').forEach(function(button){
+    button.onclick = function(){
+      const deskNode = document.querySelector('.desk');
+      if (deskNode) {
+        deskNode.classList.remove('mode-wizard', 'mode-pick', 'wiz-full', 'wiz-hello', 'wiz-done');
+        deskNode.classList.add('mode-full');
+      }
+      showAssistPane(button.getAttribute('data-after'));
+    };
+  });
+  paintAssistTabs();
+  if (box.scrollIntoView) box.scrollIntoView({ block: 'start' });
+  return true;
+}
 function paintAssistKeys(){
   const box = document.getElementById('assistKeyPreview');
   if (!box) return;
@@ -2460,7 +2620,9 @@ async function saveDesk(){
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Ответы не сохранились');
-    if (msg) msg.textContent = data.pending ? 'Ответы сохранены. Покупатели увидят их, когда помощник будет на связи.' : 'Ответы сохранены. Покупатель увидит эту фразу и кнопки.';
+    if (showWizardDone(!!data.pending)) {
+      if (msg) msg.textContent = '';
+    } else if (msg) msg.textContent = data.pending ? 'Ответы сохранены. Покупатели увидят их, когда помощник будет на связи.' : 'Ответы сохранены. Покупатель увидит эту фразу и кнопки.';
     if (button) button.disabled = false;
   } catch (error) {
     if (msg) msg.textContent = error.message;
