@@ -1439,7 +1439,7 @@ async function tplChannel(id){
 async function tplVk(id){
   if (!confirm('Опубликовать шаблон на стене сообщества НейроЯга? В записи будет картинка шаблона и прямая ссылка на него. Текст задания не попадёт.')) return;
   try {
-    const d = await api('/api/admin/templates/vk',{method:'POST',timeout:45000,body:JSON.stringify({id})});
+    const d = await api('/api/admin/templates/vk',{method:'POST',timeout:90000,body:JSON.stringify({id})});
     if (!d.ok) { alert(d.error||'Не удалось опубликовать'); return; }
     const lead = d.place === 'story'
         ? 'Картинка опубликована в историях НейроЯги. Кнопка на ней открывает шаблон.'

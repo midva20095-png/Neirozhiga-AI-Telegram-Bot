@@ -27,7 +27,9 @@ function hashTpl(value){
   const direct = text.match(/tpl=(?:local:)?(\d{1,12})(?!\d)/);
   if (direct) return direct[1];
   const ref = text.match(/(?:^|[?&#]|vk_ref=|ref=)tpl_?(\d{1,12})(?!\d)/);
-  return ref ? ref[1] : '';
+  if (ref) return ref[1];
+  const short = text.match(/(?:^|[#?&])t(\d{1,12})(?!\d)/);
+  return short ? short[1] : '';
 }
 window.__nyHost = function(msg){
   if (!msg || !msg.type) return;
@@ -541,6 +543,14 @@ async function load(){
     draw();
     return;
   }
+  const sharedTpl = pendingTpl || (typeof hashTpl === 'function' ? (hashTpl(location.hash) || hashTpl(location.search)) : '');
+  if (sharedTpl) pendingTpl = pendingTpl || sharedTpl;
+  if (!userId && pendingTpl) {
+    try { templates = ((await (await fetchT('/api/templates?audience=vk')).json()).templates) || []; } catch (e) { templates = templates || []; }
+    openSharedTpl(pendingTpl, false);
+    draw();
+    return;
+  }
   if (!userId) { draw(); return; }
   try {
     const r = await fetchT('/api/me', {headers: authHeaders()});
@@ -566,7 +576,7 @@ async function load(){
   }
   if (!live()) return;
   await loadConfig();
-  try { templates = ((await (await fetchT('/api/templates'+(isVk()?'?audience=vk':''))).json()).templates)||[]; } catch(e){ templates=[]; }
+  try { templates = ((await (await fetchT('/api/templates'+(inVkApp()?'?audience=vk':''))).json()).templates)||[]; } catch(e){ templates=[]; }
   openSharedTpl(pendingTpl, false);
   if (pendingPkg) tab = 'top';
   document.getElementById('bal').textContent = (me.balance||0)+' кр';

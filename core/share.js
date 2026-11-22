@@ -15,11 +15,10 @@ function templateLink(username, id) {
     return `https://t.me/${name}?start=tpl_${n}`;
 }
 
-function vkTemplateLink(id, groupId) {
+function vkTemplateLink(id) {
     const n = numericId(id);
-    const group = String(groupId || '214554778').replace(/\D/g, '');
-    if (!n || !group) return '';
-    return `https://vk.com/app54901511_-${group}?ref=tpl${n}`;
+    if (!n) return '';
+    return `https://vk.com/app54901511#t${n}`;
 }
 
 function vkTemplateId(value) {
@@ -27,7 +26,9 @@ function vkTemplateId(value) {
     const direct = text.match(/tpl=(?:local:)?(\d{1,12})(?!\d)/);
     if (direct) return direct[1];
     const ref = text.match(/(?:^|[?&#]|vk_ref=|ref=)tpl_?(\d{1,12})(?!\d)/);
-    return ref ? ref[1] : '';
+    if (ref) return ref[1];
+    const short = text.match(/(?:^|[#?&])t(\d{1,12})(?!\d)/);
+    return short ? short[1] : '';
 }
 
 function vkTemplateText(tpl, url) {

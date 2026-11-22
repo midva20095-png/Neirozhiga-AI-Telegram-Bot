@@ -50,10 +50,12 @@ function goalOf(value){
 }
 function tplOf(value){
   const text = String(value || '');
-  const direct = text.match(/tpl=(?:local:)?(\d{1,12})(?!\d)/);
+  const direct = text.match(/tpl=(?:local:)?(\\d{1,12})(?!\\d)/);
   if (direct) return direct[1];
-  const ref = text.match(/(?:^|[?&#]|vk_ref=|ref=)tpl_?(\d{1,12})(?!\d)/);
-  return ref ? ref[1] : '';
+  const ref = text.match(/(?:^|[?&#]|vk_ref=|ref=)tpl_?(\\d{1,12})(?!\\d)/);
+  if (ref) return ref[1];
+  const short = text.match(/(?:^|[#?&])t(\\d{1,12})(?!\\d)/);
+  return short ? short[1] : '';
 }
 window.__nyHost = function(msg){
   if (!msg || !msg.type) return;

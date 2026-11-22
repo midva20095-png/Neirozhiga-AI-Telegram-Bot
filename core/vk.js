@@ -2791,20 +2791,51 @@ async function publishTemplateStory(token, groupId, file, url) {
     await call(token, 'stories.save', { upload_results: result });
 }
 
-async function postTemplateWall(token, groupId, message, attachment, url) {
-    const params = {
-        owner_id: String(-Number(groupId)),
-        from_group: '1',
-        message,
-        attachments: `${attachment},${url}`
-    };
-    try {
-        return await call(token, 'wall.post', params);
-    } catch (error) {
-        if (Number(error && error.code) === 15) throw error;
-        params.attachments = attachment;
-        return await call(token, 'wall.post', params);
+async function uploadChatPhoto(token, groupId, file) {
+    const peers = ['', String(-Number(groupId)), String(groupId)];
+    let server = null;
+    let last = null;
+    for (const peer of peers) {
+        try {
+            const params = peer ? { peer_id: peer } : {};
+            server = await call(token, 'photos.getMessagesUploadServer', params);
+            if (server && server.upload_url) break;
+        } catch (error) {
+            last = error;
+            server = null;
+        }
     }
+    if (!server || !server.upload_url) throw last || new Error('vk photo');
+    const uploaded = await postUpload(server.upload_url, 'photo', file);
+    const field = uploadPhotoField(uploaded && uploaded.photo);
+    if (!field) throw new Error('vk photo');
+    const saved = await call(token, 'photos.saveMessagesPhoto', {
+        photo: field,
+        server: String(uploaded.server),
+        hash: uploaded.hash
+    });
+    const list = Array.isArray(saved) ? saved : [saved];
+    const attachment = photoAttachment(list[0]);
+    if (!attachment) throw new Error('vk photo');
+    return attachment;
+}
+
+async function imageStuck(groupId, postId) {
+    let seen = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const post = await readLessonPost(groupId, postId);
+        if (post && postHasPicture(post)) return true;
+        if (post && /deleted/i.test(String(post.text || ''))) return false;
+        if (post) seen = true;
+        if (attempt < 2) await sleep(500);
+    }
+    return !seen;
+}
+
+async function dropPost(token, groupId, postId) {
+    try {
+        await call(token, 'wall.delete', { owner_id: String(-Number(groupId)), post_id: String(postId) });
+    } catch (error) {}
 }
 
 async function publishTemplate(tpl) {
@@ -2816,7 +2847,7 @@ async function publishTemplate(tpl) {
     const message = share.vkTemplateText(tpl, url);
     const secret = String(tpl && tpl.prompt || '').trim();
     if (secret && message.includes(secret)) return { ok: false, error: 'Текст задания нельзя публиковать.' };
-    if (!url.includes('ref=tpl') || url.includes('#')) return { ok: false, error: 'Ссылка на шаблон собралась с обрывком, который ВК срезает.' };
+    if (!/#t\d+$/.test(url)) return { ok: false, error: 'Ссылка на шаблон собралась не так, как ВК открывает шаблоны.' };
     let bytes;
     try {
         bytes = await templateImage(tpl && tpl.image);
@@ -2831,40 +2862,37 @@ async function publishTemplate(tpl) {
     } catch (error) {
         return { ok: false, error: 'Картинка шаблона не открылась.' };
     }
-    let attachment = '';
-    try {
-        attachment = await uploadWallPhoto(wallPhotoTokens(item.token), groupId, null, file);
-    } catch (error) {
-        attachment = '';
-    }
-    if (!attachment) {
+    const attachments = [];
+    const addAttachment = value => {
+        const next = String(value || '');
+        if (next && !attachments.includes(next)) attachments.push(next);
+    };
+    try { addAttachment(await uploadWallPhoto(wallPhotoTokens(item.token), groupId, null, file)); } catch (error) {}
+    try { addAttachment(await uploadChatPhoto(item.token, groupId, file)); } catch (error) {}
+    try { addAttachment(await uploadWallDoc(item.token, groupId, file)); } catch (error) {}
+    if (!attachments.length) return { ok: false, error: 'ВК не принял картинку, запись не опубликована.' };
+    let denied = false;
+    for (const attachment of attachments) {
+        let posted;
         try {
-            attachment = await uploadWallDoc(item.token, groupId, file);
+            posted = await call(item.token, 'wall.post', {
+                owner_id: String(-Number(groupId)),
+                from_group: '1',
+                message,
+                attachments: attachment
+            });
         } catch (error) {
-            attachment = '';
+            if (Number(error && error.code) === 15) denied = true;
+            continue;
         }
-    }
-    if (attachment) {
-        try {
-            const posted = await postTemplateWall(item.token, groupId, message, attachment, url);
-            if (!attachment.startsWith('photo')) {
-                try {
-                    await publishTemplateStory(item.token, groupId, await storyFrame(bytes), url);
-                } catch (error) {}
-            }
+        const postId = Number(posted && (posted.post_id || posted.postId));
+        if (postId && await imageStuck(groupId, postId)) {
             return Object.assign(wallResult(groupId, posted, url), { place: 'wall' });
-        } catch (error) {
-            const code = Number(error && error.code);
-            if (code === 15) return { ok: false, error: 'Ключ сообщества не может публиковать на стене. Включите право «Стена».' };
         }
+        if (postId) await dropPost(item.token, groupId, postId);
     }
-    try {
-        const frame = await storyFrame(bytes);
-        await publishTemplateStory(item.token, groupId, frame, url);
-        return { ok: true, url, postUrl: '', place: 'story' };
-    } catch (error) {
-        return { ok: false, error: 'ВК не принял картинку, запись не опубликована.' };
-    }
+    if (denied) return { ok: false, error: 'Ключ сообщества не может публиковать на стене. Включите право «Стена».' };
+    return { ok: false, error: 'ВК не оставил картинку в записи. Пост не опубликован.' };
 }
 
 async function publishPrize(groupId, range, winners) {

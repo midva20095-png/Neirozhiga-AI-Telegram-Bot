@@ -19,10 +19,12 @@ q.forEach(function(value, key){
   }
   if (key === 'sign' || key.indexOf('vk_') === 0 || key === 'tk' || key === 'pkg' || key === 'paid') dest.set(key, value);
 });
-const fromHash = String(location.hash || '').match(/tpl=(?:local:)?(\d{1,12})(?!\d)/);
-const fromRef = String(q.get('vk_ref') || q.get('ref') || location.hash || '').match(/(?:^|[?&#]|vk_ref=|ref=)tpl_?(\d{1,12})(?!\d)/) || String(location.search || '').match(/tpl=(?:local:)?(\d{1,12})(?!\d)/);
+const fromHash = String(location.hash || location.search || '').match(/tpl=(?:local:)?(\d{1,12})(?!\d)/);
+const fromRef = String(q.get('vk_ref') || q.get('ref') || location.hash || '').match(/(?:^|[?&#]|vk_ref=|ref=)tpl_?(\d{1,12})(?!\d)/);
+const fromShort = String(location.hash || '').match(/(?:^|#)t(\d{1,12})(?!\d)/);
 if (fromHash) dest.set('tpl', fromHash[1]);
 else if (fromRef) dest.set('tpl', fromRef[1]);
+else if (fromShort) dest.set('tpl', fromShort[1]);
 const goal = q.get('goal') || (location.hash || '').replace(/^#/, '').split('&')[0].split('?')[0];
 const hash = (goal === 'rate' || goal === 'site' || goal === 'sub' || goal === 'help') ? '#' + goal : '';
 location.replace('/?' + dest.toString() + hash);
