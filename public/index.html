@@ -186,6 +186,38 @@ a.niche{display:block;text-decoration:none;box-sizing:border-box}
 .sandkey.primary{background:#5181b8}
 .sandkey.positive{background:#4bb34b}
 .sandkey.negative{background:#e64646}
+.sandlog{display:flex;flex-direction:column;gap:8px}
+.sandme{align-self:flex-end;max-width:86%;background:#5181b8;border-radius:14px;padding:10px 12px}
+.sandkeys{display:flex;flex-wrap:wrap;gap:8px}
+.sandkeys .sandkey{flex:1 1 calc(50% - 8px)}
+.sandkeys .sandkey.wide{flex:1 1 100%}
+.botmap{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.botrow{display:flex;gap:8px}
+.botkey{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;width:100%;text-align:left;text-decoration:none;border:1px solid var(--line);border-radius:14px;background:#1c1233;color:#fff;padding:12px 14px;cursor:pointer}
+.botrow .botkey{flex:1;min-width:0}
+.botkey b{font-size:16px;font-weight:800}
+.botkey small{display:block;margin-top:4px;color:var(--mut);font-size:12px;font-weight:600}
+.botkey.on{box-shadow:0 0 0 2px #c4b5fd}
+.botkey.primary{background:#5181b8}
+.botkey.positive{background:#4bb34b}
+.botkey.negative{background:#e64646}
+.botkey.primary small,.botkey.positive small,.botkey.negative small{color:rgba(255,255,255,.86)}
+.botkey.dim{opacity:.45}
+.botkey.fold{display:none}
+.desk.mode-wizard .botkey.fold{display:flex}
+.desk.mode-wizard .srow:not(.open) > :not([data-fold]),
+.desk.mode-wizard .prow:not(.open) > :not([data-fold]),
+.desk.mode-wizard .psec:not(.open) > :not([data-fold]){display:none !important}
+.desk.mode-wizard .srow > .hint,.desk.mode-wizard .prow > .hint,.desk.mode-wizard .psec > .hint{display:none !important}
+.desk.mode-wizard.wiz-full #assistFull .astep .hint{display:none}
+.desk.mode-wizard.wiz-full #assistFull .wiz-ask .hint{display:block}
+.desk.mode-wizard #assistBillPreview{display:none !important}
+.desk.mode-wizard .niche,.desk.mode-wizard .gate{animation:none;background:#1c1233;box-shadow:none;min-height:0;border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.desk.mode-wizard .niche::after,.desk.mode-wizard .gate::after{display:none}
+.desk.mode-wizard .niche b{font-size:16px}
+.desk.mode-wizard .niche.on{box-shadow:0 0 0 2px #c4b5fd;background:#241838}
+.desk.mode-wizard .wiz-keys > .gate-kicker,.desk.mode-wizard .wiz-keys > .gate-title,.desk.mode-wizard .wiz-keys > .hint{display:none}
+.desk.wiz-done #wizSandbox,.desk.wiz-done #wizLead{display:none !important}
 .desk.mode-wizard #wizSandbox{order:5}
 .desk.mode-wizard .wiznav{order:6}
 .desk.mode-wizard #assistDesk,.desk.mode-wizard #assistSaveHint,.desk.mode-wizard #deskmsg,.desk.mode-wizard #wizDone{order:7}
@@ -1162,6 +1194,37 @@ function assistBillPreviewHtml(items){
 function paintAssistBill(){
   const box = document.getElementById('assistBillPreview');
   if (box) box.innerHTML = assistBillPreviewHtml(assistServiceValue());
+  paintFoldHeads();
+}
+function paintFoldHeads(){
+  document.querySelectorAll('[data-srow]').forEach(function(row){
+    const name = String((row.querySelector('[data-sname]') || {}).value || '').trim();
+    const price = String((row.querySelector('[data-sprice]') || {}).value || '').trim();
+    const title = row.querySelector('[data-fold] b');
+    const note = row.querySelector('[data-fold] small');
+    if (title) title.textContent = name || 'Новая услуга';
+    if (note) note.textContent = price ? 'ведёт к цене '+price+' ₽' : 'ведёт к услуге, цену ещё не написали';
+  });
+  document.querySelectorAll('[data-psec]').forEach(function(section){
+    const name = String((section.querySelector(':scope > [data-section]') || {}).value || '').trim();
+    const goods = [];
+    section.querySelectorAll('[data-pname]').forEach(function(input){
+      const value = String(input.value || '').trim();
+      if (value) goods.push(value);
+    });
+    const title = section.querySelector(':scope > [data-fold] b');
+    const note = section.querySelector(':scope > [data-fold] small');
+    if (title) title.textContent = name || 'Новый раздел';
+    if (note) note.textContent = goods.length ? 'ведёт к: '+goods.slice(0, 4).join(', ') : 'ведёт к товарам раздела';
+  });
+  document.querySelectorAll('[data-prow]').forEach(function(row){
+    const name = String((row.querySelector('[data-pname]') || {}).value || '').trim();
+    const price = String((row.querySelector('[data-pprice]') || {}).value || '').trim();
+    const title = row.querySelector('[data-fold] b');
+    const note = row.querySelector('[data-fold] small');
+    if (title) title.textContent = name || 'Новый товар';
+    if (note) note.textContent = price ? 'ведёт к цене '+price+' ₽' : 'ведёт к товару, цену ещё не написали';
+  });
 }
 function assistServiceItems(value){
   if (!Array.isArray(value)) return [];
@@ -1180,7 +1243,10 @@ function assistServiceItems(value){
 }
 function assistServiceRow(item){
   const row = item || { name: '', price: '', link: '', extra: false };
-  return '<div class="srow" data-srow>'+
+  const named = String(row.name || '').trim();
+  const price = row.price ? String(row.price) : '';
+  return '<div class="srow'+(named ? '' : ' open')+'" data-srow>'+
+    '<button type="button" class="botkey fold" data-fold><b>'+esc(named || 'Новая услуга')+'</b><small>'+(price ? 'ведёт к цене '+esc(price)+' ₽' : 'ведёт к услуге, цену ещё не написали')+'</small></button>'+
     '<label class="flabel">Название</label>'+
     '<input data-sname maxlength="80" placeholder="Название услуги" value="'+esc(row.name || '')+'" oninput="paintAssistBill()">'+
     '<label class="flabel">Цена, ₽</label>'+
@@ -1237,7 +1303,10 @@ function fillAssistServices(list){
 }
 function assistProductRow(item){
   const row = item || { name: '', price: '', link: '' };
-  return '<div class="srow prow" data-prow>'+
+  const named = String(row.name || '').trim();
+  const price = row.price ? String(row.price) : '';
+  return '<div class="srow prow'+(named ? '' : ' open')+'" data-prow>'+
+    '<button type="button" class="botkey fold" data-fold><b>'+esc(named || 'Новый товар')+'</b><small>'+(price ? 'ведёт к цене '+esc(price)+' ₽' : 'ведёт к товару, цену ещё не написали')+'</small></button>'+
     '<label class="flabel">Название</label>'+
     '<input data-pname maxlength="80" placeholder="Название" value="'+esc(row.name || '')+'">'+
     '<label class="flabel">Цена, ₽</label>'+
@@ -1275,7 +1344,10 @@ function assistProductGroups(products){
 }
 function assistSectionBlock(section){
   const items = section && section.items && section.items.length ? section.items.slice(0, 8) : [{ name: '', price: '', link: '' }];
-  return '<div class="psec" data-psec>'+
+  const named = String(section && section.name || '').trim();
+  const goods = items.map(function(item){ return item && item.name; }).filter(Boolean);
+  return '<div class="psec'+(named ? '' : ' open')+'" data-psec>'+
+    '<button type="button" class="botkey fold" data-fold><b>'+esc(named || 'Новый раздел')+'</b><small>'+(goods.length ? 'ведёт к: '+esc(goods.slice(0, 4).join(', ')) : 'ведёт к товарам раздела')+'</small></button>'+
     '<label class="flabel">Раздел</label>'+
     '<input data-section maxlength="40" placeholder="Название раздела" value="'+esc(section && section.name || '')+'">'+
     '<div class="prows">'+items.map(assistProductRow).join('')+'</div>'+
@@ -1464,6 +1536,30 @@ function assistWelcomeHtml(){
     assistNicheButtons()+
     '<button type="button" class="textlink" id="wizKindBack">Другой вид бота</button>'+
   '</div>';
+}
+function assistSaved(reply){
+  if (!reply) return false;
+  if (reply.desk === 'simple' || reply.desk === 'full') return true;
+  if (String(reply.greeting || '').trim()) return true;
+  return Array.isArray(reply.buttons) && reply.buttons.length > 0;
+}
+function assistReadyHtml(data){
+  const orders = ((data.orders && data.orders.rows) || []).length;
+  const books = ((data.bookings && data.bookings.rows) || []).length;
+  const people = Number(data.clients && (data.clients.total || (data.clients.people || []).length)) || 0;
+  const community = data.community || {};
+  const group = String(community.groupId || '').replace(/\D/g, '');
+  const chat = group ? 'https://vk.com/im?sel=-'+group : '';
+  return '<p class="gate-kicker">НейроЯга AI</p>'+
+    '<p class="gate-title">Бот настроен</p>'+
+    '<p class="hint">Новая запись и новый заказ приходят вам в сообщения сообщества и лежат в кнопках ниже.</p>'+
+    '<div class="botmap">'+
+      '<button type="button" class="botkey" data-apane="book"><b>Записи</b><small>'+(books ? 'ведёт к записям: '+books : 'ведёт к записям, пока пусто')+'</small></button>'+
+      '<button type="button" class="botkey" data-apane="orders"><b>Заказы</b><small>'+(orders ? 'ведёт к заказам: '+orders : 'ведёт к заказам, пока пусто')+'</small></button>'+
+      '<button type="button" class="botkey" data-apane="people"><b>Клиенты</b><small>ведёт к людям, которые вам написали: '+people+'</small></button>'+
+      (chat ? '<a class="botkey" href="'+esc(chat)+'" target="_blank" rel="noopener"><b>Уведомления</b><small>ведёт в сообщения сообщества, туда приходит новая заявка</small></a>' : '')+
+    '</div>'+
+    '<button class="btn" id="assistEditWizard" type="button">Редактировать бота через мастер</button>';
 }
 function assistLobbyHtml(){
   return '<div class="lobby" id="assistLobby">'+
@@ -1707,8 +1803,8 @@ function paintWizard(){
   if (prev) { prev.disabled = false; prev.textContent = assistWizardAt === 0 ? 'К выбору бота' : 'Назад'; }
   if (next) { next.disabled = assistWizardAt >= steps.length - 1; next.textContent = step.welcome ? 'Начать настройку' : 'Дальше'; }
   const leads = {
-    prices: 'Напишите услуги и цены. Клиент увидит их по кнопке «Услуги».',
-    products: 'Нужны ли отдельные кнопки товаров? Если товары разные, дайте разделам имена. Клиент сначала нажмёт раздел.',
+    prices: 'Каждая услуга — кнопка. Нажмите её: подпись показывает, куда она ведёт. Внутри напишите цену.',
+    products: 'Нужны ли кнопки разделов? Нажмите раздел: подпись показывает, какие товары за ним.',
     about: 'Первая фраза. Клиент видит её, когда открывает бота в сообщениях сообщества.',
     contacts: 'Телефон и адрес. Кнопка «Контакты» покажет этот текст.',
     order: 'Как заказать и как платить. Клиент прочитает это по своим кнопкам.',
@@ -1717,8 +1813,9 @@ function paintWizard(){
     shello: 'Первая фраза. Клиент видит её после кнопки «Начать».',
     pay: 'Как платить. Клиент прочитает этот текст по кнопке «Оплата».',
     address: 'Куда ехать. Ссылка на карту уйдёт вместе с адресом.',
-    menu: 'Кнопка меню. Если внутри нужны разделы, отметьте галочку ниже.',
-    hand: 'Последний шаг. Ниже просмотр бота: это песочница, в сообщество ничего не уходит.'
+    menu: 'Кнопки клиента. Под каждой написано, куда она ведёт. Нажмите, чтобы поправить.',
+    keys: 'Кнопки клиента. Под каждой написано, куда она ведёт. Нажмите кнопку и поправьте путь.',
+    hand: 'Последний шаг. Ниже просмотр бота: можно нажать все кнопки до конца. В сообщество ничего не уходит.'
   };
   const lead = document.getElementById('wizLead');
   const leadText = leads[step.step] || leads[step.role] || '';
@@ -1726,6 +1823,7 @@ function paintWizard(){
   paintScenarioCards();
   paintWizardKeys();
   paintWizardSandbox(step);
+  paintFoldHeads();
   paintAssistTabs();
 }
 function copyDesk(from){
@@ -1835,7 +1933,7 @@ function assistDesk(reply, groupId){
       '<div class="wiz-keys">'+
       '<p class="gate-kicker">НейроЯга AI</p>'+
       '<p class="gate-title">Кнопки в чате</p>'+
-      '<p class="hint">Нажмите кнопку. Выберите стиль и решите, нужны ли внутри разделы. Например: шиномонтаж, внутри сезон, а в нём размеры колёс.</p>'+
+      '<p class="hint">Под кнопкой написано, куда она ведёт. Нажмите её, чтобы поправить путь.</p>'+
       '<div class="niches" id="wizKeyBoard"></div>'+
       '<button type="button" class="textlink" id="wizKeyAdd">Своя кнопка</button></div>'+
       '<div class="keys-raw">'+
@@ -1969,6 +2067,36 @@ function openWizardPick(){
   if (hint) hint.hidden = true;
   paintAssistTabs();
 }
+function leaveWizardHome(){
+  const desk = document.querySelector('.desk');
+  if (desk) {
+    desk.classList.remove('mode-wizard', 'mode-pick', 'wiz-full', 'wiz-hello', 'wiz-done');
+    desk.classList.add('mode-full');
+  }
+  showAssistPane('home');
+  const board = document.getElementById('assistManual');
+  if (board) board.hidden = true;
+  paintAssistTabs();
+}
+function editBotAgain(){
+  showAssistPane('card');
+  const desk = document.querySelector('.desk');
+  if (desk) desk.classList.remove('wiz-done');
+  beginWizard('full');
+}
+function mountReadyHome(){
+  const lobby = document.getElementById('assistLobby');
+  const reply = assistView && assistView.community && assistView.community.reply;
+  if (!lobby || !assistSaved(reply)) return;
+  lobby.innerHTML = assistReadyHtml(assistView);
+  const edit = document.getElementById('assistEditWizard');
+  if (edit) edit.onclick = editBotAgain;
+  lobby.querySelectorAll('[data-apane]').forEach(function(button){
+    button.onclick = function(){
+      showAssistPane(button.getAttribute('data-apane'), button.getAttribute('data-slice') || '');
+    };
+  });
+}
 function beginWizard(kind){
   assistWizardKind = kind === 'full' ? 'full' : 'simple';
   const kindRadio = document.querySelector('input[name="assistWizardKind"][value="'+assistWizardKind+'"]');
@@ -2075,7 +2203,8 @@ async function loadAssist(){
   const board = community
     ? '<div id="assistManual" hidden><button class="btn ghost" id="assistLobbyBack" type="button">К началу</button>'+assistBillPreviewHtml(assistServiceItems(community.reply && community.reply.services))+assistQuick(data)+'</div>'
     : '<p class="hint">После подключения здесь будут карточка, заказы, записи и клиенты.</p>';
-  const home = status+(community ? assistLobbyHtml() : '')+board+
+  const ready = community && assistSaved(community.reply);
+  const home = status+(community ? (ready ? '<div class="lobby" id="assistLobby">'+assistReadyHtml(data)+'</div>' : assistLobbyHtml()) : '')+(ready ? '' : board)+
     assistConnect(community)+assistGuide(!community);
   box.innerHTML = '<div class="card">'+
     '<div class="kicker">Моё сообщество</div>'+
@@ -2360,18 +2489,22 @@ function ensureAssistAdd(){
   if (add) add.onclick = addAssistButton;
 }
 function wizardKeyNote(row){
-  if (row.hidden) return 'Скрыта из чата';
-  if (row.kind === 'link') return row.link ? 'Откроет ссылку' : 'Нужна ссылка https';
-  if (row.kind === 'contact') return 'Покажет контакты из карточки';
+  if (row.hidden) return 'скрыта, клиент её не видит';
+  if (row.kind === 'link') return row.link ? 'ведёт по ссылке' : 'ведёт по ссылке, её ещё нет';
+  if (row.kind === 'contact') return 'ведёт в контакты из карточки';
   if (row.kind === 'menu') {
-    const names = (row.kids || []).map(function(kid){ return kid.label; }).filter(Boolean);
-    return names.length ? 'Сначала разделы: '+names.join(', ') : 'Нужны разделы внутри';
+    const names = (row.kids || []).map(function(kid){
+      if (!kid.label) return '';
+      return kid.subs ? kid.label+' → '+kid.subs : kid.label;
+    }).filter(Boolean);
+    return names.length ? 'ведёт в: '+names.join(', ') : 'ведёт в разделы, их ещё нет';
   }
-  if (row.label === 'Контакты') return 'Покажет телефон и адрес из карточки';
-  if (row.label === 'Оплата') return 'Покажет, как платить';
-  if (row.label === 'Адрес') return 'Покажет, куда ехать';
-  if (row.label === 'Услуги' || row.label === 'Каталог') return 'Покажет цены и список';
-  return row.text ? 'Клиент прочитает ваш текст' : 'Напишите, что клиент прочитает';
+  if (row.label === 'Контакты') return 'ведёт в телефон и адрес';
+  if (row.label === 'Оплата') return 'ведёт в текст оплаты';
+  if (row.label === 'Адрес') return 'ведёт в адрес';
+  if (row.label === 'Услуги' || row.label === 'Каталог' || row.label === 'Прайс') return 'ведёт в список и цены';
+  if (row.label === 'Как заказать') return 'ведёт в оформление заказа';
+  return row.text ? 'ведёт в текст' : 'ведёт в текст, его ещё нет';
 }
 function wizardTone(value){
   return value === 'primary' || value === 'positive' || value === 'negative' ? value : 'secondary';
@@ -2394,45 +2527,319 @@ function wizardToneButtons(current){
     return '<button type="button" class="tone '+tone[0]+(wizardTone(current)===tone[0]?' on':'')+'" data-ktone="'+tone[0]+'">'+tone[1]+'</button>';
   }).join('')+'</div>';
 }
+function wizardFace(label, note, openId, tone, on, dim){
+  const color = tone && tone !== 'secondary' ? tone : '';
+  return '<button type="button" class="botkey '+color+(on?' on':'')+(dim?' dim':'')+'" data-kopen="'+openId+'"><b>'+esc(label || 'Без названия')+'</b><small>'+esc(note)+'</small></button>';
+}
+function wizardPair(faces){
+  let html = '<div class="botmap">';
+  for (let i = 0; i < faces.length; i += 2) {
+    const pair = faces.slice(i, i + 2);
+    html += pair.length === 2 ? '<div class="botrow">'+pair.join('')+'</div>' : pair[0];
+  }
+  return html+'</div>';
+}
+function wizardKeyPath(open){
+  const top = /^b(\d+)/.exec(open || '');
+  const child = /\.c(\d+)/.exec(open || '');
+  const sub = /\.s(\d+)/.exec(open || '');
+  return {
+    index: top ? Number(top[1]) : -1,
+    child: child ? Number(child[1]) : -1,
+    sub: sub ? Number(sub[1]) : -1
+  };
+}
+function wizardField(id){
+  return String((document.getElementById(id) || {}).value || '').trim();
+}
+function wizardReadNode(row){
+  const label = String((row.querySelector(':scope > [data-blabel]') || {}).value || '').trim();
+  const kind = (row.querySelector(':scope > [data-bkind]') || {}).value || 'text';
+  const hidden = !!((row.querySelector(':scope > label > [data-bhide]') || {}).checked);
+  const text = String((row.querySelector(':scope > [data-btextwrap] [data-btext]') || {}).value || '').trim();
+  const link = String((row.querySelector(':scope > [data-blinkwrap] [data-blink]') || {}).value || '').trim();
+  const color = wizardTone((row.querySelector(':scope > [data-bcolor]') || {}).value);
+  const items = kind === 'menu' ? Array.prototype.slice.call(row.querySelectorAll(':scope > [data-brows] > [data-brow]')).map(wizardReadNode).filter(function(item){ return item && item.label && !item.hidden; }) : [];
+  return { label: label, kind: kind, hidden: hidden, text: text, link: link, color: color, items: items };
+}
+function wizardRole(button){
+  if (button.role) return button.role;
+  if (button.items && button.items.length) return 'menu';
+  const text = button.text || '';
+  if (button.kind === 'link' || button.link) return 'link';
+  if (button.kind === 'contact' || button.action === 'contact' || text === 'Показать контакты из карточки') return 'contact';
+  if (text === 'Показать способ оплаты') return 'pay';
+  if (text === 'Показать адрес') return 'address';
+  if (text === 'Показать услуги') return 'services';
+  if (text === 'Показать товары сообщества' || text === 'Открыть разделы') return 'catalog';
+  if (text === 'Показать, как оформить заказ') return 'order';
+  if (button.action === 'book') return 'book';
+  return 'text';
+}
+function wizardBotNow(){
+  const buttons = [];
+  document.querySelectorAll('#assistButtons > [data-brow]').forEach(function(row){
+    const item = wizardReadNode(row);
+    if (item && item.label && !item.hidden) buttons.push(item);
+  });
+  const bookOn = !document.getElementById('assistBookingOn') || document.getElementById('assistBookingOn').checked;
+  if (bookOn) buttons.push({ label: wizardField('assistBookLabel') || 'Записаться', role: 'book', color: 'positive', items: [] });
+  if ((document.getElementById('assistHandoff') || {}).checked !== false) buttons.push({ label: 'Администратор', role: 'admin', color: 'primary', items: [] });
+  const services = typeof assistServiceValue === 'function' ? assistServiceValue().filter(function(item){ return item && item.name && !item.hidden; }) : [];
+  const products = typeof assistProductValue === 'function' ? assistProductValue().filter(function(item){ return item && item.name && !item.hidden; }) : [];
+  const schedule = typeof assistScheduleValue === 'function' ? assistScheduleValue() : { days: [1, 2, 3, 4, 5], start: 10, end: 19, slot: 60, horizon: 7 };
+  const community = assistView && assistView.community;
+  return {
+    title: community && community.title ? community.title : 'ваш бот',
+    greet: wizardField('assistGreeting') || 'Здравствуйте. Выберите кнопку.',
+    contacts: wizardField('assistContacts'),
+    address: wizardField('assistAddress'),
+    map: wizardField('assistPickupMap'),
+    payment: wizardField('assistPayment'),
+    order: wizardField('assistOrder'),
+    orderOn: !document.getElementById('assistOrderOn') || document.getElementById('assistOrderOn').checked,
+    buttons: buttons,
+    services: services,
+    products: products,
+    schedule: schedule
+  };
+}
+function wizardSections(products){
+  const map = {};
+  const order = [];
+  products.forEach(function(item){
+    const name = item.section || '';
+    if (!map[name]) { map[name] = []; order.push(name); }
+    map[name].push(item);
+  });
+  return order.map(function(name){ return { name: name, items: map[name] }; });
+}
+function wizardDays(schedule){
+  const allow = (schedule.days || []).map(Number).filter(Boolean);
+  const days = allow.length ? allow : [1, 2, 3, 4, 5];
+  const horizon = [3, 7, 14].indexOf(Number(schedule.horizon)) >= 0 ? Number(schedule.horizon) : 7;
+  const out = [];
+  const now = new Date();
+  for (let i = 0; i < 40 && out.length < Math.min(horizon, 6); i += 1) {
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+    const dow = date.getDay() === 0 ? 7 : date.getDay();
+    if (days.indexOf(dow) < 0) continue;
+    const dd = date.getDate();
+    const mm = date.getMonth() + 1;
+    out.push({ id: 'day'+date.getFullYear()+mm+dd, label: (dd < 10 ? '0' : '')+dd+'.'+(mm < 10 ? '0' : '')+mm });
+  }
+  return out;
+}
+function wizardTimes(schedule){
+  let start = Number(schedule.start);
+  let end = Number(schedule.end);
+  if (!isFinite(start)) start = 10;
+  if (!isFinite(end)) end = 19;
+  const slot = Number(schedule.slot) === 30 ? 30 : 60;
+  const out = [];
+  for (let minute = start * 60; minute + slot <= end * 60 && out.length < 8; minute += slot) {
+    const hour = Math.floor(minute / 60);
+    const min = minute % 60;
+    out.push({ id: 'time'+minute, label: (hour < 10 ? '0' : '')+hour+':'+(min < 10 ? '0' : '')+min });
+  }
+  return out;
+}
+function wizardFresh(){
+  assistSand = { step: assistWizardAt, log: [], stack: [], phase: 'home', service: -1, section: '', day: '', keys: [] };
+  return assistSand;
+}
+function wizardSay(who, text){
+  const play = assistSand && assistSand.log ? assistSand : wizardFresh();
+  play.log.push({ who: who, text: text });
+  if (play.log.length > 12) play.log.shift();
+}
+function wizardOpenCatalog(bot){
+  if (!bot.products.length) { assistSand.phase = 'end'; return 'Товары ещё не заполнены.'; }
+  const named = wizardSections(bot.products).filter(function(section){ return section.name; });
+  if (named.length > 1) { assistSand.phase = 'sections'; return 'Выберите раздел.'; }
+  assistSand.section = named.length ? named[0].name : '';
+  assistSand.phase = 'goods';
+  return assistSand.section ? '«'+assistSand.section+'». Выберите товар.' : 'Выберите товар.';
+}
+function wizardOpenButton(bot, button){
+  const role = wizardRole(button);
+  if (role === 'menu') {
+    assistSand.stack.push(button);
+    assistSand.phase = 'menu';
+    return '«'+button.label+'». Выберите, куда идти дальше.';
+  }
+  if (role === 'book') {
+    assistSand.phase = bot.services.length ? 'book-service' : 'book-day';
+    return bot.services.length ? 'Выберите услугу.' : 'Выберите день.';
+  }
+  if (role === 'admin') { assistSand.phase = 'end'; return 'Вам придёт сообщение во ВК. Пока вы отвечаете, бот молчит. Это просмотр, сообщение не отправлено.'; }
+  if (role === 'link') { assistSand.phase = 'end'; return button.link ? 'Откроется ссылка: '+button.link : 'Ссылка ещё не указана.'; }
+  if (role === 'contact') { assistSand.phase = 'end'; return [bot.contacts || 'Контакты ещё не написаны.', bot.address].filter(Boolean).join('\n'); }
+  if (role === 'pay') { assistSand.phase = 'end'; return bot.payment || button.text || 'Оплата ещё не написана.'; }
+  if (role === 'address') { assistSand.phase = 'end'; return [bot.address || button.text || 'Адрес ещё не написан.', bot.map].filter(Boolean).join('\n'); }
+  if (role === 'services') {
+    if (!bot.services.length) { assistSand.phase = 'end'; return 'Услуги ещё не заполнены.'; }
+    assistSand.phase = 'services';
+    return 'Выберите услугу.';
+  }
+  if (role === 'catalog') return wizardOpenCatalog(bot);
+  if (role === 'order') {
+    if (!bot.products.length) {
+      assistSand.phase = 'end';
+      return (bot.order || 'Как заказать ещё не написано.')+'\nНапишите телефон. Заявка в кабинет не уходит, это просмотр.';
+    }
+    assistSand.phase = 'order';
+    return (bot.order || 'Как заказать.')+'\nВыберите товар или перейдите к телефону.';
+  }
+  assistSand.phase = 'end';
+  return button.text || button.label;
+}
+function wizardBack(bot){
+  const phase = assistSand.phase;
+  if (phase === 'book-time') { assistSand.phase = 'book-day'; return 'Выберите день.'; }
+  if (phase === 'book-day' && bot.services.length) { assistSand.phase = 'book-service'; return 'Выберите услугу.'; }
+  if (phase === 'goods') {
+    const named = wizardSections(bot.products).filter(function(section){ return section.name; });
+    if (named.length > 1) { assistSand.phase = 'sections'; return 'Выберите раздел.'; }
+  }
+  if (phase === 'menu' || assistSand.stack.length) {
+    if (phase !== 'menu' && assistSand.stack.length) {
+      assistSand.phase = 'menu';
+      const node = assistSand.stack[assistSand.stack.length - 1];
+      return '«'+node.label+'». Выберите, куда идти дальше.';
+    }
+    assistSand.stack.pop();
+    if (!assistSand.stack.length) { assistSand.phase = 'home'; return bot.greet; }
+    assistSand.phase = 'menu';
+    return '«'+assistSand.stack[assistSand.stack.length - 1].label+'». Выберите, куда идти дальше.';
+  }
+  assistSand.phase = 'home';
+  return bot.greet;
+}
+function wizardScreenKeys(bot){
+  const play = assistSand;
+  const phase = play.phase;
+  const nav = function(extra){
+    const keys = extra.slice();
+    if (phase !== 'home') {
+      keys.push({ id: 'back', label: 'Назад', color: 'secondary', wide: true });
+      keys.push({ id: 'home', label: 'В начало', color: 'secondary', wide: true });
+    }
+    return keys;
+  };
+  if (phase === 'home') {
+    return bot.buttons.map(function(button, index){
+      return { id: 't'+index, label: button.label, color: button.color || 'secondary', wide: button.role === 'book' || button.role === 'admin' };
+    });
+  }
+  if (phase === 'menu') {
+    const node = play.stack[play.stack.length - 1] || { items: [] };
+    return nav((node.items || []).map(function(button, index){
+      return { id: 'm'+index, label: button.label, color: button.color || 'secondary' };
+    }));
+  }
+  if (phase === 'services' || phase === 'book-service') {
+    return nav(bot.services.map(function(item, index){
+      return { id: 'svc'+index, label: item.price ? item.name+' · '+item.price+' ₽' : item.name, color: 'secondary' };
+    }));
+  }
+  if (phase === 'sections') {
+    return nav(wizardSections(bot.products).filter(function(section){ return section.name; }).map(function(section, index){
+      return { id: 'sec'+index, label: section.name, color: 'primary' };
+    }));
+  }
+  if (phase === 'goods' || phase === 'order') {
+    const rows = wizardSections(bot.products);
+    const pack = rows.find(function(section){ return section.name === play.section; }) || rows[0] || { items: [] };
+    const goods = (pack.items || []).map(function(item, index){
+      return { id: 'good'+index, label: item.price ? item.name+' · '+item.price+' ₽' : item.name, color: 'secondary' };
+    });
+    if (phase === 'order') goods.unshift({ id: 'phone', label: 'К телефону', color: 'positive', wide: true });
+    return nav(goods);
+  }
+  if (phase === 'book-day') return nav(wizardDays(bot.schedule).map(function(day){ return { id: day.id, label: day.label, color: 'secondary' }; }));
+  if (phase === 'book-time') return nav(wizardTimes(bot.schedule).map(function(time){ return { id: time.id, label: time.label, color: 'positive' }; }));
+  return nav([]);
+}
+function wizardText(value){
+  return esc(value || '').replace(/\n/g, '<br>');
+}
 function paintWizardSandbox(step){
   const box = document.getElementById('wizSandbox');
   if (!box) return;
+  const desk = document.querySelector('.desk');
+  const wizard = !!(desk && desk.classList.contains('mode-wizard') && !desk.classList.contains('wiz-done'));
   const current = step || (wizardSteps()[assistWizardAt] || {});
-  const show = current.step === 'keys' || current.done || current.role === 'menu' || current.role === 'hand';
+  const show = wizard && (current.step === 'keys' || current.done || current.role === 'menu' || current.role === 'hand');
   box.hidden = !show;
   if (!show) return;
-  if (assistSandStep !== assistWizardAt) { assistSand = []; assistSandStep = assistWizardAt; }
-  const tree = function(row){
-    const label = String((row.querySelector(':scope > [data-blabel]') || {}).value || '').trim();
-    const kind = (row.querySelector(':scope > [data-bkind]') || {}).value || 'text';
-    const hidden = !!((row.querySelector(':scope > label > [data-bhide]') || {}).checked);
-    const text = String((row.querySelector(':scope > [data-btextwrap] [data-btext]') || {}).value || '').trim();
-    const color = wizardTone((row.querySelector(':scope > [data-bcolor]') || {}).value);
-    const items = kind === 'menu' ? Array.prototype.slice.call(row.querySelectorAll(':scope > [data-brows] > [data-brow]')).map(tree).filter(function(item){ return item.label && !item.hidden; }) : [];
-    return { label: label, text: text, color: color, hidden: hidden, items: items };
-  };
-  const top = Array.prototype.slice.call(document.querySelectorAll('#assistButtons > [data-brow]')).map(tree).filter(function(item){ return item.label && !item.hidden; });
-  const bookOn = !document.getElementById('assistBookingOn') || document.getElementById('assistBookingOn').checked;
-  const book = String((document.getElementById('assistBookLabel') || {}).value || '').trim() || 'Записаться';
-  if (bookOn) top.push({ label: book, text: 'Клиент выберет день и время.', color: 'positive', items: [] });
-  if ((document.getElementById('assistHandoff') || {}).checked !== false) top.push({ label: 'Администратор', text: 'Вам придёт сообщение во ВК.', color: 'primary', items: [] });
-  const level = assistSand.length ? assistSand[assistSand.length - 1] : null;
-  const buttons = level ? level.items : top;
-  const greet = String((document.getElementById('assistGreeting') || {}).value || '').trim() || 'Здравствуйте. Выберите кнопку.';
-  const typed = String((document.getElementById('assistGroup') || {}).value || '').replace(/\D/g, '');
-  const savedGroup = assistView && assistView.community ? String(assistView.community.groupId || '').replace(/\D/g, '') : '';
-  const group = typed || savedGroup;
-  box.innerHTML = '<div class="sand"><p class="gate-kicker">Песочница</p><p class="gate-title" style="font-size:22px">Так увидит клиент</p><p class="hint">Это просмотр. В сообщество'+(group ? ' № '+esc(group) : '')+' ничего не уходит. Подключение — это номер и ключ: бот отвечает в сообщениях этого сообщества.</p><div class="sandphone"><div class="sandmsg">'+esc(level ? '«'+level.label+'». Выберите раздел.' : greet.slice(0, 180))+'</div>'+
-    buttons.map(function(item){ return '<button type="button" class="sandkey '+(item.color || 'secondary')+'" data-sand="'+esc(item.label)+'">'+esc(item.label)+'</button>'; }).join('')+
-    (level ? '<button type="button" class="sandkey negative" data-sand="back">Назад</button>' : '')+'</div></div>';
+  if (!assistSand || !assistSand.log || assistSand.step !== assistWizardAt) wizardFresh();
+  const bot = wizardBotNow();
+  if (!assistSand.log.length) wizardSay('bot', bot.greet);
+  const keys = wizardScreenKeys(bot);
+  assistSand.keys = keys;
+  box.innerHTML = '<div class="sand"><p class="flabel">Песочница · '+esc(bot.title)+'</p><p class="hint">Это ваш бот. Нажимайте кнопки до конца. В сообщество ничего не уходит.</p><div class="sandphone"><div class="sandlog">'+
+    assistSand.log.map(function(line){ return '<div class="'+(line.who === 'me' ? 'sandme' : 'sandmsg')+'">'+wizardText(line.text)+'</div>'; }).join('')+
+    '</div><div class="sandkeys">'+
+    keys.map(function(key){ return '<button type="button" class="sandkey '+(key.color || 'secondary')+(key.wide ? ' wide' : '')+'" data-sand="'+esc(key.id)+'">'+esc(key.label)+'</button>'; }).join('')+
+    '</div></div></div>';
   box.querySelectorAll('[data-sand]').forEach(function(button){
     button.onclick = function(){
-      const name = button.getAttribute('data-sand');
-      if (name === 'back') { assistSand.pop(); paintWizardSandbox(current); return; }
-      const hit = buttons.find(function(item){ return item.label === name; });
-      if (hit && hit.items && hit.items.length) { assistSand.push(hit); paintWizardSandbox(current); return; }
-      const note = box.querySelector('.sandmsg');
-      if (note) note.textContent = hit && hit.text ? hit.text : 'Клиент прочитает этот ответ.';
+      const id = button.getAttribute('data-sand');
+      const key = (assistSand.keys || []).find(function(item){ return item.id === id; });
+      if (!key) return;
+      if (id === 'back') {
+        const text = wizardBack(bot);
+        wizardSay('me', 'Назад');
+        wizardSay('bot', text);
+        paintWizardSandbox(current);
+        return;
+      }
+      if (id === 'home') {
+        assistSand.phase = 'home';
+        assistSand.stack = [];
+        wizardSay('me', 'В начало');
+        wizardSay('bot', bot.greet);
+        paintWizardSandbox(current);
+        return;
+      }
+      wizardSay('me', key.label);
+      let text = '';
+      if (id.indexOf('time') === 0) {
+        const service = bot.services[assistSand.service] || {};
+        assistSand.phase = 'end';
+        text = 'Запись: '+[service.name, assistSand.day, key.label].filter(Boolean).join(', ')+'. Это просмотр, в раздел «Записи» ничего не ушло.';
+      } else if (id.indexOf('day') === 0) {
+        assistSand.day = key.label;
+        assistSand.phase = 'book-time';
+        text = 'Выберите время.';
+      } else if (id.indexOf('svc') === 0) {
+        const item = bot.services[Number(id.slice(3))] || {};
+        assistSand.service = Number(id.slice(3));
+        if (assistSand.phase === 'book-service') { assistSand.phase = 'book-day'; text = 'Выберите день.'; }
+        else { assistSand.phase = 'end'; text = (item.name || 'Услуга')+(item.price ? ' · '+item.price+' ₽' : '')+(item.text ? '\n'+item.text : ''); }
+      } else if (id.indexOf('sec') === 0) {
+        const named = wizardSections(bot.products).filter(function(section){ return section.name; });
+        const section = named[Number(id.slice(3))] || { name: '' };
+        assistSand.section = section.name;
+        assistSand.phase = 'goods';
+        text = '«'+section.name+'». Выберите товар.';
+      } else if (id.indexOf('good') === 0) {
+        const rows = wizardSections(bot.products);
+        const pack = rows.find(function(section){ return section.name === assistSand.section; }) || rows[0] || { items: [] };
+        const item = (pack.items || [])[Number(id.slice(4))] || {};
+        assistSand.phase = 'end';
+        text = 'В счёт: '+(item.name || 'товар')+(item.price ? ', '+item.price+' ₽' : '')+'. Это просмотр, заказ не создан.';
+      } else if (id === 'phone') {
+        assistSand.phase = 'end';
+        text = 'Напишите телефон. Заявка в кабинет не уходит, это просмотр.';
+      } else if (id.indexOf('t') === 0) text = wizardOpenButton(bot, bot.buttons[Number(id.slice(1))] || {});
+      else if (id.indexOf('m') === 0) {
+        const node = assistSand.stack[assistSand.stack.length - 1] || { items: [] };
+        text = wizardOpenButton(bot, (node.items || [])[Number(id.slice(1))] || {});
+      } else text = key.label;
+      wizardSay('bot', text);
+      paintWizardSandbox(current);
     };
   });
 }
@@ -2456,35 +2863,50 @@ function paintWizardKeys(){
     open = rows.length ? 'b'+(rows.length - 1) : '';
     assistKeyOpen = open;
   }
+  const path = wizardKeyPath(open);
   const book = String((document.getElementById('assistBookLabel') || {}).value || '').trim() || 'Записаться';
   const adminOn = (document.getElementById('assistHandoff') || {}).checked !== false;
-  let html = '';
-  if (open === 'book') {
-    html += '<div class="plain"><p class="gate-title" style="font-size:22px">Кнопка записи</p><p class="hint">Клиент выбирает день и время. Эту кнопку нельзя убрать.</p><label class="flabel">Надпись</label><input id="wizBookName" maxlength="24" value="'+esc(book)+'"><button type="button" class="textlink" data-kopen="">Закрыть</button></div>';
-  } else html += '<button type="button" class="niche" data-kopen="book"><b>'+esc(book)+'</b><span>Клиент выбирает день и время</span></button>';
-  rows.forEach(function(row, index){
-    const id = 'b'+index;
-    if (open === id) {
-      const nested = row.kind === 'menu';
-      html += '<div class="plain"><label class="flabel">Надпись на кнопке</label><input data-kname maxlength="24" value="'+esc(row.label)+'">'+wizardToneButtons(row.color);
-      html += '<p class="gate-title" style="font-size:22px">Разделы внутри</p><p class="hint">Например кнопка «Шиномонтаж», внутри «Сезонный», а в нём размеры колёс.</p>';
-      html += '<button type="button" class="niche'+(!nested?' on':'')+'" data-knest="0"><b>Без разделов</b><span>Клиент сразу читает текст</span></button>';
-      html += '<button type="button" class="niche'+(nested?' on':'')+'" data-knest="1"><b>Нужны разделы</b><span>Сначала выбор, потом текст или подраздел</span></button>';
-      if (row.kind === 'link') html += '<label class="flabel">Ссылка https</label><input data-klink maxlength="300" value="'+esc(row.link)+'">';
-      else if (row.kind === 'contact') html += '<p class="hint">Клиент увидит контакты из карточки.</p>';
-      else if (!nested) html += '<label class="flabel">Что клиент прочитает</label><textarea data-ktext maxlength="900" rows="3">'+esc(row.text)+'</textarea>';
-      if (nested) {
-        html += row.kids.map(function(kid, kidIndex){
-          return '<div class="srow" data-kidx="'+kidIndex+'"><label class="flabel">Раздел</label><input data-kchild maxlength="24" value="'+esc(kid.label)+'"><label class="flabel">Текст, если нет подразделов</label><textarea data-kchildtext maxlength="900" rows="2">'+esc(kid.text)+'</textarea><label class="flabel">Подразделы через запятую</label><input data-ksubs maxlength="180" placeholder="R15, R16, R17" value="'+esc(kid.subs)+'"><button type="button" class="textlink" data-kchilddel>Убрать раздел</button></div>';
-        }).join('');
-        html += '<button type="button" class="textlink" data-kchildadd>Ещё раздел</button>';
-      }
-      html += '<button type="button" class="textlink" data-khide>'+(row.hidden ? 'Вернуть в чат' : 'Скрыть из чата')+'</button><button type="button" class="textlink" data-kdel>Убрать кнопку</button><button type="button" class="textlink" data-kopen="">Закрыть</button></div>';
-    } else html += '<button type="button" class="niche'+(row.hidden ? '' : '')+'" data-kopen="'+id+'"><b>'+esc(row.label || 'Без названия')+'</b><span>'+esc(wizardKeyNote(row))+'</span></button>';
+  const faces = rows.map(function(row, index){
+    return wizardFace(row.label, wizardKeyNote(row), 'b'+index, row.color, path.index === index, row.hidden);
   });
-  if (open === 'admin') {
-    html += '<div class="plain"><p class="gate-title" style="font-size:22px">Администратор</p><p class="hint">Клиент нажмёт, и вам придёт сообщение во ВК. Пока вы отвечаете, бот молчит.</p><label style="display:block"><input id="wizAdmin" type="checkbox"'+(adminOn ? ' checked' : '')+'> Показывать кнопку</label><button type="button" class="textlink" data-kopen="">Закрыть</button></div>';
-  } else html += '<button type="button" class="niche alt" data-kopen="admin"><b>Администратор</b><span>'+(adminOn ? 'Вам придёт сообщение во ВК' : 'Сейчас выключена')+'</span></button>';
+  let html = wizardPair(faces);
+  html += wizardFace(book, 'ведёт к выбору дня и времени', 'book', 'positive', open === 'book', false);
+  html += wizardFace('Администратор', adminOn ? 'ведёт к сообщению вам во ВК' : 'сейчас выключена', 'admin', 'primary', open === 'admin', !adminOn);
+  if (open === 'book') {
+    html += '<div class="plain"><p class="flabel">Кнопка записи</p><p class="hint">Ведёт к выбору дня и времени. Её нельзя убрать.</p><label class="flabel">Надпись</label><input id="wizBookName" maxlength="24" value="'+esc(book)+'"><button type="button" class="textlink" data-kopen="">Закрыть</button></div>';
+  } else if (open === 'admin') {
+    html += '<div class="plain"><p class="flabel">Администратор</p><p class="hint">Ведёт к сообщению вам во ВК. Пока вы отвечаете, бот молчит.</p><label style="display:block"><input id="wizAdmin" type="checkbox"'+(adminOn ? ' checked' : '')+'> Показывать кнопку</label><button type="button" class="textlink" data-kopen="">Закрыть</button></div>';
+  }
+  const row = path.index >= 0 ? document.querySelectorAll('#assistButtons > [data-brow]')[path.index] : null;
+  const data = path.index >= 0 ? rows[path.index] : null;
+  if (row && data) {
+    const nested = data.kind === 'menu';
+    html += '<div class="plain"><label class="flabel">Надпись на кнопке</label><input data-kname maxlength="24" value="'+esc(data.label)+'">'+wizardToneButtons(data.color);
+    html += '<p class="flabel">Куда ведёт кнопка</p><div class="botmap">';
+    html += '<button type="button" class="botkey'+(!nested ? ' on' : '')+'" data-knest="0"><b>Без разделов</b><small>ведёт сразу в текст</small></button>';
+    html += '<button type="button" class="botkey'+(nested ? ' on' : '')+'" data-knest="1"><b>Нужны разделы</b><small>сначала раздел, потом текст или подраздел</small></button></div>';
+    if (data.kind === 'link') html += '<label class="flabel">Ссылка https</label><input data-klink maxlength="300" value="'+esc(data.link)+'">';
+    else if (data.kind === 'contact') html += '<p class="hint">Ведёт в контакты из карточки.</p>';
+    else if (!nested) html += '<label class="flabel">Текст, куда ведёт кнопка</label><textarea data-ktext maxlength="900" rows="3">'+esc(data.text)+'</textarea>';
+    if (nested) {
+      html += '<p class="flabel">Разделы внутри</p>'+wizardPair(data.kids.map(function(kid, kidIndex){
+        const note = kid.subs ? 'ведёт в: '+kid.subs : (kid.text ? 'ведёт в текст' : 'ведёт в текст, его ещё нет');
+        return wizardFace(kid.label, note, 'b'+path.index+'.c'+kidIndex, 'secondary', path.child === kidIndex, false);
+      }));
+      if (path.child >= 0 && data.kids[path.child]) {
+        const kid = data.kids[path.child];
+        const subs = kid.subs ? kid.subs.split(', ') : [];
+        html += '<div class="srow" data-kidx="'+path.child+'"><label class="flabel">Раздел</label><input data-kchild maxlength="24" value="'+esc(kid.label)+'"><label class="flabel">Текст, если нет подразделов</label><textarea data-kchildtext maxlength="900" rows="2">'+esc(kid.text)+'</textarea>';
+        html += '<p class="flabel">Подразделы</p>'+wizardPair(subs.map(function(name, subIndex){
+          return wizardFace(name, 'ведёт в текст', 'b'+path.index+'.c'+path.child+'.s'+subIndex, 'secondary', path.sub === subIndex, false);
+        }));
+        if (path.sub >= 0) html += '<label class="flabel">Подраздел</label><input data-ksub maxlength="24" value="'+esc(subs[path.sub] || '')+'">';
+        html += '<button type="button" class="textlink" data-ksubadd>Ещё подраздел</button><button type="button" class="textlink" data-kchilddel>Убрать раздел</button></div>';
+      }
+      html += '<button type="button" class="textlink" data-kchildadd>Ещё раздел</button>';
+    }
+    html += '<button type="button" class="textlink" data-khide>'+(data.hidden ? 'Вернуть в чат' : 'Скрыть из чата')+'</button><button type="button" class="textlink" data-kdel>Убрать кнопку</button><button type="button" class="textlink" data-kopen="">Закрыть</button></div>';
+  }
   box.innerHTML = html;
   box.querySelectorAll('[data-kopen]').forEach(function(node){
     node.onclick = function(){
@@ -2496,16 +2918,18 @@ function paintWizardKeys(){
   if (bookName) bookName.oninput = function(){
     const real = document.getElementById('assistBookLabel');
     if (real) real.value = bookName.value;
+    const face = box.querySelector('[data-kopen="book"] b');
+    if (face) face.textContent = bookName.value || 'Записаться';
     paintAssistKeys();
+    paintWizardSandbox();
   };
   const admin = document.getElementById('wizAdmin');
   if (admin) admin.onchange = function(){
     const real = document.getElementById('assistHandoff');
     if (real) real.checked = admin.checked;
     paintAssistKeys();
+    paintWizardKeys();
   };
-  const index = open.indexOf('b') === 0 ? Number(open.slice(1)) : -1;
-  const row = index >= 0 ? document.querySelectorAll('#assistButtons > [data-brow]')[index] : null;
   if (row) {
     const name = box.querySelector('[data-kname]');
     const text = box.querySelector('[data-ktext]');
@@ -2513,6 +2937,8 @@ function paintWizardKeys(){
     if (name) name.oninput = function(){
       const real = row.querySelector(':scope > [data-blabel]');
       if (real) real.value = name.value;
+      const face = box.querySelector('[data-kopen="b'+path.index+'"] b');
+      if (face) face.textContent = name.value || 'Без названия';
       paintAssistKeys();
       paintWizardSandbox();
     };
@@ -2520,6 +2946,7 @@ function paintWizardKeys(){
       const real = row.querySelector(':scope > [data-btextwrap] [data-btext]');
       if (real) real.value = text.value;
       paintAssistKeys();
+      paintWizardSandbox();
     };
     if (link) link.oninput = function(){
       const real = row.querySelector(':scope > [data-blinkwrap] [data-blink]');
@@ -2532,6 +2959,11 @@ function paintWizardKeys(){
         const real = row.querySelector(':scope > [data-bcolor]');
         if (real) real.value = tone;
         box.querySelectorAll('[data-ktone]').forEach(function(node){ node.classList.toggle('on', node === button); });
+        const face = box.querySelector('[data-kopen="b'+path.index+'"]');
+        if (face) {
+          face.classList.remove('primary', 'positive', 'negative');
+          if (tone !== 'secondary') face.classList.add(tone);
+        }
         paintWizardSandbox();
       };
     });
@@ -2547,56 +2979,64 @@ function paintWizardKeys(){
         if (nested && nest && !nest.querySelector(':scope > [data-brow]')) {
           nest.insertAdjacentHTML('beforeend', assistButtonHtml({ label: 'Сезонный', text: 'Напишите, что входит в сезон.' }, 1));
         }
+        assistKeyOpen = 'b'+path.index;
         paintWizardKeys();
       };
     });
-    box.querySelectorAll('[data-kidx]').forEach(function(card){
-      const child = row.querySelectorAll(':scope > [data-brows] > [data-brow]')[Number(card.getAttribute('data-kidx'))];
-      if (!child) return;
+    const card = box.querySelector('[data-kidx]');
+    const child = path.child >= 0 ? row.querySelectorAll(':scope > [data-brows] > [data-brow]')[path.child] : null;
+    if (card && child) {
       const childName = card.querySelector('[data-kchild]');
       const childText = card.querySelector('[data-kchildtext]');
-      const subs = card.querySelector('[data-ksubs]');
+      const subName = card.querySelector('[data-ksub]');
       if (childName) childName.oninput = function(){
         const real = child.querySelector(':scope > [data-blabel]');
         if (real) real.value = childName.value;
+        const face = box.querySelector('[data-kopen="b'+path.index+'.c'+path.child+'"] b');
+        if (face) face.textContent = childName.value || 'Без названия';
         paintWizardSandbox();
       };
       if (childText) childText.oninput = function(){
         const real = child.querySelector(':scope > [data-btextwrap] [data-btext]');
         if (real) real.value = childText.value;
       };
-      if (subs) subs.oninput = function(){
-        const names = subs.value.split(',').map(function(part){ return part.trim(); }).filter(Boolean).slice(0, 6);
-        const kind = child.querySelector(':scope > [data-bkind]');
-        const nest = child.querySelector(':scope > [data-brows]');
-        if (!nest || !kind) return;
-        if (!names.length) { kind.value = 'text'; assistKind(kind); return; }
-        kind.value = 'menu';
-        assistKind(kind);
-        let kids = Array.prototype.slice.call(nest.querySelectorAll(':scope > [data-brow]'));
-        while (kids.length < names.length) {
-          nest.insertAdjacentHTML('beforeend', assistButtonHtml({ label: '', text: '' }, 2));
-          kids = Array.prototype.slice.call(nest.querySelectorAll(':scope > [data-brow]'));
-        }
-        while (kids.length > names.length) kids.pop().remove();
-        kids.forEach(function(kid, kidIndex){
-          const label = kid.querySelector(':scope > [data-blabel]');
-          const text = kid.querySelector(':scope > [data-btextwrap] [data-btext]');
-          const kidKind = kid.querySelector(':scope > [data-bkind]');
-          if (label) label.value = names[kidIndex].slice(0, 24);
-          if (text) text.value = names[kidIndex];
-          if (kidKind) kidKind.value = 'text';
-        });
+      if (subName) subName.oninput = function(){
+        const grand = child.querySelectorAll(':scope > [data-brows] > [data-brow]')[path.sub];
+        if (!grand) return;
+        const label = grand.querySelector(':scope > [data-blabel]');
+        const text = grand.querySelector(':scope > [data-btextwrap] [data-btext]');
+        if (label) label.value = subName.value.slice(0, 24);
+        if (text) text.value = subName.value;
+        const face = box.querySelector('[data-kopen="b'+path.index+'.c'+path.child+'.s'+path.sub+'"] b');
+        if (face) face.textContent = subName.value || 'Без названия';
         paintWizardSandbox();
       };
       const drop = card.querySelector('[data-kchilddel]');
-      if (drop) drop.onclick = function(){ child.remove(); paintWizardKeys(); };
-    });
+      if (drop) drop.onclick = function(){
+        child.remove();
+        assistKeyOpen = 'b'+path.index;
+        paintWizardKeys();
+      };
+      const addSub = card.querySelector('[data-ksubadd]');
+      if (addSub) addSub.onclick = function(){
+        const nest = child.querySelector(':scope > [data-brows]');
+        const kind = child.querySelector(':scope > [data-bkind]');
+        if (!nest || !kind || nest.querySelectorAll(':scope > [data-brow]').length >= 6) return;
+        kind.value = 'menu';
+        assistKind(kind);
+        const next = nest.querySelectorAll(':scope > [data-brow]').length;
+        nest.insertAdjacentHTML('beforeend', assistButtonHtml({ label: 'Размер', text: 'Размер' }, 2));
+        assistKeyOpen = 'b'+path.index+'.c'+path.child+'.s'+next;
+        paintWizardKeys();
+      };
+    }
     const addChild = box.querySelector('[data-kchildadd]');
     if (addChild) addChild.onclick = function(){
       const nest = row.querySelector(':scope > [data-brows]');
       if (!nest || nest.querySelectorAll(':scope > [data-brow]').length >= 6) return;
+      const next = nest.querySelectorAll(':scope > [data-brow]').length;
       nest.insertAdjacentHTML('beforeend', assistButtonHtml({ label: '', text: '' }, 1));
+      assistKeyOpen = 'b'+path.index+'.c'+next;
       paintWizardKeys();
     };
     const hide = box.querySelector('[data-khide]');
@@ -2624,8 +3064,10 @@ function paintWizardKeys(){
 function showWizardDone(pending){
   const desk = document.querySelector('.desk');
   const box = document.getElementById('wizDone');
+  const sand = document.getElementById('wizSandbox');
   if (!desk || !box || !desk.classList.contains('mode-wizard')) return false;
   desk.classList.add('wiz-done');
+  if (sand) sand.hidden = true;
   const typed = String((document.getElementById('assistGroup') || {}).value || '').replace(/\D/g, '');
   const saved = assistView && assistView.community ? String(assistView.community.groupId || '').replace(/\D/g, '') : '';
   const group = typed || saved;
@@ -2633,14 +3075,13 @@ function showWizardDone(pending){
   box.hidden = false;
   box.innerHTML = '<p class="gate-kicker">НейроЯга AI</p>'+
     '<p class="gate-title">Карточка сохранена</p>'+
-    '<p class="hint">'+(pending ? 'Покупатели увидят её, когда помощник будет на связи.' : 'Покупатель пишет в сообщения сообщества и нажимает кнопки.')+'</p>'+
-    '<p class="gate-title" style="font-size:22px;margin-top:18px">Куда приходит новое</p>'+
-    '<p class="hint">Запись и заказ приходят вам личным сообщением во ВК от сообщества. Те же заявки лежат в кабинете.</p>'+
-    '<div class="niches">'+
-    '<button type="button" class="niche" data-after="book"><b>Записи</b><span>Новая запись лежит здесь</span></button>'+
-    '<button type="button" class="niche alt" data-after="orders"><b>Заказы</b><span>Новый заказ лежит здесь</span></button>'+
-    (chat ? '<a class="niche" href="'+esc(chat)+'" target="_blank" rel="noopener"><b>Сообщения сообщества</b><span>Здесь клиент видит кнопки, а вам приходит уведомление</span></a>' : '')+
-    '</div>';
+    '<p class="hint">'+(pending ? 'Покупатели увидят её, когда помощник будет на связи.' : 'Новая заявка приходит вам в сообщения сообщества и лежит в кнопках ниже.')+'</p>'+
+    '<div class="botmap">'+
+    '<button type="button" class="botkey" data-after="book"><b>Записи</b><small>ведёт к новым записям</small></button>'+
+    '<button type="button" class="botkey" data-after="orders"><b>Заказы</b><small>ведёт к новым заказам</small></button>'+
+    (chat ? '<a class="botkey" href="'+esc(chat)+'" target="_blank" rel="noopener"><b>Уведомления</b><small>ведёт в сообщения сообщества, туда приходит новая заявка</small></a>' : '')+
+    '</div>'+
+    '<button type="button" class="btn" id="wizEditAgain">Редактировать бота через мастер</button>';
   box.querySelectorAll('[data-after]').forEach(function(button){
     button.onclick = function(){
       const deskNode = document.querySelector('.desk');
@@ -2651,6 +3092,8 @@ function showWizardDone(pending){
       showAssistPane(button.getAttribute('data-after'));
     };
   });
+  const again = document.getElementById('wizEditAgain');
+  if (again) again.onclick = editBotAgain;
   paintAssistTabs();
   if (box.scrollIntoView) box.scrollIntoView({ block: 'start' });
   return true;
@@ -2818,8 +3261,10 @@ async function saveDesk(){
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Ответы не сохранились');
+    if (data.reply && assistView && assistView.community) assistView.community.reply = data.reply;
     if (showWizardDone(!!data.pending)) {
       if (msg) msg.textContent = '';
+      mountReadyHome();
     } else if (msg) msg.textContent = data.pending ? 'Ответы сохранены. Покупатели увидят их, когда помощник будет на связи.' : 'Ответы сохранены. Покупатель увидит эту фразу и кнопки.';
     if (button) button.disabled = false;
   } catch (error) {
@@ -3250,7 +3695,7 @@ function bindPlain(){
     };
   });
   const kindBack = document.getElementById('wizKindBack');
-  if (kindBack) kindBack.onclick = function(){ openWizardPick(); };
+  if (kindBack) kindBack.onclick = function(){ leaveWizardHome(); };
   document.querySelectorAll('[data-mode]').forEach(function(button){
     button.onclick = function(){
       const mode = button.getAttribute('data-mode') === 'info' ? 'info' : 'funnel';
@@ -3299,7 +3744,7 @@ function bindPlain(){
   const prev = document.getElementById('wizPrev');
   if (prev) prev.onclick = function(){
     if (assistWizardAt > 0) { assistWizardAt -= 1; paintWizard(); return; }
-    openWizardPick();
+    leaveWizardHome();
   };
   const next = document.getElementById('wizNext');
   if (next) next.onclick = function(){ assistGoNext(); };
@@ -3328,6 +3773,19 @@ function bind(){
   if (assistDrop) assistDrop.onclick = dropAssist;
   const assistDeskButton = document.getElementById('assistDesk');
   if (assistDeskButton) assistDeskButton.onclick = saveDesk;
+  const editWizard = document.getElementById('assistEditWizard');
+  if (editWizard) editWizard.onclick = editBotAgain;
+  document.querySelectorAll('[data-fold]').forEach(function(button){
+    button.onclick = function(){
+      const row = button.parentElement;
+      if (row) row.classList.toggle('open');
+    };
+  });
+  document.querySelectorAll('[data-sname],[data-sprice],[data-pname],[data-pprice],[data-section]').forEach(function(input){
+    if (input.dataset.foldbound) return;
+    input.dataset.foldbound = '1';
+    input.addEventListener('input', paintFoldHeads);
+  });
   ensureAssistAdd();
   const bookLabel = document.getElementById('assistBookLabel');
   if (bookLabel) bookLabel.oninput = paintAssistKeys;
@@ -3352,7 +3810,7 @@ function bind(){
   document.querySelectorAll('[data-gate]').forEach(function(button){
     button.onclick = function(){
       if (button.getAttribute('data-gate') === 'manual') openManualBoard();
-      else openWizardPick();
+      else beginWizard('full');
     };
   });
   const lobbyBack = document.getElementById('assistLobbyBack');
