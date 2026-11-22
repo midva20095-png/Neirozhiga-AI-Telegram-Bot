@@ -1202,8 +1202,10 @@ function paintFoldHeads(){
     const price = String((row.querySelector('[data-sprice]') || {}).value || '').trim();
     const title = row.querySelector('[data-fold] b');
     const note = row.querySelector('[data-fold] small');
+    const many = !!((document.getElementById('assistMulti') || {}).checked);
+    const together = many || !!((row.querySelector('[data-sextra]') || {}).checked);
     if (title) title.textContent = name || 'Новая услуга';
-    if (note) note.textContent = price ? 'ведёт к цене '+price+' ₽' : 'ведёт к услуге, цену ещё не написали';
+    if (note) note.textContent = (price ? 'ведёт к цене '+price+' ₽' : 'цену ещё не написали')+' · '+(together ? 'можно несколько' : 'одна');
   });
   document.querySelectorAll('[data-psec]').forEach(function(section){
     const name = String((section.querySelector(':scope > [data-section]') || {}).value || '').trim();
@@ -1246,7 +1248,7 @@ function assistServiceRow(item){
   const named = String(row.name || '').trim();
   const price = row.price ? String(row.price) : '';
   return '<div class="srow'+(named ? '' : ' open')+'" data-srow>'+
-    '<button type="button" class="botkey fold" data-fold><b>'+esc(named || 'Новая услуга')+'</b><small>'+(price ? 'ведёт к цене '+esc(price)+' ₽' : 'ведёт к услуге, цену ещё не написали')+'</small></button>'+
+    '<button type="button" class="botkey fold" data-fold><b>'+esc(named || 'Новая услуга')+'</b><small>'+(price ? 'ведёт к цене '+esc(price)+' ₽' : 'цену ещё не написали')+' · '+(row.extra ? 'можно несколько' : 'одна')+'</small></button>'+
     '<label class="flabel">Название</label>'+
     '<input data-sname maxlength="80" placeholder="Название услуги" value="'+esc(row.name || '')+'" oninput="paintAssistBill()">'+
     '<label class="flabel">Цена, ₽</label>'+
@@ -1257,15 +1259,17 @@ function assistServiceRow(item){
     '<input class="snote" data-stext maxlength="300" placeholder="Коротко, что получает клиент" value="'+esc(row.text || '')+'">'+
     '<label class="flabel">Длительность, минут</label>'+
     '<input data-smin inputmode="numeric" maxlength="3" placeholder="40" value="'+esc(row.minutes ? String(row.minutes) : '')+'">'+
-    '<label><input data-sextra type="checkbox"'+(row.extra ? ' checked' : '')+' onchange="paintAssistBill()"> Доп к основной услуге</label>'+
-    '<p class="hint">Без галочки клиент выбирает одну услугу. С галочкой её можно добавить сверху.</p>'+
+    '<label><input data-sextra type="checkbox"'+(row.extra ? ' checked' : '')+' onchange="paintAssistBill()"> Можно выбрать вместе с другими</label>'+
+    '<p class="hint">Без галочки это одна основная услуга. С галочкой клиент добавляет её к уже выбранной.</p>'+
     '<label><input data-shide type="checkbox"'+(row.hidden ? ' checked' : '')+' onchange="paintAssistBill()"> Скрыть от клиента</label>'+
     '<button class="btn ghost" type="button" data-sdel>Удалить услугу</button></div>';
 }
 function assistServiceEditor(reply){
   const items = assistServiceItems(reply && reply.services);
   const rows = (items.length ? items : [{ name: '', price: '', link: '', extra: false }]).slice(0, 8).map(assistServiceRow).join('');
-  return '<label class="flabel">Услуги, цены и допы</label>'+
+  return '<label class="check"><input id="assistMulti" type="checkbox"'+(reply && reply.multi ? ' checked' : '')+' onchange="paintAssistBill()"> Несколько услуг сразу</label>'+
+    '<p class="hint">Включите, если клиент отмечает несколько услуг и сумма складывается. Выключите, если нужна одна услуга. «Можно выбрать вместе» на отдельной услуге добавляет её сверху, даже когда общая галочка выключена.</p>'+
+    '<label class="flabel">Услуги, цены и допы</label>'+
     '<p class="hint">Напишите название и цену. «Скрыть от клиента» оставляет строку здесь, в чате её не будет. Пустая цена в сумму не входит.</p>'+
     '<div id="assistBillPreview">'+assistBillPreviewHtml(items)+'</div>'+
     '<div id="assistServiceRows">'+rows+'</div>'+
@@ -1803,7 +1807,7 @@ function paintWizard(){
   if (prev) { prev.disabled = false; prev.textContent = assistWizardAt === 0 ? 'К выбору бота' : 'Назад'; }
   if (next) { next.disabled = assistWizardAt >= steps.length - 1; next.textContent = step.welcome ? 'Начать настройку' : 'Дальше'; }
   const leads = {
-    prices: 'Каждая услуга — кнопка. Нажмите её: подпись показывает, куда она ведёт. Внутри напишите цену.',
+    prices: 'Каждая услуга — кнопка. Откройте её и напишите цену. Галочка «Несколько услуг сразу» включает выбор нескольких: клиент отмечает их, сумма складывается. Без галочки выбирается одна.',
     products: 'Нужны ли кнопки разделов? Нажмите раздел: подпись показывает, какие товары за ним.',
     about: 'Первая фраза. Клиент видит её, когда открывает бота в сообщениях сообщества.',
     contacts: 'Телефон и адрес. Кнопка «Контакты» покажет этот текст.',
@@ -1813,8 +1817,8 @@ function paintWizard(){
     shello: 'Первая фраза. Клиент видит её после кнопки «Начать».',
     pay: 'Как платить. Клиент прочитает этот текст по кнопке «Оплата».',
     address: 'Куда ехать. Ссылка на карту уйдёт вместе с адресом.',
-    menu: 'Кнопки клиента. Под каждой написано, куда она ведёт. Нажмите, чтобы поправить.',
-    keys: 'Кнопки клиента. Под каждой написано, куда она ведёт. Нажмите кнопку и поправьте путь.',
+    menu: 'Кнопки ниже — основные, они на главном экране. Дополнительные стоят внутри основной: клиент видит их только после нажатия.',
+    keys: 'Кнопки ниже — основные, они на главном экране. Дополнительные стоят внутри основной: клиент видит их только после нажатия. Подпись под кнопкой показывает, куда она ведёт.',
     hand: 'Последний шаг. Ниже просмотр бота: можно нажать все кнопки до конца. В сообщество ничего не уходит.'
   };
   const lead = document.getElementById('wizLead');
@@ -2042,8 +2046,22 @@ function showAssistPane(name, slice){
   if (slice && assistPane === 'card') openManual(slice);
   else if (slice) showAssistSlice(slice);
   paintAssistTabs();
+  paintAssistBack();
   const current = document.querySelector('.atabs button.on');
   if (current && current.scrollIntoView) current.scrollIntoView({ inline:'center', block:'nearest' });
+}
+function paintAssistBack(){
+  const button = document.getElementById('assistBack');
+  if (!button) return;
+  button.textContent = assistPane && assistPane !== 'home' ? 'Назад' : 'В кабинет';
+}
+function assistBack(){
+  if (assistPane && assistPane !== 'home') {
+    showAssistPane('home');
+    return;
+  }
+  tab = 'cab';
+  draw();
 }
 function paintAssistTabs(){
   const tabs = document.querySelector('.atabs');
@@ -2168,7 +2186,8 @@ async function loadAssist(){
     data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Раздел не открылся');
   } catch (error) {
-    box.innerHTML = '<div class="card"><p class="err">'+esc(error.message || 'Раздел не открылся')+'</p></div>';
+    assistPane = 'home';
+    box.innerHTML = '<div class="card"><button type="button" class="back" id="assistBack">В кабинет</button><p class="err">'+esc(error.message || 'Раздел не открылся')+'</p></div>';
     bind();
     return;
   }
@@ -2176,13 +2195,15 @@ async function loadAssist(){
     const note = data.check === false
       ? 'Не удалось сверить донат. Откройте раздел ещё раз.'
       : 'Раздел открыт донам НейроЯги. После оплаты подписка появится здесь, и можно будет подключить своё сообщество.';
-    box.innerHTML = '<div class="card"><div class="kicker">Моё сообщество</div><p class="now">'+esc(note)+'</p>'+
+    assistPane = 'home';
+    box.innerHTML = '<div class="card"><button type="button" class="back" id="assistBack">В кабинет</button><div class="kicker">Моё сообщество</div><p class="now">'+esc(note)+'</p>'+
       '<a class="btn" href="'+esc(data.join || 'https://vk.com/donut/club214554778')+'" target="_blank" rel="noopener">Оформить донат</a></div>';
     bind();
     return;
   }
   if (!data.active) {
-    box.innerHTML = '<div class="card"><div class="kicker">Моё сообщество</div><p class="now">Донат не продлён, помощник в вашем сообществе молчит. После оплаты он снова ответит покупателям.</p>'+
+    assistPane = 'home';
+    box.innerHTML = '<div class="card"><button type="button" class="back" id="assistBack">В кабинет</button><div class="kicker">Моё сообщество</div><p class="now">Донат не продлён, помощник в вашем сообществе молчит. После оплаты он снова ответит покупателям.</p>'+
       '<a class="btn" href="'+esc(data.join)+'" target="_blank" rel="noopener">Продлить донат</a></div>';
     bind();
     return;
@@ -2207,6 +2228,7 @@ async function loadAssist(){
   const home = status+(community ? (ready ? '<div class="lobby" id="assistLobby">'+assistReadyHtml(data)+'</div>' : assistLobbyHtml()) : '')+(ready ? '' : board)+
     assistConnect(community)+assistGuide(!community);
   box.innerHTML = '<div class="card">'+
+    '<button type="button" class="back" id="assistBack">Назад</button>'+
     '<div class="kicker">Моё сообщество</div>'+
     (community ? assistTabs(marks) : '')+
     assistPaneBox('home', home)+
@@ -2600,6 +2622,7 @@ function wizardBotNow(){
     orderOn: !document.getElementById('assistOrderOn') || document.getElementById('assistOrderOn').checked,
     buttons: buttons,
     services: services,
+    multi: !!((document.getElementById('assistMulti') || {}).checked),
     products: products,
     schedule: schedule
   };
@@ -2645,7 +2668,7 @@ function wizardTimes(schedule){
   return out;
 }
 function wizardFresh(){
-  assistSand = { step: assistWizardAt, log: [], stack: [], phase: 'home', service: -1, section: '', day: '', keys: [] };
+  assistSand = { step: assistWizardAt, log: [], stack: [], phase: 'home', service: -1, picked: [], section: '', day: '', keys: [] };
   return assistSand;
 }
 function wizardSay(who, text){
@@ -2669,8 +2692,9 @@ function wizardOpenButton(bot, button){
     return '«'+button.label+'». Выберите, куда идти дальше.';
   }
   if (role === 'book') {
+    assistSand.picked = [];
     assistSand.phase = bot.services.length ? 'book-service' : 'book-day';
-    return bot.services.length ? 'Выберите услугу.' : 'Выберите день.';
+    return bot.services.length ? (bot.multi ? 'Отметьте услуги. Можно несколько, сумма сложится.' : 'Выберите услугу.') : 'Выберите день.';
   }
   if (role === 'admin') { assistSand.phase = 'end'; return 'Вам придёт сообщение во ВК. Пока вы отвечаете, бот молчит. Это просмотр, сообщение не отправлено.'; }
   if (role === 'link') { assistSand.phase = 'end'; return button.link ? 'Откроется ссылка: '+button.link : 'Ссылка ещё не указана.'; }
@@ -2679,8 +2703,9 @@ function wizardOpenButton(bot, button){
   if (role === 'address') { assistSand.phase = 'end'; return [bot.address || button.text || 'Адрес ещё не написан.', bot.map].filter(Boolean).join('\n'); }
   if (role === 'services') {
     if (!bot.services.length) { assistSand.phase = 'end'; return 'Услуги ещё не заполнены.'; }
+    assistSand.picked = [];
     assistSand.phase = 'services';
-    return 'Выберите услугу.';
+    return bot.multi ? 'Можно выбрать несколько услуг. Они складываются.' : 'Выберите одну услугу. Чтобы складывать несколько, включите «Несколько услуг сразу» на шаге цен.';
   }
   if (role === 'catalog') return wizardOpenCatalog(bot);
   if (role === 'order') {
@@ -2739,9 +2764,14 @@ function wizardScreenKeys(bot){
     }));
   }
   if (phase === 'services' || phase === 'book-service') {
-    return nav(bot.services.map(function(item, index){
-      return { id: 'svc'+index, label: item.price ? item.name+' · '+item.price+' ₽' : item.name, color: 'secondary' };
-    }));
+    const picked = play.picked || [];
+    const keys = bot.services.map(function(item, index){
+      const on = picked.indexOf(index) >= 0;
+      const name = item.price ? item.name+' · '+item.price+' ₽' : item.name;
+      return { id: 'svc'+index, label: (on ? 'Снять: ' : 'Выбрать: ')+name, color: on ? 'positive' : 'secondary' };
+    });
+    if (picked.length) keys.push({ id: 'svcdone', label: 'Дальше', color: 'primary', wide: true });
+    return nav(keys);
   }
   if (phase === 'sections') {
     return nav(wizardSections(bot.products).filter(function(section){ return section.name; }).map(function(section, index){
@@ -2813,11 +2843,39 @@ function paintWizardSandbox(step){
         assistSand.day = key.label;
         assistSand.phase = 'book-time';
         text = 'Выберите время.';
+      } else if (id === 'svcdone') {
+        const rows = (assistSand.picked || []).map(function(index){ return bot.services[index]; }).filter(Boolean);
+        const total = rows.reduce(function(sum, item){ return sum + (Number(item.price) || 0); }, 0);
+        const bill = rows.map(function(item){ return item.name+(item.price ? ': '+item.price+' ₽' : ''); }).join(', ');
+        const line = bill ? 'Сейчас: '+bill+(total ? ', Итого: '+total+' ₽' : '') : 'Услуги не выбраны.';
+        if (assistSand.phase === 'book-service') {
+          assistSand.service = assistSand.picked && assistSand.picked.length ? assistSand.picked[0] : -1;
+          assistSand.phase = 'book-day';
+          text = line+'\nВыберите день.';
+        } else {
+          assistSand.phase = 'end';
+          text = line+'. Это просмотр, заявка не создана.';
+        }
       } else if (id.indexOf('svc') === 0) {
-        const item = bot.services[Number(id.slice(3))] || {};
-        assistSand.service = Number(id.slice(3));
-        if (assistSand.phase === 'book-service') { assistSand.phase = 'book-day'; text = 'Выберите день.'; }
-        else { assistSand.phase = 'end'; text = (item.name || 'Услуга')+(item.price ? ' · '+item.price+' ₽' : '')+(item.text ? '\n'+item.text : ''); }
+        const index = Number(id.slice(3));
+        const item = bot.services[index] || {};
+        if (!assistSand.picked) assistSand.picked = [];
+        const at = assistSand.picked.indexOf(index);
+        const many = bot.multi || item.extra;
+        if (many) {
+          if (at >= 0) assistSand.picked.splice(at, 1);
+          else assistSand.picked.push(index);
+        } else if (at >= 0) assistSand.picked.splice(at, 1);
+        else {
+          assistSand.picked = assistSand.picked.filter(function(picked){ return bot.services[picked] && bot.services[picked].extra; });
+          assistSand.picked.push(index);
+        }
+        const rows = assistSand.picked.map(function(picked){ return bot.services[picked]; }).filter(Boolean);
+        const total = rows.reduce(function(sum, row){ return sum + (Number(row.price) || 0); }, 0);
+        const bill = rows.map(function(row){ return row.name+(row.price ? ': '+row.price+' ₽' : ''); }).join(', ');
+        text = rows.length
+          ? 'Сейчас: '+bill+(total ? ', Итого: '+total+' ₽' : '')+'\n'+(bot.multi ? 'Можно выбрать ещё. «Дальше» продолжит.' : 'Одна основная. Услуга с галочкой «вместе» добавляется сверху.')
+          : (bot.multi ? 'Можно выбрать несколько услуг. Они складываются.' : 'Выберите одну услугу.');
       } else if (id.indexOf('sec') === 0) {
         const named = wizardSections(bot.products).filter(function(section){ return section.name; });
         const section = named[Number(id.slice(3))] || { name: '' };
@@ -2869,7 +2927,7 @@ function paintWizardKeys(){
   const faces = rows.map(function(row, index){
     return wizardFace(row.label, wizardKeyNote(row), 'b'+index, row.color, path.index === index, row.hidden);
   });
-  let html = wizardPair(faces);
+  let html = '<p class="flabel">Основные кнопки главного экрана</p>'+wizardPair(faces);
   html += wizardFace(book, 'ведёт к выбору дня и времени', 'book', 'positive', open === 'book', false);
   html += wizardFace('Администратор', adminOn ? 'ведёт к сообщению вам во ВК' : 'сейчас выключена', 'admin', 'primary', open === 'admin', !adminOn);
   if (open === 'book') {
@@ -2889,7 +2947,7 @@ function paintWizardKeys(){
     else if (data.kind === 'contact') html += '<p class="hint">Ведёт в контакты из карточки.</p>';
     else if (!nested) html += '<label class="flabel">Текст, куда ведёт кнопка</label><textarea data-ktext maxlength="900" rows="3">'+esc(data.text)+'</textarea>';
     if (nested) {
-      html += '<p class="flabel">Разделы внутри</p>'+wizardPair(data.kids.map(function(kid, kidIndex){
+      html += '<p class="flabel">Дополнительные кнопки. Клиент видит их после нажатия основной</p>'+wizardPair(data.kids.map(function(kid, kidIndex){
         const note = kid.subs ? 'ведёт в: '+kid.subs : (kid.text ? 'ведёт в текст' : 'ведёт в текст, его ещё нет');
         return wizardFace(kid.label, note, 'b'+path.index+'.c'+kidIndex, 'secondary', path.child === kidIndex, false);
       }));
@@ -3257,7 +3315,7 @@ async function saveDesk(){
     const response = await fetch('/api/vk/assistant/reply', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, choices: choices, payment: payment, booking: booking, pickup: pickup, pickupMap: pickupMap, delivery: delivery, deliveryPrice: deliveryPrice, pickupOn: pickupOn, deliveryOn: deliveryOn, goodsOn: goodsOn, orderOn: orderOn, bookingOn: scenario === 'info' ? false : bookingOn, linkOn: linkOn, trade: trade, services: services, products: products, handoff: handoff, buttons: buttons, schedule: assistScheduleValue(), scenario: scenario, desk: deskMode })
+      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, choices: choices, payment: payment, booking: booking, pickup: pickup, pickupMap: pickupMap, delivery: delivery, deliveryPrice: deliveryPrice, pickupOn: pickupOn, deliveryOn: deliveryOn, goodsOn: goodsOn, orderOn: orderOn, bookingOn: scenario === 'info' ? false : bookingOn, linkOn: linkOn, trade: trade, services: services, multi: !!((document.getElementById('assistMulti') || {}).checked), products: products, handoff: handoff, buttons: buttons, schedule: assistScheduleValue(), scenario: scenario, desk: deskMode })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Ответы не сохранились');
@@ -3767,6 +3825,9 @@ function bind(){
   document.querySelectorAll('[data-go]').forEach(function(button){
     button.onclick = function(){ tab = button.dataset.go; draw(); };
   });
+  const assistBackBtn = document.getElementById('assistBack');
+  if (assistBackBtn) assistBackBtn.onclick = assistBack;
+  paintAssistBack();
   const assistSave = document.getElementById('assistSave');
   if (assistSave) assistSave.onclick = saveAssist;
   const assistDrop = document.getElementById('assistDrop');

@@ -47,6 +47,8 @@ test('карточка ИП заполняет те же поля, что чел
     assert.equal(reply.products.filter(item => item.section === 'Хранение').length, 3);
     assert.match(reply.pickupMap, /yandex\.ru\/maps\/213\/moscow/);
     assert.match(reply.address, /Люблинская/);
+    assert.equal(reply.multi, true);
+    assert.equal(reply.buttons.find(item => item.label === 'Прайс').color, 'positive');
     assert.equal(reply.buttons.find(item => item.label === 'Прайс').items[0].items.length, 2);
     assert.match(reply.buttons.find(item => item.label === 'Отзывы').link, /reviews-243561815/);
     assert.equal(reply.buttons.find(item => item.label === 'Как доехать').action, 'contact');
@@ -130,6 +132,8 @@ test('фраза дона принимает ссылку и ответ и от�
     assert.equal(modes.goodsOn, false);
     assert.equal(modes.bookingOn, false);
     assert.equal(assistant.cleanReply({ scenario: 'info', bookingOn: true }).bookingOn, false);
+    assert.equal(assistant.cleanReply({}).multi, false);
+    assert.equal(assistant.cleanReply({ multi: true }).multi, true);
     assert.equal(assistant.cleanReply({}).goodsOn, true);
     assert.equal(assistant.cleanReply({}).bookingOn, true);
     assert.equal(assistant.cleanReply({}).linkOn, true);

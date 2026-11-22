@@ -96,6 +96,7 @@ function cleanReply(input) {
         bookingOn: bookingOn,
         linkOn: linkOn,
         orderOn: orderOn,
+        multi: input.multi === true || input.multi === 'true',
         trade: picked.id,
         services: cleanServices(input.services, picked.id),
         products: cleanProducts(input.products),
@@ -519,6 +520,7 @@ async function saveDesk(account, input, fetchImpl) {
         bookingOn: reply.bookingOn,
         linkOn: reply.linkOn,
         orderOn: reply.orderOn,
+        multi: reply.multi,
         trade: reply.trade,
         services: reply.services,
         products: reply.products,
@@ -917,14 +919,17 @@ function demoReply(groupId) {
             places: ['Бокс', 'Выезд'],
             seats: 4
         },
+        multi: true,
         buttons: [
-            { label: 'Услуги', text: 'Показать услуги' },
-            { label: 'Каталог', text: 'Открыть разделы' },
+            { label: 'Услуги', text: 'Показать услуги', color: 'primary' },
+            { label: 'Каталог', text: 'Открыть разделы', color: 'primary' },
             {
                 label: 'Прайс',
+                color: 'positive',
                 items: [
                     {
                         label: 'Легковые',
+                        color: 'primary',
                         items: [
                             { label: 'R15-R16', text: 'Шиномонтаж легкового колеса R15-R16 стоит 400 рублей, балансировка входит.' },
                             { label: 'R17-R18', text: 'Шиномонтаж легкового колеса R17-R18 стоит 500 рублей, балансировка входит.' }
@@ -932,6 +937,7 @@ function demoReply(groupId) {
                     },
                     {
                         label: 'Внедорожник',
+                        color: 'primary',
                         items: [
                             { label: 'R17-R19', text: 'Шиномонтаж внедорожника R17-R19 стоит 600 рублей за колесо.' },
                             { label: 'R20-R22', text: 'Шиномонтаж внедорожника R20-R22 стоит 800 рублей за колесо.' }
@@ -941,8 +947,8 @@ function demoReply(groupId) {
             },
             { label: 'Как доехать', action: 'contact' },
             { label: 'Оплата', text: 'Показать способ оплаты' },
-            { label: 'Отзывы', link: reviews },
-            { label: 'Запись онлайн', action: 'book', text: 'Открыть свободные дни' }
+            { label: 'Отзывы', link: reviews, color: 'secondary' },
+            { label: 'Запись онлайн', action: 'book', text: 'Открыть свободные дни', color: 'positive' }
         ]
     });
 }

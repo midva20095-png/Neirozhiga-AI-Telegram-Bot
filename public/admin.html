@@ -41,6 +41,7 @@ th{color:var(--mut);font-size:12px}
 .ok{color:#3ee08f;font-weight:800}.bad{color:#ff8fb0;font-weight:800}
 .ava{width:36px;height:36px;border-radius:50%;object-fit:cover;background:#1c1233;display:inline-flex;align-items:center;justify-content:center;font-weight:800;vertical-align:middle;margin-right:8px}
 .note{color:var(--mut);font-size:13px}
+.setup-kids{margin:6px 0 8px 12px;padding-left:10px;border-left:2px solid var(--line)}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .stat{background:#1c1233;border:1px solid var(--line);border-radius:14px;padding:12px}
 .stat .n{font-size:24px;font-weight:800}
@@ -473,7 +474,7 @@ async function loadAssist(){
     : '<span class="bad">'+(health.error || 'второй бот не на связи')+'</span>';
   const demo = data.demo || null;
   el.innerHTML = '<div class="card"><h3>Демонстрация</h3>'+
-    '<p class="note">Вставьте номер и ключ тестового сообщества. Карточка заполнится как у ИП Соколова: услуги со ссылкой и описанием, разделы каталога, прайс с разделами и подразделами, адрес, точка на Яндекс Картах, доставка, оплата и запись. Люди пишут этому сообществу.</p>'+
+    '<p class="note">Вставьте номер и ключ тестового сообщества. Карточка как у ИП Соколова. На главном экране основные кнопки: услуги, каталог, прайс, дорога, оплата, отзывы и запись. Внутри «Прайс» дополнительные: легковые и внедорожник, а в них размеры. Клиент может отметить несколько услуг, сумма складывается. Адрес, точка на Яндекс Картах, доставка и оплата тоже в карточке.</p>'+
     (demo ? '<p class="note"><span class="ok">'+esc(demo.title)+'</span> · '+esc(demo.groupId)+' · '+esc(demo.syncLabel)+'</p>'+
       '<p class="note"><a href="'+esc(demo.link)+'" target="_blank" rel="noopener">Открыть переписку с демонстрацией</a></p>'+
       (demo.error ? '<p class="note">'+esc(demo.error)+'</p>' : '') : '<p class="note">Демонстрация ещё не подключена.</p>')+
@@ -584,17 +585,114 @@ function setupHours(selected, from, to){
   }
   return html;
 }
+function setupTone(value){
+  return value === 'primary' || value === 'positive' || value === 'negative' ? value : 'secondary';
+}
+function setupButtonKind(button){
+  if (button && Array.isArray(button.items) && button.items.length) return 'menu';
+  if (button && button.action === 'contact') return 'contact';
+  if (button && button.action === 'book') return 'book';
+  if (button && button.link && !button.text) return 'link';
+  return 'text';
+}
+function setupButtonRow(button, depth){
+  const level = depth || 0;
+  const kind = setupButtonKind(button);
+  const tone = setupTone(button && button.color);
+  const value = kind === 'link' ? (button && button.link || '') : (button && button.text || '');
+  const kids = kind === 'menu' && button && Array.isArray(button.items) ? button.items : [];
+  return '<div class="setup-btn" data-setup-row>'+
+    '<label>'+(level ? 'Дополнительная, внутри кнопки' : 'Основная, главный экран')+'</label>'+
+    '<div class="row">'+
+      '<input data-setup-label maxlength="40" placeholder="Надпись" value="'+esc(button && button.label || '')+'">'+
+      '<select data-setup-kind>'+
+        '<option value="text"'+(kind==='text'?' selected':'')+'>Текст</option>'+
+        '<option value="link"'+(kind==='link'?' selected':'')+'>Ссылка</option>'+
+        '<option value="contact"'+(kind==='contact'?' selected':'')+'>Контакты</option>'+
+        (level ? '' : '<option value="book"'+(kind==='book'?' selected':'')+'>Запись</option>')+
+        (level < 2 ? '<option value="menu"'+(kind==='menu'?' selected':'')+'>Кнопки внутри</option>' : '')+
+      '</select>'+
+      '<select data-setup-color>'+
+        '<option value="secondary"'+(tone==='secondary'?' selected':'')+'>Обычная</option>'+
+        '<option value="primary"'+(tone==='primary'?' selected':'')+'>Синяя</option>'+
+        '<option value="positive"'+(tone==='positive'?' selected':'')+'>Зелёная</option>'+
+        '<option value="negative"'+(tone==='negative'?' selected':'')+'>Красная</option>'+
+      '</select>'+
+    '</div>'+
+    '<input data-setup-value maxlength="300" placeholder="Текст или https" value="'+esc(value)+'"'+(kind==='menu'||kind==='contact'||kind==='book'?' hidden':'')+'>'+
+    '<div class="setup-kids" data-setup-kids'+(kind==='menu'?'':' hidden')+'>'+kids.map(function(kid){ return setupButtonRow(kid, level + 1); }).join('')+'</div>'+
+    (level < 2 ? '<button type="button" class="ghost" data-setup-add>Дополнительная кнопка</button>' : '')+
+  '</div>';
+}
 function setupButtons(reply){
-  const saved = reply && Array.isArray(reply.buttons) ? reply.buttons.slice(0, 6) : [];
-  const rows = saved.slice();
-  while (rows.length < 6) rows.push({ label: '', text: '' });
-  return rows.map(function(button){
-    const kind = button.link ? 'link' : 'text';
-    const value = button.link || button.text || '';
-    return '<div class="row" data-setup-row><input data-setup-label maxlength="40" placeholder="Надпись" value="'+esc(button.label||'')+'">'+
-      '<select data-setup-kind><option value="text"'+(kind==='text'?' selected':'')+'>Текст</option><option value="link"'+(kind==='link'?' selected':'')+'>Ссылка</option></select>'+
-      '<input data-setup-value maxlength="300" placeholder="Текст или https" value="'+esc(value)+'"></div>';
-  }).join('');
+  const saved = reply && Array.isArray(reply.buttons) ? reply.buttons.filter(function(button){ return button && button.label; }).slice(0, 8) : [];
+  const rows = saved.length ? saved : [{ label: '', text: '' }];
+  return '<div id="setupButtons">'+rows.map(function(button){ return setupButtonRow(button, 0); }).join('')+'</div>'+
+    '<button type="button" class="ghost" id="setupAddButton">Ещё основная кнопка</button>';
+}
+function setupButtonDepth(row){
+  let depth = 0;
+  let node = row ? row.parentElement : null;
+  while (node) {
+    if (node.hasAttribute && node.hasAttribute('data-setup-row')) depth += 1;
+    node = node.parentElement;
+  }
+  return depth;
+}
+function setupKindChange(select){
+  const row = select.closest('[data-setup-row]');
+  if (!row) return;
+  const value = row.querySelector(':scope > [data-setup-value]');
+  const kids = row.querySelector(':scope > [data-setup-kids]');
+  const menu = select.value === 'menu';
+  if (value) value.hidden = menu || select.value === 'contact' || select.value === 'book';
+  if (kids) kids.hidden = !menu;
+}
+function bindSetupButtons(){
+  document.querySelectorAll('#setupButtons [data-setup-kind]').forEach(function(select){
+    select.onchange = function(){ setupKindChange(select); };
+  });
+  document.querySelectorAll('#setupButtons [data-setup-add]').forEach(function(button){
+    button.onclick = function(){
+      const row = button.closest('[data-setup-row]');
+      const kids = row && row.querySelector(':scope > [data-setup-kids]');
+      if (!kids || kids.querySelectorAll(':scope > [data-setup-row]').length >= 6) return;
+      const kind = row.querySelector(':scope > .row [data-setup-kind]');
+      if (kind) { kind.value = 'menu'; setupKindChange(kind); }
+      kids.hidden = false;
+      kids.insertAdjacentHTML('beforeend', setupButtonRow({ label: '', text: '' }, setupButtonDepth(row) + 1));
+      bindSetupButtons();
+    };
+  });
+  const add = document.getElementById('setupAddButton');
+  if (add) add.onclick = function(){
+    const box = document.getElementById('setupButtons');
+    if (!box || box.querySelectorAll(':scope > [data-setup-row]').length >= 8) return;
+    box.insertAdjacentHTML('beforeend', setupButtonRow({ label: '', text: '' }, 0));
+    bindSetupButtons();
+  };
+}
+function setupReadRow(row){
+  const label = String((row.querySelector(':scope > .row [data-setup-label]') || {}).value || '').trim();
+  if (!label) return null;
+  const kind = (row.querySelector(':scope > .row [data-setup-kind]') || {}).value || 'text';
+  const color = (row.querySelector(':scope > .row [data-setup-color]') || {}).value || 'secondary';
+  const value = String((row.querySelector(':scope > [data-setup-value]') || {}).value || '');
+  let item;
+  if (kind === 'menu') {
+    const items = [];
+    row.querySelectorAll(':scope > [data-setup-kids] > [data-setup-row]').forEach(function(child){
+      const next = setupReadRow(child);
+      if (next) items.push(next);
+    });
+    if (!items.length) return null;
+    item = { label: label, items: items };
+  } else if (kind === 'book') item = { label: label, action: 'book', text: 'Открыть свободные дни' };
+  else if (kind === 'contact') item = { label: label, action: 'contact' };
+  else if (kind === 'link') item = { label: label, link: value };
+  else item = { label: label, text: value || label };
+  if (color === 'primary' || color === 'positive' || color === 'negative' || color === 'secondary') item.color = color;
+  return item;
 }
 function openSetup(userId){
   setupUserId = String(userId || '').replace(/\D/g, '');
@@ -645,7 +743,8 @@ function openSetup(userId){
       '<label>Места через запятую</label><input id="setupPlaces" maxlength="180" value="'+esc((plan.places||['На месте']).join(', '))+'">'+
       '<label>Мест на день, пусто — без ограничений</label><input id="setupSeats" inputmode="numeric" maxlength="2" placeholder="Пусто — без ограничений" value="'+esc(Number(plan.seats) > 0 ? plan.seats : '')+'">'+
       '<label class="check"><input id="setupHandoff" type="checkbox"'+(reply.handoff===false?'':' checked')+'> Кнопка «Администратор»</label>'+
-      '<label>Кнопки, пустые строки не сохраняются</label>'+setupButtons(reply)+
+      '<label class="check"><input id="setupMulti" type="checkbox"'+(reply.multi?' checked':'')+'> Несколько услуг сразу: клиент отмечает больше одной, сумма складывается</label>'+
+      '<label>Кнопки. Основные стоят на главном экране. Дополнительная открывается только внутри основной</label>'+setupButtons(reply)+
       '<div class="row" style="margin-top:12px"><button type="button" id="setupSave">Сохранить карточку</button></div>'
     : '<p class="note">Сообщество ещё не подключено. Карточку можно заполнить после того, как человек вставит номер и ключ в своём кабинете.</p>';
   box.innerHTML = '<div class="card sheet"><div class="head"><h3>'+esc(don.name)+'</h3><button type="button" class="ghost" id="setupClose">Закрыть</button></div>'+
@@ -666,6 +765,7 @@ function openSetup(userId){
   document.getElementById('setupClose').onclick = function(){ box.style.display = 'none'; };
   const save = document.getElementById('setupSave');
   if (save) save.onclick = saveSetup;
+  bindSetupButtons();
   const write = document.getElementById('setupWrite');
   if (write) write.onclick = writeSetup;
   const done = document.getElementById('setupDone');
@@ -706,14 +806,9 @@ function setupServicesField(){
 }
 function setupBody(){
   const buttons = [];
-  document.querySelectorAll('[data-setup-row]').forEach(function(row){
-    const label = (row.querySelector('[data-setup-label]') || {}).value || '';
-    const kind = (row.querySelector('[data-setup-kind]') || {}).value || 'text';
-    const value = (row.querySelector('[data-setup-value]') || {}).value || '';
-    if (!String(label).trim() && !String(value).trim()) return;
-    const item = { label: label };
-    item[kind === 'link' ? 'link' : 'text'] = value;
-    buttons.push(item);
+  document.querySelectorAll('#setupButtons > [data-setup-row]').forEach(function(row){
+    const item = setupReadRow(row);
+    if (item) buttons.push(item);
   });
   const days = [];
   document.querySelectorAll('[data-setup-day]').forEach(function(box){ if (box.checked) days.push(Number(box.value)); });
@@ -743,6 +838,7 @@ function setupBody(){
     services: setupServicesField(),
     products: setupProductsField(),
     handoff: !!(document.getElementById('setupHandoff') || {}).checked,
+    multi: !!(document.getElementById('setupMulti') || {}).checked,
     buttons: buttons,
     schedule: {
       days: days,
