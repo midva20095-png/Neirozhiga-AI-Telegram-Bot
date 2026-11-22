@@ -1116,6 +1116,14 @@ function startWebApp() {
         }
     });
 
+    app.post('/api/admin/vk/assistant/demo/stop', requireAdmin, async (req, res) => {
+        try {
+            res.json(await assistant.stopDemo());
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Демонстрация не отключилась.' });
+        }
+    });
+
     app.post('/api/admin/vk/assistant/demo', requireAdmin, async (req, res) => {
         try {
             const body = req.body || {};

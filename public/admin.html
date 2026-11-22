@@ -480,8 +480,7 @@ async function loadAssist(){
     '<label>Номер сообщества</label><input id="demoGroup" inputmode="numeric" placeholder="123456789" value="'+esc(demo ? demo.groupId : '')+'">'+
     '<label>Ключ сообщества</label><input id="demoToken" type="password" placeholder="Ключ из настроек сообщества" autocomplete="off">'+
     '<div class="row" style="margin-top:12px"><button type="button" onclick="saveDemo()">Подключить и заполнить</button>'+
-    (demo ? '<button type="button" class="ghost" onclick="dropAssist(\''+String(demo.groupId).replace(/\D/g, '')+'\')">Отключить</button>' : '')+
-    '</div>'+
+    '<button type="button" class="ghost" onclick="stopDemo()">Отключить</button></div>'+
     '<p id="demomsg" class="note"></p></div>'+
     '<div class="card"><h3>Помощник доната</h3>'+
     '<p class="note">'+line+' Доны НейроЯги подключают своё сообщество в кабинете приложения. Пока донат жив, второй бот отвечает покупателям. Когда срок кончился, он замолкает только у этого человека. База клиентов каждого сообщества хранится у помощника отдельно. Здесь видно только количество, без телефонов.</p>'+
@@ -533,6 +532,20 @@ async function saveDemo(){
     ? 'Карточка сохранена. Второй бот её ещё не принял.'
     : 'Готово. Люди могут писать сообществу и смотреть бота.';
   loadAssist();
+}
+async function stopDemo(){
+  if (!confirm('Отключить демонстрацию? Тестовое сообщество перестанет отвечать.')) return;
+  const msg = document.getElementById('demomsg');
+  if (msg) msg.textContent = 'Отключаю демонстрацию…';
+  const data = await api('/api/admin/vk/assistant/demo/stop', { method:'POST', body:'{}', timeout: 90000 });
+  if (!data.ok) {
+    if (msg) msg.textContent = data.error || 'Не получилось';
+    return;
+  }
+  const note = data.stopped ? 'Демонстрация отключена.' : 'Демонстрация уже выключена.';
+  await loadAssist();
+  const fresh = document.getElementById('demomsg');
+  if (fresh) fresh.textContent = note;
 }
 async function syncAssist(){
   const msg = document.getElementById('assistmsg');

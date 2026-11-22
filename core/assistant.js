@@ -992,6 +992,17 @@ async function installDemo(groupId, token, title, fetchImpl) {
     };
 }
 
+async function stopDemo(fetchImpl) {
+    const rows = await db.listAssistantCommunities(DEMO_OWNER);
+    for (const row of rows) {
+        await postAssistant('/community/remove', { userId: DEMO_OWNER, groupId: Number(row.group_id) }, fetchImpl);
+        await db.deleteAssistantCommunity(row.group_id);
+    }
+    await db.upsertAssistantDon(DEMO_OWNER, 'Демонстрация', false);
+    await tellAccess(DEMO_OWNER, false, fetchImpl);
+    return { ok: true, stopped: rows.length };
+}
+
 async function adminList(fetchImpl) {
     const health = await readHealth(fetchImpl);
     const dons = await db.listAssistantDons();
@@ -1047,6 +1058,7 @@ module.exports = {
     DEMO_OWNER,
     demoReply,
     installDemo,
+    stopDemo,
     vkId,
     accessChange,
     maskToken,
