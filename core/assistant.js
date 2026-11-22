@@ -1,4 +1,5 @@
 const db = require('./db');
+const { cleanServices, tradeById } = require('../public/trades');
 
 const JOIN_URL = 'https://vk.com/donut/club214554778';
 const HOLD_MS = 10 * 24 * 60 * 60 * 1000;
@@ -73,6 +74,15 @@ function cleanReply(input) {
     if (typeof rawMap !== 'string') return null;
     const pickupMap = yandexMapLink(rawMap);
     if (rawMap.trim() && !pickupMap) return null;
+    const picked = tradeById(input.trade);
+    const goodsOn = input.goodsOn == null ? picked.goodsOn : !(input.goodsOn === false || input.goodsOn === 'false');
+    const bookingOn = input.scenario === 'info'
+        ? false
+        : (input.bookingOn == null ? picked.bookingOn : !(input.bookingOn === false || input.bookingOn === 'false'));
+    const linkOn = input.linkOn == null
+        ? (input.goodsOn == null ? picked.linkOn : goodsOn)
+        : !(input.linkOn === false || input.linkOn === 'false');
+    const orderOn = input.orderOn == null ? picked.orderOn : !(input.orderOn === false || input.orderOn === 'false');
     return Object.assign({
         greeting: greeting,
         buttons: buttons,
@@ -81,8 +91,12 @@ function cleanReply(input) {
         handoff: !(input.handoff === false || input.handoff === 'false'),
         pickupOn: input.pickupOn === true || input.pickupOn === 'true',
         deliveryOn: input.deliveryOn === true || input.deliveryOn === 'true',
-        goodsOn: !(input.goodsOn === false || input.goodsOn === 'false'),
-        bookingOn: input.scenario === 'info' ? false : !(input.bookingOn === false || input.bookingOn === 'false'),
+        goodsOn: goodsOn,
+        bookingOn: bookingOn,
+        linkOn: linkOn,
+        orderOn: orderOn,
+        trade: picked.id,
+        services: cleanServices(input.services, picked.id),
         pickupMap: pickupMap
     }, fields);
 }
@@ -472,6 +486,10 @@ async function saveDesk(account, input, fetchImpl) {
         deliveryOn: reply.deliveryOn,
         goodsOn: reply.goodsOn,
         bookingOn: reply.bookingOn,
+        linkOn: reply.linkOn,
+        orderOn: reply.orderOn,
+        trade: reply.trade,
+        services: reply.services,
         handoff: reply.handoff,
         buttons: reply.buttons,
         schedule: reply.schedule,
@@ -715,7 +733,8 @@ function publicBookings(list) {
         address: cleanBit(item && item.address, 200),
         phone: cleanBit(item && item.phone, 16),
         map: yandexMapLink(item && item.map),
-        product: httpsLink(item && item.product)
+        product: httpsLink(item && item.product),
+        service: cleanBit(item && item.service, 40)
     })).filter(item => item.peerId > 0 && /^\d{4}-\d{2}-\d{2}$/.test(item.day));
 }
 

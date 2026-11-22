@@ -153,7 +153,7 @@ function startWebApp() {
     const publicPath = path.join(__dirname, '../public');
     app.use(express.static(publicPath, {
         setHeaders(res, filePath) {
-            if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+            if (filePath.endsWith('.html') || filePath.endsWith(`${path.sep}trades.js`)) res.setHeader('Cache-Control', 'no-cache');
         }
     }));
     app.get('/', (req, res) => {

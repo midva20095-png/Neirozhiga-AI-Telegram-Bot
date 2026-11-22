@@ -62,6 +62,18 @@ test('фраза дона принимает ссылку и ответ и от�
     assert.equal(assistant.cleanReply({ scenario: 'info', bookingOn: true }).bookingOn, false);
     assert.equal(assistant.cleanReply({}).goodsOn, true);
     assert.equal(assistant.cleanReply({}).bookingOn, true);
+    assert.equal(assistant.cleanReply({}).linkOn, true);
+    assert.equal(assistant.cleanReply({}).orderOn, true);
+    assert.equal(assistant.cleanReply({}).trade, 'shop');
+    assert.deepEqual(assistant.cleanReply({}).services, []);
+    const tire = assistant.cleanReply({ trade: 'tire' });
+    assert.equal(tire.trade, 'tire');
+    assert.equal(tire.linkOn, false);
+    assert.equal(tire.orderOn, false);
+    assert.equal(tire.goodsOn, false);
+    assert.deepEqual(tire.services, ['Шиномонтаж', 'Ремонт', 'Балансировка', 'Сезонная смена']);
+    assert.equal(assistant.cleanReply({ goodsOn: false }).linkOn, false);
+    assert.equal(assistant.cleanReply({ goodsOn: false, linkOn: true }).linkOn, true);
     const card = assistant.cleanReply({
         payment: 'Перевод после подтверждения.',
         booking: 'Бронь по дате в сообщениях.',

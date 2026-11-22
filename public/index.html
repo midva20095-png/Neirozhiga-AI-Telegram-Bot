@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>НейроЯга</title>
 <link rel="icon" href="cover.jpg">
+<script src="trades.js"></script>
 <script>
 function vkSend(handler, params){
   if (window.vkBridge && vkBridge.send) {
@@ -907,9 +908,27 @@ function assistButtonList(reply, groupId){
     return { label: 'Каталог', link: 'https://vk.com/market-' + id };
   });
 }
+function assistLinkChecked(reply){
+  if (!reply || reply.linkOn == null) return !reply || reply.goodsOn !== false;
+  return reply.linkOn !== false;
+}
+function assistTradeHtml(reply){
+  const current = reply && reply.trade ? reply.trade : 'shop';
+  const catalog = window.ASSIST_TRADES || { groups: [], trades: [] };
+  const groups = catalog.groups.map(function(group){
+    const options = catalog.trades.filter(function(item){ return item.group === group; }).map(function(item){
+      return '<option value="'+esc(item.id)+'"'+(item.id===current?' selected':'')+'>'+esc(item.title)+'</option>';
+    }).join('');
+    return '<optgroup label="'+esc(group)+'">'+options+'</optgroup>';
+  }).join('');
+  return '<label class="flabel" for="assistTrade">Направление</label>'+
+    '<select id="assistTrade">'+groups+'</select>'+
+    '<p class="hint">Выберите, чем занимается сообщество. Подставятся кнопки, запись и список, на что записывают. Галочки ниже можно поправить и потом сохранить карточку.</p>';
+}
 function assistScenarioHtml(reply){
   const mode = reply && reply.scenario === 'info' ? 'info' : 'funnel';
-  return '<p class="hint">«Только информация» даёт контакты, каталог, заказ, оплату и адрес. «Запись и заказ» добавляет календарь. Кнопки появляются в чате после включения «Возможностей ботов».</p>'+
+  return assistTradeHtml(reply)+
+    '<p class="hint">«Только информация» оставляет контакты и ответы без записи. «Запись и заказ» включает то, что выбрано в направлении.</p>'+
     '<label style="display:block;margin:6px 0"><input type="radio" name="assistScenario" value="funnel"'+(mode==='funnel'?' checked':'')+'> Запись и заказ</label>'+
     '<label style="display:block;margin:6px 0"><input type="radio" name="assistScenario" value="info"'+(mode==='info'?' checked':'')+'> Только информация</label>';
 }
@@ -934,8 +953,11 @@ function assistScheduleHtml(reply){
   const places = Array.isArray(plan.places) && plan.places.length ? plan.places.join(', ') : 'На месте';
   const seats = Number(plan.seats) > 0 ? String(plan.seats) : '';
   return '<p class="now">Календарь записи</p>'+
-      '<label style="display:block;margin:8px 0"><input id="assistBookingOn" type="checkbox"'+(!reply || (reply.bookingOn !== false && reply.scenario !== 'info') ? ' checked' : '')+'> Принимать запись</label>'+
-      '<p class="hint">Включено: день, время и телефон. Ссылку на товар бот спросит только если поиск товаров включён, и её можно пропустить кнопкой «Без товара». Выключите, если записывать не нужно.</p>'+
+      '<label style="display:block;margin:8px 0"><input id="assistBookingOn" type="checkbox"'+(!reply || (reply.bookingOn !== false && reply.scenario !== 'info') ? ' checked' : '')+'> Кнопка «Записаться»</label>'+
+      '<label style="display:block;margin:8px 0"><input id="assistLinkOn" type="checkbox"'+(assistLinkChecked(reply) ? ' checked' : '')+'> Спрашивать ссылку на товар</label>'+
+      '<p class="hint">Снимите «Записаться», чтобы убрать кнопку и не принимать бронь. Снимите ссылку на товар, если при записи она не нужна. Для шиномонтажа, маникюра и других услуг ссылка выключена, а запись идёт на услугу из списка.</p>'+
+      '<label class="flabel" for="assistServices">На что запись, через запятую</label>'+
+      '<input id="assistServices" maxlength="300" placeholder="Например: Шиномонтаж, Ремонт" value="'+esc(Array.isArray(reply && reply.services) ? reply.services.join(', ') : '')+'">'+
     '<label class="flabel">Рабочие дни</label><div>'+checks+'</div>'+
     '<label class="flabel" for="assistStart">Начало</label><select id="assistStart">'+assistHourOptions(plan.start == null ? 10 : plan.start, 0, 22)+'</select>'+
     '<label class="flabel" for="assistEnd">Конец, это время уже не записывают</label><select id="assistEnd">'+assistHourOptions(plan.end == null ? 19 : plan.end, 1, 23)+'</select>'+
@@ -983,7 +1005,8 @@ function assistDesk(reply, groupId){
       '<label class="flabel" for="assistChoices">Варианты к заказу</label>'+
       assistArea('assistChoices', 1500, 6, 'Начинка: шоколад, ягоды, ваниль', reply && reply.choices)+
       '<label style="display:block;margin:8px 0"><input id="assistGoodsOn" type="checkbox"'+(!reply || reply.goodsOn !== false ? ' checked' : '')+'> Искать товары сообщества</label>'+
-      '<p class="hint">Включено: бот показывает найденные товары кнопками, человек может написать, что искать. В заказе и в записи будет видно, что товар нашёл бот, и ссылка на него. Прямая ссылка на кнопке открывается сразу и в заявку сама не попадает. Выключите, если товары не нужны, например для автосервиса.</p>'+
+      '<label style="display:block;margin:8px 0"><input id="assistOrderOn" type="checkbox"'+(!reply || reply.orderOn !== false ? ' checked' : '')+'> Принимать заказ</label>'+
+      '<p class="hint">Поиск показывает найденные товары кнопками. Заказ сохраняет товар, телефон и получение. Для записи на услугу оба пункта выключены: остаётся кнопка «Записаться» и список услуг.</p>'+
       '<label class="flabel" for="assistPayment">Как оплатить</label>'+
       assistArea('assistPayment', 1500, 5, 'Карта, перевод или наличные. Не пишите то, чего нет.', reply && reply.payment)],
     ['road', 'Доставка',
@@ -1003,7 +1026,7 @@ function assistDesk(reply, groupId){
       assistArea('assistBooking', 2500, 8, 'Предоплата, что взять с собой. Если правил нет, оставьте пустым.', reply && reply.booking)+
       assistScheduleHtml(reply)],
     ['keys', 'Кнопки',
-      '<p class="hint">«Каталог» — прямая ссылка на витрину сообщества, её можно заменить своим адресом https. «Свой текст» присылает вашу фразу. «Ответ: бот ищет товары» — отдельная кнопка, если нужен поиск по сообществу.</p>'+
+      '<p class="hint">«Каталог» — прямая ссылка на витрину сообщества, её можно заменить своим адресом https. «Свой текст» присылает вашу фразу. «Ответ: бот ищет товары» — отдельная кнопка, если нужен поиск по сообществу. Кнопку «Записаться» убирает галочка в разделе «Запись».</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistHandoff" type="checkbox"'+(handoff ? ' checked' : '')+'> Кнопка «Администратор»</label>'+
       '<p class="hint">Покупатель жмёт её, вам приходит сообщение ВК, а в списке клиентов появляется пометка «Ждёт администратора». Пока вы отвечаете, помощник молчит. Покупатель возвращает меню кнопкой «К помощнику».</p>'+
       '<div id="assistButtons">'+buttons.map(assistButtonHtml).join('')+'</div>'+
@@ -1335,7 +1358,7 @@ function assistBookings(pack, clients, groupId){
   const list = chosen.length ? chosen.map(function(item){
     const person = people.find(function(one){ return Number(one.peerId) === Number(item.peerId); });
     const who = person && person.name ? person.name : ('ВК '+item.peerId);
-    const bits = [item.slot, item.place, item.way, item.address, item.phone].filter(Boolean);
+    const bits = [item.service, item.slot, item.place, item.way, item.address, item.phone].filter(Boolean);
     const product = item.product ? ' · <a href="'+esc(item.product)+'">товар, который нашёл бот</a>' : '';
     const map = item.map ? ' · <a href="'+esc(item.map)+'">карта</a>' : '';
     const dialog = communityDialog(groupId, item.peerId);
@@ -1414,6 +1437,52 @@ function assistKind(select){
     if (field) { field.disabled = false; field.placeholder = 'Например: доставка по городу в день заказа'; }
   }
 }
+function applyTrade(id){
+  const catalog = window.ASSIST_TRADES;
+  const trade = catalog && catalog.trades.find(function(item){ return item.id === id; });
+  if (!trade) return;
+  const booking = document.getElementById('assistBookingOn');
+  const link = document.getElementById('assistLinkOn');
+  const goods = document.getElementById('assistGoodsOn');
+  const order = document.getElementById('assistOrderOn');
+  const services = document.getElementById('assistServices');
+  if (booking) booking.checked = !!trade.bookingOn;
+  if (link) link.checked = !!trade.linkOn;
+  if (goods) goods.checked = !!trade.goodsOn;
+  if (order) order.checked = !!trade.orderOn;
+  if (services) services.value = (trade.services || []).join(', ');
+  if (trade.bookingOn) {
+    const funnel = document.querySelector('input[name="assistScenario"][value="funnel"]');
+    if (funnel) funnel.checked = true;
+  }
+  const list = document.getElementById('assistButtons');
+  if (list) {
+    const groupId = String((document.getElementById('assistGroup') || {}).value || '').replace(/\D/g, '');
+    const buttons = (trade.buttons || []).map(function(button){
+      if (button.label === 'Каталог' && groupId && !button.link && !button.goods) {
+        return { label: 'Каталог', link: 'https://vk.com/market-' + groupId };
+      }
+      return button;
+    });
+    list.innerHTML = buttons.map(assistButtonHtml).join('');
+    const add = document.getElementById('assistAdd');
+    if (buttons.length >= 6 && add) add.remove();
+    if (buttons.length < 6 && !document.getElementById('assistAdd')) {
+      list.insertAdjacentHTML('afterend', '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>');
+    }
+  }
+  const msg = document.getElementById('deskmsg');
+  if (msg) msg.textContent = 'Направление «'+trade.title+'» подставлено. Сохраните карточку.';
+  bind();
+}
+function syncBookButton(){
+  const box = document.getElementById('assistBookingOn');
+  const on = !box || box.checked;
+  document.querySelectorAll('[data-brow]').forEach(function(row){
+    const label = String((row.querySelector('[data-blabel]') || {}).value || '').trim();
+    if (label === 'Записаться') row.hidden = !on;
+  });
+}
 function addAssistButton(){
   const list = document.getElementById('assistButtons');
   if (!list || list.querySelectorAll('[data-brow]').length >= 6) return;
@@ -1471,7 +1540,11 @@ async function saveDesk(){
   const deliveryOn = !!(document.getElementById('assistDeliveryOn') || {}).checked;
   const handoff = !!(document.getElementById('assistHandoff') || {}).checked;
   const goodsOn = !!(document.getElementById('assistGoodsOn') || {}).checked;
+  const orderOn = !!(document.getElementById('assistOrderOn') || {}).checked;
   const bookingOn = !!(document.getElementById('assistBookingOn') || {}).checked;
+  const linkOn = !!(document.getElementById('assistLinkOn') || {}).checked;
+  const trade = (document.getElementById('assistTrade') || {}).value || 'shop';
+  const services = String((document.getElementById('assistServices') || {}).value || '').split(',');
   const picked = document.querySelector('input[name="assistScenario"]:checked');
   const scenario = picked && picked.value === 'info' ? 'info' : 'funnel';
   const buttons = [];
@@ -1495,7 +1568,7 @@ async function saveDesk(){
     const response = await fetch('/api/vk/assistant/reply', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, choices: choices, payment: payment, booking: booking, pickup: pickup, pickupMap: pickupMap, delivery: delivery, deliveryPrice: deliveryPrice, pickupOn: pickupOn, deliveryOn: deliveryOn, goodsOn: goodsOn, bookingOn: scenario === 'info' ? false : bookingOn, handoff: handoff, buttons: buttons, schedule: assistScheduleValue(), scenario: scenario })
+      body: JSON.stringify({ greeting: greeting, about: about, guide: guide, contacts: contacts, address: address, order: order, choices: choices, payment: payment, booking: booking, pickup: pickup, pickupMap: pickupMap, delivery: delivery, deliveryPrice: deliveryPrice, pickupOn: pickupOn, deliveryOn: deliveryOn, goodsOn: goodsOn, orderOn: orderOn, bookingOn: scenario === 'info' ? false : bookingOn, linkOn: linkOn, trade: trade, services: services, handoff: handoff, buttons: buttons, schedule: assistScheduleValue(), scenario: scenario })
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Ответы не сохранились');
@@ -1924,6 +1997,19 @@ function bind(){
   document.querySelectorAll('[data-bkind]').forEach(function(select){
     select.onchange = function(){ assistKind(select); };
   });
+  const bookBox = document.getElementById('assistBookingOn');
+  if (bookBox) bookBox.onchange = syncBookButton;
+  const tradeBox = document.getElementById('assistTrade');
+  if (tradeBox) tradeBox.onchange = function(){ applyTrade(tradeBox.value); };
+  document.querySelectorAll('input[name="assistScenario"]').forEach(function(node){
+    node.onchange = function(){
+      if (node.value !== 'info') return;
+      const box = document.getElementById('assistBookingOn');
+      if (box) box.checked = false;
+      syncBookButton();
+    };
+  });
+  syncBookButton();
   document.querySelectorAll('[data-bdel]').forEach(function(button){
     button.onclick = function(){
       const row = button.closest('[data-brow]');

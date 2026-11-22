@@ -576,6 +576,12 @@ function openSetup(userId){
     ? '<p class="note">Сообщество '+esc(community.title)+' · '+esc(community.groupId)+'. Сохраняется только эта карточка.</p>'+
       '<label class="check"><input type="radio" name="setupScenario" value="funnel"'+(reply.scenario==='info'?'':' checked')+'> Запись и заказ</label>'+
       '<label class="check"><input type="radio" name="setupScenario" value="info"'+(reply.scenario==='info'?' checked':'')+'> Только информация</label>'+
+      '<input type="hidden" id="setupTrade" value="'+esc(reply.trade||'shop')+'">'+
+      '<input type="hidden" id="setupServices" value="'+esc(Array.isArray(reply.services)?reply.services.join(', '):'')+'">'+
+      '<input type="hidden" id="setupGoodsOn" value="'+(reply.goodsOn===false?'0':'1')+'">'+
+      '<input type="hidden" id="setupOrderOn" value="'+(reply.orderOn===false?'0':'1')+'">'+
+      '<input type="hidden" id="setupBookingOn" value="'+((reply.bookingOn===false||reply.scenario==='info')?'0':'1')+'">'+
+      '<input type="hidden" id="setupLinkOn" value="'+((reply.linkOn===false||(reply.linkOn==null&&reply.goodsOn===false))?'0':'1')+'">'+
       '<label>Что продаёте</label><textarea id="setupAbout" maxlength="1500">'+esc(reply.about||'')+'</textarea>'+
       '<label>Первая фраза, уходит по кнопке «Начать»</label><textarea id="setupGreeting" maxlength="900">'+esc(reply.greeting||'')+'</textarea>'+
       '<p class="note">Если «Что продаёте» заполнено, в чате появляется такая кнопка. «Доставка» и «Самовывоз» появляются, когда разделы включены.</p>'+
@@ -663,6 +669,12 @@ function setupBody(){
     pickupOn: !!(document.getElementById('setupPickupOn') || {}).checked,
     deliveryOn: !!(document.getElementById('setupDeliveryOn') || {}).checked,
     booking: (document.getElementById('setupBooking') || {}).value || '',
+    goodsOn: (document.getElementById('setupGoodsOn') || {}).value !== '0',
+    orderOn: (document.getElementById('setupOrderOn') || {}).value !== '0',
+    bookingOn: (document.getElementById('setupBookingOn') || {}).value !== '0',
+    linkOn: (document.getElementById('setupLinkOn') || {}).value !== '0',
+    trade: (document.getElementById('setupTrade') || {}).value || 'shop',
+    services: String((document.getElementById('setupServices') || {}).value || '').split(','),
     handoff: !!(document.getElementById('setupHandoff') || {}).checked,
     buttons: buttons,
     schedule: {
