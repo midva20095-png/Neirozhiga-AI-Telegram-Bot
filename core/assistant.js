@@ -24,16 +24,16 @@ function maskToken(token) {
 }
 
 const REPLY_FIELDS = [
-    ['about', 1500],
-    ['guide', 900],
-    ['contacts', 500],
-    ['address', 500],
-    ['order', 800],
-    ['payment', 500],
-    ['booking', 800],
-    ['pickup', 500],
-    ['delivery', 500],
-    ['deliveryPrice', 200]
+    ['about', 2500],
+    ['guide', 2500],
+    ['contacts', 1500],
+    ['address', 1500],
+    ['order', 2500],
+    ['payment', 1500],
+    ['booking', 2500],
+    ['pickup', 1500],
+    ['delivery', 1500],
+    ['deliveryPrice', 400]
 ];
 
 function emptyReply() {
@@ -49,7 +49,7 @@ function cleanReply(input) {
     if (typeof input !== 'object' || Array.isArray(input)) return null;
     if (input.greeting != null && typeof input.greeting !== 'string') return null;
     if (input.buttons != null && !Array.isArray(input.buttons)) return null;
-    const greeting = cleanBody(input.greeting, 900, true);
+    const greeting = cleanBody(input.greeting, 2500, true);
     const fields = {};
     for (let i = 0; i < REPLY_FIELDS.length; i += 1) {
         const name = REPLY_FIELDS[i][0];

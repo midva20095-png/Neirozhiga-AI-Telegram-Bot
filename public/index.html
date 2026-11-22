@@ -273,6 +273,10 @@ body.vkapp .tabbar button.on{background:linear-gradient(135deg,#7c3aed,#4c1d95);
 .acab b{display:block}
 .acab span{display:block;margin-top:4px;color:var(--mut);font-size:12px;font-weight:600}
 .apanel[hidden],.aslice[hidden]{display:none}
+.desk,.aslice,.apanel{min-width:0;max-width:100%}
+.desk textarea{display:block;width:100%;max-width:100%;min-height:140px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;overflow:hidden;resize:vertical}
+.count{margin:4px 2px 0;text-align:right;color:var(--mut);font-size:12px;font-weight:700}
+.count.full{color:#ff8fb0}
 .calhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px}
 .calhead button{width:auto;min-width:44px;border:1px solid var(--line);background:#1c1233;border-radius:12px;padding:8px 12px;font-weight:800}
 .calhead strong{font-size:15px}
@@ -943,6 +947,11 @@ function assistScheduleHtml(reply){
     '<input id="assistSeats" inputmode="numeric" maxlength="2" placeholder="Пусто — без ограничений" value="'+esc(seats)+'">'+
     '<p class="hint">Сколько записей принять в один день. Пустое поле не ограничивает: клиент видит свободные дни и места, а занять можно всё, что не занято по времени.</p>';
 }
+function assistArea(id, limit, rows, placeholder, value){
+  const text = value || '';
+  return '<textarea id="'+id+'" maxlength="'+limit+'" rows="'+rows+'" placeholder="'+esc(placeholder)+'">'+esc(text)+'</textarea>'+
+    '<p class="count">'+text.length+' из '+limit+'</p>';
+}
 function assistSliceBox(id, body){
   return '<div class="aslice" data-aslice="'+id+'"'+(assistSlice===id?'':' hidden')+'>'+body+'</div>';
 }
@@ -954,33 +963,34 @@ function assistDesk(reply){
     ['about', 'Фраза',
       '<p class="hint">Первая фраза уходит, когда человек нажимает «Начать». Если заполните «Что продаёте», в чате появится такая кнопка. Пустое поле кнопки не даёт. «Контакты», «Каталог», «Как заказать», «Оплата» и «Адрес» есть всегда. «Доставка» и «Самовывоз» появляются, когда эти разделы включены и заполнены.</p>'+
       '<label class="flabel" for="assistGreeting">Первая фраза в чате</label>'+
-      '<textarea id="assistGreeting" maxlength="900" rows="3" placeholder="Здравствуйте. Выберите кнопку ниже.">'+esc(reply && reply.greeting || '')+'</textarea>'+
+      assistArea('assistGreeting', 2500, 6, 'Здравствуйте. Выберите кнопку ниже.', reply && reply.greeting)+
       '<label class="flabel" for="assistAbout">Что продаёте, если спросят своими словами</label>'+
-      '<textarea id="assistAbout" maxlength="1500" rows="4" placeholder="Что продаёте или какую услугу делаете. Цену пишите только если её можно называть.">'+esc(reply && reply.about || '')+'</textarea>'],
+      assistArea('assistAbout', 2500, 8, 'Что продаёте или какую услугу делаете. Цену пишите только если её можно называть.', reply && reply.about)],
     ['contacts', 'Контакты',
       '<label class="flabel" for="assistContacts">Контакты</label>'+
-      '<textarea id="assistContacts" maxlength="500" rows="2" placeholder="Телефон, мессенджер или почта.">'+esc(reply && reply.contacts || '')+'</textarea>'+
+      assistArea('assistContacts', 1500, 5, 'Телефон, мессенджер или почта.', reply && reply.contacts)+
       '<label class="flabel" for="assistAddress">Адрес</label>'+
-      '<textarea id="assistAddress" maxlength="500" rows="2" placeholder="Где вы находитесь или что работаете онлайн.">'+esc(reply && reply.address || '')+'</textarea>'],
+      assistArea('assistAddress', 1500, 5, 'Где вы находитесь или что работаете онлайн.', reply && reply.address)],
     ['order', 'Заказ',
       '<label class="flabel" for="assistOrder">Как сделать заказ</label>'+
-      '<textarea id="assistOrder" maxlength="800" rows="3" placeholder="Что покупатель должен написать, чтобы заказ приняли.">'+esc(reply && reply.order || '')+'</textarea>'+
+      assistArea('assistOrder', 2500, 8, 'Что покупатель должен написать, чтобы заказ приняли.', reply && reply.order)+
       '<label class="flabel" for="assistPayment">Как оплатить</label>'+
-      '<textarea id="assistPayment" maxlength="500" rows="2" placeholder="Карта, перевод или наличные. Не пишите то, чего нет.">'+esc(reply && reply.payment || '')+'</textarea>'],
+      assistArea('assistPayment', 1500, 5, 'Карта, перевод или наличные. Не пишите то, чего нет.', reply && reply.payment)],
     ['road', 'Доставка',
       '<p class="hint">Включите только то, что у вас реально есть. Стоимость доставки помощник называет только из поля ниже.</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistPickupOn" type="checkbox"'+(reply && reply.pickupOn ? ' checked' : '')+'> Самовывоз</label>'+
-      '<textarea id="assistPickup" maxlength="500" rows="2" placeholder="Откуда забрать и с какого часа.">'+esc(reply && reply.pickup || '')+'</textarea>'+
+      assistArea('assistPickup', 1500, 5, 'Откуда забрать и с какого часа.', reply && reply.pickup)+
       '<label class="flabel" for="assistPickupMap">Точка на Яндекс Картах</label>'+
       '<input id="assistPickupMap" maxlength="300" placeholder="https://yandex.ru/maps/..." value="'+esc(reply && reply.pickupMap || '')+'">'+
       '<p class="hint">Вставьте ссылку на точку из Яндекс Карт. По кнопке «Самовывоз» покупатель получит этот адрес и ссылку.</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistDeliveryOn" type="checkbox"'+(reply && reply.deliveryOn ? ' checked' : '')+'> Доставка</label>'+
-      '<textarea id="assistDelivery" maxlength="500" rows="2" placeholder="Район и срок. Например: по городу в день заказа.">'+esc(reply && reply.delivery || '')+'</textarea>'+
+      assistArea('assistDelivery', 1500, 5, 'Район и срок. Например: по городу в день заказа.', reply && reply.delivery)+
       '<label class="flabel" for="assistDeliveryPrice">Стоимость доставки</label>'+
-      '<input id="assistDeliveryPrice" maxlength="200" placeholder="Например: 400 рублей по городу" value="'+esc(reply && reply.deliveryPrice || '')+'">'],
+      '<input id="assistDeliveryPrice" maxlength="400" placeholder="Например: 400 рублей по городу" value="'+esc(reply && reply.deliveryPrice || '')+'">'+
+      '<p class="count">'+String(reply && reply.deliveryPrice || '').length+' из 400</p>'],
     ['book', 'Запись',
       '<label class="flabel" for="assistBooking">Что дописать к подтверждению записи</label>'+
-      '<textarea id="assistBooking" maxlength="800" rows="2" placeholder="Предоплата, что взять с собой. Если правил нет, оставьте пустым.">'+esc(reply && reply.booking || '')+'</textarea>'+
+      assistArea('assistBooking', 2500, 8, 'Предоплата, что взять с собой. Если правил нет, оставьте пустым.', reply && reply.booking)+
       assistScheduleHtml(reply)],
     ['keys', 'Кнопки',
       '<p class="hint">«Контакты», «Каталог», «Как заказать», «Оплата», «Адрес» и «Записаться» открывают разделы карточки. «Что продаёте», «Доставка» и «Самовывоз» добавляются сами, когда эти поля заполнены. Своя надпись присылает ваш текст или ссылку.</p>'+
@@ -1065,6 +1075,20 @@ function showAssistSlice(name){
   });
   document.querySelectorAll('.aslices [data-slice]').forEach(function(button){
     button.classList.toggle('on', button.getAttribute('data-slice') === assistSlice);
+  });
+  fitCardText();
+}
+function fitCardText(){
+  document.querySelectorAll('.desk textarea, #assistDeliveryPrice').forEach(function(node){
+    const limit = Number(node.getAttribute('maxlength')) || 0;
+    const note = node.nextElementSibling;
+    if (note && note.classList.contains('count') && limit) {
+      note.textContent = node.value.length + ' из ' + limit;
+      note.classList.toggle('full', limit > 0 && node.value.length >= limit);
+    }
+    if (node.tagName !== 'TEXTAREA' || node.offsetParent === null) return;
+    node.style.height = '0px';
+    node.style.height = Math.max(node.scrollHeight + 8, 140) + 'px';
   });
 }
 async function loadAssist(){
@@ -1851,6 +1875,10 @@ function bind(){
   document.querySelectorAll('.aslices [data-slice]').forEach(function(button){
     button.onclick = function(){ showAssistSlice(button.getAttribute('data-slice')); };
   });
+  document.querySelectorAll('.desk textarea, #assistDeliveryPrice').forEach(function(node){
+    node.oninput = fitCardText;
+  });
+  fitCardText();
   document.querySelectorAll('[data-bmonth]').forEach(function(button){
     button.onclick = function(){
       assistMonth = shiftMonth(assistMonth, Number(button.getAttribute('data-bmonth')) || 0);

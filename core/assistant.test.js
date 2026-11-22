@@ -91,6 +91,10 @@ test('фраза дона принимает ссылку и ответ и от�
     assert.throws(() => assistant.setupCard({ task: 'Включите самовывоз', phone: '+79001112233', address: 'Ленина 5', map: 'https://google.com/maps' }), /Яндекс/);
     assert.equal(assistant.HOLD_MS, 10 * 24 * 60 * 60 * 1000);
     assert.equal(assistant.cleanReply({ scenario: 'info' }).scenario, 'info');
+    const longOrder = 'Правило заказа. '.repeat(120);
+    assert.equal(assistant.cleanReply({ order: longOrder }).order.length, longOrder.trim().length);
+    assert.equal(assistant.cleanReply({ order: 'а'.repeat(2501) }), null);
+    assert.equal(assistant.cleanReply({ greeting: 'а'.repeat(2500) }).greeting.length, 2500);
     const people = assistant.publicPeople([{ peerId: 7, name: 'Анна', phone: '+7 999 111-22-33', note: 'хочу заказ', seen: 2, token: 'secret-token' }]);
     assert.equal(people[0].phone, '+79991112233');
     assert.equal(JSON.stringify(people).includes('secret-token'), false);
