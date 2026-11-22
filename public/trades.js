@@ -97,15 +97,51 @@
     return trades.find((item) => item.id === id) || trades[0];
   }
 
+  function servicePrice(value) {
+    const text = String(value == null ? '' : value).replace(/\s+/g, '').replace(/₽/g, '').replace(/руб\.?/gi, '').replace(/р$/i, '');
+    if (!/^\d{1,7}$/.test(text)) return 0;
+    const price = Number(text);
+    if (!Number.isSafeInteger(price) || price < 1 || price > 1000000) return 0;
+    return price;
+  }
+
+  function serviceLink(value) {
+    const link = String(value || '').trim();
+    if (!link || link.length > 300 || /\s/.test(link)) return '';
+    try {
+      const url = new URL(link);
+      if (url.protocol !== 'https:' || url.username || url.password) return '';
+      return url.toString();
+    } catch (error) {
+      return '';
+    }
+  }
+
+  function serviceItem(raw) {
+    if (raw && typeof raw === 'object') {
+      const name = String(raw.name || raw.title || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+      if (!name) return null;
+      const extra = raw.extra === true || raw.extra === 'true' || raw.extra === 1 || raw.extra === '1';
+      return { name: name, price: servicePrice(raw.price), link: serviceLink(raw.link), extra: extra };
+    }
+    const name = String(raw || '').replace(/\s+/g, ' ').trim();
+    if (!name || name.length > 40) return null;
+    return { name: name, price: 0, link: '', extra: false };
+  }
+
   function cleanServices(value, tradeId) {
-    if (value == null) return tradeById(tradeId).services.slice(0, 6);
+    const preset = tradeById(tradeId).services.slice(0, 8).map(serviceItem).filter(Boolean);
+    if (value == null) return preset;
     const source = Array.isArray(value) ? value : String(value).split(',');
     const out = [];
-    for (const item of source) {
-      const name = String(item || '').replace(/\s+/g, ' ').trim();
-      if (!name || name.length > 40 || out.includes(name)) continue;
-      out.push(name);
-      if (out.length >= 6) break;
+    const seen = {};
+    for (var index = 0; index < source.length; index += 1) {
+      const clean = serviceItem(source[index]);
+      const key = clean && clean.name.toLowerCase();
+      if (!clean || seen[key]) continue;
+      seen[key] = true;
+      out.push(clean);
+      if (out.length >= 8) break;
     }
     return out;
   }

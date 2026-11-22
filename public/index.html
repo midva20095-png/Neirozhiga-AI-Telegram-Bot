@@ -120,6 +120,10 @@ window.addEventListener('message', function(event){
 html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,sans-serif;min-height:100%}
 button,textarea,input,select{font:inherit;color:inherit}
 .app{max-width:620px;margin:0 auto;padding:12px 12px calc(84px + env(safe-area-inset-bottom))}
+.srow{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(72px,.6fr) minmax(0,1.2fr) auto;gap:6px;margin:6px 0;align-items:center}
+.srow input{width:100%;border-radius:10px;border:1px solid var(--line);background:#1c1233;padding:8px}
+.srow label{font-size:12px;color:var(--mut);white-space:nowrap}
+@media(max-width:640px){.srow{grid-template-columns:1fr 1fr}.srow input[data-slink]{grid-column:1 / -1}}
 .top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .logo{font-family:Unbounded,sans-serif;font-weight:700;font-size:18px;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;flex:1}
 .bal{font-weight:800;border:1px solid var(--line);border-radius:12px;padding:6px 10px;white-space:nowrap}
@@ -945,6 +949,71 @@ function assistHourOptions(selected, from, to){
   }
   return html;
 }
+function assistServiceItems(value){
+  if (!Array.isArray(value)) return [];
+  return value.map(function(item){
+    if (typeof item === 'string') return { name: item, price: '', link: '', extra: false };
+    return {
+      name: item && item.name ? item.name : '',
+      price: item && item.price ? item.price : '',
+      link: item && item.link ? item.link : '',
+      extra: !!(item && item.extra)
+    };
+  }).filter(function(item){ return item.name || item.price || item.link; });
+}
+function assistServiceRow(item){
+  const row = item || { name: '', price: '', link: '', extra: false };
+  return '<div class="srow" data-srow>'+
+    '<input data-sname maxlength="40" placeholder="Название" value="'+esc(row.name || '')+'">'+
+    '<input data-sprice inputmode="numeric" maxlength="7" placeholder="Цена, ₽" value="'+esc(row.price ? String(row.price) : '')+'">'+
+    '<input data-slink maxlength="300" placeholder="https://..." value="'+esc(row.link || '')+'">'+
+    '<label><input data-sextra type="checkbox"'+(row.extra ? ' checked' : '')+'> Доп</label></div>';
+}
+function assistServiceEditor(reply){
+  const items = assistServiceItems(reply && reply.services);
+  const rows = (items.length ? items : [{ name: '', price: '', link: '', extra: false }]).slice(0, 8).map(assistServiceRow).join('');
+  return '<label class="flabel">Услуги, цены и допы</label>'+
+    '<p class="hint">Название, цена в рублях и ссылка https, если она есть. Пустая цена клиенту не называется и в итог не входит. «Доп» — добавка к основной услуге: её нажимают при записи, бот пишет сумму. Если цены не заполнены, итога не будет.</p>'+
+    '<div id="assistServiceRows">'+rows+'</div>'+
+    (items.length < 8 ? '<button class="btn ghost" id="assistServiceAdd" type="button" style="margin-top:8px">Добавить услугу</button>' : '');
+}
+function assistServiceValue(){
+  const services = [];
+  document.querySelectorAll('[data-srow]').forEach(function(row){
+    const name = (row.querySelector('[data-sname]') || {}).value || '';
+    if (!String(name).trim()) return;
+    services.push({
+      name: name,
+      price: (row.querySelector('[data-sprice]') || {}).value || '',
+      link: (row.querySelector('[data-slink]') || {}).value || '',
+      extra: !!(row.querySelector('[data-sextra]') || {}).checked
+    });
+  });
+  return services;
+}
+function fillAssistServices(list){
+  const box = document.getElementById('assistServiceRows');
+  if (!box) return;
+  const items = (list || []).slice(0, 8).map(function(name){
+    return { name: typeof name === 'string' ? name : (name && name.name) || '', price: '', link: '', extra: false };
+  }).filter(function(item){ return item.name; });
+  box.innerHTML = (items.length ? items : [{ name: '', price: '', link: '', extra: false }]).map(assistServiceRow).join('');
+  const add = document.getElementById('assistServiceAdd');
+  if (items.length >= 8 && add) add.remove();
+  if (items.length < 8 && !document.getElementById('assistServiceAdd') && box.parentNode) {
+    box.insertAdjacentHTML('afterend', '<button class="btn ghost" id="assistServiceAdd" type="button" style="margin-top:8px">Добавить услугу</button>');
+  }
+}
+function addAssistService(){
+  const box = document.getElementById('assistServiceRows');
+  if (!box || box.querySelectorAll('[data-srow]').length >= 8) return;
+  box.insertAdjacentHTML('beforeend', assistServiceRow({ name: '', price: '', link: '', extra: false }));
+  if (box.querySelectorAll('[data-srow]').length >= 8) {
+    const add = document.getElementById('assistServiceAdd');
+    if (add) add.remove();
+  }
+  bind();
+}
 function assistScheduleHtml(reply){
   const plan = reply && reply.schedule && typeof reply.schedule === 'object' ? reply.schedule : {};
   const days = Array.isArray(plan.days) && plan.days.length ? plan.days.map(Number) : [1, 2, 3, 4, 5];
@@ -961,8 +1030,7 @@ function assistScheduleHtml(reply){
       '<label style="display:block;margin:8px 0"><input id="assistBookingOn" type="checkbox"'+(!reply || (reply.bookingOn !== false && reply.scenario !== 'info') ? ' checked' : '')+'> Кнопка «Записаться»</label>'+
       '<label style="display:block;margin:8px 0"><input id="assistLinkOn" type="checkbox"'+(assistLinkChecked(reply) ? ' checked' : '')+'> Спрашивать ссылку на товар</label>'+
       '<p class="hint">Снимите «Записаться», чтобы убрать кнопку и не принимать бронь. Снимите ссылку на товар, если при записи она не нужна. Для шиномонтажа, маникюра и других услуг ссылка выключена, а запись идёт на услугу из списка.</p>'+
-      '<label class="flabel" for="assistServices">На что запись, через запятую</label>'+
-      '<input id="assistServices" maxlength="300" placeholder="Например: Шиномонтаж, Ремонт" value="'+esc(Array.isArray(reply && reply.services) ? reply.services.join(', ') : '')+'">'+
+      assistServiceEditor(reply)+
     '<label class="flabel">Рабочие дни</label><div>'+checks+'</div>'+
     '<label class="flabel" for="assistStart">Начало</label><select id="assistStart">'+assistHourOptions(plan.start == null ? 10 : plan.start, 0, 22)+'</select>'+
     '<label class="flabel" for="assistEnd">Конец, это время уже не записывают</label><select id="assistEnd">'+assistHourOptions(plan.end == null ? 19 : plan.end, 1, 23)+'</select>'+
@@ -1364,7 +1432,7 @@ function assistBookings(pack, clients, groupId){
   const list = chosen.length ? chosen.map(function(item){
     const person = people.find(function(one){ return Number(one.peerId) === Number(item.peerId); });
     const who = person && person.name ? person.name : ('ВК '+item.peerId);
-    const bits = [item.service, item.slot, item.place, item.way, item.address, item.phone].filter(Boolean);
+    const bits = [item.service, item.bill, item.slot, item.place, item.way, item.address, item.phone].filter(Boolean);
     const product = item.product ? ' · <a href="'+esc(item.product)+'">товар, который нашёл бот</a>' : '';
     const map = item.map ? ' · <a href="'+esc(item.map)+'">карта</a>' : '';
     const dialog = communityDialog(groupId, item.peerId);
@@ -1451,12 +1519,11 @@ function applyTrade(id){
   const link = document.getElementById('assistLinkOn');
   const goods = document.getElementById('assistGoodsOn');
   const order = document.getElementById('assistOrderOn');
-  const services = document.getElementById('assistServices');
   if (booking) booking.checked = !!trade.bookingOn;
   if (link) link.checked = !!trade.linkOn;
   if (goods) goods.checked = !!trade.goodsOn;
   if (order) order.checked = !!trade.orderOn;
-  if (services) services.value = (trade.services || []).join(', ');
+  fillAssistServices(trade.services || []);
   if (trade.bookingOn) {
     const funnel = document.querySelector('input[name="assistScenario"][value="funnel"]');
     if (funnel) funnel.checked = true;
@@ -1550,7 +1617,7 @@ async function saveDesk(){
   const bookingOn = !!(document.getElementById('assistBookingOn') || {}).checked;
   const linkOn = !!(document.getElementById('assistLinkOn') || {}).checked;
   const trade = (document.getElementById('assistTrade') || {}).value || 'shop';
-  const services = String((document.getElementById('assistServices') || {}).value || '').split(',');
+  const services = assistServiceValue();
   const picked = document.querySelector('input[name="assistScenario"]:checked');
   const scenario = picked && picked.value === 'info' ? 'info' : 'funnel';
   const buttons = [];
@@ -1971,6 +2038,8 @@ function bind(){
   if (assistDeskButton) assistDeskButton.onclick = saveDesk;
   const assistAdd = document.getElementById('assistAdd');
   if (assistAdd) assistAdd.onclick = addAssistButton;
+  const assistServiceAdd = document.getElementById('assistServiceAdd');
+  if (assistServiceAdd) assistServiceAdd.onclick = addAssistService;
   const assistReset = document.getElementById('assistReset');
   if (assistReset) assistReset.onclick = resetAssistButtons;
   const assistMailSend = document.getElementById('assistMailSend');

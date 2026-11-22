@@ -734,7 +734,8 @@ function publicBookings(list) {
         phone: cleanBit(item && item.phone, 16),
         map: yandexMapLink(item && item.map),
         product: httpsLink(item && item.product),
-        service: cleanBit(item && item.service, 40)
+        service: cleanBit(item && item.service, 40),
+        bill: cleanBit(item && item.bill, 300)
     })).filter(item => item.peerId > 0 && /^\d{4}-\d{2}-\d{2}$/.test(item.day));
 }
 

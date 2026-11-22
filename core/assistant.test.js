@@ -71,7 +71,19 @@ test('фраза дона принимает ссылку и ответ и от�
     assert.equal(tire.linkOn, false);
     assert.equal(tire.orderOn, false);
     assert.equal(tire.goodsOn, false);
-    assert.deepEqual(tire.services, ['Шиномонтаж', 'Ремонт', 'Балансировка', 'Сезонная смена']);
+    assert.deepEqual(tire.services.map(function (item) { return item.name; }), ['Шиномонтаж', 'Ремонт', 'Балансировка', 'Сезонная смена']);
+    assert.equal(tire.services[0].price, 0);
+    const priced = assistant.cleanReply({
+        trade: 'hair',
+        services: [
+            { name: 'Стрижка', price: '700', link: 'https://vk.com/market-1' },
+            { name: 'Мытьё', price: 300, extra: true, link: 'http://evil.test' }
+        ]
+    });
+    assert.equal(priced.services[0].price, 700);
+    assert.equal(priced.services[0].link, 'https://vk.com/market-1');
+    assert.equal(priced.services[1].extra, true);
+    assert.equal(priced.services[1].link, '');
     assert.equal(assistant.cleanReply({ goodsOn: false }).linkOn, false);
     assert.equal(assistant.cleanReply({ goodsOn: false, linkOn: true }).linkOn, true);
     const card = assistant.cleanReply({
