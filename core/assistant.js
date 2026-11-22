@@ -859,7 +859,12 @@ async function setupRequests(rows) {
     });
 }
 
-function demoReply() {
+function demoReply(groupId) {
+    const id = String(groupId || '').replace(/\D/g, '');
+    const page = id ? `https://vk.com/club${id}` : 'https://vk.com/club214554778';
+    const market = id ? `https://vk.com/market-${id}` : 'https://vk.com/market-214554778';
+    const reviews = id ? `https://vk.com/reviews-${id}` : 'https://vk.com/reviews-214554778';
+    const pin = 'https://yandex.ru/maps/213/moscow/?ll=37.736200,55.676400&z=17&pt=37.736200,55.676400';
     return cleanReply({
         scenario: 'funnel',
         trade: 'tire',
@@ -870,29 +875,34 @@ function demoReply() {
         linkOn: false,
         pickupOn: true,
         deliveryOn: true,
-        greeting: 'Здравствуйте. Это демонстрация помощника: услуги, запись, доставка и кнопка администратора.',
-        about: 'Шиномонтаж и сезонная переобувка. Цены смотрите в кнопке «Услуги».',
-        contacts: 'Телефон демонстрации: +7 900 000-00-00',
-        address: 'Демонстрационный адрес: улица Пример, 1',
-        order: 'Выберите диаметр и оставьте телефон. Это учебный заказ, его никто не везёт.',
-        choices: 'Диаметр: R15, R16, R17',
-        payment: 'В демонстрации оплата на месте.',
-        booking: 'Это учебная запись. Слот занят только внутри этой демонстрации.',
-        pickup: 'Самовывоз с улицы Пример, 1, с 10:00.',
-        pickupMap: 'https://yandex.ru/maps/?text=Москва',
-        delivery: 'По городу в день обращения.',
-        deliveryPrice: '400 рублей по городу',
+        greeting: 'Здравствуйте, это шиномонтаж ИП Соколова. Напишите, что с колесом, или выберите кнопку.',
+        about: 'ИП Соколов Артём Сергеевич. Шиномонтаж легковых и внедорожников, ремонт прокола, балансировка и сезонное хранение. Бокс на Люблинской, выезд по ЮВАО.',
+        guide: 'Цены только из карточки. Скидку не обещать. Запись вести кнопкой, диаметр спрашивать из вариантов.',
+        contacts: 'Телефон +7 926 415-30-18. Сообщения сообщества отвечают в рабочее время.',
+        address: 'Москва, Люблинская улица, 161, бокс 3. Вход со двора, синяя вывеска.',
+        order: 'Напишите диаметр и сколько колёс. Оставьте телефон, перезвоним и подтвердим время.',
+        choices: 'Диаметр: R15, R16, R17, R18',
+        payment: 'Наличные и перевод на карту. Чек по запросу.',
+        booking: 'Приезжайте за 10 минут. Если опоздание больше 15 минут, слот можем отдать следующему.',
+        pickup: 'Бокс 3, Люблинская улица, 161. Выдача с 9:00 до 19:00, суббота до 17:00.',
+        pickupMap: pin,
+        delivery: 'По Юго-Восточному округу в день обращения. За МКАД по договорённости.',
+        deliveryPrice: '400 рублей по ЮВАО, за МКАД от 700 рублей.',
         services: [
-            { name: 'Шиномонтаж', price: 400 },
-            { name: 'Ремонт прокола', price: 500 },
-            { name: 'Балансировка', price: 300, extra: true },
-            { name: 'Сезонная переобувка четырёх колёс', price: 2200 },
-            { name: 'Скрытая позиция', price: 1, hidden: true }
+            { name: 'Шиномонтаж легкового', price: 400, link: page, text: 'Снятие, установка и балансировка одного колеса R15-R16.' },
+            { name: 'Шиномонтаж внедорожника', price: 600, link: page, text: 'Одно колесо R17-R20, включая балансировку.' },
+            { name: 'Ремонт прокола', price: 500, link: page, text: 'Жгут или грибок, колесо проверяем в воде.' },
+            { name: 'Балансировка', price: 300, extra: true, link: page, text: 'Доп к шиномонтажу, если диск снимали отдельно.' },
+            { name: 'Сезонная переобувка 4 колес', price: 2200, link: page, text: 'Четыре колеса, балансировка входит. Хранение отдельно.' },
+            { name: 'Сезонное хранение', price: 3500, link: market, text: 'Комплект из четырёх колёс до следующего сезона.' }
         ],
         products: [
-            { name: 'Колпачки', price: 200, section: 'Расходники' },
-            { name: 'Вентиль', price: 50, section: 'Расходники' },
-            { name: 'Чехлы', price: 1500, section: 'Хранение' }
+            { name: 'Колпачки на ниппель', price: 200, section: 'Расходники', link: market, text: 'Комплект из четырёх колпачков, пластик.' },
+            { name: 'Вентиль', price: 150, section: 'Расходники', link: market, text: 'Резиновый вентиль под легковой диск.' },
+            { name: 'Грузик', price: 50, section: 'Расходники', link: market, text: 'Один грузик для балансировки, ставится в боксе.' },
+            { name: 'Чехол для колеса', price: 400, section: 'Хранение', link: market, text: 'Пакет на одно колесо, чтобы не пачкал багажник.' },
+            { name: 'Пакет хранения', price: 3500, section: 'Хранение', link: market, text: 'Четыре колеса на складе бокса до следующего сезона.' },
+            { name: 'Сумка для дисков', price: 900, section: 'Хранение', link: market, text: 'Сумка на комплект, забираете сами.' }
         ],
         schedule: {
             days: [1, 2, 3, 4, 5, 6],
@@ -900,21 +910,34 @@ function demoReply() {
             end: 19,
             slot: 30,
             horizon: 14,
-            places: ['Зал', 'Выезд'],
+            places: ['Бокс', 'Выезд'],
             seats: 4
         },
         buttons: [
             { label: 'Услуги', text: 'Показать услуги' },
+            { label: 'Каталог', text: 'Открыть разделы' },
             {
                 label: 'Прайс',
                 items: [
-                    { label: 'Шиномонтаж', text: '400 рублей за колесо.' },
-                    { label: 'Хранение', text: 'Сезонное хранение оформляется записью.' }
+                    {
+                        label: 'Легковые',
+                        items: [
+                            { label: 'R15-R16', text: 'Шиномонтаж легкового колеса R15-R16 стоит 400 рублей, балансировка входит.' },
+                            { label: 'R17-R18', text: 'Шиномонтаж легкового колеса R17-R18 стоит 500 рублей, балансировка входит.' }
+                        ]
+                    },
+                    {
+                        label: 'Внедорожник',
+                        items: [
+                            { label: 'R17-R19', text: 'Шиномонтаж внедорожника R17-R19 стоит 600 рублей за колесо.' },
+                            { label: 'R20-R22', text: 'Шиномонтаж внедорожника R20-R22 стоит 800 рублей за колесо.' }
+                        ]
+                    }
                 ]
             },
             { label: 'Как доехать', action: 'contact' },
             { label: 'Оплата', text: 'Показать способ оплаты' },
-            { label: 'Отзывы', link: 'https://vk.com/feed' },
+            { label: 'Отзывы', link: reviews },
             { label: 'Запись онлайн', action: 'book', text: 'Открыть свободные дни' }
         ]
     });
@@ -927,7 +950,7 @@ async function installDemo(groupId, token, title, fetchImpl) {
     if (!communityId || key.length < 20 || key.length > 2000) {
         throw publicError('Нужен номер сообщества и ключ из его настроек.');
     }
-    const reply = demoReply();
+    const reply = demoReply(communityId);
     if (!reply) throw publicError('Карточка демонстрации не собралась.');
     const rows = await db.listAssistantCommunities();
     const taken = rows.find(item => String(item.group_id) === communityId && Number(item.owner_id) !== DEMO_OWNER);

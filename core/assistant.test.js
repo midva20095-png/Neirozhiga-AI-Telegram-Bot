@@ -25,20 +25,23 @@ test('живой список донов включает текущих и вы
     assert.deepEqual(plan.off, [1]);
 });
 
-test('карточка демонстрации собирает услуги, разделы и кнопки', () => {
-    const reply = assistant.demoReply();
+test('карточка ИП заполняет те же поля, что человек в кабинете', () => {
+    const reply = assistant.demoReply('243561815');
     assert.ok(reply);
-    assert.equal(reply.trade, 'tire');
-    assert.equal(reply.services.some(item => item.hidden), true);
-    assert.equal(reply.services.some(item => item.name === 'Сезонная переобувка четырёх колёс' && item.price === 2200), true);
-    assert.equal(reply.products.filter(item => item.section === 'Расходники').length, 2);
-    assert.equal(reply.buttons.find(item => item.label === 'Прайс').items.length, 2);
+    assert.match(reply.greeting, /ИП Соколов/);
+    assert.equal(/демонстрац|учебн/i.test(JSON.stringify(reply)), false);
+    assert.equal(reply.services.every(item => item.link && item.text && item.price), true);
+    assert.equal(reply.products.every(item => item.link && item.text && item.section), true);
+    assert.equal(reply.products.filter(item => item.section === 'Расходники').length, 3);
+    assert.equal(reply.products.filter(item => item.section === 'Хранение').length, 3);
+    assert.match(reply.pickupMap, /yandex\.ru\/maps\/213\/moscow/);
+    assert.match(reply.address, /Люблинская/);
+    assert.equal(reply.buttons.find(item => item.label === 'Прайс').items[0].items.length, 2);
+    assert.match(reply.buttons.find(item => item.label === 'Отзывы').link, /reviews-243561815/);
     assert.equal(reply.buttons.find(item => item.label === 'Как доехать').action, 'contact');
     assert.equal(reply.buttons.find(item => item.label === 'Запись онлайн').action, 'book');
-    assert.equal(reply.schedule.slot, 30);
-    assert.equal(reply.schedule.horizon, 14);
-    assert.equal(reply.pickupOn, true);
-    assert.equal(reply.deliveryOn, true);
+    assert.ok(reply.guide);
+    assert.equal(reply.schedule.places[0], 'Бокс');
 });
 
 test('команда второму боту уходит с секретом и не кладёт его в тело', async () => {
