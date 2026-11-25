@@ -424,6 +424,25 @@ body.vkapp .tabbar button.on{background:linear-gradient(135deg,#7c3aed,#4c1d95);
 .podium span{font-weight:800;font-size:18px}
 .podium .place{font-size:12px;font-weight:800;letter-spacing:.04em}
 .kicker{font-size:13px;font-weight:800;color:var(--mut)}
+.course-door{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:88px;margin-top:12px;padding:18px 18px;border-radius:22px;text-decoration:none;color:#fff;background:linear-gradient(120deg,#6a35ff,#ff2d95,#00d4ff);background-size:180% 180%;animation:courseShift 7s ease infinite;font-weight:800;font-size:18px;box-shadow:0 12px 32px rgba(179,102,255,.35)}
+.course-door small{display:block;margin-top:4px;font-size:13px;font-weight:600;opacity:.85}
+.course-door:active{transform:scale(.98)}
+@keyframes courseShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+.course-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.course-tile{min-height:84px;border-radius:20px;border:1px solid rgba(255,255,255,.16);background:#1c1233;color:#fff;font-weight:800;font-size:17px;text-align:left;padding:16px;animation:courseIn .5s ease both}
+.course-tile:nth-child(2){animation-delay:.05s}.course-tile:nth-child(3){animation-delay:.1s}.course-tile:nth-child(4){animation-delay:.15s}.course-tile:nth-child(5){animation-delay:.2s}.course-tile:nth-child(6){animation-delay:.25s}.course-tile:nth-child(7){animation-delay:.3s}
+.course-tile.on{background:linear-gradient(135deg,#b366ff,#ff2d95);border-color:transparent;transform:translateY(-2px)}
+.course-tile:active{transform:scale(.98)}
+@keyframes courseIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.course-lesson{border:1px solid rgba(255,255,255,.12);border-radius:20px;background:#120a22;margin-top:10px;overflow:hidden;animation:courseIn .35s ease both}
+.course-lesson summary{cursor:pointer;list-style:none;padding:18px 16px;font-size:18px;font-weight:800}
+.course-lesson summary::-webkit-details-marker{display:none}
+.course-lesson .body{padding:0 16px 18px;white-space:pre-wrap;line-height:1.6;font-size:16px}
+.course-link{color:#7af0ff;font-weight:800;text-decoration:underline;text-underline-offset:3px}
+.course-ask{min-height:64px;font-size:18px;border-radius:18px}
+#courseAnswer .course-link{word-break:break-all}
+@media(max-width:640px){.course-grid{grid-template-columns:1fr}.course-door{font-size:17px}}
+@media(prefers-reduced-motion:reduce){.course-door,.course-tile,.course-lesson{animation:none}}
 .cabbal{font-size:32px;font-weight:800;line-height:1.1;margin:4px 0 6px}
 .cabrow{display:flex;width:100%;text-align:left;align-items:center;justify-content:space-between;background:#1c1233;border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:8px;font-weight:800}
 .cabrow:after{content:'›';color:var(--mut);font-size:22px}
@@ -2284,24 +2303,37 @@ async function renderCourse(box) {
   }
   const sections = pack.sections || [];
   const lessons = pack.lessons || [];
+  const door = /^https:\/\/vk\.com\/[A-Za-z0-9_.]{2,64}$/.test(pack.door || '') ? pack.door : '';
   const chips = sections.map(function(item){
-    return '<button type="button" class="btn ghost" data-course="'+esc(item.id)+'">'+esc(item.title)+'</button>';
+    return '<button type="button" class="course-tile" data-course="'+esc(item.id)+'">'+esc(item.title)+'</button>';
   }).join('');
   const cards = lessons.map(function(item){
-    return '<article class="note" data-lesson="'+esc(item.section)+'"><b>'+esc(item.title)+'</b><div style="white-space:pre-wrap;margin-top:6px">'+esc(item.body)+'</div></article>';
+    return '<details class="course-lesson" data-lesson="'+esc(item.section)+'"><summary>'+esc(item.title)+'</summary><div class="body">'+linkText(item.body)+'</div></details>';
   }).join('');
+  const doorHtml = door
+    ? '<a class="course-door" href="'+esc(door)+'" target="_blank" rel="noopener">Перейти в сообщество кафедры<small>'+esc(pack.community || 'Бот отвечает донам здесь')+'</small></a>'
+    : '';
   box.innerHTML = '<div class="card">'+
     '<button type="button" class="back" id="assistBack">В кабинет</button>'+
     '<div class="kicker">Кафедра</div>'+
-    '<p class="now">Ведение сообщества ВКонтакте: страница, оформление, записи, реклама, бот и ритм.</p>'+
+    '<p class="now">Страница, оформление, записи, реклама, бот и приложения. Откройте раздел и нажмите урок.</p>'+
+    doorHtml+
+    '<div class="course-grid">'+chips+'</div>'+
+    '<div id="courseLessons">'+cards+'</div>'+
     '<label class="flabel" for="courseText">Вопрос по своему проекту</label>'+
     '<textarea id="courseText" maxlength="500" rows="3" placeholder="Например: какой размер обложки ставить на телефон"></textarea>'+
-    '<button class="btn" id="courseSend" type="button" style="margin-top:8px">Спросить</button>'+
+    '<button class="btn course-ask" id="courseSend" type="button">Спросить</button>'+
     '<p id="courseAnswer" class="hint" style="white-space:pre-wrap"></p>'+
-    '<div class="row" style="margin-top:12px">'+chips+'</div>'+
-    '<div id="courseLessons">'+cards+'</div>'+
     '</div>';
   bind();
+}
+function linkText(value){
+  return esc(value).replace(/https?:\/\/[^\s<&]+/g, function(raw){
+    const url = raw.replace(/[),.;]+$/,'');
+    const tail = raw.slice(url.length);
+    if (!/^https:\/\/(?:vk\.com|dev\.vk\.com|ads\.vk\.ru)\//.test(url)) return raw;
+    return '<a class="course-link" href="'+url+'" target="_blank" rel="noopener">'+url+'</a>'+tail;
+  });
 }
 let courseFilter = '';
 function showCourseSection(id) {
@@ -2332,7 +2364,7 @@ async function askCourse() {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Ответ не собрался');
-    if (note) note.textContent = data.answer || '';
+    if (note) note.innerHTML = linkText(data.answer || '');
   } catch (error) {
     if (note) note.textContent = error.message || 'Ответ не собрался';
   }

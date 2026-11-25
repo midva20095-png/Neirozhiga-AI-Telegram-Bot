@@ -375,7 +375,12 @@ function startWebApp() {
             }
             const course = await assistant.courseList();
             if (!course.ok) return res.status(502).json({ error: course.error || 'Материалы не открылись.' });
-            res.json({ sections: course.sections || [], lessons: course.lessons || [] });
+            res.json({
+                sections: course.sections || [],
+                lessons: course.lessons || [],
+                door: /^https:\/\/vk\.com\/[A-Za-z0-9_.]{2,64}$/.test(course.door || '') ? course.door : '',
+                community: typeof course.community === 'string' ? course.community.slice(0, 200) : ''
+            });
         } catch (e) {
             res.status(500).json({ error: 'Кафедра не открылась.' });
         }
