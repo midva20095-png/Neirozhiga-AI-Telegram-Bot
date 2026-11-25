@@ -37,7 +37,11 @@ th{color:var(--mut);font-size:12px}
 .tabs button{padding:8px 12px}
 .tabs button.off{background:transparent;border:1px solid var(--line)}
 @keyframes nyblink{50%{box-shadow:0 0 0 3px #ff2d95;background:#ff2d95;color:#fff}}
-.tabs button.alarm,.homes button.alarm{animation:nyblink 1s steps(2) infinite}
+.tabs button.alarm,.homes button.alarm,#dropAlarm button.alarm{animation:nyblink 1s steps(2) infinite}
+#dropAlarm{position:sticky;top:8px;z-index:40}
+#dropAlarm button{width:100%;font-size:18px}
+.drop-person{margin:10px 0;padding:12px;border-radius:14px;border:1px solid rgba(255,80,120,.55);background:#24101c}
+.drop-person a{color:#ffd0e4;font-weight:800;text-decoration:underline;text-underline-offset:3px}
 .ok{color:#3ee08f;font-weight:800}.bad{color:#ff8fb0;font-weight:800}
 .ava{width:36px;height:36px;border-radius:50%;object-fit:cover;background:#1c1233;display:inline-flex;align-items:center;justify-content:center;font-weight:800;vertical-align:middle;margin-right:8px}
 .note{color:var(--mut);font-size:13px}
@@ -84,6 +88,8 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
 </head>
 <body>
 <h1>Админ <i>НейроЯга</i></h1>
+<div id="dropAlarm" style="display:none"></div>
+<div class="cover" id="dropDialog" style="display:none"></div>
 <p class="note" id="intro">Вход по паролю. Дальше отдельно Telegram и каждое сообщество ВК: клиенты, баланс, модели, шаблоны, поддержка, рейтинг и донат.</p>
 
 <div class="card" id="gate" style="display:none">
@@ -160,6 +166,9 @@ let vkHome = sessionStorage.getItem('ny_admin_home') || '';
 let homes = [];
 let cur = 'stats';
 let assistNeed = 0;
+let dropPeople = [];
+let dropNeed = 0;
+let dropWatch = null;
 let assistWatch = 0;
 let users=[], templates=[], modelsData=[], groupsData={}, providersData={}, packagesData=[], generalData={};
 let usersQuery = '';
@@ -208,6 +217,7 @@ async function login(){
     token = d.token; sessionStorage.setItem('ny_admin_token', token);
     place = ''; sessionStorage.removeItem('ny_admin_place');
     showPanel();
+    armDropWatch();
   }catch(e){ document.getElementById('lerr').textContent = (e && e.name==='AbortError') ? 'Сервер не ответил. Попробуйте ещё раз.' : e.message; }
 }
 function logout(){
@@ -221,6 +231,10 @@ function logout(){
   document.getElementById('door').style.display='none';
   document.getElementById('communities').style.display='none';
   document.getElementById('gate').style.display='none';
+  dropNeed = 0;
+  dropPeople = [];
+  if (dropWatch) clearInterval(dropWatch);
+  paintDropAlarm();
 }
 function inCommunity(){ return place==='vk' && /^\d+$/.test(vkHome); }
 function groupQuery(){ return inCommunity() ? '&group='+encodeURIComponent(vkHome) : ''; }
@@ -259,6 +273,57 @@ function showDoor(){
   document.getElementById('communities').style.display='none';
   document.getElementById('door').style.display='block';
   refreshGate();
+  armDropWatch();
+}
+function paintDropAlarm(){
+  const node = document.getElementById('dropAlarm');
+  const login = document.getElementById('login');
+  if (!node) return;
+  if (!dropNeed || (login && login.style.display !== 'none')) {
+    node.style.display = 'none';
+    return;
+  }
+  node.style.display = 'block';
+  node.innerHTML = '<button type="button" class="alarm" onclick="openDrops()">Исключите из сообщества: '+dropNeed+'</button>';
+}
+async function watchDrops(){
+  if (!token) return;
+  try {
+    const data = await api('/api/admin/vk/course-drops');
+    dropPeople = data.people || [];
+    dropNeed = dropPeople.length;
+  } catch (e) { return; }
+  paintDropAlarm();
+}
+function armDropWatch(){
+  watchDrops();
+  if (dropWatch) clearInterval(dropWatch);
+  dropWatch = setInterval(watchDrops, 20000);
+}
+function openDrops(){
+  const sheet = document.getElementById('dropDialog');
+  if (!sheet) return;
+  const rows = dropPeople.map(function(item){
+    const name = item.name || ('ВК '+item.id);
+    return '<p class="drop-person"><a href="https://vk.com/id'+esc(item.id)+'" target="_blank" rel="noopener">'+esc(name)+'</a>'+
+      '<span class="note"> · донат кончился. Уберите из участников сообщества кафедры.</span>'+
+      '<button type="button" style="margin-left:8px" onclick="clearDrop('+Number(item.id)+')">Исключил</button></p>';
+  }).join('');
+  sheet.style.display = 'block';
+  sheet.innerHTML = '<div class="sheet card"><h3>Исключите бывших донов</h3>'+
+    '<p class="note">Имя подчёркнуто. Откройте страницу человека и удалите его из сообщества. Когда уберёте, нажмите «Исключил», мигание погаснет.</p>'+
+    rows+
+    '<button type="button" class="ghost" onclick="closeDrops()">Закрыть</button></div>';
+}
+function closeDrops(){
+  const sheet = document.getElementById('dropDialog');
+  if (sheet) sheet.style.display = 'none';
+}
+async function clearDrop(id){
+  await api('/api/admin/vk/course-drops/clear', { method:'POST', body: JSON.stringify({ id: id }) });
+  await watchDrops();
+  if (dropNeed) openDrops();
+  else closeDrops();
 }
 function showCommunities(){
   document.getElementById('login').style.display='none';
@@ -387,6 +452,7 @@ async function showPanel(){
   }
   else if (place==='vk') enterPlace('vk');
   else showDoor();
+  armDropWatch();
 }
 
 async function loadSection(k){

@@ -424,6 +424,21 @@ async function applyEvent(kind, userId, name, fetchImpl) {
     return { changed: true, active, sent };
 }
 
+async function listCourseDrops() {
+    const rows = await db.listAssistantDrops();
+    return rows
+        .filter(row => Number(row.user_id) !== DEMO_OWNER)
+        .map(row => ({
+            id: Number(row.user_id),
+            name: row.name || '',
+            at: row.updated_at || null
+        }));
+}
+
+async function clearCourseDrop(userId) {
+    return db.clearAssistantDrop(userId);
+}
+
 async function registerLive(donors, fetchImpl) {
     const rows = await db.listAssistantDons();
     const plan = planLive(rows, donors);
@@ -1150,5 +1165,7 @@ module.exports = {
     courseList,
     courseSave,
     courseRemove,
-    courseAsk
+    courseAsk,
+    listCourseDrops,
+    clearCourseDrop
 };

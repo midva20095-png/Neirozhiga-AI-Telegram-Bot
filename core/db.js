@@ -242,6 +242,7 @@ async function initDB() {
       updated_at TIMESTAMP DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE vk_assistant_don ADD COLUMN IF NOT EXISTS drop_open BOOLEAN NOT NULL DEFAULT FALSE`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS vk_assistant_community (
       group_id BIGINT PRIMARY KEY,
@@ -474,11 +475,35 @@ async function upsertAssistantDon(userId, name, active) {
      ON CONFLICT (user_id) DO UPDATE SET
        name = CASE WHEN EXCLUDED.name <> '' THEN EXCLUDED.name ELSE vk_assistant_don.name END,
        active = EXCLUDED.active,
+       drop_open = CASE
+         WHEN vk_assistant_don.active = TRUE AND EXCLUDED.active = FALSE THEN TRUE
+         WHEN EXCLUDED.active = TRUE THEN FALSE
+         ELSE vk_assistant_don.drop_open
+       END,
        updated_at = NOW()
-     RETURNING user_id, name, active, updated_at`,
+     RETURNING user_id, name, active, drop_open, updated_at`,
     [id, title, !!active]
   );
   return res.rows[0] || null;
+}
+
+async function listAssistantDrops() {
+  const res = await pool.query(
+    `SELECT user_id, name, updated_at FROM vk_assistant_don
+     WHERE drop_open = TRUE
+     ORDER BY updated_at DESC`
+  );
+  return res.rows;
+}
+
+async function clearAssistantDrop(userId) {
+  const id = assistantPerson(userId);
+  if (!id) return false;
+  const res = await pool.query(
+    'UPDATE vk_assistant_don SET drop_open = FALSE WHERE user_id = $1 AND drop_open = TRUE',
+    [id]
+  );
+  return res.rowCount > 0;
 }
 
 async function listAssistantCommunities(ownerId) {
@@ -1538,6 +1563,8 @@ module.exports = {
   listDonutLog,
   getAssistantDon,
   listAssistantDons,
+  listAssistantDrops,
+  clearAssistantDrop,
   upsertAssistantDon,
   listAssistantCommunities,
   saveAssistantCommunity,

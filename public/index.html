@@ -429,7 +429,8 @@ body.vkapp .tabbar button.on{background:linear-gradient(135deg,#7c3aed,#4c1d95);
 .course-door:active{transform:scale(.98)}
 @keyframes courseShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
 .course-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
-.course-tile{min-height:84px;border-radius:20px;border:1px solid rgba(255,255,255,.16);background:#1c1233;color:#fff;font-weight:800;font-size:17px;text-align:left;padding:16px;animation:courseIn .5s ease both}
+.course-tile,a.course-tile{min-height:84px;border-radius:20px;border:1px solid rgba(255,255,255,.16);background:#1c1233;color:#fff;font-weight:800;font-size:17px;text-align:left;padding:16px;animation:courseIn .5s ease both}
+a.course-tile{display:flex;flex-direction:column;justify-content:center;text-decoration:none}
 .course-tile:nth-child(2){animation-delay:.05s}.course-tile:nth-child(3){animation-delay:.1s}.course-tile:nth-child(4){animation-delay:.15s}.course-tile:nth-child(5){animation-delay:.2s}.course-tile:nth-child(6){animation-delay:.25s}.course-tile:nth-child(7){animation-delay:.3s}
 .course-tile.on{background:linear-gradient(135deg,#b366ff,#ff2d95);border-color:transparent;transform:translateY(-2px)}
 .course-tile:active{transform:scale(.98)}
@@ -2318,6 +2319,7 @@ async function renderCourse(box) {
     '<div class="kicker">Кафедра</div>'+
     '<p class="now">Страница, оформление, записи, реклама, бот и приложения. Откройте раздел и нажмите урок.</p>'+
     doorHtml+
+    clubBlock()+
     '<div class="course-grid">'+chips+'</div>'+
     '<div id="courseLessons">'+cards+'</div>'+
     '<label class="flabel" for="courseText">Вопрос по своему проекту</label>'+
@@ -2327,11 +2329,25 @@ async function renderCourse(box) {
     '</div>';
   bind();
 }
+function clubBlock(){
+  const groups = [
+    ['Бабка-таргетолог', 'https://vk.com/@neuroyaga-navigator-po-klubu-babki-targetologa', 'Создание сообщества, живая обложка, товары, карточки услуг, меню и виджеты, сайт-визитка, контент-план, игры, боты и рассылки, клипы, таргет, оформление в SUPA'],
+    ['Поддержка по ИИ', 'https://vk.com/@neuroyaga-navigaciya-po-urokam-kluba-na-urovne-bazovaya-podderzhka-po', 'Обложки и аватар с помощью ИИ, меню и виджеты, карточки товаров, чистота фото, оживление, промпты, прайс за пять минут'],
+    ['Фудфото', 'https://vk.com/@neuroyaga-navigaciya-po-urovnu-fudfoto-chek-listy-pdf-gaidy', 'Чек-листы, гайды и уроки по фото без дизайнера'],
+    ['Клип «Полёт над сладкой страной»', 'https://vk.com/@neuroyaga-urok-po-sozdaniu-klipa-polet-nad-sladkoi-stranoi', 'Съёмка и сборка клипа'],
+    ['Клип «Полёт на драконе»', 'https://vk.com/@neuroyaga-urok-po-sozdaniu-klipa-s-pomoschu-neirosetei-polet-na-drakon', 'Клип с помощью нейросети'],
+    ['Что внутри клуба', 'https://vk.com/@neuroyaga-opisanie-nashego-vip-kluba-neiroyaga-chto-vnutri-kakie-urovn', 'Уровни доната и что в каждом']
+  ];
+  return '<h3 style="margin-top:16px">Уроки клуба НейроЯги</h3>'+
+    '<div class="course-grid">'+groups.map(function(item){
+      return '<a class="course-tile" href="'+esc(item[1])+'" target="_blank" rel="noopener"><b>'+esc(item[0])+'</b><small style="display:block;margin-top:6px;font-weight:600;color:#cbbbe8">'+esc(item[2])+'</small></a>';
+    }).join('')+'</div>';
+}
 function linkText(value){
   return esc(value).replace(/https?:\/\/[^\s<&]+/g, function(raw){
     const url = raw.replace(/[),.;]+$/,'');
     const tail = raw.slice(url.length);
-    if (!/^https:\/\/(?:vk\.com|dev\.vk\.com|ads\.vk\.ru)\//.test(url)) return raw;
+    if (!/^https:\/\/(?:vk\.com|vk\.ru|dev\.vk\.com|ads\.vk\.ru)\//.test(url)) return raw;
     return '<a class="course-link" href="'+url+'" target="_blank" rel="noopener">'+url+'</a>'+tail;
   });
 }

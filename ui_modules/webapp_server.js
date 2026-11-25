@@ -1164,6 +1164,24 @@ function startWebApp() {
         res.json({ communities: vk.adminHomes() });
     });
 
+    app.get('/api/admin/vk/course-drops', requireAdmin, async (req, res) => {
+        try {
+            res.json({ people: await assistant.listCourseDrops() });
+        } catch (e) {
+            res.status(500).json({ error: 'Список на исключение не открылся.' });
+        }
+    });
+
+    app.post('/api/admin/vk/course-drops/clear', requireAdmin, async (req, res) => {
+        try {
+            const id = Number(req.body && req.body.id);
+            await assistant.clearCourseDrop(id);
+            res.json({ ok: true, people: await assistant.listCourseDrops() });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Отметку не сохранили.' });
+        }
+    });
+
     app.get('/api/admin/vk/course', requireAdmin, async (req, res) => {
         try {
             const course = await assistant.courseList();
