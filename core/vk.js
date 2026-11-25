@@ -145,6 +145,31 @@ function keepPhotos(previous, fresh, ageMs) {
     return recent.concat(incoming).slice(-6);
 }
 
+function photoMark(item) {
+    if (Buffer.isBuffer(item)) return `${item.length}:${item.subarray(0, 8).toString('hex')}`;
+    return String(item);
+}
+
+function joinPhotoBurst(previous, incoming) {
+    const prior = previous || {};
+    const next = incoming || {};
+    const photos = [];
+    const seen = new Set();
+    for (const item of [].concat(prior.photos || [], next.photos || [])) {
+        if (!item) continue;
+        const mark = photoMark(item);
+        if (seen.has(mark)) continue;
+        seen.add(mark);
+        photos.push(item);
+    }
+    return {
+        prompt: String(next.prompt || prior.prompt || '').trim(),
+        photos: photos.slice(-6),
+        groupId: String(next.groupId || prior.groupId || ''),
+        voice: next.voice || prior.voice || null
+    };
+}
+
 function readEvent(update) {
     if (!update || update.type !== 'message_event') return null;
     const obj = update.object || {};
@@ -1942,27 +1967,73 @@ async function reply(token, peerId, account, text, payload, groupId, photoUrls, 
         return openMenu(token, peerId, account, action, groupId);
     }
     const fresh = await loadPhotoBuffers(photoUrls);
+    if (photoBursts.has(String(account)) || fresh.length) {
+        return queuePhotoTurn(token, peerId, account, { prompt: text, photos: fresh, groupId, voice });
+    }
     const modelKeyNow = (await db.getCurrentModel(account)) || catalog.defaultModelKey('vk');
     const modelNow = catalog.getModel(modelKeyNow, { audience: 'vk' });
     if (modelNow && modelNow.audio) {
         return beginAvatar(token, peerId, account, { text, groupId, fresh, voice });
     }
     if (!text) {
-        if (fresh.length) {
-            const saved = stashPhotos(account, fresh);
-            const line = saved.length > 1
-                ? `Фото получил: ${saved.length}. Напишите, что сделать с этими кадрами.`
-                : 'Фото получил. Напишите, что сделать с этим человеком или кадром.';
-            await sendText(token, peerId, line);
-            return;
-        }
         await sendText(token, peerId, 'Напишите запрос или нажмите кнопку внизу.');
         return;
     }
     const photos = takeReferencePhotos(account, fresh);
     if (photos.length) console.log(`ВК: в запрос взято фото, ${photos.length} шт.`);
-    const modelKey = (await db.getCurrentModel(account)) || catalog.defaultModelKey('vk');
-    return askOrRun(token, peerId, account, { prompt: text, modelKey, quality: '', duration: 0, aspect: '', groupId: groupId || '', photos });
+    return askOrRun(token, peerId, account, { prompt: text, modelKey: modelKeyNow, quality: '', duration: 0, aspect: '', groupId: groupId || '', photos });
+}
+
+const photoBursts = new Map();
+
+function queuePhotoTurn(token, peerId, account, pack) {
+    const key = String(account);
+    const burst = photoBursts.get(key);
+    const joined = joinPhotoBurst(burst, pack);
+    const next = { token, peerId, account, ...joined };
+    clearTimeout(burst && burst.timer);
+    next.timer = setTimeout(() => {
+        finishPhotoBurst(key).catch(error => {
+            console.error(`ВК: фото не собрались. ${error && error.message ? error.message : ''}`);
+        });
+    }, 1600);
+    photoBursts.set(key, next);
+}
+
+async function finishPhotoBurst(key) {
+    const burst = photoBursts.get(key);
+    if (!burst) return;
+    photoBursts.delete(key);
+    const modelKey = (await db.getCurrentModel(burst.account)) || catalog.defaultModelKey('vk');
+    const model = catalog.getModel(modelKey, { audience: 'vk' });
+    if (model && model.audio) {
+        return beginAvatar(burst.token, burst.peerId, burst.account, {
+            text: burst.prompt,
+            groupId: burst.groupId,
+            fresh: burst.photos,
+            voice: burst.voice
+        });
+    }
+    if (!burst.prompt) {
+        if (!burst.photos.length) return;
+        const saved = stashPhotos(burst.account, burst.photos);
+        const line = saved.length > 1
+            ? `Фото получил: ${saved.length}. Напишите, что сделать с этими кадрами.`
+            : 'Фото получил. Напишите, что сделать с этим человеком или кадром.';
+        await sendText(burst.token, burst.peerId, line);
+        return;
+    }
+    const photos = takeReferencePhotos(burst.account, burst.photos);
+    if (photos.length) console.log(`ВК: в запрос взято фото, ${photos.length} шт.`);
+    return askOrRun(burst.token, burst.peerId, burst.account, {
+        prompt: burst.prompt,
+        modelKey,
+        quality: '',
+        duration: 0,
+        aspect: '',
+        groupId: burst.groupId || '',
+        photos
+    });
 }
 
 async function handleEvent(token, event, groupId) {
@@ -2457,7 +2528,19 @@ async function ensureLessonPin(token, groupId) {
     watchLessonPin(token, groupId);
 }
 
-async function readPostComments(token, groupId, postId) {
+async function commentReadTokens(groupToken) {
+    const list = [];
+    const add = value => {
+        const token = String(value || '').trim();
+        if (token && !list.includes(token)) list.push(token);
+    };
+    audit.readerTokens().forEach(add);
+    try { add(await audit.serviceToken()); } catch (error) {}
+    add(groupToken);
+    return list;
+}
+
+async function readPostComments(tokens, groupId, postId) {
     const params = {
         owner_id: String(-Number(groupId)),
         post_id: String(postId),
@@ -2465,9 +2548,6 @@ async function readPostComments(token, groupId, postId) {
         sort: 'desc',
         thread_items_count: '10'
     };
-    const tokens = [token];
-    const reader = audit.readerToken();
-    if (reader && reader !== token) tokens.push(reader);
     let last = null;
     for (const item of tokens) {
         try { return await call(item, 'wall.getComments', params); }
@@ -2476,9 +2556,59 @@ async function readPostComments(token, groupId, postId) {
     throw last || new Error('comments');
 }
 
-async function answerFreshLessonComments(token, groupId, postId) {
-    const pack = await readPostComments(token, groupId, postId);
-    const items = (pack && pack.items) || [];
+async function readCommunityWall(tokens, groupId) {
+    const owner = String(-Number(groupId));
+    let last = null;
+    for (const token of tokens) {
+        for (const params of [
+            { owner_id: owner, count: '10', filter: 'owner' },
+            { owner_id: owner, count: '10' }
+        ]) {
+            try { return await call(token, 'wall.get', params); }
+            catch (error) { last = error; }
+        }
+    }
+    throw last || new Error('wall');
+}
+
+async function rememberPinPost(groupId, postId, saved) {
+    const key = lesson.pinKey(groupId);
+    const prior = saved && typeof saved === 'object' ? saved : {};
+    if (Number(prior.postId) === Number(postId)) return;
+    try {
+        await db.setSetting(key, {
+            ...prior,
+            postId: Number(postId),
+            url: lesson.postUrl(groupId, postId),
+            published: true
+        });
+    } catch (error) {}
+}
+
+async function loadLessonComments(token, groupId) {
+    const tokens = await commentReadTokens(token);
+    const saved = await lessonPin(groupId);
+    let postId = Number(saved && saved.postId) || 0;
+    let last = null;
+    if (postId) {
+        try { return { postId, pack: await readPostComments(tokens, groupId, postId) }; }
+        catch (error) { last = error; }
+    }
+    let wall = null;
+    try { wall = await readCommunityWall(tokens, groupId); }
+    catch (error) { last = last || error; }
+    const live = lesson.commentPostId(saved, wall && wall.items);
+    if (live && live !== postId) {
+        await rememberPinPost(groupId, live, saved);
+        try { return { postId: live, pack: await readPostComments(tokens, groupId, live) }; }
+        catch (error) { last = error; }
+    }
+    throw last || new Error('comments');
+}
+
+async function answerFreshLessonComments(token, groupId, postId, pack) {
+    const comments = pack || await readPostComments(await commentReadTokens(token), groupId, postId);
+    const items = (comments && comments.items) || [];
     const flat = [];
     items.forEach(comment => {
         flat.push(comment);
@@ -2514,14 +2644,14 @@ function watchLessonPin(token, groupId) {
     lessonWatch.add(id);
     const tick = async () => {
         try {
-            const pin = await lessonPin(id);
-            if (pin && pin.postId) await answerFreshLessonComments(token, id, pin.postId);
+            const found = await loadLessonComments(token, id);
+            if (found && found.postId) await answerFreshLessonComments(token, id, found.postId, found.pack);
         } catch (error) {
             const now = Date.now();
             if (now - lessonReadFail > 5 * 60 * 1000) {
                 lessonReadFail = now;
                 const code = Number(error && error.code);
-                console.error(`ВК ${id}: закреп не прочитался${code ? ` (${code})` : ''}.`);
+                console.error(`ВК ${id}: закреп не прочитался${code ? ` (${code})` : ''}.${wallAccessLine(id, code)}`);
             }
         }
         setTimeout(tick, 20000);
@@ -3275,5 +3405,5 @@ async function ensureCommunityWidget(groupId) {
 }
 
 module.exports = {
-    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, clubGroupId, communityStatus, adminHomes, communityDonut, checkCommunityToken, monthActivity, setRatingHidden, publishPrize, prepareCover, templateCoverFile, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos, WALL_RECOUNT_MS
+    accountId, readIncoming, readEvent, isGreeting, menuAction, mainMenu, cabinetLink, appCabinetUrl, payKeyboard, payLockKeyboard, payLinkKeyboard, emailOk, createPayment, sectionKeyboard, modelKeyboard, nextChoice, modelNeedsChoice, connectHint, keepsQuiet, startVk, notify, sendToUser, askTopup, setTelegramNotify, attachFaces, fileForVk, mediaFile, messagePhoto, uploadPhotoField, samePicture, photoAttachment, communityList, communityId, clubGroupId, communityStatus, adminHomes, communityDonut, checkCommunityToken, monthActivity, setRatingHidden, publishPrize, prepareCover, templateCoverFile, communityCommentAttempts, communitiesForNotice, surveyHolds, modeHolds, spareKeyboard, keepPhotos, joinPhotoBurst, WALL_RECOUNT_MS
 };

@@ -64,6 +64,12 @@ test('из стены берётся только закреплённая за�
     ]);
     assert.equal(pinned.id, 9);
     assert.equal(lesson.pinnedItem([{ id: 4 }]), null);
+    assert.equal(lesson.commentPostId({ postId: 16047 }, [
+        { id: 4, text: 'свежая' },
+        { id: 9, is_pinned: 1, text: 'старая' }
+    ]), 9);
+    assert.equal(lesson.commentPostId({ postId: 20 }, [{ id: 4, text: lesson.postText('') }]), 4);
+    assert.equal(lesson.commentPostId({ postId: 20 }, []), 20);
 });
 
 test('обложка уроков собирается в картинку', async () => {

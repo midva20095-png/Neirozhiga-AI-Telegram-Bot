@@ -162,6 +162,10 @@ test('из события ВК берётся только входящий те
     assert.deepEqual(vk.keepPhotos(['a'], ['b'], 3 * 60 * 1000), ['b']);
     assert.deepEqual(vk.keepPhotos(['a'], [], 1000), ['a']);
     assert.deepEqual(vk.keepPhotos(['a'], [], 20 * 60 * 1000), []);
+    const burst = vk.joinPhotoBurst({ photos: ['a'], prompt: '' }, { photos: ['b', 'a'], prompt: 'собери коллаж' });
+    assert.deepEqual(burst.photos, ['a', 'b']);
+    assert.equal(burst.prompt, 'собери коллаж');
+    assert.equal(vk.joinPhotoBurst(burst, { photos: ['c', 'd', 'e', 'f', 'g'] }).photos.length, 6);
     assert.equal(vk.isGreeting('Начать'), true);
     assert.equal(vk.isGreeting('нарисуй кота'), false);
 });

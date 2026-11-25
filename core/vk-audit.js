@@ -687,6 +687,7 @@ module.exports = {
     groupOf,
     readerToken,
     readerTokens,
+    serviceToken,
     run,
     CLUB_URL
 };

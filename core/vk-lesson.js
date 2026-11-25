@@ -41,6 +41,15 @@ function pinnedItem(items) {
     return list.find(item => Number(item && item.is_pinned) === 1) || null;
 }
 
+function commentPostId(saved, items) {
+    const pinned = pinnedItem(items);
+    if (pinned && Number(pinned.id)) return Number(pinned.id);
+    const list = Array.isArray(items) ? items : [];
+    const own = list.find(item => isOwnPost(item && item.text));
+    if (own && Number(own.id)) return Number(own.id);
+    return Number(saved && saved.postId) || 0;
+}
+
 function lessonPostId(saved) {
     const current = Number(saved && saved.postId) || 0;
     if (current) return current;
@@ -141,5 +150,5 @@ async function paintCover() {
 }
 
 module.exports = {
-    CLUB_ID, PIN_POST_ID, OPENING, isClub, pinKey, postUrl, postText, isOwnPost, pinnedItem, lessonPostId, questionText, lessonRoute, withLessons, lessonPrompt, plain, fallbackText, paintCover
+    CLUB_ID, PIN_POST_ID, OPENING, isClub, pinKey, postUrl, postText, isOwnPost, pinnedItem, commentPostId, lessonPostId, questionText, lessonRoute, withLessons, lessonPrompt, plain, fallbackText, paintCover
 };

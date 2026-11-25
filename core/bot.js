@@ -1264,8 +1264,35 @@ async function startBot(app) {
             userAwaitingEmail.delete(userId);
         }
 
+        const burstKey = `u:${userId}`;
+        const burst = mediaGroupBuffers.get(burstKey);
+        if (burst) {
+            burst.contexts.push(ctx);
+            clearTimeout(burst.timer);
+            burst.timer = setTimeout(() => flushMedia(burstKey), 300);
+            return;
+        }
         await collectAndGenerate(ctx);
     };
+
+    function flushMedia(key) {
+        const current = mediaGroupBuffers.get(key);
+        mediaGroupBuffers.delete(key);
+        if (current && current.contexts.length > 0) collectAndGenerate(current.contexts[0], current.contexts);
+    }
+
+    function queueAlbum(ctx) {
+        const mediaGroupId = ctx.message && ctx.message.media_group_id;
+        const key = mediaGroupId ? `g:${mediaGroupId}` : `u:${ctx.from && ctx.from.id}`;
+        let group = mediaGroupBuffers.get(key);
+        if (!group) {
+            group = { contexts: [] };
+            mediaGroupBuffers.set(key, group);
+        }
+        group.contexts.push(ctx);
+        clearTimeout(group.timer);
+        group.timer = setTimeout(() => flushMedia(key), 1200);
+    }
 
     // Данные из Mini App (web_app keyboard button). Основной канал — HTTP API, но шаблоны/оплата приходят сюда.
     bot.on('message', async (ctx, next) => {
@@ -1287,23 +1314,6 @@ async function startBot(app) {
     bot.on('text', handleTextMessage);
 
     bot.on(['voice', 'audio'], async (ctx) => collectAndGenerate(ctx));
-
-    function queueAlbum(ctx) {
-        const mediaGroupId = ctx.message && ctx.message.media_group_id;
-        if (!mediaGroupId) return collectAndGenerate(ctx);
-        let group = mediaGroupBuffers.get(mediaGroupId);
-        if (!group) {
-            group = { contexts: [] };
-            mediaGroupBuffers.set(mediaGroupId, group);
-        }
-        group.contexts.push(ctx);
-        clearTimeout(group.timer);
-        group.timer = setTimeout(async () => {
-            const current = mediaGroupBuffers.get(mediaGroupId);
-            mediaGroupBuffers.delete(mediaGroupId);
-            if (current && current.contexts.length > 0) await collectAndGenerate(current.contexts[0], current.contexts);
-        }, 1200);
-    }
 
     bot.on('photo', queueAlbum);
 
