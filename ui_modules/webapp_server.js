@@ -363,16 +363,32 @@ function startWebApp() {
         return { check: true, view };
     }
 
+    async function courseDonor(req, res) {
+        if (communityClosed()) {
+            res.status(403).json({ closed: true, error: 'Кафедра сейчас закрыта.' });
+            return '';
+        }
+        const userId = assistant.vkId(req.userId);
+        if (!userId) {
+            res.status(403).json({ error: 'Кафедра открыта донам НейроЯги.', join: assistant.JOIN_URL });
+            return '';
+        }
+        const gate = await donorView(userId);
+        if (!gate.check) {
+            res.status(503).json({ error: 'Не удалось сверить донат.' });
+            return '';
+        }
+        if (!gate.view.don || !gate.view.active) {
+            res.status(403).json({ error: 'Кафедра открыта донам НейроЯги.', join: gate.view.join || assistant.JOIN_URL });
+            return '';
+        }
+        return String(req.userId);
+    }
+
     app.get('/api/vk/course', requireUser, async (req, res) => {
         try {
-            if (communityClosed()) return res.status(403).json({ closed: true, error: 'Кафедра сейчас закрыта.' });
-            const userId = assistant.vkId(req.userId);
-            if (!userId) return res.status(403).json({ error: 'Кафедра открыта донам НейроЯги.', join: assistant.JOIN_URL });
-            const gate = await donorView(userId);
-            if (!gate.check) return res.status(503).json({ error: 'Не удалось сверить донат.' });
-            if (!gate.view.don || !gate.view.active) {
-                return res.status(403).json({ error: 'Кафедра открыта донам НейроЯги.', join: gate.view.join || assistant.JOIN_URL });
-            }
+            const account = await courseDonor(req, res);
+            if (!account) return;
             const course = await assistant.courseList();
             if (!course.ok) return res.status(502).json({ error: course.error || 'Материалы не открылись.' });
             res.json({
@@ -386,19 +402,67 @@ function startWebApp() {
         }
     });
 
+    app.get('/api/vk/course/thread', requireUser, async (req, res) => {
+        try {
+            const account = await courseDonor(req, res);
+            if (!account) return;
+            res.json({ messages: await db.listCourseChat(account), marks: await db.listCourseMarks(account) });
+        } catch (e) {
+            res.status(500).json({ error: 'Диалог не открылся.' });
+        }
+    });
+
+    app.post('/api/vk/course/thread/clear', requireUser, async (req, res) => {
+        try {
+            const account = await courseDonor(req, res);
+            if (!account) return;
+            await db.clearCourseChat(account);
+            res.json({ ok: true, messages: [] });
+        } catch (e) {
+            res.status(500).json({ error: 'Диалог не очистился.' });
+        }
+    });
+
+    app.post('/api/vk/course/mark', requireUser, async (req, res) => {
+        try {
+            const account = await courseDonor(req, res);
+            if (!account) return;
+            const title = req.body && typeof req.body.title === 'string' ? req.body.title : '';
+            const body = req.body && typeof req.body.body === 'string' ? req.body.body : '';
+            const saved = await db.addCourseMark(account, title, body);
+            if (!saved) return res.status(400).json({ error: 'Нечего сохранять.' });
+            res.json({ ok: true, marks: await db.listCourseMarks(account) });
+        } catch (e) {
+            res.status(500).json({ error: 'Закладка не сохранилась.' });
+        }
+    });
+
+    app.post('/api/vk/course/mark/remove', requireUser, async (req, res) => {
+        try {
+            const account = await courseDonor(req, res);
+            if (!account) return;
+            await db.removeCourseMark(account, req.body && req.body.id);
+            res.json({ ok: true, marks: await db.listCourseMarks(account) });
+        } catch (e) {
+            res.status(500).json({ error: 'Закладка не удалилась.' });
+        }
+    });
+
     app.post('/api/vk/course/ask', requireUser, async (req, res) => {
         try {
-            if (communityClosed()) return res.status(403).json({ error: 'Кафедра сейчас закрыта.' });
-            const userId = assistant.vkId(req.userId);
-            if (!userId) return res.status(403).json({ error: 'Кафедра открыта донам НейроЯги.' });
-            const gate = await donorView(userId);
-            if (!gate.check) return res.status(503).json({ error: 'Не удалось сверить донат.' });
-            if (!gate.view.don || !gate.view.active) return res.status(403).json({ error: 'Кафедра открыта донам НейроЯги.' });
+            const account = await courseDonor(req, res);
+            if (!account) return;
             const text = req.body && typeof req.body.text === 'string' ? req.body.text.trim() : '';
             if (!text) return res.status(400).json({ error: 'Напишите вопрос.' });
-            const course = await assistant.courseAsk(text.slice(0, 500));
+            const prior = (await db.listCourseChat(account)).slice(-6).map(item => ({
+                role: item.role === 'user' ? 'user' : 'assistant',
+                text: item.body
+            }));
+            const course = await assistant.courseAsk(text.slice(0, 500), prior);
             if (!course.ok) return res.status(502).json({ error: course.error || 'Ответ не собрался.' });
-            res.json({ ok: true, answer: course.answer || '' });
+            await db.addCourseChat(account, 'user', text.slice(0, 500));
+            await db.addCourseChat(account, 'ai', course.answer || '');
+            res.json({ ok: true, answer: course.answer || '', messages: await db.listCourseChat(account) });
         } catch (e) {
             res.status(500).json({ error: 'Ответ не собрался.' });
         }

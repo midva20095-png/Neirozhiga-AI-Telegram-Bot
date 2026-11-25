@@ -441,6 +441,21 @@ a.course-tile{display:flex;flex-direction:column;justify-content:center;text-dec
 .course-lesson .body{padding:0 16px 18px;white-space:pre-wrap;line-height:1.6;font-size:16px}
 .course-link{color:#7af0ff;font-weight:800;text-decoration:underline;text-underline-offset:3px}
 .course-ask{min-height:64px;font-size:18px;border-radius:18px}
+.course-tabs{display:flex;gap:8px;margin:12px 0}
+.course-tabs button{flex:1;min-width:0;background:#1c1233;border:1px solid rgba(255,255,255,.16);color:#fff;border-radius:14px;padding:12px 8px}
+.course-tabs button.on{background:linear-gradient(135deg,#b366ff,#ff2d95);border-color:transparent}
+.course-chat{display:flex;flex-direction:column;gap:10px;min-height:240px;max-height:58vh;overflow:auto;padding:4px 2px 8px}
+.bubble{max-width:88%;padding:12px 14px;border-radius:18px;white-space:pre-wrap;line-height:1.5}
+.bubble.me{margin-left:auto;background:linear-gradient(135deg,#5b2dff,#ff2d95)}
+.bubble.ai{margin-right:auto;background:#1c1233;border:1px solid rgba(255,255,255,.12)}
+.bubble .mark,.lesson-tools button{margin-top:8px;background:transparent;border:1px solid rgba(255,255,255,.22);color:inherit;border-radius:999px;padding:6px 10px;font-size:13px;font-weight:800}
+.lesson-tools{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.lesson-tools button{margin-top:0;width:auto}
+.course-compose{display:flex;flex-direction:column;gap:8px;position:sticky;bottom:0;background:#140c24;padding-top:8px}
+.course-compose .btn{width:auto;margin-top:0}
+.course-compose .tools{display:flex;gap:8px;flex-wrap:wrap}
+.course-mark{border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:12px;margin-top:10px;background:#120a22}
+.course-mark h4{margin:0 0 6px}
 #courseAnswer .course-link{word-break:break-all}
 @media(max-width:640px){.course-grid{grid-template-columns:1fr}.course-door{font-size:17px}}
 @media(prefers-reduced-motion:reduce){.course-door,.course-tile,.course-lesson{animation:none}}
@@ -2309,25 +2324,130 @@ async function renderCourse(box) {
     return '<button type="button" class="course-tile" data-course="'+esc(item.id)+'">'+esc(item.title)+'</button>';
   }).join('');
   const cards = lessons.map(function(item){
-    return '<details class="course-lesson" data-lesson="'+esc(item.section)+'"><summary>'+esc(item.title)+'</summary><div class="body">'+linkText(item.body)+'</div></details>';
+    return '<details class="course-lesson" data-lesson="'+esc(item.section)+'" data-lesson-id="'+esc(item.id)+'"><summary>'+esc(item.title)+'</summary><div class="body">'+linkText(item.body)+lessonTools(item)+'</div></details>';
   }).join('');
   const doorHtml = door
     ? '<a class="course-door" href="'+esc(door)+'" target="_blank" rel="noopener">Перейти в сообщество кафедры<small>'+esc(pack.community || 'Бот отвечает донам здесь')+'</small></a>'
     : '';
+  courseLessons = lessons;
+  try {
+    const saved = await fetch('/api/vk/course/thread', { headers: authHeaders() });
+    const data = await saved.json();
+    if (saved.ok) {
+      courseThread = data.messages || [];
+      courseMarks = data.marks || [];
+    }
+  } catch (error) {}
   box.innerHTML = '<div class="card">'+
     '<button type="button" class="back" id="assistBack">В кабинет</button>'+
     '<div class="kicker">Кафедра</div>'+
-    '<p class="now">Страница, оформление, записи, реклама, бот и приложения. Откройте раздел и нажмите урок.</p>'+
-    doorHtml+
-    clubBlock()+
-    '<div class="course-grid">'+chips+'</div>'+
-    '<div id="courseLessons">'+cards+'</div>'+
-    '<label class="flabel" for="courseText">Вопрос по своему проекту</label>'+
-    '<textarea id="courseText" maxlength="500" rows="3" placeholder="Например: какой размер обложки ставить на телефон"></textarea>'+
-    '<button class="btn course-ask" id="courseSend" type="button">Спросить</button>'+
-    '<p id="courseAnswer" class="hint" style="white-space:pre-wrap"></p>'+
+    '<div class="course-tabs">'+
+      '<button type="button" data-cpane="lessons"'+(coursePane==='lessons'?' class="on"':'')+'>Материалы</button>'+
+      '<button type="button" data-cpane="chat"'+(coursePane==='chat'?' class="on"':'')+'>Чат</button>'+
+      '<button type="button" data-cpane="marks"'+(coursePane==='marks'?' class="on"':'')+'>Закладки</button>'+
+    '</div>'+
+    '<div id="courseLessonsPane"'+(coursePane==='lessons'?'':' hidden')+'>'+
+      '<p class="now">Страница, оформление, записи, реклама, бот и приложения. Откройте раздел и нажмите урок.</p>'+
+      doorHtml+
+      clubBlock()+
+      '<label class="flabel" for="courseFind">Найти в материалах</label>'+
+      '<input id="courseFind" placeholder="Обложка, реклама, бот">'+
+      '<div class="course-grid">'+chips+'</div>'+
+      '<div id="courseLessons">'+cards+'</div>'+
+    '</div>'+
+    '<div id="courseChatPane"'+(coursePane==='chat'?'':' hidden')+'>'+
+      '<div class="course-chat" id="courseThread"></div>'+
+      '<div class="course-compose">'+
+        '<label class="flabel" for="courseText">Вопрос в этот диалог</label>'+
+        '<textarea id="courseText" maxlength="500" rows="3" placeholder="Например: какой размер обложки ставить на телефон"></textarea>'+
+        '<div class="tools"><button class="btn course-ask" id="courseSend" type="button">Спросить</button>'+
+        '<button class="btn ghost" id="courseClear" type="button">Очистить диалог</button></div>'+
+      '</div>'+
+    '</div>'+
+    '<div id="courseMarksPane"'+(coursePane==='marks'?'':' hidden')+'></div>'+
     '</div>';
+  paintThread();
+  paintMarks();
   bind();
+}
+let coursePane = 'lessons';
+let courseLessons = [];
+let courseThread = [];
+let courseMarks = [];
+function showCoursePane(name){
+  coursePane = name === 'chat' || name === 'marks' ? name : 'lessons';
+  ['lessons','chat','marks'].forEach(function(id){
+    const pane = document.getElementById('course'+id.charAt(0).toUpperCase()+id.slice(1)+'Pane');
+    if (pane) pane.hidden = coursePane !== id;
+  });
+  document.querySelectorAll('[data-cpane]').forEach(function(button){
+    button.classList.toggle('on', button.getAttribute('data-cpane') === coursePane);
+  });
+  if (coursePane === 'chat') {
+    const thread = document.getElementById('courseThread');
+    if (thread) thread.scrollTop = thread.scrollHeight;
+  }
+}
+function paintThread(){
+  const box = document.getElementById('courseThread');
+  if (!box) return;
+  if (!courseThread.length) {
+    box.innerHTML = '<p class="hint">Диалог остаётся в этом окне. Вопрос и ответ идут друг за другом, как в чате. Закладка сохранит ответ, пока донат жив.</p>';
+    return;
+  }
+  box.innerHTML = courseThread.map(function(item, index){
+    const side = item.role === 'user' ? 'me' : 'ai';
+    const keep = side === 'ai' ? '<button type="button" class="mark" data-keep="'+index+'">В закладки</button>' : '';
+    return '<div class="bubble '+side+'">'+linkText(item.body)+keep+'</div>';
+  }).join('');
+  box.scrollTop = box.scrollHeight;
+  bindCourseBits();
+}
+function paintMarks(){
+  const box = document.getElementById('courseMarksPane');
+  if (!box) return;
+  if (!courseMarks.length) {
+    box.innerHTML = '<p class="hint">Закладок пока нет. В уроке или в ответе чата нажмите «В закладки». После окончания доната этот список закрывается вместе с кафедрой.</p>';
+    return;
+  }
+  box.innerHTML = courseMarks.map(function(item){
+    return '<article class="course-mark"><h4>'+esc(item.title)+'</h4><div class="body">'+linkText(item.body)+'</div>'+
+      '<button type="button" class="mark" data-drop-mark="'+esc(item.id)+'">Убрать</button></article>';
+  }).join('');
+  bindCourseBits();
+}
+function lessonTools(item){
+  return '<div class="lesson-tools">'+
+    '<button type="button" data-ask-lesson="'+esc(item.title)+'">Спросить в чате</button>'+
+    '<button type="button" data-keep-lesson="'+esc(item.id)+'">В закладки</button>'+
+    '</div>';
+}
+function bindCourseBits(){
+  document.querySelectorAll('[data-keep]').forEach(function(button){
+    button.onclick = function(){
+      const item = courseThread[Number(button.getAttribute('data-keep'))];
+      if (item) keepCourse('Ответ кафедры', item.body);
+    };
+  });
+  document.querySelectorAll('[data-keep-lesson]').forEach(function(button){
+    button.onclick = function(){
+      const lesson = courseLessons.find(function(item){ return item.id === button.getAttribute('data-keep-lesson'); });
+      if (lesson) keepCourse(lesson.title, lesson.body);
+    };
+  });
+  document.querySelectorAll('[data-ask-lesson]').forEach(function(button){
+    button.onclick = function(){
+      showCoursePane('chat');
+      const field = document.getElementById('courseText');
+      if (field) {
+        field.value = 'Разбери урок «'+button.getAttribute('data-ask-lesson')+'» на моём проекте';
+        field.focus();
+      }
+    };
+  });
+  document.querySelectorAll('[data-drop-mark]').forEach(function(button){
+    button.onclick = function(){ dropCourseMark(button.getAttribute('data-drop-mark')); };
+  });
 }
 function clubBlock(){
   const groups = [
@@ -2354,24 +2474,28 @@ function linkText(value){
 let courseFilter = '';
 function showCourseSection(id) {
   courseFilter = courseFilter === id ? '' : (id || '');
-  document.querySelectorAll('[data-lesson]').forEach(function(node){
-    node.hidden = !!courseFilter && node.getAttribute('data-lesson') !== courseFilter;
-  });
   document.querySelectorAll('[data-course]').forEach(function(button){
     button.classList.toggle('on', button.getAttribute('data-course') === courseFilter);
+  });
+  filterCourse();
+}
+function filterCourse(){
+  const query = ((document.getElementById('courseFind') || {}).value || '').trim().toLowerCase();
+  document.querySelectorAll('[data-lesson]').forEach(function(node){
+    const blob = (node.textContent || '').toLowerCase();
+    const sectionOk = !courseFilter || node.getAttribute('data-lesson') === courseFilter;
+    node.hidden = !sectionOk || (!!query && blob.indexOf(query) < 0);
   });
 }
 async function askCourse() {
   const field = document.getElementById('courseText');
-  const note = document.getElementById('courseAnswer');
   const button = document.getElementById('courseSend');
   const text = field ? field.value.trim() : '';
-  if (!text) {
-    if (note) note.textContent = 'Напишите вопрос.';
-    return;
-  }
+  if (!text) return;
+  if (field) field.value = '';
+  courseThread.push({ role: 'user', body: text });
+  paintThread();
   if (button) button.disabled = true;
-  if (note) note.textContent = 'Собираю ответ по материалам…';
   try {
     const response = await fetch('/api/vk/course/ask', {
       method: 'POST',
@@ -2380,11 +2504,50 @@ async function askCourse() {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Ответ не собрался');
-    if (note) note.innerHTML = linkText(data.answer || '');
+    courseThread = data.messages || courseThread.concat([{ role: 'ai', body: data.answer || '' }]);
   } catch (error) {
-    if (note) note.textContent = error.message || 'Ответ не собрался';
+    courseThread.push({ role: 'ai', body: error.message || 'Ответ не собрался' });
   }
+  paintThread();
   if (button) button.disabled = false;
+}
+async function clearCourseChat(){
+  courseThread = [];
+  paintThread();
+  try {
+    await fetch('/api/vk/course/thread/clear', { method: 'POST', headers: authHeaders(), body: '{}' });
+  } catch (error) {}
+}
+async function keepCourse(title, body){
+  try {
+    const response = await fetch('/api/vk/course/mark', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ title: title, body: body })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Закладка не сохранилась');
+    courseMarks = data.marks || courseMarks;
+    paintMarks();
+    showCoursePane('marks');
+  } catch (error) {
+    alert(error.message || 'Закладка не сохранилась');
+  }
+}
+async function dropCourseMark(id){
+  try {
+    const response = await fetch('/api/vk/course/mark/remove', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ id: id })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Закладка не удалилась');
+    courseMarks = data.marks || [];
+    paintMarks();
+  } catch (error) {
+    alert(error.message || 'Закладка не удалилась');
+  }
 }
 async function saveAssist(){
   const msg = document.getElementById('assistmsg');
@@ -4283,6 +4446,14 @@ function bind(){
   if (assistSave) assistSave.onclick = saveAssist;
   const courseSend = document.getElementById('courseSend');
   if (courseSend) courseSend.onclick = askCourse;
+  const courseClear = document.getElementById('courseClear');
+  if (courseClear) courseClear.onclick = clearCourseChat;
+  const courseFind = document.getElementById('courseFind');
+  if (courseFind) courseFind.oninput = filterCourse;
+  document.querySelectorAll('[data-cpane]').forEach(function(button){
+    button.onclick = function(){ showCoursePane(button.getAttribute('data-cpane') || 'lessons'); };
+  });
+  bindCourseBits();
   document.querySelectorAll('[data-course]').forEach(function(button){
     button.onclick = function(){ showCourseSection(button.getAttribute('data-course') || ''); };
   });

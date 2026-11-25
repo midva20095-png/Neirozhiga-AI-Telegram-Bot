@@ -1116,8 +1116,9 @@ function courseRemove(id) {
     return courseCall('/course/remove', { id }, 20000);
 }
 
-function courseAsk(text) {
-    return courseCall('/course/ask', { text }, 65000);
+function courseAsk(text, history) {
+    const prior = Array.isArray(history) ? history.slice(-8) : [];
+    return courseCall('/course/ask', { text, history: prior }, 65000);
 }
 
 module.exports = {

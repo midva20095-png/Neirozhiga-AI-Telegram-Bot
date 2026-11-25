@@ -113,7 +113,7 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
     <button type="button" onclick="enterPlace('tg')"><strong>Telegram</strong><span class="meta">Клиенты, модели и шаблоны</span></button>
     <button type="button" onclick="enterPlace('vk')"><strong>ВКонтакте</strong><span class="meta">Каждое сообщество отдельно</span></button>
     <a href="https://neiroyaga-backend-production.up.railway.app/admin" target="_blank" rel="noopener"><strong>Админка сайта</strong><span class="meta">Шаблоны, клиенты и лента babayagaland.ru</span></a>
-    <a href="https://vkdonutassistantbot-production.up.railway.app/admin" target="_blank" rel="noopener"><strong>Админка второго бота</strong><span class="meta">Кафедра: сообщество, где сидит бот, и уроки</span></a>
+    <a href="https://vkdonutassistantbot-production.up.railway.app/admin" target="_blank" rel="noopener"><strong>Админка второго бота</strong><span class="meta">Кафедра: кнопка «Добавить сообщество» и уроки</span></a>
   </div>
 </div>
 
@@ -165,6 +165,7 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
 <script>
 const TABS = [
   ['stats','Статистика'],['users','Клиенты'],['tpl','Шаблоны'],['models','Модели'],
+  ['assist','Кафедра'],
   ['packages','Пакеты'],['tickets','Поддержка'],['broadcast','Рассылка'],['journal','Журнал'],['settings','Настройки']
 ];
 let token = sessionStorage.getItem('ny_admin_token') || null;
@@ -626,7 +627,10 @@ async function loadAssist(){
   } catch (error) {
     course = { error: 'Уроки второго бота не открылись.' };
   }
-  el.innerHTML = '<div class="card"><h3>Вход в кафедру</h3>'+
+  el.innerHTML = '<div class="card"><h3>Где кафедра</h3>'+
+    '<p class="note">Кафедра — это второй бот. Сообщество, в котором он отвечает донам, добавляется в его админке кнопкой «Добавить сообщество». Эта вкладка показывает донов и уроки. Дверь «ВКонтакте» выше ведёт в управление сообществами основного бота: клиенты, рейтинг, кнопки. Туда сообщество кафедры не добавляется.</p>'+
+    '<p><a class="ghost" href="https://vkdonutassistantbot-production.up.railway.app/admin" target="_blank" rel="noopener" style="display:inline-block;padding:10px 14px;border-radius:12px">Открыть админку второго бота</a></p></div>'+
+    '<div class="card"><h3>Вход в кафедру</h3>'+
     '<p class="note">Это второй бот, не основной. Основной бот по-прежнему ведёт чат, кредиты и шаблоны. Кафедра открывается только дону НейроЯги.</p>'+
     '<p class="note">'+(data.closed ? '<span class="bad">Закрыто.</span> В приложении вместо кафедры стоит короткая заглушка.' : '<span class="ok">Вход открыт.</span> Дон видит материалы и может задать вопрос.')+'</p>'+
     '<div class="row"><button type="button" class="'+(data.closed ? '' : 'ghost')+'" onclick="setCommunityGate('+(data.closed ? 'false' : 'true')+')">'+(data.closed ? 'Открыть вход' : 'Закрыть вход')+'</button></div>'+

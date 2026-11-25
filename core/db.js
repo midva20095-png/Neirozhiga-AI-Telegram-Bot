@@ -111,6 +111,26 @@ async function initDB() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS vk_group BIGINT NOT NULL DEFAULT 0`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS vk_mode TEXT`);
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS vk_course_chat (
+      id SERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      role TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS vk_course_chat_user_idx ON vk_course_chat (user_id, id DESC)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS vk_course_mark (
+      id SERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS vk_course_mark_user_idx ON vk_course_mark (user_id, id DESC)`);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS site_pulls (
       id TEXT PRIMARY KEY,
       user_id BIGINT NOT NULL,
@@ -405,14 +425,87 @@ async function saveDonutSurvey(userId, groupId, step, gaps) {
 }
 
 async function setVkMode(userId, mode) {
-  const next = mode === 'audit' || mode === 'club' ? mode : null;
+  const next = mode === 'audit' || mode === 'club' || mode === 'admin' ? mode : null;
   await pool.query('UPDATE users SET vk_mode = $2, updated_at = NOW() WHERE user_id = $1', [String(userId), next]);
 }
 
 async function getVkMode(userId) {
   const res = await pool.query('SELECT vk_mode FROM users WHERE user_id = $1', [String(userId)]);
   const mode = res.rows[0] && res.rows[0].vk_mode;
-  return mode === 'audit' || mode === 'club' ? mode : '';
+  return mode === 'audit' || mode === 'club' || mode === 'admin' ? mode : '';
+}
+
+async function listCourseChat(userId) {
+  const res = await pool.query(
+    `SELECT id, role, body FROM (
+       SELECT id, role, body FROM vk_course_chat WHERE user_id = $1 ORDER BY id DESC LIMIT 40
+     ) recent ORDER BY id ASC`,
+    [String(userId)]
+  );
+  return res.rows.map(row => ({
+    id: row.id,
+    role: row.role === 'user' ? 'user' : 'ai',
+    body: row.body
+  }));
+}
+
+async function addCourseChat(userId, role, body) {
+  const who = role === 'user' ? 'user' : 'ai';
+  const text = String(body || '').trim().slice(0, 4000);
+  if (!text) return null;
+  const res = await pool.query(
+    'INSERT INTO vk_course_chat (user_id, role, body) VALUES ($1, $2, $3) RETURNING id, role, body',
+    [String(userId), who, text]
+  );
+  await pool.query(
+    `DELETE FROM vk_course_chat WHERE user_id = $1 AND id NOT IN (
+       SELECT id FROM vk_course_chat WHERE user_id = $1 ORDER BY id DESC LIMIT 40
+     )`,
+    [String(userId)]
+  );
+  const row = res.rows[0];
+  return { id: row.id, role: row.role === 'user' ? 'user' : 'ai', body: row.body };
+}
+
+async function clearCourseChat(userId) {
+  await pool.query('DELETE FROM vk_course_chat WHERE user_id = $1', [String(userId)]);
+}
+
+async function listCourseMarks(userId) {
+  const res = await pool.query(
+    'SELECT id, title, body FROM vk_course_mark WHERE user_id = $1 ORDER BY id DESC LIMIT 40',
+    [String(userId)]
+  );
+  return res.rows.map(row => ({ id: row.id, title: row.title, body: row.body }));
+}
+
+async function addCourseMark(userId, title, body) {
+  const name = String(title || '').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Закладка';
+  const text = String(body || '').trim().slice(0, 4000);
+  if (text.length < 2) return null;
+  const same = await pool.query(
+    'SELECT id, title, body FROM vk_course_mark WHERE user_id = $1 AND body = $2 LIMIT 1',
+    [String(userId), text]
+  );
+  if (same.rows[0]) return same.rows[0];
+  const res = await pool.query(
+    'INSERT INTO vk_course_mark (user_id, title, body) VALUES ($1, $2, $3) RETURNING id, title, body',
+    [String(userId), name, text]
+  );
+  await pool.query(
+    `DELETE FROM vk_course_mark WHERE user_id = $1 AND id NOT IN (
+       SELECT id FROM vk_course_mark WHERE user_id = $1 ORDER BY id DESC LIMIT 40
+     )`,
+    [String(userId)]
+  );
+  return res.rows[0];
+}
+
+async function removeCourseMark(userId, id) {
+  const mark = Number(id);
+  if (!Number.isInteger(mark) || mark <= 0) return false;
+  const res = await pool.query('DELETE FROM vk_course_mark WHERE user_id = $1 AND id = $2', [String(userId), mark]);
+  return res.rowCount > 0;
 }
 
 async function clearDonutSurvey(userId, groupId) {
@@ -1558,6 +1651,12 @@ module.exports = {
   saveDonutSurvey,
   setVkMode,
   getVkMode,
+  listCourseChat,
+  addCourseChat,
+  clearCourseChat,
+  listCourseMarks,
+  addCourseMark,
+  removeCourseMark,
   clearDonutSurvey,
   recordDonut,
   listDonutLog,

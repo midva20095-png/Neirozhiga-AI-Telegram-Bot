@@ -177,7 +177,7 @@ test('полный пересчёт стены идёт раз в 12 часов'
 test('меню ВК открывает кабинет и не считает кнопки запросом', () => {
     const menu = JSON.parse(vk.mainMenu());
     const labels = menu.buttons.flat().map(button => button.action.label);
-    assert.deepEqual(labels, ['Кабинет', 'Баланс', 'Модели', 'Пополнить', 'Перенос', 'Справка', 'Рейтинг']);
+    assert.deepEqual(labels, ['Кабинет', 'Баланс', 'Модели', 'Пополнить', 'Перенос', 'Справка', 'Рейтинг', 'Админ']);
     for (const row of menu.buttons) {
         const links = row.filter(button => button.action.type === 'open_link');
         if (!links.length) continue;

@@ -49,6 +49,10 @@ test('аудит не отпускает чат, пока не нажата на
     assert.equal(vk.modeHolds('audit', 'model'), true);
     assert.equal(vk.modeHolds('audit', 'pay_back'), false);
     assert.equal(vk.modeHolds('audit', 'opt_cancel'), false);
+    assert.equal(vk.modeHolds('admin', ''), true);
+    assert.equal(vk.modeHolds('admin', 'models'), true);
+    assert.equal(vk.modeHolds('admin', 'pay_back'), false);
+    assert.equal(vk.menuAction('Админ'), 'admin');
     assert.equal(vk.modeHolds('', 'https://vk.com/club1'), false);
     const fallback = JSON.parse(vk.spareKeyboard(vk.payLockKeyboard()));
     assert.equal(fallback.buttons.length, 0);

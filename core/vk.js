@@ -223,6 +223,7 @@ function menuAction(text, payload) {
     if (value === 'ученики') return 'honor';
     if (value === 'аудит') return 'audit';
     if (value === 'клуб') return 'club';
+    if (value === 'админ' || value === 'администратор') return 'admin';
     if (value === 'бот ии') return 'models';
     if (value === 'назад') return 'pay_back';
     if (value === 'отмена') return 'opt_cancel';
@@ -310,6 +311,7 @@ function mainMenu(peerId, groupId) {
     const cabinet = linkButton('Кабинет', account ? cabinetLink(account, '', groupId) : siteLink());
     if (cabinet) rows.push([cabinet]);
     rows.push(...textRows());
+    rows.push([textButton('Админ', { a: 'admin' }, 'secondary')]);
     if (auditHere(groupId)) {
         rows.push([
             textButton('Аудит', { a: 'audit' }, 'secondary'),
@@ -325,6 +327,7 @@ const pendingMove = new Map();
 const pendingJob = new Map();
 const pendingAudit = new Set();
 const pendingClub = new Set();
+const pendingAdmin = new Set();
 const runningAudit = new Set();
 let tellTelegram = async () => {};
 
@@ -508,7 +511,7 @@ function spareKeyboard(failed) {
 }
 
 function modeHolds(mode, action) {
-    if (mode !== 'audit' && mode !== 'club') return false;
+    if (mode !== 'audit' && mode !== 'club' && mode !== 'admin') return false;
     return action !== 'pay_back' && action !== 'opt_cancel';
 }
 
@@ -516,6 +519,7 @@ function dialogKind(account) {
     const key = String(account);
     if (pendingAudit.has(key)) return 'audit';
     if (pendingClub.has(key)) return 'club';
+    if (pendingAdmin.has(key)) return 'admin';
     return '';
 }
 
@@ -523,9 +527,12 @@ async function rememberDialog(account, mode) {
     const key = String(account);
     pendingAudit.delete(key);
     pendingClub.delete(key);
+    pendingAdmin.delete(key);
     if (mode === 'audit') pendingAudit.add(key);
     if (mode === 'club') pendingClub.add(key);
-    try { await db.setVkMode(account, mode === 'audit' || mode === 'club' ? mode : ''); } catch (error) {}
+    if (mode === 'admin') pendingAdmin.add(key);
+    const kept = mode === 'audit' || mode === 'club' || mode === 'admin' ? mode : '';
+    try { await db.setVkMode(account, kept); } catch (error) {}
 }
 
 async function restoreDialog(account) {
@@ -536,6 +543,7 @@ async function restoreDialog(account) {
     const key = String(account);
     if (mode === 'audit') pendingAudit.add(key);
     if (mode === 'club') pendingClub.add(key);
+    if (mode === 'admin') pendingAdmin.add(key);
     return dialogKind(account);
 }
 
@@ -1852,6 +1860,28 @@ async function holdDialog(token, peerId, account, text, action, groupId, mode) {
     return sendText(token, peerId, audit.guide(), payLockKeyboard());
 }
 
+async function holdAdmin(token, peerId, account, text, action) {
+    if (action && action !== 'admin') {
+        await sendText(token, peerId, 'Сейчас вы пишете администратору. Модели, оплата и остальные кнопки молчат. «Назад» возвращает меню.', payLockKeyboard());
+        return;
+    }
+    if (action === 'admin') {
+        await sendText(token, peerId, 'Напишите сообщение администратору. Пока открыто это окно, модели не запускаются. «Назад» возвращает меню.', payLockKeyboard());
+        return;
+    }
+    const raw = String(text || '').trim();
+    if (!raw) {
+        await sendText(token, peerId, 'Напишите сообщение администратору. «Назад» возвращает меню.', payLockKeyboard());
+        return;
+    }
+    try { await db.createTicket(account, `vk ${peerId}`, raw, 'vk-admin'); } catch (error) {}
+    const note = `Сообщение администратору из ВК ${peerId}:\n${raw.slice(0, 1500)}`;
+    for (const adminId of auth.adminIds()) {
+        try { await tellTelegram(adminId, note); } catch (error) {}
+    }
+    await sendText(token, peerId, 'Сообщение ушло администратору. Ответ придёт в этот чат. Можно написать ещё. Модели молчат, пока не нажмёте «Назад».', payLockKeyboard());
+}
+
 async function holdClub(token, peerId, account, text, action, groupId) {
     const key = String(account);
     if (!pendingClub.has(key)) return false;
@@ -1884,6 +1914,7 @@ async function reply(token, peerId, account, text, payload, groupId, photoUrls, 
         return goBack(token, peerId, account, groupId);
     }
     const mode = await restoreDialog(account);
+    if (mode === 'admin' && modeHolds(mode, action)) return holdAdmin(token, peerId, account, text, action);
     if (modeHolds(mode, action) && auditHere(groupId)) return holdDialog(token, peerId, account, text, action, groupId, mode);
     if (await holdDonutSurvey(token, peerId, account, text, action, payload, groupId)) return;
     if (action === 'quality' || action === 'duration' || action === 'size') {
@@ -1898,6 +1929,7 @@ async function reply(token, peerId, account, text, payload, groupId, photoUrls, 
         pendingJob.delete(String(account));
         pendingAudit.delete(String(account));
         pendingClub.delete(String(account));
+        pendingAdmin.delete(String(account));
         const pkg = catalog.getPackage(payload && payload.p);
         if (!pkg) return sendText(token, peerId, 'Пакет недоступен.');
         pendingMove.delete(String(account));
@@ -1914,6 +1946,7 @@ async function reply(token, peerId, account, text, payload, groupId, photoUrls, 
         pendingPay.delete(String(account));
         pendingAudit.delete(String(account));
         pendingClub.delete(String(account));
+        pendingAdmin.delete(String(account));
         pendingMove.set(String(account), { stage: 'who' });
         const shown = String(account).replace(/^-/, '');
         return sendText(
@@ -1949,9 +1982,18 @@ async function reply(token, peerId, account, text, payload, groupId, photoUrls, 
         return sendText(token, peerId, club.overview(), payLockKeyboard());
     }
     if (await holdClub(token, peerId, account, text, action, groupId)) return;
+    if (action === 'admin') {
+        pendingJob.delete(String(account));
+        pendingPay.delete(String(account));
+        pendingMove.delete(String(account));
+        pendingShop.delete(String(account));
+        await rememberDialog(account, 'admin');
+        return holdAdmin(token, peerId, account, '', 'admin');
+    }
     if (action) {
         pendingAudit.delete(String(account));
         pendingClub.delete(String(account));
+        pendingAdmin.delete(String(account));
     }
     if (action === 'group') {
         pendingJob.delete(String(account));
@@ -2900,7 +2942,7 @@ function surveyKeyboard() {
 
 function surveyHolds(action, busy) {
     const state = busy || {};
-    if (state.audit || state.club || state.pay || state.move) return false;
+    if (state.audit || state.club || state.admin || state.pay || state.move) return false;
     if (action && action !== 'survey' && action !== 'hello') return false;
     return true;
 }
@@ -2911,6 +2953,7 @@ async function holdDonutSurvey(token, peerId, account, text, action, payload, gr
     if (!surveyHolds(action, {
         audit: pendingAudit.has(key),
         club: pendingClub.has(key),
+        admin: pendingAdmin.has(key),
         pay: pendingPay.has(key),
         move: pendingMove.has(key)
     })) return false;
@@ -2928,6 +2971,7 @@ async function holdDonutSurvey(token, peerId, account, text, action, payload, gr
     pendingJob.delete(key);
     pendingAudit.delete(key);
     pendingClub.delete(key);
+    pendingAdmin.delete(key);
     const gaps = survey.gaps.slice();
     if (answer === 'no') gaps.push(survey.step);
     const next = survey.step + 1;
