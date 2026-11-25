@@ -17,7 +17,7 @@ input,select,textarea{width:100%;padding:10px 12px;border-radius:12px;border:1px
 textarea{min-height:90px;resize:vertical}
 label{display:block;font-size:12px;color:var(--mut);margin:8px 0 4px}
 button{cursor:pointer;border:0;border-radius:12px;padding:10px 14px;font-weight:800;background:linear-gradient(135deg,#b366ff,#ff2d95);color:#fff}
-.ghost{background:transparent;border:1px solid var(--line)}
+.ghost{background:transparent;border:1px solid var(--line);color:inherit;text-decoration:none}
 .topiclist{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .topiclist button{flex:0 0 auto;min-width:0;border-radius:999px;padding:8px 12px;background:#1c1233;border:1px solid var(--line);color:var(--text)}
 .topiclist button.on{background:linear-gradient(135deg,#b366ff,#ff2d95);border-color:transparent;color:#fff}
@@ -69,9 +69,9 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
 .check{display:flex;align-items:flex-start;gap:8px;margin-top:10px;color:var(--text);font-size:14px}
 .check input{width:auto;margin-top:2px}
 .door,.homes{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.door button,.homes button{min-height:120px;font-size:18px;border-radius:18px;background:#1c1233;border:1px solid var(--line);color:var(--text);text-align:left;padding:16px 18px}
-.homes button strong,.door button strong{display:block;font-family:Unbounded,sans-serif;font-size:18px}
-.homes button .meta,.door button .meta{display:block;margin-top:8px;color:var(--mut);font-size:13px;font-weight:600}
+.door button,.door a,.homes button{min-height:120px;font-size:18px;border-radius:18px;background:#1c1233;border:1px solid var(--line);color:var(--text);text-align:left;padding:16px 18px;text-decoration:none;display:block}
+.homes button strong,.door button strong,.door a strong{display:block;font-family:Unbounded,sans-serif;font-size:18px}
+.homes button .meta,.door button .meta,.door a .meta{display:block;margin-top:8px;color:var(--mut);font-size:13px;font-weight:600}
 .homes button .ok,.homes button .bad{display:block;margin-top:4px;font-size:13px}
 .actions{display:flex;flex-direction:column;gap:8px;margin-top:12px}
 .actions button{width:100%;background:transparent;border:1px solid var(--line);color:var(--text)}
@@ -99,10 +99,11 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
 
 <div class="card" id="door" style="display:none">
   <h3>Куда войти</h3>
-  <p class="note">Telegram и ВКонтакте открываются отдельно.</p>
+  <p class="note">Telegram и ВКонтакте открываются отдельно. Админка сайта — в той же сетке.</p>
   <div class="door">
     <button type="button" onclick="enterPlace('tg')"><strong>Telegram</strong><span class="meta">Клиенты, модели и шаблоны</span></button>
     <button type="button" onclick="enterPlace('vk')"><strong>ВКонтакте</strong><span class="meta">Каждое сообщество отдельно</span></button>
+    <a href="https://neiroyaga-backend-production.up.railway.app/admin" target="_blank" rel="noopener"><strong>Админка сайта</strong><span class="meta">Шаблоны, клиенты и лента babayagaland.ru</span></a>
   </div>
 </div>
 
@@ -124,6 +125,7 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
       <p class="note" id="placeNote"></p>
     </div>
     <div class="row" style="margin:0;flex:0 0 auto">
+      <a class="ghost" href="https://neiroyaga-backend-production.up.railway.app/admin" target="_blank" rel="noopener">Админка сайта</a>
       <button class="ghost" type="button" id="backPlace" onclick="place==='vk'?showCommunities():showDoor()">Другой вход</button>
       <button class="ghost" type="button" onclick="logout()">Выйти</button>
     </div>
