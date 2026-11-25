@@ -861,6 +861,7 @@ function startWebApp() {
             let exactPrompt = false;
             let photos = [];
             const audience = String(req.userId).startsWith('-') ? 'vk' : 'tg';
+            const listedPhotos = Array.isArray(body.photos) ? body.photos.filter(Boolean).slice(0, templateFields.MAX_PHOTOS) : [];
             if (body.templateId) {
                 tpl = await templatesSrc.getFull(body.templateId, audience);
                 if (!tpl) return res.status(404).json({ error: 'Шаблон не найден' });
@@ -890,6 +891,10 @@ function startWebApp() {
                 if (!prompt) prompt = 'Сделай изображение по прикреплённому фото';
                 const templateKind = (catalog.getModel(modelKey, { includeDisabled: true, audience }) || {}).kind;
                 if (templateKind !== 'video' && templateKind !== 'audio') prompt = templateFields.withAspect(prompt, aspect);
+            } else {
+                photos = listedPhotos.slice();
+                if (body.image && photos.indexOf(body.image) < 0) photos.unshift(body.image);
+                photos = photos.slice(0, templateFields.MAX_PHOTOS);
             }
             if (!prompt && !body.image && !photos.length && !body.audio) return res.status(400).json({ error: 'Введите промпт' });
             const liveModel = catalog.getModel(modelKey, { audience });
@@ -907,7 +912,7 @@ function startWebApp() {
                 userId: req.userId,
                 prompt,
                 modelKey,
-                fileBuffer: file && file.buffer,
+                fileBuffer: files.length === 1 ? file.buffer : null,
                 fileBuffers: files.length > 1 ? files.map(item => item.buffer) : undefined,
                 mimeType: file && file.mime,
                 mimeTypes: files.map(item => item.mime),

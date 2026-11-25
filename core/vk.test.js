@@ -127,6 +127,24 @@ test('из события ВК берётся только входящий те
     });
     assert.deepEqual(pair.photos, ['https://cdn.example/a.jpg', 'https://cdn.example/b.jpg']);
     assert.equal(pair.messageId, 77);
+    const files = vk.readIncoming({
+        type: 'message_new',
+        object: {
+            message: {
+                id: 80,
+                from_id: 10,
+                peer_id: 10,
+                text: 'две картинки',
+                out: 0,
+                attachments: [
+                    { type: 'photo', photo: { orig_photo: { url: 'https://cdn.example/one.jpg' } } },
+                    { type: 'doc', doc: { ext: 'png', title: 'two.png', url: 'https://cdn.example/two.png' } },
+                    { type: 'doc', doc: { ext: 'pdf', title: 'note.pdf', url: 'https://cdn.example/note.pdf' } }
+                ]
+            }
+        }
+    });
+    assert.deepEqual(files.photos, ['https://cdn.example/one.jpg', 'https://cdn.example/two.png']);
     const spoken = vk.readIncoming({
         type: 'message_new',
         object: {

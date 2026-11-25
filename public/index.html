@@ -45,12 +45,13 @@ function hashTpl(value){
   }
   return '';
 }
+window.__nyTpl = hashTpl(location.href) || '';
 window.__nyHost = function(msg){
   if (!msg || !msg.type) return;
   if (msg.type === 'ny-goal-ask') {
     const goal = String(location.hash || '').replace(/^#/, '').split('&')[0].split('?')[0];
     if (goal === 'rate' || goal === 'site' || goal === 'shop' || goal === 'sub' || goal === 'help') vkTell({ type: 'ny-goal', goal: goal });
-    const tpl = hashTpl(location.hash) || hashTpl(location.search);
+    const tpl = hashTpl(location.href) || hashTpl(window.__nyTpl || '');
     if (tpl) vkTell({ type: 'ny-tpl', id: tpl });
     return;
   }
@@ -108,7 +109,7 @@ window.addEventListener('message', function(event){
     });
     const id = String(bag.vk_group_id || (bridgeData && bridgeData.group_id) || '').replace(/\D/g, '');
     if (id) vkTell({ type: 'ny-group', id: id });
-    const opened = hashTpl(location.hash) || hashTpl(location.search) || hashTpl(bag.vk_ref) || hashTpl(bridgeData && bridgeData.location) || hashTpl(bridgeData && bridgeData.hash);
+    const opened = hashTpl(location.href) || hashTpl(window.__nyTpl) || hashTpl(bag.vk_ref) || hashTpl(bridgeData && bridgeData.location) || hashTpl(bridgeData && bridgeData.hash);
     if (opened) vkTell({ type: 'ny-tpl', id: opened });
     vkTell({ type: 'ny-launch', params: bag });
     return;
@@ -323,6 +324,8 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .tcard{display:flex;gap:10px;width:100%;text-align:left;background:#1c1233;border:1px solid transparent;border-radius:14px;padding:10px;margin-bottom:8px;align-items:center}
 .tcard img,.thumb{width:64px;height:64px;object-fit:cover;border-radius:10px;background:#0b0614;flex:0 0 auto}
 .preview{width:100%;max-height:320px;object-fit:cover;border-radius:14px;background:#0b0614}
+.shots{display:flex;gap:8px;overflow-x:auto;margin-top:10px}
+.shots .preview{width:72px;height:72px;max-height:72px;flex:0 0 72px}
 .filebtn{position:relative;display:block;overflow:hidden;text-align:center;border:1px dashed rgba(255,255,255,.25);border-radius:14px;padding:14px;margin-top:10px;font-weight:800;cursor:pointer}
 .filebtn input{position:absolute;left:0;top:0;width:100%;height:100%;opacity:0;font-size:32px;cursor:pointer}
 .phrow{display:flex;align-items:center;gap:8px;margin-top:8px}
@@ -484,7 +487,7 @@ body.vkapp .tabbar button.on{background:linear-gradient(135deg,#7c3aed,#4c1d95);
 <script>
 const KIND = {text:'Текст', image:'Картинка', video:'Видео', audio:'Музыка'};
 let tab='gen', me=null, cfg=null, templates=[], works=null, worksLoading=false, userId=null, token=null, busy=false, last=null, wantMenu=false, tplAnswers={}, tplPhotos={};
-let openTpl=null, photoData=null, pickedFormat=null, genPhoto=null, genVoice=null, genVoiceSeconds=0, draft='', pendingTpl='', pendingPkg='';
+let openTpl=null, photoData=null, pickedFormat=null, genPhoto=null, genPhotos=[], genVoice=null, genVoiceSeconds=0, draft='', pendingTpl='', pendingPkg='';
 let tplKind='', tplTopic='', tplQuery='';
 const TCAT = {image:'Картинки', fix:'Улучшение', chat:'Текст', video:'Видео', audio:'Голос'};
 const TMARK = {image:'🪄', fix:'✨', chat:'✍️', video:'🎬', audio:'🎙'};
@@ -524,7 +527,8 @@ function detectAuth(){
   if (hp.get('tk')) token = hp.get('tk');
   else if (sp.get('tk')) token = sp.get('tk');
   const namedTpl = String(hp.get('tpl') || sp.get('tpl') || '').replace(/^local:/, '');
-  pendingTpl = /^\d{1,12}$/.test(namedTpl) ? namedTpl : (hashTpl(location.hash) || hashTpl(location.search));
+  pendingTpl = /^\d{1,12}$/.test(namedTpl) ? namedTpl : (hashTpl(location.href) || hashTpl(window.__nyTpl || ''));
+  if (pendingTpl) tab = 'tpl';
   if (hp.get('pkg') || sp.get('pkg')) pendingPkg = hp.get('pkg') || sp.get('pkg');
   window.__vkPaid = hp.get('paid') === '1' || sp.get('paid') === '1';
   const goal = hash.split('&')[0].split('?')[0];
@@ -727,7 +731,7 @@ async function load(){
     draw();
     return;
   }
-  const sharedTpl = pendingTpl || (typeof hashTpl === 'function' ? (hashTpl(location.hash) || hashTpl(location.search)) : '');
+  const sharedTpl = pendingTpl || (typeof hashTpl === 'function' ? (hashTpl(location.href) || hashTpl(window.__nyTpl || '')) : '');
   if (sharedTpl) pendingTpl = pendingTpl || sharedTpl;
   if (!userId && pendingTpl) {
     try { templates = ((await (await fetchT('/api/templates?audience=vk')).json()).templates) || []; } catch (e) { templates = templates || []; }
@@ -792,7 +796,7 @@ function draw(){
     box.innerHTML = '<div class="card"><p>Идёт обновление. Зайдите чуть позже: сейчас вход закрыт.</p></div>';
     return;
   }
-  if (window.__vkOffline && (!userId || (me && me.error))) {
+  if (!(tab === 'tpl' && (openTpl || pendingTpl)) && window.__vkOffline && (!userId || (me && me.error))) {
     box.innerHTML = '<div class="card"><p>Кабинет открыт. Сервер бота не ответил, поэтому баланс и генерация ещё не загрузились.</p><button class="btn" type="button" onclick="retryOpen()">Повторить</button><p class="empty">'+(isVk()?'Бот в чате сообщества при этом работает. Напишите туда, если повтор не помогает.':'Откройте кабинет ещё раз из чата бота.')+'</p></div>';
     return;
   }
@@ -801,11 +805,11 @@ function draw(){
     loadRating();
     return;
   }
-  if (!userId && window.__nyApi && !window.__vkLaunchSeen && !window.__vkAuthError) {
+  if (!(tab === 'tpl' && (openTpl || pendingTpl)) && !userId && window.__nyApi && !window.__vkLaunchSeen && !window.__vkAuthError) {
     box.innerHTML = '<div class="card"><p class="empty">Открываю кабинет…</p></div>';
     return;
   }
-  if (!userId || (me && !me.user_id && me.error!==true && !me.balance)) {
+  if (!(tab === 'tpl' && (openTpl || pendingTpl)) && (!userId || (me && !me.user_id && me.error!==true && !me.balance))) {
     box.innerHTML = '<div class="card"><p class="empty">'+(window.__vkAuthError ? 'Сессия сообщества не открылась. Закройте кабинет и откройте его кнопкой из чата.' : 'Откройте кабинет из чата бота или из сообщества.')+'</p></div>';
     return;
   }
@@ -943,7 +947,12 @@ function openSharedTpl(id, paint){
   const num = String(id || '').replace(/^local:/, '').replace(/\D/g, '');
   if (!num) return;
   const hit = (templates || []).find(function(t){ return String(t.id).replace(/^local:/, '') === num; });
-  if (!hit) { pendingTpl = num; return; }
+  if (!hit) {
+    pendingTpl = num;
+    tab = 'tpl';
+    if (paint !== false && document.getElementById('view')) draw();
+    return;
+  }
   pendingTpl = '';
   if (String(openTpl) === String(hit.id) && tab === 'tpl') return;
   tab = 'tpl';
@@ -966,7 +975,7 @@ window.addEventListener('message', function(event){
   const data = event.data || {};
   bridgeGoal(data);
   if (data.type === 'ny-launch') {
-    const refTpl = typeof hashTpl === 'function' ? (hashTpl(data.params && data.params.vk_ref) || hashTpl(location.hash) || hashTpl(location.search)) : '';
+    const refTpl = typeof hashTpl === 'function' ? (hashTpl(data.params && data.params.hash) || hashTpl(data.params && data.params.vk_ref) || hashTpl(location.href) || hashTpl(window.__nyTpl || '')) : '';
     if (refTpl) {
       pendingTpl = pendingTpl || refTpl;
       openSharedTpl(refTpl, false);
@@ -3735,8 +3744,11 @@ function viewGen(){
   if (m && m.durations && m.durations.length > 1) opts += '<div class="hint">Длина</div>'+chips(m.durations.map(function(d){ return {id:d, name:d+' сек · '+quote(m,{quality:pickedQuality,duration:d})+' кр'}; }), pickedDuration, 'dur');
   if (m && m.ratio && m.aspects && m.aspects.length) opts += '<div class="hint">Формат</div>'+chips(m.aspects, pickedAspect, 'asp');
   let photo = '';
-  if (m && (m.image === 'optional' || m.image === 'required')) {
-    photo = '<label class="filebtn">'+(genPhoto?'Фото прикреплено — заменить':'Прикрепить фото'+(m.image==='required'?'':' — по желанию'))+'<input id="genfile" type="file" accept="image/*"></label>'+(genPhoto?'<img class="preview" style="margin-top:10px" src="'+genPhoto+'" alt="">':'');
+  if (m && m.audio) {
+    photo = '<label class="filebtn">'+(genPhoto?'Фото прикреплено — заменить':'Прикрепить фото')+'<input id="genfile" type="file" accept="image/*"></label>'+(genPhoto?'<img class="preview" style="margin-top:10px" src="'+genPhoto+'" alt="">':'');
+  } else if (m && (m.image === 'optional' || m.image === 'required')) {
+    const shots = (genPhotos || []).map(function(src){ return '<img class="preview" src="'+src+'" alt="">'; }).join('');
+    photo = '<label class="filebtn">'+(genPhotos.length ? ('Фото: '+genPhotos.length+' · добавить ещё') : ('Прикрепить фото'+(m.image==='required'?'':' — по желанию')+' · можно несколько'))+'<input id="genfile" type="file" accept="image/*" multiple></label>'+(shots?'<div class="shots">'+shots+'</div>':'');
   }
   if (m && m.audio) {
     photo += '<label class="filebtn">'+(genVoiceSeconds ? ('Голосовое прикреплено, '+genVoiceSeconds+' сек — заменить') : 'Прикрепить голосовое')+'<input id="genvoice" type="file" accept="audio/*,.ogg,.mp3,.m4a,.wav,.webm"></label>';
@@ -3776,8 +3788,7 @@ function tplTopics(t){
 function vkAppTplLink(id){
   const n = String(id || '').replace(/^local:/, '').replace(/\D/g, '');
   if (!n) return '';
-  const group = String(window.__vkGroup || '214554778').replace(/\D/g, '') || '214554778';
-  return 'https://vk.com/app54901511_-' + group + '#t' + n;
+  return 'https://vk.com/app54901511#t' + n;
 }
 function tplShareLink(t){
   if (isVk() || inVkApp()) return vkAppTplLink(t && t.id);
@@ -3785,6 +3796,8 @@ function tplShareLink(t){
 }
 function viewTpl(){
   if (openTpl) return viewTplRun();
+  if (pendingTpl && !(templates && templates.length)) return '<div class="card"><div class="empty">Открываю шаблон…</div></div>';
+  if (pendingTpl) return '<div class="card"><div class="empty">Шаблон не найден</div></div>';
   const q = tplQuery.trim().toLowerCase();
   const have = {};
   templates.forEach(t=>{ have[t.category||'image'] = 1; });
@@ -4616,7 +4629,7 @@ async function shareWork(id, btn){
 }
 async function setModel(model){
   if (me) me.current_model = model;
-  pickedQuality = null; pickedDuration = null; pickedAspect = null; genPhoto = null; genVoice = null; genVoiceSeconds = 0;
+  pickedQuality = null; pickedDuration = null; pickedAspect = null; genPhoto = null; genPhotos = []; genVoice = null; genVoiceSeconds = 0;
   if (tab==='models'){ tab='gen'; }
   draw();
   try { await fetch('/api/set-model',{method:'POST',headers:authHeaders(),body:JSON.stringify({model})}); } catch(e){}
@@ -4681,10 +4694,19 @@ function fileToJpeg(file){
   });
 }
 async function onGenPhoto(input){
-  const file = input.files && input.files[0];
-  if (!file) return;
-  try { genPhoto = await fileToJpeg(file); draft = (document.getElementById('prompt')||{}).value || draft; }
-  catch (e) { genPhoto = null; alert(e.message); }
+  const files = Array.from(input.files || []).slice(0, 6);
+  if (!files.length) return;
+  draft = (document.getElementById('prompt')||{}).value || draft;
+  try {
+    const ready = [];
+    for (const file of files) ready.push(await fileToJpeg(file));
+    if (input.multiple) genPhotos = genPhotos.concat(ready).slice(-6);
+    else genPhotos = ready.slice(0, 1);
+    genPhoto = genPhotos[0] || null;
+  } catch (e) {
+    if (!input.multiple) { genPhoto = null; genPhotos = []; }
+    alert(e.message);
+  }
   draw();
 }
 function readFileData(file){
@@ -4828,13 +4850,15 @@ async function generate(){
   const lack = shortOf(price);
   if (lack) { last = {_prompt:prompt, error:lack}; draw(); return; }
   if (m && m.audio && (!genPhoto || !genVoice || !(genVoiceSeconds > 0))) { last = {_prompt:prompt, error:'Прикрепите фото и голосовое'}; draw(); return; }
-  if (m && m.image === 'required' && !genPhoto) { last = {_prompt:prompt, error:'Прикрепите фото'}; draw(); return; }
-  if (!prompt && !genPhoto) return;
+  if (m && m.image === 'required' && !genPhotos.length) { last = {_prompt:prompt, error:'Прикрепите фото'}; draw(); return; }
+  if (!prompt && !genPhotos.length) return;
   if (m && m.image === 'forbidden' && !prompt) return;
   busy = true; draft = prompt; last = {_prompt:prompt}; draw();
   try {
     const r = await fetch('/api/generate',{method:'POST',headers:authHeaders(),body:JSON.stringify({
-      prompt, model: me&&me.current_model, image: (m && m.image !== 'forbidden') ? genPhoto : null,
+      prompt, model: me&&me.current_model,
+      image: (m && m.image !== 'forbidden') ? (genPhotos[0] || null) : null,
+      photos: (m && m.image !== 'forbidden' && !m.audio) ? genPhotos.slice() : [],
       audio: (m && m.audio) ? genVoice : null,
       audioSeconds: (m && m.audio) ? genVoiceSeconds : 0,
       quality: pickedQuality, duration: pickedDuration, format: pickedAspect,

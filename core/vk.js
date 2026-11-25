@@ -82,7 +82,17 @@ function urlsFromAttachments(list) {
     const urls = [];
     if (!Array.isArray(list)) return urls;
     list.forEach(item => {
-        if (!item || item.type !== 'photo' || !item.photo) return;
+        if (!item) return;
+        if (item.type === 'doc') {
+            const doc = item.doc || {};
+            const ext = String(doc.ext || '').toLowerCase();
+            const title = String(doc.title || '').toLowerCase();
+            const image = ext === 'jpg' || ext === 'jpeg' || ext === 'png' || ext === 'webp' || ext === 'gif' || /\.(jpe?g|png|webp|gif)$/.test(title);
+            const url = image && /^https:\/\//i.test(String(doc.url || '')) ? String(doc.url) : '';
+            if (url && urls.indexOf(url) < 0) urls.push(url);
+            return;
+        }
+        if (item.type !== 'photo' || !item.photo) return;
         const sizes = Array.isArray(item.photo.sizes) ? item.photo.sizes : [];
         let best = null;
         sizes.forEach(size => {

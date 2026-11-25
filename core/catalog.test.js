@@ -127,6 +127,30 @@ test('запрос в Братуху собирается как на сайте
 
     const sora = input.buildSiteInput(model('sora-2'), { prompt: 'море', aspect: '9:16', duration: 4 });
     assert.equal(sora.input.size_std, '720*1280');
+
+    const avatar = input.buildSiteInput(model('wan-2-2-avatar'), {
+        prompt: 'Спокойно смотрит в камеру',
+        imageUrl: 'https://cdn.example/portrait.jpg',
+        audioUrl: 'https://cdn.example/voice.mp3',
+        quality: '720p'
+    });
+    assert.equal(avatar.tool, 'wan-2-2-avatar');
+    assert.equal(avatar.input.image, 'https://cdn.example/portrait.jpg');
+    assert.equal(avatar.input.audio, 'https://cdn.example/voice.mp3');
+    assert.equal(avatar.input.resolution, '720p');
+    assert.equal(avatar.input.prompt, 'Спокойно смотрит в камеру');
+    const plain = input.buildSiteInput(model('wan-2-2-avatar'), {
+        imageUrl: 'https://cdn.example/portrait.jpg',
+        audioUrl: 'https://cdn.example/voice.ogg'
+    });
+    assert.equal(plain.input.resolution, '480p');
+    assert.equal(plain.input.prompt, undefined);
+    const mp3 = Buffer.from([0x49, 0x44, 0x33, 0, 0, 0, 0, 0, 0, 0]);
+    const ogg = Buffer.from('OggS');
+    assert.equal(input.mediaName(mp3, 'audio/mpeg', 'audio'), 'voice.mp3');
+    assert.equal(input.mediaName(ogg, 'audio/ogg', 'audio'), 'voice.ogg');
+    assert.equal(input.mediaName(Buffer.from([0xff, 0xd8, 0xff]), 'image/jpeg', 'image'), 'photo.jpg');
+    assert.equal(input.mediaName(Buffer.alloc(0), 'audio/webm', 'audio'), '');
     assert.equal(sora.tool, 'sora-2');
 
     const song = input.buildSiteInput(model('suno'), { prompt: 'дождь', quality: 'instrumental' });

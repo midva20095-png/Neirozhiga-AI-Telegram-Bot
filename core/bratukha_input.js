@@ -49,13 +49,36 @@ function videoPrompt(prompt, hasImage, aspect) {
     return parts.filter(Boolean).join(' ');
 }
 
-function imagePrompt(prompt, imageUrl) {
+function imagePrompt(prompt, imageCount) {
     let text = String(prompt || '').trim().replace(/\.+$/, '') + '.';
     const quoted = quotes(prompt);
     if (quoted.length) text += ' Текст на изображении — дословно, без ошибок: ' + quoted.slice(0, 3).map(q => `«${q}»`).join('; ') + '.';
     else if (!TEXT_WORDS.test(prompt || '')) text += ' Без лишних надписей и водяных знаков.';
-    if (imageUrl) text = 'Используй приложенное изображение: ' + text + ' Сохрани лица и узнаваемые детали с исходного фото.';
+    const count = Number(imageCount) || 0;
+    if (count > 1) text = 'Используй все приложенные изображения, ни одно не пропускай: ' + text + ' Сохрани лица и узнаваемые детали с каждого исходного фото.';
+    else if (count === 1) text = 'Используй приложенное изображение: ' + text + ' Сохрани лица и узнаваемые детали с исходного фото.';
     return text;
+}
+
+function mediaName(buf, mime, role) {
+    const b = Buffer.isBuffer(buf) ? buf : Buffer.alloc(0);
+    const type = String(mime || '').toLowerCase();
+    if (role === 'audio') {
+        if (b.slice(0, 4).toString('ascii') === 'OggS' || type.includes('ogg') || type.includes('opus')) return 'voice.ogg';
+        if (b.slice(0, 4).toString('ascii') === 'RIFF' && b.slice(8, 12).toString('ascii') === 'WAVE') return 'voice.wav';
+        if (b.slice(0, 4).toString('ascii') === 'fLaC' || type.includes('flac')) return 'voice.flac';
+        if ((b.length > 8 && b.slice(4, 8).toString('ascii') === 'ftyp') || type.includes('mp4') || type.includes('m4a') || type.includes('aac')) return 'voice.m4a';
+        if (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) return 'voice.mp3';
+        if (b[0] === 0xff && (b[1] & 0xe0) === 0xe0) return 'voice.mp3';
+        if (type.includes('mpeg') || type.includes('mp3')) return 'voice.mp3';
+        return '';
+    }
+    if (b[0] === 0x89 && b[1] === 0x50) return 'photo.png';
+    if (b.slice(0, 4).toString('ascii') === 'RIFF' && b.slice(8, 12).toString('ascii') === 'WEBP') return 'photo.webp';
+    if (b[0] === 0xff && b[1] === 0xd8) return 'photo.jpg';
+    if (type.includes('png')) return 'photo.png';
+    if (type.includes('webp')) return 'photo.webp';
+    return 'photo.jpg';
 }
 
 function buildSiteInput(spec, opts) {
@@ -84,14 +107,21 @@ function buildSiteInput(spec, opts) {
     }
 
     if (spec.audio) {
-        const input = { image: imageUrl, audio: o.audioUrl, resolution: quality || '480p' };
-        if (o.prompt) input.prompt = String(o.prompt).slice(0, 2000);
+        if (!imageUrl || !o.audioUrl) {
+            const error = new Error(imageUrl ? 'Нужно голосовое сообщение.' : 'Нужно фото человека.');
+            error.code = 'user';
+            throw error;
+        }
+        const resolution = String(quality || '').toLowerCase() === '720p' ? '720p' : '480p';
+        const input = { image: imageUrl, audio: o.audioUrl, resolution };
+        const prompt = String(o.prompt || '').trim();
+        if (prompt) input.prompt = prompt.slice(0, 2000);
         return { tool, input };
     }
 
     if (kind === 'image') {
         const urls = Array.isArray(o.imageUrls) && o.imageUrls.length ? o.imageUrls : (imageUrl ? [imageUrl] : []);
-        const text = o.exact ? String(o.prompt || '').trim() : imagePrompt(o.prompt, urls[0]);
+        const text = o.exact ? String(o.prompt || '').trim() : imagePrompt(o.prompt, urls.length);
         let input;
         if (tool === 'nano-banana') input = { mode: quality || 'normal', prompt: text.slice(0, 20000), image_size: aspect || 'auto' };
         else if (tool === 'seedream-4-5') input = { prompt: text.slice(0, 3000), size: aspect || 'auto', resolution: quality || '2K', n: 1 };
@@ -284,4 +314,4 @@ function collectResultUrls(opData, kind) {
     return images.length ? images : found;
 }
 
-module.exports = { buildSiteInput, siteModes, videoPrompt, imagePrompt, collectResultUrls };
+module.exports = { buildSiteInput, siteModes, videoPrompt, imagePrompt, mediaName, collectResultUrls };

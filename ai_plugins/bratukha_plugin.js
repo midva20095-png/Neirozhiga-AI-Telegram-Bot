@@ -1,6 +1,6 @@
 require('dotenv').config();
 const axios = require('axios');
-const { buildSiteInput, siteModes, collectResultUrls } = require('../core/bratukha_input');
+const { buildSiteInput, siteModes, collectResultUrls, mediaName } = require('../core/bratukha_input');
 
 // Берем URL из переменных Railway или ставим рабочий дефолт
 const BRATUKHA_API_URL = process.env.BRATUKHA_API_URL || 'https://bratuha.ru/api/v1';
@@ -225,24 +225,35 @@ async function downloadUrl(url) {
     throw lastErr || new Error('Не удалось скачать картинку');
 }
 
+function takeBuffers(context) {
+    const many = Array.isArray(context && context.fileBuffers) ? context.fileBuffers.filter(Boolean) : [];
+    if (many.length) return many.slice(0, 6);
+    return context && context.fileBuffer ? [context.fileBuffer] : [];
+}
+
 async function runSite(context) {
     const spec = context.spec;
     const apiKey = context.apiKey;
-    const buffers = [];
-    if (context.fileBuffer) buffers.push(context.fileBuffer);
-    if (Array.isArray(context.fileBuffers)) buffers.push(...context.fileBuffers);
+    const buffers = takeBuffers(context);
     const imageUrls = [];
     if (spec.image !== 'forbidden' && buffers.length) {
-        const cap = (spec.kind === 'image' || context.exactPrompt) ? Math.min(buffers.length, 6) : 1;
+        const cap = (spec.kind === 'image' || context.exactPrompt) ? buffers.length : 1;
         for (let i = 0; i < cap; i++) {
             const mime = (context.mimeTypes && context.mimeTypes[i]) || context.mimeType || 'image/jpeg';
-            imageUrls.push(await uploadBuffer(apiKey, buffers[i], mime, 'photo_' + (i + 1) + '.jpg'));
+            const name = mediaName(buffers[i], mime, 'image');
+            imageUrls.push(await uploadBuffer(apiKey, buffers[i], mime, name));
         }
     }
     const imageUrl = imageUrls[0] || null;
     let audioUrl = null;
     if (context.audioBuffer) {
-        audioUrl = await uploadBuffer(apiKey, context.audioBuffer, context.audioMime || 'audio/ogg', 'voice.ogg');
+        const audioName = mediaName(context.audioBuffer, context.audioMime || '', 'audio');
+        if (!audioName) {
+            const error = new Error('Это голосовое не подходит. Отправьте запись голосом ещё раз.');
+            error.code = 'user';
+            throw error;
+        }
+        audioUrl = await uploadBuffer(apiKey, context.audioBuffer, context.audioMime || 'audio/ogg', audioName);
     }
     const attempts = spec.kind === 'video' ? 300 : spec.kind === 'audio' ? 160 : 100;
     const modes = siteModes(spec, context.quality || spec.quality);
@@ -284,7 +295,7 @@ async function runSite(context) {
 }
 
 async function processRequest(context) {
-    const { prompt, fileBuffer, fileBuffers, mimeType, modelKey, aspectRatio } = context;
+    const { prompt, mimeType, modelKey, aspectRatio } = context;
     if (context.spec && context.spec.site) {
         const apiKey = process.env.BRATUKHA_API_KEY || process.env.BRATUKHA_TOKEN;
         if (!apiKey) throw new Error('BRATUKHA_API_KEY не задан в переменных окружения');
@@ -300,11 +311,7 @@ async function processRequest(context) {
         throw new Error('❌ Не указан slug модели для Братухи');
     }
 
-    const allBuffers = [];
-    if (fileBuffer) allBuffers.push(fileBuffer);
-    if (fileBuffers && Array.isArray(fileBuffers)) {
-        allBuffers.push(...fileBuffers);
-    }
+    const allBuffers = takeBuffers(context);
 
     if (MODELS_REQUIRING_IMAGE.includes(toolSlug) && allBuffers.length === 0) {
         throw new Error('⚠️ Для выбранной модели обязательно требуется прикрепить изображение.');
@@ -336,11 +343,12 @@ async function processRequest(context) {
     if (allBuffers.length > 0) {
         const uploadedUrls = [];
         for (let i = 0; i < allBuffers.length; i++) {
+            const name = mediaName(allBuffers[i], mimeType || 'image/jpeg', 'image');
             const url = await uploadBuffer(
                 apiKey,
                 allBuffers[i],
                 mimeType || 'image/jpeg',
-                `input_${i + 1}.jpg`
+                name
             );
             uploadedUrls.push(url);
         }
@@ -349,6 +357,7 @@ async function processRequest(context) {
             inputData.image = uploadedUrls[0];
             inputData.image_url = uploadedUrls[0];
             inputData.images = uploadedUrls;
+            inputData.image_urls = uploadedUrls;
             inputData.file_url = uploadedUrls[0];
             inputData.files = uploadedUrls;
         }

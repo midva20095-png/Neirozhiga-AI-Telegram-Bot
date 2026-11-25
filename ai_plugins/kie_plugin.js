@@ -189,9 +189,8 @@ async function processRequest(context) {
         return out;
     }
 
-    const buffers = [];
-    if (context.fileBuffer) buffers.push(context.fileBuffer);
-    if (Array.isArray(context.fileBuffers)) buffers.push(...context.fileBuffers.filter(Boolean));
+    const many = Array.isArray(context.fileBuffers) ? context.fileBuffers.filter(Boolean) : [];
+    const buffers = (many.length ? many : (context.fileBuffer ? [context.fileBuffer] : [])).slice(0, 6);
     if (buffers.length && spec.image === 'forbidden') {
         throw userError('Эта модель рисует только по тексту, без фото.');
     }

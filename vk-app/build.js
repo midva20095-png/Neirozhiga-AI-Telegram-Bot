@@ -70,12 +70,25 @@ function tplOf(value){
   }
   return '';
 }
+window.__nyTpl = tplOf(location.href) || '';
+if (window.vkBridge && vkBridge.subscribe) {
+  vkBridge.subscribe(function(event){
+    var detail = event && event.detail ? event.detail : {};
+    var data = detail.data || {};
+    var id = '';
+    if (detail.type === 'VKWebAppChangeFragment' || detail.type === 'VKWebAppLocationChanged') id = tplOf(data.location) || tplOf(data.hash);
+    if (detail.type === 'VKWebAppGetLaunchParamsResult') id = tplOf(data.hash) || tplOf(data.location) || tplOf(location.href);
+    if (!id) return;
+    window.__nyTpl = id;
+    tell({ type: 'ny-tpl', id: id });
+  });
+}
 window.__nyHost = function(msg){
   if (!msg || !msg.type) return;
   if (msg.type === 'ny-goal-ask') {
     const goal = goalOf(location.hash);
     if (goal) tell({ type: 'ny-goal', goal: goal });
-    const tpl = tplOf(location.hash) || tplOf(location.search);
+    const tpl = tplOf(location.href) || tplOf(window.__nyTpl);
     if (tpl) tell({ type: 'ny-tpl', id: tpl });
     return;
   }
@@ -135,7 +148,7 @@ window.addEventListener('message', function(event){
     });
     const id = String(bag.vk_group_id || (bridgeData && bridgeData.group_id) || '').replace(/\\D/g, '');
     if (id) tell({ type: 'ny-group', id: id });
-    const opened = tplOf(location.hash) || tplOf(location.search) || tplOf(bag.vk_ref) || tplOf(bridgeData && bridgeData.location) || tplOf(bridgeData && bridgeData.hash);
+    const opened = tplOf(location.href) || tplOf(window.__nyTpl) || tplOf(bag.vk_ref) || tplOf(bridgeData && bridgeData.location) || tplOf(bridgeData && bridgeData.hash);
     if (opened) tell({ type: 'ny-tpl', id: opened });
     tell({ type: 'ny-launch', params: bag });
     return;

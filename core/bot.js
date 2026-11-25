@@ -23,6 +23,7 @@ const userAwaitingSupport = new Map();
 const mediaGroupBuffers = new Map();
 const userPendingRatio = new Map();
 const userPendingAvatar = new Map();
+const userPendingPhotos = new Map();
 const userTransfer = new Map();
 
 const MENU_TEXTS = [
@@ -1100,7 +1101,14 @@ async function startBot(app) {
         for (const c of list) {
             if (c.message?.photo && c.message.photo.length > 0) {
                 const largest = c.message.photo[c.message.photo.length - 1];
-                const buf = await getTelegramFileBuffer(ctx, largest.file_id);
+                const buf = await getTelegramFileBuffer(c, largest.file_id);
+                if (buf) fileBuffers.push(buf);
+            }
+            const doc = c.message?.document;
+            const docName = String(doc && doc.file_name || '').toLowerCase();
+            const docMime = String(doc && doc.mime_type || '').toLowerCase();
+            if (doc && (docMime.startsWith('image/') || /\.(jpe?g|png|webp|gif)$/.test(docName))) {
+                const buf = await getTelegramFileBuffer(c, doc.file_id);
                 if (buf) fileBuffers.push(buf);
             }
             const voice = c.message?.voice || c.message?.audio;
@@ -1111,6 +1119,26 @@ async function startBot(app) {
             }
         }
         if (model.image === 'forbidden') fileBuffers.length = 0;
+
+        if (!model.audio && model.image !== 'forbidden') {
+            const held = userPendingPhotos.get(userId);
+            if (held && Date.now() - held.at < 10 * 60 * 1000 && Array.isArray(held.fileBuffers) && held.fileBuffers.length) {
+                fileBuffers.unshift(...held.fileBuffers);
+            }
+            const kept = fileBuffers.filter(Boolean).slice(-6);
+            fileBuffers.length = 0;
+            fileBuffers.push(...kept);
+            if (!prompt.trim() && fileBuffers.length) {
+                userPendingPhotos.set(userId, { fileBuffers: fileBuffers.slice(), at: Date.now() });
+                const line = fileBuffers.length > 1
+                    ? `Фото получил: ${fileBuffers.length}. Напишите, что сделать с этими кадрами.`
+                    : 'Фото получил. Напишите, что сделать с этим кадром.';
+                return ctx.reply(line);
+            }
+            if (prompt.trim()) userPendingPhotos.delete(userId);
+        } else {
+            userPendingPhotos.delete(userId);
+        }
 
         if (model.audio) {
             if (fileBuffers.length && audioBuffer) {
@@ -1260,24 +1288,31 @@ async function startBot(app) {
 
     bot.on(['voice', 'audio'], async (ctx) => collectAndGenerate(ctx));
 
-    bot.on('photo', async (ctx) => {
-        const mediaGroupId = ctx.message?.media_group_id;
-        if (mediaGroupId) {
-            if (!mediaGroupBuffers.has(mediaGroupId)) {
-                mediaGroupBuffers.set(mediaGroupId, {
-                    contexts: [ctx],
-                    timer: setTimeout(async () => {
-                        const group = mediaGroupBuffers.get(mediaGroupId);
-                        mediaGroupBuffers.delete(mediaGroupId);
-                        if (group && group.contexts.length > 0) await collectAndGenerate(group.contexts[0], group.contexts);
-                    }, 1000)
-                });
-            } else {
-                mediaGroupBuffers.get(mediaGroupId).contexts.push(ctx);
-            }
-        } else {
-            return collectAndGenerate(ctx);
+    function queueAlbum(ctx) {
+        const mediaGroupId = ctx.message && ctx.message.media_group_id;
+        if (!mediaGroupId) return collectAndGenerate(ctx);
+        let group = mediaGroupBuffers.get(mediaGroupId);
+        if (!group) {
+            group = { contexts: [] };
+            mediaGroupBuffers.set(mediaGroupId, group);
         }
+        group.contexts.push(ctx);
+        clearTimeout(group.timer);
+        group.timer = setTimeout(async () => {
+            const current = mediaGroupBuffers.get(mediaGroupId);
+            mediaGroupBuffers.delete(mediaGroupId);
+            if (current && current.contexts.length > 0) await collectAndGenerate(current.contexts[0], current.contexts);
+        }, 1200);
+    }
+
+    bot.on('photo', queueAlbum);
+
+    bot.on('document', async (ctx) => {
+        const doc = ctx.message && ctx.message.document;
+        const mime = String(doc && doc.mime_type || '').toLowerCase();
+        const name = String(doc && doc.file_name || '').toLowerCase();
+        if (!doc || (!mime.startsWith('image/') && !/\.(jpe?g|png|webp|gif)$/.test(name))) return;
+        return queueAlbum(ctx);
     });
 
     try {
