@@ -80,10 +80,13 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
 .actions{display:flex;flex-direction:column;gap:8px;margin-top:12px}
 .actions button{width:100%;background:transparent;border:1px solid var(--line);color:var(--text)}
 .head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.head-side{display:flex;flex-direction:column;align-items:flex-end;gap:8px;margin-left:auto}
+.head-links{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.head-links a,.head-links button{width:auto;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;border-radius:12px;padding:10px 14px;font-weight:800;line-height:1.2}
 .place{font-family:Unbounded,sans-serif;font-size:18px;margin:0}
 .cover{position:fixed;inset:0;z-index:30;overflow:auto;background:rgba(5,2,12,.82);padding:16px}
 .cover .sheet{max-width:760px;margin:0 auto}
-@media(max-width:640px){.mrow{grid-template-columns:1fr 1fr}.door,.homes{grid-template-columns:1fr}}
+@media(max-width:640px){.mrow{grid-template-columns:1fr 1fr}.door,.homes{grid-template-columns:1fr}.head-side{align-items:flex-start;width:100%;margin-left:0}.head-links{justify-content:flex-start}}
 </style>
 </head>
 <body>
@@ -131,11 +134,15 @@ details summary{cursor:pointer;color:var(--mut);font-weight:700}
       <div class="place" id="placeTitle">Telegram</div>
       <p class="note" id="placeNote"></p>
     </div>
-    <div class="row" style="margin:0;flex:0 0 auto">
-      <a class="ghost" href="https://neiroyaga-backend-production.up.railway.app/admin" target="_blank" rel="noopener">Админка сайта</a>
-      <a class="ghost" href="https://vkdonutassistantbot-production.up.railway.app/admin" target="_blank" rel="noopener">Админка второго бота</a>
-      <button class="ghost" type="button" id="backPlace" onclick="place==='vk'?showCommunities():showDoor()">Другой вход</button>
-      <button class="ghost" type="button" onclick="logout()">Выйти</button>
+    <div class="head-side">
+      <div class="head-links">
+        <a class="ghost" href="https://neiroyaga-backend-production.up.railway.app/admin" target="_blank" rel="noopener">Админка сайта</a>
+        <a class="ghost" href="https://vkdonutassistantbot-production.up.railway.app/admin" target="_blank" rel="noopener">Админка второго бота</a>
+      </div>
+      <div class="head-links">
+        <button class="ghost" type="button" id="backPlace" onclick="place==='vk'?showCommunities():showDoor()">Другой вход</button>
+        <button class="ghost" type="button" onclick="logout()">Выйти</button>
+      </div>
     </div>
   </div>
   <div class="tabs" id="tabs"></div>
@@ -1605,7 +1612,7 @@ async function loadTpl(){
     groupsData = md.groups||{};
     providersData = md.providers||{};
   }
-  const d = await api('/api/admin/templates?audience='+place+(place==='vk'?groupQuery():''));
+  const d = await api('/api/admin/templates?all=1'+(place==='vk' ? '&audience=vk'+groupQuery() : ''));
   templates = d.templates||[];
   const editing = tplEdit;
   const preferred = modelsData.some(m=>m.key==='kie-banana-lite') ? 'kie-banana-lite' : 'nanobanana';
@@ -1616,7 +1623,7 @@ async function loadTpl(){
   const startQuality = editing && editing.quality ? editing.quality : (current && current.quality);
   const startDuration = editing && editing.duration ? editing.duration : (current && current.durations && current.durations[0]);
   const startCost = editing ? editing.cost : modeCost(current, startQuality, startDuration);
-  const aud = editing && (editing.audience==='vk' || editing.audience==='tg' || editing.audience==='all') ? editing.audience : (place==='vk' ? 'vk' : 'tg');
+  const aud = editing && (editing.audience==='vk' || editing.audience==='tg' || editing.audience==='all') ? editing.audience : 'all';
   el.innerHTML =
     '<div class="card"><h3>'+(editing?'Правка шаблона':'Новый шаблон')+'</h3>'+
     '<p class="note">Четыре поля. Фото — это пример, который человек видит на карточке. Название — подпись карточки. Текст ниже — что сделать с его фото; сам человек этот текст не видит. Цена — сколько списать в кабинете.</p>'+
@@ -1654,7 +1661,7 @@ async function loadTpl(){
     '<div class="row" style="margin-top:12px"><button onclick="saveTpl()">'+(editing?'Сохранить изменения':'Добавить шаблон в кабинет')+'</button>'+
     (editing?'<button class="ghost" type="button" onclick="newTpl()">Отмена</button>':'')+'</div></div>'+
     '<div class="card"><h3>Категории</h3>'+topicCatalog()+'</div>'+
-    '<div class="card"><h3>Шаблоны · '+placeName()+'</h3><p class="note">'+templates.length+' в этом входе. «Оба чата» видны и в Telegram, и во ВК. Скрытые в кабинет не попадают.</p>'+
+    '<div class="card"><h3>Шаблоны</h3><p class="note">'+templates.length+' всего. Список один и для Telegram, и для ВК. Метка на карточке показывает, где шаблон виден человеку. Новый шаблон по умолчанию открыт в обоих чатах.</p>'+
     (templates.length ? '<div class="agallery">'+templates.map(t=>{
       const src = safeImg(t.image);
       const saved = modelsData.find(m=>m.key===t.model);

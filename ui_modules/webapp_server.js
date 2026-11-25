@@ -1637,10 +1637,11 @@ function startWebApp() {
     app.get('/api/admin/templates', requireAdmin, async (req, res) => {
         try {
             const audience = req.query.audience === 'vk' ? 'vk' : req.query.audience === 'tg' ? 'tg' : undefined;
+            const every = req.query.all === '1';
             const place = req.query.audience === 'vk' ? 'vk' : 'tg';
             const group = String(req.query.group || '').replace(/\D/g, '');
             const name = botUsername();
-            const templates = (await db.listTemplates(true, audience)).map(row => templatesSrc.attachChannelLink(row, name, place, group));
+            const templates = (await db.listTemplates(true, every ? undefined : audience)).map(row => templatesSrc.attachChannelLink(row, name, place, group));
             res.json({ templates });
         } catch (e) { res.status(500).json({ error: e.message }); }
     });
