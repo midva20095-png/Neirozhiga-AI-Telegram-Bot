@@ -456,6 +456,7 @@ a.course-tile{display:flex;flex-direction:column;justify-content:center;text-dec
 .course-compose .tools{display:flex;gap:8px;flex-wrap:wrap}
 .course-mark{border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:12px;margin-top:10px;background:#120a22}
 .course-mark h4{margin:0 0 6px}
+.course-mark button{appearance:none;-webkit-appearance:none;margin-top:10px;width:auto;background:#3a2468;border:1px solid rgba(255,255,255,.45);color:#f3efff;border-radius:999px;padding:8px 14px;font-size:14px;font-weight:800}
 #courseAnswer .course-link{word-break:break-all}
 @media(max-width:640px){.course-grid{grid-template-columns:1fr}.course-door{font-size:17px}}
 @media(prefers-reduced-motion:reduce){.course-door,.course-tile,.course-lesson{animation:none}}
@@ -2412,7 +2413,7 @@ function paintMarks(){
   }
   box.innerHTML = courseMarks.map(function(item){
     return '<article class="course-mark"><h4>'+esc(item.title)+'</h4><div class="body">'+linkText(item.body)+'</div>'+
-      '<button type="button" class="mark" data-drop-mark="'+esc(item.id)+'">Убрать</button></article>';
+      '<button type="button" class="mark" data-drop-mark="'+esc(item.id)+'">Удалить</button></article>';
   }).join('');
   bindCourseBits();
 }
