@@ -81,6 +81,19 @@ function mediaName(buf, mime, role) {
     return 'photo.jpg';
 }
 
+function mediaType(name) {
+    const file = String(name || '').toLowerCase();
+    if (file.endsWith('.png')) return 'image/png';
+    if (file.endsWith('.webp')) return 'image/webp';
+    if (file.endsWith('.jpg') || file.endsWith('.jpeg')) return 'image/jpeg';
+    if (file.endsWith('.mp3')) return 'audio/mpeg';
+    if (file.endsWith('.ogg') || file.endsWith('.opus')) return 'audio/ogg';
+    if (file.endsWith('.wav')) return 'audio/wav';
+    if (file.endsWith('.m4a') || file.endsWith('.aac')) return 'audio/mp4';
+    if (file.endsWith('.flac')) return 'audio/flac';
+    return '';
+}
+
 function buildSiteInput(spec, opts) {
     const o = opts || {};
     const tool = spec.tool || spec.key;
@@ -314,4 +327,4 @@ function collectResultUrls(opData, kind) {
     return images.length ? images : found;
 }
 
-module.exports = { buildSiteInput, siteModes, videoPrompt, imagePrompt, mediaName, collectResultUrls };
+module.exports = { buildSiteInput, siteModes, videoPrompt, imagePrompt, mediaName, mediaType, collectResultUrls };

@@ -3751,7 +3751,7 @@ function viewGen(){
     photo = '<label class="filebtn">'+(genPhotos.length ? ('Фото: '+genPhotos.length+' · добавить ещё') : ('Прикрепить фото'+(m.image==='required'?'':' — по желанию')+' · можно несколько'))+'<input id="genfile" type="file" accept="image/*" multiple></label>'+(shots?'<div class="shots">'+shots+'</div>':'');
   }
   if (m && m.audio) {
-    photo += '<label class="filebtn">'+(genVoiceSeconds ? ('Голосовое прикреплено, '+genVoiceSeconds+' сек — заменить') : 'Прикрепить голосовое')+'<input id="genvoice" type="file" accept="audio/*,.ogg,.mp3,.m4a,.wav,.webm"></label>';
+    photo += '<label class="filebtn">'+(genVoiceSeconds ? ('Голосовое прикреплено, '+genVoiceSeconds+' сек — заменить') : 'Прикрепить голосовое')+'<input id="genvoice" type="file" accept=".ogg,.mp3,.m4a,.wav,.flac,audio/ogg,audio/mpeg,audio/mp4,audio/wav,audio/flac"></label>';
   }
   const note = m && m.audio
     ? '<div class="hint">Цена считается по длине голосового. Прикрепите фото и запись голоса.</div>' : '';

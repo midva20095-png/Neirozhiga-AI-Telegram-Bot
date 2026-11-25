@@ -151,6 +151,10 @@ test('запрос в Братуху собирается как на сайте
     assert.equal(input.mediaName(ogg, 'audio/ogg', 'audio'), 'voice.ogg');
     assert.equal(input.mediaName(Buffer.from([0xff, 0xd8, 0xff]), 'image/jpeg', 'image'), 'photo.jpg');
     assert.equal(input.mediaName(Buffer.alloc(0), 'audio/webm', 'audio'), '');
+    assert.equal(input.mediaType('voice.mp3'), 'audio/mpeg');
+    assert.equal(input.mediaType('voice.ogg'), 'audio/ogg');
+    assert.equal(input.mediaType('photo.png'), 'image/png');
+    assert.equal(input.mediaType('photo.webp'), 'image/webp');
     assert.equal(sora.tool, 'sora-2');
 
     const song = input.buildSiteInput(model('suno'), { prompt: 'дождь', quality: 'instrumental' });

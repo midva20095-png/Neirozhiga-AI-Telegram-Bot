@@ -1,6 +1,6 @@
 require('dotenv').config();
 const axios = require('axios');
-const { buildSiteInput, siteModes, collectResultUrls, mediaName } = require('../core/bratukha_input');
+const { buildSiteInput, siteModes, collectResultUrls, mediaName, mediaType } = require('../core/bratukha_input');
 
 // Берем URL из переменных Railway или ставим рабочий дефолт
 const BRATUKHA_API_URL = process.env.BRATUKHA_API_URL || 'https://bratuha.ru/api/v1';
@@ -241,7 +241,7 @@ async function runSite(context) {
         for (let i = 0; i < cap; i++) {
             const mime = (context.mimeTypes && context.mimeTypes[i]) || context.mimeType || 'image/jpeg';
             const name = mediaName(buffers[i], mime, 'image');
-            imageUrls.push(await uploadBuffer(apiKey, buffers[i], mime, name));
+            imageUrls.push(await uploadBuffer(apiKey, buffers[i], mediaType(name) || mime, name));
         }
     }
     const imageUrl = imageUrls[0] || null;
@@ -253,7 +253,7 @@ async function runSite(context) {
             error.code = 'user';
             throw error;
         }
-        audioUrl = await uploadBuffer(apiKey, context.audioBuffer, context.audioMime || 'audio/ogg', audioName);
+        audioUrl = await uploadBuffer(apiKey, context.audioBuffer, mediaType(audioName), audioName);
     }
     const attempts = spec.kind === 'video' ? 300 : spec.kind === 'audio' ? 160 : 100;
     const modes = siteModes(spec, context.quality || spec.quality);
@@ -347,7 +347,7 @@ async function processRequest(context) {
             const url = await uploadBuffer(
                 apiKey,
                 allBuffers[i],
-                mimeType || 'image/jpeg',
+                mediaType(name) || mimeType || 'image/jpeg',
                 name
             );
             uploadedUrls.push(url);
