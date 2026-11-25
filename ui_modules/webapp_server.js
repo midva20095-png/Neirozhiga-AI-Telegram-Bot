@@ -349,6 +349,56 @@ function startWebApp() {
         return true;
     }
 
+    async function donorView(userId) {
+        let view = await assistant.cabinet(userId);
+        if (!view.don) {
+            const pack = await vk.communityDonut(vk.clubGroupId());
+            if (pack.donorError) return { check: false, view };
+            const found = (pack.donors || []).find(item => Number(item.id) === userId);
+            if (found) {
+                await assistant.applyEvent('create', userId, found.name || '');
+                view = await assistant.cabinet(userId);
+            }
+        }
+        return { check: true, view };
+    }
+
+    app.get('/api/vk/course', requireUser, async (req, res) => {
+        try {
+            if (communityClosed()) return res.status(403).json({ closed: true, error: 'Кафедра сейчас закрыта.' });
+            const userId = assistant.vkId(req.userId);
+            if (!userId) return res.status(403).json({ error: 'Кафедра открыта донам НейроЯги.', join: assistant.JOIN_URL });
+            const gate = await donorView(userId);
+            if (!gate.check) return res.status(503).json({ error: 'Не удалось сверить донат.' });
+            if (!gate.view.don || !gate.view.active) {
+                return res.status(403).json({ error: 'Кафедра открыта донам НейроЯги.', join: gate.view.join || assistant.JOIN_URL });
+            }
+            const course = await assistant.courseList();
+            if (!course.ok) return res.status(502).json({ error: course.error || 'Материалы не открылись.' });
+            res.json({ sections: course.sections || [], lessons: course.lessons || [] });
+        } catch (e) {
+            res.status(500).json({ error: 'Кафедра не открылась.' });
+        }
+    });
+
+    app.post('/api/vk/course/ask', requireUser, async (req, res) => {
+        try {
+            if (communityClosed()) return res.status(403).json({ error: 'Кафедра сейчас закрыта.' });
+            const userId = assistant.vkId(req.userId);
+            if (!userId) return res.status(403).json({ error: 'Кафедра открыта донам НейроЯги.' });
+            const gate = await donorView(userId);
+            if (!gate.check) return res.status(503).json({ error: 'Не удалось сверить донат.' });
+            if (!gate.view.don || !gate.view.active) return res.status(403).json({ error: 'Кафедра открыта донам НейроЯги.' });
+            const text = req.body && typeof req.body.text === 'string' ? req.body.text.trim() : '';
+            if (!text) return res.status(400).json({ error: 'Напишите вопрос.' });
+            const course = await assistant.courseAsk(text.slice(0, 500));
+            if (!course.ok) return res.status(502).json({ error: course.error || 'Ответ не собрался.' });
+            res.json({ ok: true, answer: course.answer || '' });
+        } catch (e) {
+            res.status(500).json({ error: 'Ответ не собрался.' });
+        }
+    });
+
     app.get('/api/vk/assistant', requireUser, async (req, res) => {
         try {
             if (communityClosed()) return res.json({ closed: true, don: false, active: false, community: null });
@@ -1107,6 +1157,37 @@ function startWebApp() {
 
     app.get('/api/admin/vk/communities', requireAdmin, (req, res) => {
         res.json({ communities: vk.adminHomes() });
+    });
+
+    app.get('/api/admin/vk/course', requireAdmin, async (req, res) => {
+        try {
+            const course = await assistant.courseList();
+            if (!course.ok) return res.status(502).json({ error: course.error || 'Уроки второго бота не открылись.' });
+            res.json({ sections: course.sections || [], lessons: course.lessons || [] });
+        } catch (e) {
+            res.status(500).json({ error: 'Уроки второго бота не открылись.' });
+        }
+    });
+
+    app.post('/api/admin/vk/course/save', requireAdmin, async (req, res) => {
+        try {
+            const course = await assistant.courseSave(req.body || {});
+            if (!course.ok) return res.status(400).json({ ok: false, error: course.error || 'Урок не сохранился.' });
+            res.json({ ok: true, lesson: course.lesson || null });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Урок не сохранился.' });
+        }
+    });
+
+    app.post('/api/admin/vk/course/remove', requireAdmin, async (req, res) => {
+        try {
+            const id = req.body && typeof req.body.id === 'string' ? req.body.id : '';
+            const course = await assistant.courseRemove(id);
+            if (!course.ok) return res.status(400).json({ ok: false, error: course.error || 'Урок не снялся.' });
+            res.json({ ok: true });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Урок не снялся.' });
+        }
     });
 
     app.get('/api/admin/vk/assistant', requireAdmin, async (req, res) => {

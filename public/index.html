@@ -2245,58 +2245,98 @@ async function loadAssist(){
   }
   if (data.closed) {
     assistPane = 'home';
-    box.innerHTML = '<div class="card"><button type="button" class="back" id="assistBack">В кабинет</button><div class="kicker">Моё сообщество</div><p class="now">Закрыто на разработку.</p></div>';
+    box.innerHTML = '<div class="card"><button type="button" class="back" id="assistBack">В кабинет</button><div class="kicker">Кафедра</div><p class="now">Кафедра сейчас закрыта.</p></div>';
     bind();
     return;
   }
   if (!data.don) {
     const note = data.check === false
       ? 'Не удалось сверить донат. Откройте раздел ещё раз.'
-      : 'Раздел открыт донам НейроЯги. После оплаты подписка появится здесь, и можно будет подключить своё сообщество.';
+      : 'Кафедра открыта донам НейроЯги. После оплаты здесь откроются разборы по странице, записям, рекламе и боту.';
     assistPane = 'home';
-    box.innerHTML = '<div class="card"><button type="button" class="back" id="assistBack">В кабинет</button><div class="kicker">Моё сообщество</div><p class="now">'+esc(note)+'</p>'+
+    box.innerHTML = '<div class="card"><button type="button" class="back" id="assistBack">В кабинет</button><div class="kicker">Кафедра</div><p class="now">'+esc(note)+'</p>'+
       '<a class="btn" href="'+esc(data.join || 'https://vk.com/donut/club214554778')+'" target="_blank" rel="noopener">Оформить донат</a></div>';
     bind();
     return;
   }
   if (!data.active) {
     assistPane = 'home';
-    box.innerHTML = '<div class="card"><button type="button" class="back" id="assistBack">В кабинет</button><div class="kicker">Моё сообщество</div><p class="now">Донат не продлён, помощник в вашем сообществе молчит. После оплаты он снова ответит покупателям.</p>'+
+    box.innerHTML = '<div class="card"><button type="button" class="back" id="assistBack">В кабинет</button><div class="kicker">Кафедра</div><p class="now">Донат не продлён, кафедра закрыта. После оплаты материалы снова откроются.</p>'+
       '<a class="btn" href="'+esc(data.join)+'" target="_blank" rel="noopener">Продлить донат</a></div>';
     bind();
     return;
   }
   assistView = data;
-  const community = data.community;
-  const orders = ((data.orders && data.orders.rows) || []).length;
-  const books = ((data.bookings && data.bookings.rows) || []).length;
-  const people = Number(data.clients && (data.clients.total || (data.clients.people || []).length)) || 0;
-  const marks = {};
-  if (orders) marks.orders = orders;
-  if (books) marks.book = books;
-  if (people) marks.people = people;
-  if (data.setup && data.setup.open) marks.ask = 1;
-  const status = community
-    ? '<p class="now">Подключено: '+esc(community.title || ('сообщество '+community.groupId))+' · '+esc(community.groupId)+'</p>'+(community.error ? '<p class="err">'+esc(community.error)+'</p>' : '<p class="hint">Помощник слушает сообщения. Напишите ему со своей личной страницы, не от имени сообщества.</p>')
-    : '<p class="now">Помощник пока нигде не отвечает. Подключите своё сообщество.</p>';
-  const board = community
-    ? '<div id="assistManual" hidden><button class="btn ghost" id="assistLobbyBack" type="button">К началу</button>'+assistBillPreviewHtml(assistServiceItems(community.reply && community.reply.services))+assistQuick(data)+'</div>'
-    : '<p class="hint">После подключения здесь будут карточка, заказы, записи и клиенты.</p>';
-  const ready = community && assistSaved(community.reply);
-  const home = status+(community ? (ready ? '<div class="lobby" id="assistLobby">'+assistReadyHtml(data)+'</div>' : assistLobbyHtml()) : '')+(ready ? '' : board)+
-    assistConnect(community)+assistGuide(!community);
+  await renderCourse(box);
+}
+async function renderCourse(box) {
+  box.innerHTML = '<div class="card"><button type="button" class="back" id="assistBack">В кабинет</button><div class="kicker">Кафедра</div><p class="now">Открываю материалы…</p></div>';
+  bind();
+  let pack = {};
+  try {
+    const response = await fetch('/api/vk/course', { headers: authHeaders() });
+    pack = await response.json();
+    if (!response.ok) throw new Error(pack.error || 'Материалы не открылись');
+  } catch (error) {
+    box.innerHTML = '<div class="card"><button type="button" class="back" id="assistBack">В кабинет</button><div class="kicker">Кафедра</div><p class="err">'+esc(error.message || 'Материалы не открылись')+'</p></div>';
+    bind();
+    return;
+  }
+  const sections = pack.sections || [];
+  const lessons = pack.lessons || [];
+  const chips = sections.map(function(item){
+    return '<button type="button" class="btn ghost" data-course="'+esc(item.id)+'">'+esc(item.title)+'</button>';
+  }).join('');
+  const cards = lessons.map(function(item){
+    return '<article class="note" data-lesson="'+esc(item.section)+'"><b>'+esc(item.title)+'</b><div style="white-space:pre-wrap;margin-top:6px">'+esc(item.body)+'</div></article>';
+  }).join('');
   box.innerHTML = '<div class="card">'+
-    '<button type="button" class="back" id="assistBack">Назад</button>'+
-    '<div class="kicker">Моё сообщество</div>'+
-    (community ? assistTabs(marks) : '')+
-    assistPaneBox('home', home)+
-    assistPaneBox('card', community ? assistDesk(community.reply, community.groupId) : assistLocked())+
-    assistPaneBox('orders', community ? assistOrders(data.orders, data.clients, community.groupId) : assistLocked())+
-    assistPaneBox('book', community ? assistBookings(data.bookings, data.clients, community.groupId) : assistLocked())+
-    assistPaneBox('people', community ? assistBase(data.clients) : assistLocked())+
-    assistPaneBox('ask', assistHelpBox(data.setup))+
+    '<button type="button" class="back" id="assistBack">В кабинет</button>'+
+    '<div class="kicker">Кафедра</div>'+
+    '<p class="now">Ведение сообщества ВКонтакте: страница, оформление, записи, реклама, бот и ритм.</p>'+
+    '<label class="flabel" for="courseText">Вопрос по своему проекту</label>'+
+    '<textarea id="courseText" maxlength="500" rows="3" placeholder="Например: какой размер обложки ставить на телефон"></textarea>'+
+    '<button class="btn" id="courseSend" type="button" style="margin-top:8px">Спросить</button>'+
+    '<p id="courseAnswer" class="hint" style="white-space:pre-wrap"></p>'+
+    '<div class="row" style="margin-top:12px">'+chips+'</div>'+
+    '<div id="courseLessons">'+cards+'</div>'+
     '</div>';
   bind();
+}
+let courseFilter = '';
+function showCourseSection(id) {
+  courseFilter = courseFilter === id ? '' : (id || '');
+  document.querySelectorAll('[data-lesson]').forEach(function(node){
+    node.hidden = !!courseFilter && node.getAttribute('data-lesson') !== courseFilter;
+  });
+  document.querySelectorAll('[data-course]').forEach(function(button){
+    button.classList.toggle('on', button.getAttribute('data-course') === courseFilter);
+  });
+}
+async function askCourse() {
+  const field = document.getElementById('courseText');
+  const note = document.getElementById('courseAnswer');
+  const button = document.getElementById('courseSend');
+  const text = field ? field.value.trim() : '';
+  if (!text) {
+    if (note) note.textContent = 'Напишите вопрос.';
+    return;
+  }
+  if (button) button.disabled = true;
+  if (note) note.textContent = 'Собираю ответ по материалам…';
+  try {
+    const response = await fetch('/api/vk/course/ask', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ text: text })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Ответ не собрался');
+    if (note) note.textContent = data.answer || '';
+  } catch (error) {
+    if (note) note.textContent = error.message || 'Ответ не собрался';
+  }
+  if (button) button.disabled = false;
 }
 async function saveAssist(){
   const msg = document.getElementById('assistmsg');
@@ -3698,7 +3738,7 @@ function viewCab(){
     ['help', 'Помощь']
   ];
   if (vkAdmin()) rows.push(['menu', 'Кнопки сообщества']);
-  if (inVkApp() || isVk()) rows.splice(1, 0, ['assist', 'Моё сообщество']);
+  if (inVkApp() || isVk()) rows.splice(1, 0, ['assist', 'Кафедра']);
   return '<div class="card"><div class="kicker">Кабинет</div><div class="cabbal">'+balance+' кр</div><p class="now">Чат, шаблоны, рейтинг и магазин — внизу.</p></div>'+
     rows.map(function(row){ return '<button type="button" class="cabrow" data-go="'+row[0]+'">'+row[1]+'</button>'; }).join('');
 }
@@ -4193,6 +4233,11 @@ function bind(){
   paintAssistBack();
   const assistSave = document.getElementById('assistSave');
   if (assistSave) assistSave.onclick = saveAssist;
+  const courseSend = document.getElementById('courseSend');
+  if (courseSend) courseSend.onclick = askCourse;
+  document.querySelectorAll('[data-course]').forEach(function(button){
+    button.onclick = function(){ showCourseSection(button.getAttribute('data-course') || ''); };
+  });
   const assistDrop = document.getElementById('assistDrop');
   if (assistDrop) assistDrop.onclick = dropAssist;
   const assistDeskButton = document.getElementById('assistDesk');

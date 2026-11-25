@@ -1059,6 +1059,52 @@ async function adminList(fetchImpl) {
     };
 }
 
+async function courseCall(path, body, timeoutMs) {
+    const cfg = assistantConfig();
+    if (!cfg.url || !cfg.secret) return { ok: false, error: 'Второй бот ещё не подключён: нет адреса или секрета.' };
+    let response;
+    try {
+        response = await fetch(`${cfg.url}${path}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Donut-Secret': cfg.secret
+            },
+            body: JSON.stringify(body || {}),
+            signal: AbortSignal.timeout(timeoutMs || 20000)
+        });
+    } catch (error) {
+        return { ok: false, error: 'Второй бот не ответил.' };
+    }
+    let data = {};
+    try {
+        data = await response.json();
+    } catch (error) {
+        data = {};
+    }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) data = {};
+    if (!response.ok || data.ok === false) {
+        return { ok: false, error: data.error || 'Второй бот не принял команду.' };
+    }
+    return data;
+}
+
+function courseList() {
+    return courseCall('/course/list', {}, 20000);
+}
+
+function courseSave(body) {
+    return courseCall('/course/save', body || {}, 20000);
+}
+
+function courseRemove(id) {
+    return courseCall('/course/remove', { id }, 20000);
+}
+
+function courseAsk(text) {
+    return courseCall('/course/ask', { text }, 65000);
+}
+
 module.exports = {
     JOIN_URL,
     HOLD_MS,
@@ -1100,5 +1146,9 @@ module.exports = {
     adminDrop,
     wipeCommunity,
     adminList,
-    syncLabel
+    syncLabel,
+    courseList,
+    courseSave,
+    courseRemove,
+    courseAsk
 };

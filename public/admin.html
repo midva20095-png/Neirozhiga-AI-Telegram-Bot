@@ -167,6 +167,7 @@ let tplEdit = null, tplImage = '', tplImageTouched = false, modelsMsg = '';
 let rateGroup = sessionStorage.getItem('ny_admin_group') || '';
 let donutGroup = sessionStorage.getItem('ny_admin_donut') || '';
 let assistPack = { dons: [], requests: [] };
+let coursePack = { lessons: [], sections: [] };
 let setupUserId = '';
 
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -269,7 +270,7 @@ function showCommunities(){
 }
 function renderCommunityDoor(){
   const alarm = assistNeed
-    ? '<button type="button" class="alarm" onclick="enterAssist()">Помощник: '+esc(assistNeed)+' заявок</button>'
+    ? '<button type="button" class="alarm" onclick="enterAssist()">Кафедра: '+esc(assistNeed)+' заявок</button>'
     : '';
   document.getElementById('communityDoor').innerHTML = alarm + homes.map(item =>
     '<button type="button" onclick="enterCommunity(\''+esc(item.id)+'\')">'+
@@ -333,7 +334,7 @@ function openCabinet(tab){
 }
 
 function currentTabs(){
-  if (inCommunity()) return [['home','Обзор'],['rate','Рейтинг'],['shop','Магазин'],['donut','Донат'],['assist','Помощник'],['users','Клиенты'],['tickets','Поддержка']];
+  if (inCommunity()) return [['home','Обзор'],['rate','Рейтинг'],['shop','Магазин'],['donut','Донат'],['assist','Кафедра'],['users','Клиенты'],['tickets','Поддержка']];
   return TABS.slice();
 }
 function rateFace(row){
@@ -458,6 +459,76 @@ function openRate(id){
   sessionStorage.setItem('ny_admin_group', rateGroup);
   go('rate');
 }
+function courseCard(course) {
+  coursePack = course && course.lessons ? course : { lessons: [], sections: [], error: course && course.error };
+  if (coursePack.error && !coursePack.lessons.length) {
+    return '<div class="card"><h3>Уроки второго бота</h3><p class="note">'+esc(coursePack.error)+'</p></div>';
+  }
+  const sectionOptions = (coursePack.sections || []).map(function(item){
+    return '<option value="'+esc(item.id)+'">'+esc(item.title)+'</option>';
+  }).join('');
+  const lessonOptions = '<option value="">Новый урок</option>'+(coursePack.lessons || []).map(function(item){
+    return '<option value="'+esc(item.id)+'">'+esc(item.title)+'</option>';
+  }).join('');
+  return '<div class="card"><h3>Уроки второго бота</h3>'+
+    '<p class="note">Этот текст читают доны. Название до 40 знаков: оно же становится кнопкой во втором боте. В текст кладут факт и ссылку на справку ВКонтакте.</p>'+
+    '<label>Урок</label><select id="lessonPick" onchange="fillLesson()">'+lessonOptions+'</select>'+
+    '<label>Раздел</label><select id="lessonSection">'+sectionOptions+'</select>'+
+    '<label>Название на кнопке</label><input id="lessonTitle" maxlength="40" placeholder="До 40 знаков">'+
+    '<label>Текст</label><textarea id="lessonBody" rows="8" maxlength="3500"></textarea>'+
+    '<div class="row" style="margin-top:12px"><button type="button" onclick="saveLesson()">Сохранить урок</button>'+
+    '<button type="button" class="ghost" onclick="removeLesson()">Скрыть урок</button></div>'+
+    '<p id="lessonmsg" class="note"></p></div>';
+}
+function fillLesson() {
+  const id = (document.getElementById('lessonPick') || {}).value || '';
+  const lesson = (coursePack.lessons || []).find(function(item){ return item.id === id; });
+  const section = document.getElementById('lessonSection');
+  const title = document.getElementById('lessonTitle');
+  const body = document.getElementById('lessonBody');
+  if (!lesson) {
+    if (title) title.value = '';
+    if (body) body.value = '';
+    return;
+  }
+  if (section) section.value = lesson.section;
+  if (title) title.value = lesson.title || '';
+  if (body) body.value = lesson.body || '';
+}
+async function saveLesson() {
+  const msg = document.getElementById('lessonmsg');
+  const id = (document.getElementById('lessonPick') || {}).value || '';
+  const payload = {
+    id: id,
+    section: (document.getElementById('lessonSection') || {}).value || '',
+    title: (document.getElementById('lessonTitle') || {}).value || '',
+    body: (document.getElementById('lessonBody') || {}).value || ''
+  };
+  if (msg) msg.textContent = 'Сохраняю урок во втором боте…';
+  const data = await api('/api/admin/vk/course/save', { method:'POST', body: JSON.stringify(payload) });
+  if (!data.ok) {
+    if (msg) msg.textContent = data.error || 'Урок не сохранился';
+    return;
+  }
+  await loadAssist();
+  const fresh = document.getElementById('lessonmsg');
+  if (fresh) fresh.textContent = 'Урок сохранён во втором боте.';
+}
+async function removeLesson() {
+  const id = (document.getElementById('lessonPick') || {}).value || '';
+  const msg = document.getElementById('lessonmsg');
+  if (!id) {
+    if (msg) msg.textContent = 'Сначала выберите урок.';
+    return;
+  }
+  if (!confirm('Скрыть этот урок у донов?')) return;
+  const data = await api('/api/admin/vk/course/remove', { method:'POST', body: JSON.stringify({ id: id }) });
+  if (!data.ok) {
+    if (msg) msg.textContent = data.error || 'Урок не скрылся';
+    return;
+  }
+  await loadAssist();
+}
 async function loadAssist(){
   const el = document.getElementById('section-assist');
   el.innerHTML = '<div class="card">Смотрю помощника…</div>';
@@ -474,23 +545,20 @@ async function loadAssist(){
   const line = health.online
     ? '<span class="ok">второй бот на связи</span>'
     : '<span class="bad">'+(health.error || 'второй бот не на связи')+'</span>';
-  const demo = data.demo || null;
-  el.innerHTML = '<div class="card"><h3>Вход в «Моё сообщество»</h3>'+
-    '<p class="note">'+(data.closed ? '<span class="bad">Закрыто на разработку.</span> В кабинете вместо раздела этот текст.' : '<span class="ok">Вход открыт.</span> Люди с донатом заходят в раздел как обычно.')+'</p>'+
-    '<div class="row"><button type="button" class="'+(data.closed ? '' : 'ghost')+'" onclick="setCommunityGate('+(data.closed ? 'false' : 'true')+')">'+(data.closed ? 'Открыть вход' : 'Закрыть на разработку')+'</button></div>'+
+  let course = { sections: [], lessons: [] };
+  try {
+    course = await api('/api/admin/vk/course');
+  } catch (error) {
+    course = { error: 'Уроки второго бота не открылись.' };
+  }
+  el.innerHTML = '<div class="card"><h3>Вход в кафедру</h3>'+
+    '<p class="note">Это второй бот, не основной. Основной бот по-прежнему ведёт чат, кредиты и шаблоны. Кафедра открывается только дону НейроЯги.</p>'+
+    '<p class="note">'+(data.closed ? '<span class="bad">Закрыто.</span> В приложении вместо кафедры стоит короткая заглушка.' : '<span class="ok">Вход открыт.</span> Дон видит материалы и может задать вопрос.')+'</p>'+
+    '<div class="row"><button type="button" class="'+(data.closed ? '' : 'ghost')+'" onclick="setCommunityGate('+(data.closed ? 'false' : 'true')+')">'+(data.closed ? 'Открыть вход' : 'Закрыть вход')+'</button></div>'+
     '<p id="gatemsg" class="note"></p></div>'+
-    '<div class="card"><h3>Демонстрация</h3>'+
-    '<p class="note">Вставьте номер и ключ тестового сообщества. Карточка как у ИП Соколова. На главном экране основные кнопки: услуги, каталог, прайс, дорога, оплата, отзывы и запись. Внутри «Прайс» дополнительные: легковые и внедорожник, а в них размеры. Клиент может отметить несколько услуг, сумма складывается. Адрес, точка на Яндекс Картах, доставка и оплата тоже в карточке.</p>'+
-    (demo ? '<p class="note"><span class="ok">'+esc(demo.title)+'</span> · '+esc(demo.groupId)+' · '+esc(demo.syncLabel)+'</p>'+
-      '<p class="note"><a href="'+esc(demo.link)+'" target="_blank" rel="noopener">Открыть переписку с демонстрацией</a></p>'+
-      (demo.error ? '<p class="note">'+esc(demo.error)+'</p>' : '') : '<p class="note">Демонстрация ещё не подключена.</p>')+
-    '<label>Номер сообщества</label><input id="demoGroup" inputmode="numeric" placeholder="123456789" value="'+esc(demo ? demo.groupId : '')+'">'+
-    '<label>Ключ сообщества</label><input id="demoToken" type="password" placeholder="Ключ из настроек сообщества" autocomplete="off">'+
-    '<div class="row" style="margin-top:12px"><button type="button" onclick="saveDemo()">Подключить и заполнить</button>'+
-    '<button type="button" class="ghost" onclick="stopDemo()">Отключить</button></div>'+
-    '<p id="demomsg" class="note"></p></div>'+
-    '<div class="card"><h3>Помощник доната</h3>'+
-    '<p class="note">'+line+' Доны НейроЯги подключают своё сообщество в кабинете приложения. Пока донат жив, второй бот отвечает покупателям. Когда срок кончился, он замолкает только у этого человека. База клиентов каждого сообщества хранится у помощника отдельно. Здесь видно только количество, без телефонов.</p>'+
+    courseCard(course)+
+    '<div class="card"><h3>Доступ донов</h3>'+
+    '<p class="note">'+line+' Список берётся из основного бота: кто оплатил донат НейроЯги. Пока донат жив, второй бот открывает этому человеку кафедру в его сообществе. Чужим в том же диалоге кафедра закрыта. Когда срок кончился, второй бот замолкает только у этого номера.</p>'+
     '<div class="grid">'+
     '<div class="stat"><div class="n">'+dons.length+'</div><div class="l">Зарегистрировано</div></div>'+
     '<div class="stat"><div class="n">'+on+'</div><div class="l">Донат жив</div></div>'+
@@ -498,19 +566,6 @@ async function loadAssist(){
     '</div>'+
     '<div class="row" style="margin-top:12px"><button type="button" onclick="syncAssist()">Взять донов из ВК</button></div>'+
     '<p id="assistmsg" class="note"></p></div>'+
-    '<div class="card"><h3>Ждут настройки</h3>'+
-    (requests.length ? requests.map(item => {
-      const don = dons.find(person => person.userId === item.userId) || { name: 'ВК '+item.userId, userId: item.userId };
-      const map = item.map ? '<p class="note"><a href="'+esc(item.map)+'">Метка на карте</a></p>' : '';
-      return '<div class="stat" style="margin-top:8px"><div class="n" style="font-size:16px">'+esc(don.name)+'</div>'+
-        '<div class="l">ВК '+esc(item.userId)+'</div>'+
-        '<p class="note">Что настроить: '+esc(item.task || item.note || 'просит настроить бота')+'</p>'+
-        (item.phone ? '<p class="note">Телефон: '+esc(item.phone)+'</p>' : '')+
-        (item.address ? '<p class="note">Адрес: '+esc(item.address)+'</p>' : '')+
-        map+
-        '<div class="row"><button type="button" onclick="openSetup('+Number(item.userId)+')">Открыть переписку</button></div></div>';
-    }).join('') : '<p class="note">Заявок нет. Кнопка «Настройка через разработчика» в кабинете дона откроет здесь окно с этим человеком. Настроить можно и без заявки: кнопка «Настроить» у дона ниже.</p>')+
-    '</div>'+
     '<div class="card"><h3>Доны и сообщества</h3>'+
     (dons.length ? dons.map(item => {
       const list = item.communities || [];
@@ -519,9 +574,9 @@ async function loadAssist(){
         '<div class="row"><button type="button" class="ghost" onclick="dropAssist(\''+esc(group.groupId)+'\')">Отключить сообщество</button><button type="button" class="hot" onclick="wipeAssist(\''+esc(group.groupId)+'\')">Удалить данные</button></div></div>'
       ).join('') : '<p class="note">Сообщество ещё не подключено.</p>';
       return '<div class="stat" style="margin-top:8px"><div class="n" style="font-size:16px">'+esc(item.name)+'</div>'+
-        '<div class="l">ВК '+esc(item.userId)+' · '+(item.active ? '<span class="ok">помощник включён</span>' : '<span class="bad">помощник выключен</span>')+'</div>'+
+        '<div class="l">ВК '+esc(item.userId)+' · '+(item.active ? '<span class="ok">кафедра включена</span>' : '<span class="bad">кафедра выключена</span>')+'</div>'+
         groups+
-        '<div class="row" style="margin-top:8px"><button type="button" onclick="openSetup('+Number(item.userId)+')">Настроить</button><button type="button" onclick="setAssist('+item.userId+','+(item.active?'false':'true')+')">'+(item.active?'Выключить':'Включить')+'</button></div></div>';
+        '<div class="row" style="margin-top:8px"><button type="button" onclick="setAssist('+item.userId+','+(item.active?'false':'true')+')">'+(item.active?'Выключить':'Включить')+'</button></div></div>';
     }).join('') : '<p class="note">Донов пока нет. Нажмите «Взять донов из ВК» или дождитесь новой подписки.</p>')+
     '</div>';
 }
@@ -772,7 +827,7 @@ function openSetup(userId){
       setupThread(request) : '')+
     card+
     (request
-      ? '<label>Ответ в приложение, в ту же заявку</label><textarea id="setupLetter" maxlength="500" placeholder="Карточка заполнена. Откройте «Моё сообщество» и проверьте."></textarea>'+
+      ? '<label>Ответ в приложение, в ту же заявку</label><textarea id="setupLetter" maxlength="500" placeholder="Материал на месте. Откройте «Кафедра» и проверьте."></textarea>'+
         '<div class="row"><button type="button" id="setupWrite">Ответить в приложении</button>'+
         '<button type="button" class="ghost" id="setupDone">Заявка выполнена</button></div>'
       : '')+
