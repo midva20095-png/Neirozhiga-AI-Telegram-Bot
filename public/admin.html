@@ -448,18 +448,30 @@ function go(k){
   loadSection(k);
 }
 
+function takeDoor(){
+  const params = new URLSearchParams(location.search);
+  const value = params.get('door');
+  if (value !== 'tg' && value !== 'vk') return '';
+  params.delete('door');
+  const next = params.toString();
+  history.replaceState({}, '', location.pathname + (next ? '?'+next : ''));
+  return value;
+}
 async function showPanel(){
   document.getElementById('login').style.display='none';
   try{ await api('/api/admin/me'); }catch(e){ return; }
   refreshGate();
-  if (place==='tg') enterPlace('tg');
-  else if (place==='vk' && vkHome==='shared') enterShared();
-  else if (place==='vk' && /^\d+$/.test(vkHome)) {
-    try { homes = (await api('/api/admin/vk/communities')).communities || []; } catch (e) { homes = []; }
-    enterCommunity(vkHome);
+  const asked = takeDoor();
+  if (asked === 'tg' || asked === 'vk') {
+    enterPlace(asked);
+    armDropWatch();
+    return;
   }
-  else if (place==='vk') enterPlace('vk');
-  else showDoor();
+  place = '';
+  vkHome = '';
+  sessionStorage.removeItem('ny_admin_place');
+  sessionStorage.removeItem('ny_admin_home');
+  showDoor();
   armDropWatch();
 }
 
