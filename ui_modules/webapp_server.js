@@ -1290,6 +1290,16 @@ function startWebApp() {
         }
     });
 
+    app.post('/api/admin/vk/course/section/remove', requireAdmin, async (req, res) => {
+        try {
+            const course = await assistant.courseSectionRemove(req.body || {});
+            if (!course.ok) return res.status(400).json({ ok: false, error: course.error || 'Раздел не удалился.' });
+            res.json({ ok: true });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Раздел не удалился.' });
+        }
+    });
+
     app.post('/api/admin/vk/course/remove', requireAdmin, async (req, res) => {
         try {
             const id = req.body && typeof req.body.id === 'string' ? req.body.id : '';

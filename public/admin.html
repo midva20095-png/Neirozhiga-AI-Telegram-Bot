@@ -563,21 +563,70 @@ function courseCard(course) {
     const place = room ? ((room.shelfTitle ? room.shelfTitle + ' · ' : '') + room.title + ' · ') : '';
     return '<option value="'+esc(item.id)+'">'+esc(place + item.title)+'</option>';
   }).join('');
-  return '<div class="card"><h3>Новый раздел кафедры</h3>'+
-    '<p class="note">Раздел появится внутри выбранной двери: во втором боте и в приложении. Название до 40 знаков станет кнопкой. Урок в этот раздел добавляют карточкой ниже.</p>'+
+  const sectionList = (coursePack.sections || []).map(function(item){
+    const count = (coursePack.lessons || []).filter(function(lesson){ return lesson.section === item.id; }).length;
+    return '<div class="row"><span>'+esc((item.shelfTitle ? item.shelfTitle + ' · ' : '') + item.title)+' · уроков '+count+'</span><button type="button" class="ghost" data-drop-section="'+esc(item.id)+'">Удалить</button></div>';
+  }).join('') || '<p class="note">Разделов пока нет.</p>';
+  const lessonList = (coursePack.sections || []).map(function(section){
+    const rows = (coursePack.lessons || []).filter(function(item){ return item.section === section.id; });
+    if (!rows.length) return '';
+    return '<p class="note">'+esc((section.shelfTitle ? section.shelfTitle + ' · ' : '') + section.title)+'</p>'+
+      rows.map(function(item){
+        return '<div class="row"><span>'+esc(item.title)+'</span><button type="button" data-edit="'+esc(item.id)+'">Править</button><button type="button" class="ghost" data-drop-lesson="'+esc(item.id)+'">Удалить</button></div>';
+      }).join('');
+  }).join('') || '<p class="note">Уроков пока нет.</p>';
+  return '<div class="card"><h3>Разделы кафедры</h3>'+
+    '<p class="note">Каждый раздел — кнопка внутри двери, во втором боте и в приложении. «Добавить раздел» создаёт новую кнопку. «Удалить» снимает раздел. Если в нём есть уроки, они снимаются вместе с ним.</p>'+
+    '<div id="sectionList">'+sectionList+'</div>'+
     '<label>Дверь</label><select id="sectionShelf">'+shelfOptions+'</select>'+
-    '<label>Название раздела</label><input id="sectionTitle" maxlength="40" placeholder="Например: Съёмка на выезде">'+
-    '<div class="row" style="margin-top:12px"><button type="button" onclick="saveSection()">Создать раздел</button></div>'+
+    '<label>Название нового раздела</label><input id="sectionTitle" maxlength="40" placeholder="Например: Съёмка на выезде">'+
+    '<div class="row" style="margin-top:12px"><button type="button" onclick="saveSection()">Добавить раздел</button></div>'+
     '<p id="sectionmsg" class="note"></p></div>'+
-    '<div class="card"><h3>Опубликованные уроки</h3>'+
-    '<p class="note">Выберите урок в списке. Откроется текст, который уже видят доны. Поправьте его и нажмите «Сохранить урок»: эта версия заменит опубликованную. Строка «Новый урок» создаёт ещё один материал.</p>'+
-    '<label>Опубликованный урок</label><select id="lessonPick" onchange="fillLesson()">'+lessonOptions+'</select>'+
+    '<div class="card"><h3>Уроки кафедры</h3>'+
+    '<p class="note">Ниже все уроки, которые уже видят доны. «Править» открывает опубликованный текст: поправьте его и нажмите «Сохранить урок». «Добавить урок» создаёт новый материал. «Удалить» снимает урок с двери.</p>'+
+    '<div id="lessonList">'+lessonList+'</div>'+
+    '<div class="row" style="margin-top:12px"><button type="button" id="addLesson">Добавить урок</button></div>'+
+    '<label>Какой урок открыт</label><select id="lessonPick" onchange="fillLesson()">'+lessonOptions+'</select>'+
     '<label>Раздел</label><select id="lessonSection">'+sectionOptions+'</select>'+
     '<label>Название на кнопке</label><input id="lessonTitle" maxlength="40" placeholder="До 40 знаков">'+
     '<label>Текст</label><textarea id="lessonBody" rows="8" maxlength="3500"></textarea>'+
     '<div class="row" style="margin-top:12px"><button type="button" onclick="saveLesson()">Сохранить урок</button>'+
-    '<button type="button" class="ghost" onclick="removeLesson()">Скрыть урок</button></div>'+
+    '<button type="button" class="ghost" onclick="removeLesson()">Удалить урок</button></div>'+
     '<p id="lessonmsg" class="note"></p></div>';
+}
+function bindCourseDesk() {
+  const sections = document.getElementById('sectionList');
+  if (sections) sections.onclick = function(event) {
+    const button = event.target.closest('[data-drop-section]');
+    if (button) dropSection(button.getAttribute('data-drop-section'));
+  };
+  const lessons = document.getElementById('lessonList');
+  if (lessons) lessons.onclick = function(event) {
+    const edit = event.target.closest('[data-edit]');
+    if (edit) { editLesson(edit.getAttribute('data-edit')); return; }
+    const drop = event.target.closest('[data-drop-lesson]');
+    if (drop) removeLesson(drop.getAttribute('data-drop-lesson'));
+  };
+  const add = document.getElementById('addLesson');
+  if (add) add.onclick = addLesson;
+}
+function editLesson(id) {
+  const pick = document.getElementById('lessonPick');
+  if (pick) pick.value = id;
+  fillLesson();
+  const body = document.getElementById('lessonBody');
+  if (body) body.focus();
+  const msg = document.getElementById('lessonmsg');
+  if (msg) msg.textContent = 'Открыт опубликованный текст. Поправьте его и нажмите «Сохранить урок».';
+}
+function addLesson() {
+  const pick = document.getElementById('lessonPick');
+  if (pick) pick.value = '';
+  fillLesson();
+  const title = document.getElementById('lessonTitle');
+  if (title) title.focus();
+  const msg = document.getElementById('lessonmsg');
+  if (msg) msg.textContent = 'Новый урок. Выберите раздел, напишите название и текст, затем «Сохранить урок».';
 }
 function fillLesson() {
   const id = (document.getElementById('lessonPick') || {}).value || '';
@@ -636,20 +685,43 @@ async function saveLesson() {
   const fresh = document.getElementById('lessonmsg');
   if (fresh) fresh.textContent = 'Текст опубликован. Доны видят эту версию.';
 }
-async function removeLesson() {
-  const id = (document.getElementById('lessonPick') || {}).value || '';
-  const msg = document.getElementById('lessonmsg');
-  if (!id) {
-    if (msg) msg.textContent = 'Сначала выберите урок.';
-    return;
-  }
-  if (!confirm('Скрыть этот урок у донов?')) return;
-  const data = await api('/api/admin/vk/course/remove', { method:'POST', body: JSON.stringify({ id: id }) });
+async function dropSection(id) {
+  const msg = document.getElementById('sectionmsg');
+  const section = (coursePack.sections || []).find(function(item){ return item.id === id; });
+  const count = (coursePack.lessons || []).filter(function(item){ return item.section === id; }).length;
+  const name = section ? section.title : 'раздел';
+  const ask = count
+    ? 'Удалить раздел «' + name + '» и уроки в нём (' + count + ')?'
+    : 'Удалить раздел «' + name + '»?';
+  if (!confirm(ask)) return;
+  if (msg) msg.textContent = 'Удаляю раздел…';
+  const data = await api('/api/admin/vk/course/section/remove', { method:'POST', body: JSON.stringify({ id: id, withLessons: true }) });
   if (!data.ok) {
-    if (msg) msg.textContent = data.error || 'Урок не скрылся';
+    if (msg) msg.textContent = data.error || 'Раздел не удалился';
     return;
   }
   await loadAssist();
+  const fresh = document.getElementById('sectionmsg');
+  if (fresh) fresh.textContent = 'Раздел «' + name + '» удалён.';
+}
+async function removeLesson(id) {
+  const key = id || (document.getElementById('lessonPick') || {}).value || '';
+  const msg = document.getElementById('lessonmsg');
+  if (!key) {
+    if (msg) msg.textContent = 'Сначала выберите урок.';
+    return;
+  }
+  const lesson = (coursePack.lessons || []).find(function(item){ return item.id === key; });
+  const name = lesson ? lesson.title : 'этот урок';
+  if (!confirm('Удалить урок «' + name + '»? Доны его больше не увидят.')) return;
+  const data = await api('/api/admin/vk/course/remove', { method:'POST', body: JSON.stringify({ id: key }) });
+  if (!data.ok) {
+    if (msg) msg.textContent = data.error || 'Урок не удалился';
+    return;
+  }
+  await loadAssist();
+  const fresh = document.getElementById('lessonmsg');
+  if (fresh) fresh.textContent = 'Урок «' + name + '» удалён.';
 }
 async function loadAssist(){
   const el = document.getElementById('section-assist');
@@ -706,6 +778,7 @@ async function loadAssist(){
         '</div></div>';
     }).join('') : '<p class="note">Донов пока нет. Нажмите «Взять донов из ВК» или дождитесь новой подписки.</p>')+
     '</div>';
+  bindCourseDesk();
 }
 async function setCommunityGate(closed){
   const msg = document.getElementById('gatemsg');
