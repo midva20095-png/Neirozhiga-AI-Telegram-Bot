@@ -458,7 +458,7 @@ function startWebApp() {
                 role: item.role === 'user' ? 'user' : 'assistant',
                 text: item.body
             }));
-            const course = await assistant.courseAsk(text.slice(0, 500), prior);
+            const course = await assistant.courseAsk(text.slice(0, 500), prior, assistant.vkId(account));
             if (!course.ok) return res.status(502).json({ error: course.error || 'Ответ не собрался.' });
             await db.addCourseChat(account, 'user', text.slice(0, 500));
             await db.addCourseChat(account, 'ai', course.answer || '');
