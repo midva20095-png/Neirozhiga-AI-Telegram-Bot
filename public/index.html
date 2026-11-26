@@ -2439,6 +2439,12 @@ function lessonTools(item){
     '</div>';
 }
 function bindCourseBits(){
+  document.querySelectorAll('a.course-link[data-out]').forEach(function(link){
+    link.onclick = function(event){
+      event.preventDefault();
+      openOut(link.getAttribute('data-out') || '');
+    };
+  });
   document.querySelectorAll('[data-keep]').forEach(function(button){
     button.onclick = function(){
       const item = courseThread[Number(button.getAttribute('data-keep'))];
@@ -2483,8 +2489,11 @@ function linkText(value){
   return esc(value).replace(/https?:\/\/[^\s<&]+/g, function(raw){
     const url = raw.replace(/[),.;]+$/,'');
     const tail = raw.slice(url.length);
-    if (!/^https:\/\/(?:vk\.com|vk\.ru|dev\.vk\.com|ads\.vk\.ru)\//.test(url)) return raw;
-    return '<a class="course-link" href="'+url+'" target="_blank" rel="noopener">'+url+'</a>'+tail;
+    if (!/^https:\/\//.test(url)) return raw;
+    if (/^https:\/\/(?:vk\.com|vk\.ru|dev\.vk\.com|ads\.vk\.ru)\//.test(url)) {
+      return '<a class="course-link" href="'+url+'" target="_blank" rel="noopener">'+url+'</a>'+tail;
+    }
+    return '<a class="course-link" href="'+url+'" data-out="'+url+'" target="_blank" rel="noopener">'+url+'</a>'+tail;
   });
 }
 let courseFilter = '';
