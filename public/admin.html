@@ -548,19 +548,30 @@ function openRate(id){
   go('rate');
 }
 function courseCard(course) {
-  coursePack = course && course.lessons ? course : { lessons: [], sections: [], error: course && course.error };
+  coursePack = course && course.lessons ? course : { lessons: [], sections: [], shelves: [], error: course && course.error };
   if (coursePack.error && !coursePack.lessons.length) {
     return '<div class="card"><h3>Уроки второго бота</h3><p class="note">'+esc(coursePack.error)+'</p></div>';
   }
   const sectionOptions = (coursePack.sections || []).map(function(item){
     return '<option value="'+esc(item.id)+'">'+esc((item.shelfTitle ? item.shelfTitle + ' · ' : '') + item.title)+'</option>';
   }).join('');
-  const lessonOptions = '<option value="">Новый урок</option>'+(coursePack.lessons || []).map(function(item){
+  const shelfOptions = (coursePack.shelves || []).map(function(item){
     return '<option value="'+esc(item.id)+'">'+esc(item.title)+'</option>';
   }).join('');
-  return '<div class="card"><h3>Уроки второго бота</h3>'+
-    '<p class="note">Этот текст читают доны. Название до 40 знаков: оно же становится кнопкой во втором боте. Раздел уже лежит внутри своей двери: ВКонтакте, Яндекс Директ, Авито или фудфото.</p>'+
-    '<label>Урок</label><select id="lessonPick" onchange="fillLesson()">'+lessonOptions+'</select>'+
+  const lessonOptions = '<option value="">Новый урок</option>'+(coursePack.lessons || []).map(function(item){
+    const room = (coursePack.sections || []).find(function(row){ return row.id === item.section; });
+    const place = room ? ((room.shelfTitle ? room.shelfTitle + ' · ' : '') + room.title + ' · ') : '';
+    return '<option value="'+esc(item.id)+'">'+esc(place + item.title)+'</option>';
+  }).join('');
+  return '<div class="card"><h3>Новый раздел кафедры</h3>'+
+    '<p class="note">Раздел появится внутри выбранной двери: во втором боте и в приложении. Название до 40 знаков станет кнопкой. Урок в этот раздел добавляют карточкой ниже.</p>'+
+    '<label>Дверь</label><select id="sectionShelf">'+shelfOptions+'</select>'+
+    '<label>Название раздела</label><input id="sectionTitle" maxlength="40" placeholder="Например: Съёмка на выезде">'+
+    '<div class="row" style="margin-top:12px"><button type="button" onclick="saveSection()">Создать раздел</button></div>'+
+    '<p id="sectionmsg" class="note"></p></div>'+
+    '<div class="card"><h3>Опубликованные уроки</h3>'+
+    '<p class="note">Выберите урок в списке. Откроется текст, который уже видят доны. Поправьте его и нажмите «Сохранить урок»: эта версия заменит опубликованную. Строка «Новый урок» создаёт ещё один материал.</p>'+
+    '<label>Опубликованный урок</label><select id="lessonPick" onchange="fillLesson()">'+lessonOptions+'</select>'+
     '<label>Раздел</label><select id="lessonSection">'+sectionOptions+'</select>'+
     '<label>Название на кнопке</label><input id="lessonTitle" maxlength="40" placeholder="До 40 знаков">'+
     '<label>Текст</label><textarea id="lessonBody" rows="8" maxlength="3500"></textarea>'+
@@ -583,6 +594,23 @@ function fillLesson() {
   if (title) title.value = lesson.title || '';
   if (body) body.value = lesson.body || '';
 }
+async function saveSection() {
+  const msg = document.getElementById('sectionmsg');
+  const payload = {
+    shelf: (document.getElementById('sectionShelf') || {}).value || '',
+    title: (document.getElementById('sectionTitle') || {}).value || ''
+  };
+  if (msg) msg.textContent = 'Сохраняю раздел…';
+  const data = await api('/api/admin/vk/course/section', { method:'POST', body: JSON.stringify(payload) });
+  if (!data.ok) {
+    if (msg) msg.textContent = data.error || 'Раздел не сохранился';
+    return;
+  }
+  const title = payload.title;
+  await loadAssist();
+  const fresh = document.getElementById('sectionmsg');
+  if (fresh) fresh.textContent = 'Раздел «' + title.trim() + '» уже в двери.';
+}
 async function saveLesson() {
   const msg = document.getElementById('lessonmsg');
   const id = (document.getElementById('lessonPick') || {}).value || '';
@@ -598,9 +626,15 @@ async function saveLesson() {
     if (msg) msg.textContent = data.error || 'Урок не сохранился';
     return;
   }
+  const saved = data.lesson && data.lesson.id ? data.lesson.id : id;
   await loadAssist();
+  const pick = document.getElementById('lessonPick');
+  if (pick && saved) {
+    pick.value = saved;
+    fillLesson();
+  }
   const fresh = document.getElementById('lessonmsg');
-  if (fresh) fresh.textContent = 'Урок сохранён во втором боте.';
+  if (fresh) fresh.textContent = 'Текст опубликован. Доны видят эту версию.';
 }
 async function removeLesson() {
   const id = (document.getElementById('lessonPick') || {}).value || '';

@@ -1260,7 +1260,11 @@ function startWebApp() {
         try {
             const course = await assistant.courseList();
             if (!course.ok) return res.status(502).json({ error: course.error || 'Уроки второго бота не открылись.' });
-            res.json({ sections: course.sections || [], lessons: course.lessons || [] });
+            res.json({
+                shelves: course.shelves || [],
+                sections: course.sections || [],
+                lessons: course.lessons || []
+            });
         } catch (e) {
             res.status(500).json({ error: 'Уроки второго бота не открылись.' });
         }
@@ -1273,6 +1277,16 @@ function startWebApp() {
             res.json({ ok: true, lesson: course.lesson || null });
         } catch (e) {
             res.status(500).json({ ok: false, error: 'Урок не сохранился.' });
+        }
+    });
+
+    app.post('/api/admin/vk/course/section', requireAdmin, async (req, res) => {
+        try {
+            const course = await assistant.courseSection(req.body || {});
+            if (!course.ok) return res.status(400).json({ ok: false, error: course.error || 'Раздел не сохранился.' });
+            res.json({ ok: true, section: course.section || null });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Раздел не сохранился.' });
         }
     });
 

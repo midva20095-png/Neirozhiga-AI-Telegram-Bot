@@ -1135,6 +1135,10 @@ function courseRemove(id) {
     return courseCall('/course/remove', { id }, 20000);
 }
 
+function courseSection(body) {
+    return courseCall('/course/section', body || {}, 20000);
+}
+
 function courseAsk(text, history, userId) {
     const prior = Array.isArray(history) ? history.slice(-8) : [];
     const body = { text, history: prior };
@@ -1190,6 +1194,7 @@ module.exports = {
     courseList,
     courseSave,
     courseRemove,
+    courseSection,
     courseAsk,
     listCourseDrops,
     clearCourseDrop
