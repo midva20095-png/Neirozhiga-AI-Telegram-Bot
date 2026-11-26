@@ -2997,7 +2997,7 @@ async function handleDonutJoin(token, update, groupId) {
     try { await db.recordDonut(groupId, hit.userId, hit.kind, hit.amount); } catch (error) {}
     try {
         const assistant = require('./assistant');
-        await assistant.applyEvent(hit.kind, hit.userId, '');
+        await assistant.applyEvent(hit.kind, hit.userId, '', undefined, hit.amount);
     } catch (error) {
         console.error(`ВК ${groupId}: помощник доната не обновился.`);
     }

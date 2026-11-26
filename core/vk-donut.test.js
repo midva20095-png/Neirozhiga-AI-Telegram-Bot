@@ -52,5 +52,9 @@ test('да и нет читаются с кнопки и текстом', () => 
     assert.equal(donut.readSubscription({ type: 'message_new', object: { user_id: 7 } }), null);
     assert.deepEqual(donut.readDonutEvent({ type: 'donut_subscription_cancelled', object: { user_id: 9, amount: 50 } }), { userId: 9, kind: 'cancel', amount: 50 });
     assert.equal(donut.readDonutEvent({ type: 'donut_subscription_expired', object: { user_id: 3 } }).kind, 'expire');
+    assert.deepEqual(
+        donut.readDonutEvent({ type: 'donut_subscription_price_changed', object: { user_id: 4, amount_old: 50, amount_new: 150 } }),
+        { userId: 4, kind: 'price', amount: 150 }
+    );
     assert.equal(donut.readDonutEvent({ type: 'wall_reply_new', object: { user_id: 3 } }), null);
 });

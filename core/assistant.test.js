@@ -17,6 +17,7 @@ test('срок доната выключает помощника, отмена 
     assert.equal(assistant.accessChange('create'), true);
     assert.equal(assistant.accessChange('prolong'), true);
     assert.equal(assistant.accessChange('expire'), false);
+    assert.equal(assistant.accessChange('price'), true);
     assert.equal(assistant.accessChange('cancel'), null);
 });
 
@@ -25,6 +26,21 @@ test('номер дона берётся и из кабинета ВК, и из 
     assert.equal(assistant.vkId(15), 15);
     assert.equal(assistant.vkId(0), 0);
     assert.equal(assistant.maskToken('vk1.a.secretKEY'), '···tKEY');
+});
+
+test('уровень около 50 рублей остаётся донатом и закрывает кафедру', () => {
+    assert.equal(assistant.courseAllowed(true, 50), false);
+    assert.equal(assistant.courseAllowed(true, 59), false);
+    assert.equal(assistant.courseAllowed(true, 100), true);
+    assert.equal(assistant.courseAllowed(true, 0), true);
+    assert.equal(assistant.courseAllowed(false, 150), false);
+    const calls = assistant.replayPlan(
+        [{ user_id: 5, active: true, amount: 50 }, { user_id: 8, active: true, amount: 150 }],
+        []
+    );
+    assert.equal(calls[0].body.active, true);
+    assert.equal(calls[0].body.course, false);
+    assert.equal(calls[1].body.course, true);
 });
 
 test('живой список донов включает текущих и выключает пропавших', () => {
@@ -253,6 +269,8 @@ test('после перезапуска помощника касса снова
     );
     assert.equal(calls.length, 3);
     assert.equal(calls[0].body.active, true);
+    assert.equal(calls[0].body.course, true);
+    assert.equal(calls[2].body.course, false);
     assert.equal(calls[1].path, '/community');
     assert.equal(calls[1].body.groupId, 50);
     assert.equal(calls[1].body.title, 'Сообщество 50');

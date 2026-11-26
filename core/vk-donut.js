@@ -87,7 +87,8 @@ const DONUT_KINDS = {
     donut_subscription_create: 'create',
     donut_subscription_prolonged: 'prolong',
     donut_subscription_cancelled: 'cancel',
-    donut_subscription_expired: 'expire'
+    donut_subscription_expired: 'expire',
+    donut_subscription_price_changed: 'price'
 };
 
 function readDonutEvent(update) {
@@ -96,7 +97,7 @@ function readDonutEvent(update) {
     const obj = update.object || {};
     const userId = Number(obj.user_id || obj.userId || obj.from_id);
     if (!Number.isInteger(userId) || userId <= 0) return null;
-    const amount = Number(obj.amount);
+    const amount = kind === 'price' ? Number(obj.amount_new) : Number(obj.amount);
     return { userId, kind, amount: Number.isFinite(amount) ? Math.round(amount) : 0 };
 }
 

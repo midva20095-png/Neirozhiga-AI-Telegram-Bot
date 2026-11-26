@@ -13,8 +13,19 @@ function vkId(account) {
     return positive;
 }
 
+const FOOD_MAX = 59;
+
+function foodAmount(amount) {
+    const value = Number(amount);
+    return Number.isInteger(value) && value > 0 && value <= FOOD_MAX;
+}
+
+function courseAllowed(active, amount) {
+    return !!active && !foodAmount(amount);
+}
+
 function accessChange(kind) {
-    if (kind === 'create' || kind === 'prolong') return true;
+    if (kind === 'create' || kind === 'prolong' || kind === 'price') return true;
     if (kind === 'expire') return false;
     return null;
 }
@@ -334,10 +345,23 @@ async function cabinet(account) {
     if (!userId) return { don: false, active: false, join: JOIN_URL, community: null };
     const row = await db.getAssistantDon(userId);
     if (!row) return { don: false, active: false, join: JOIN_URL, community: null };
+    if (row.active && !(Number(row.amount) > 0)) {
+        try {
+            const found = await db.latestDonutAmount(userId);
+            if (found) {
+                const saved = await db.upsertAssistantDon(userId, row.name || '', true, found);
+                if (saved) row.amount = saved.amount;
+                if (foodAmount(found)) await tellAccess(userId, true, undefined, false);
+            }
+        } catch (error) {
+            // Старая сумма не прочиталась: кафедра остаётся открытой, пока цена не придёт событием.
+        }
+    }
     const communities = await db.listAssistantCommunities(userId);
     return {
         don: true,
         active: !!row.active,
+        course: courseAllowed(row.active, row.amount),
         join: JOIN_URL,
         name: row.name || '',
         community: communityCard(communities[0]),
@@ -350,7 +374,7 @@ function replayPlan(dons, communities) {
     (Array.isArray(dons) ? dons : []).forEach(don => {
         const id = vkId(don && don.user_id);
         if (!id) return;
-        calls.push({ path: '/access', body: { userId: id, active: !!(don && don.active) } });
+        calls.push({ path: '/access', body: { userId: id, active: !!(don && don.active), course: courseAllowed(don && don.active, don && don.amount) } });
         if (!don.active) return;
         (Array.isArray(communities) ? communities : []).forEach(item => {
             if (!item || Number(item.owner_id) !== id || !String(item.token || '').trim()) return;
@@ -389,8 +413,10 @@ async function replayKnown(fetchImpl) {
     return { ok: true, sent };
 }
 
-async function tellAccess(userId, active, fetchImpl) {
-    return postAssistant('/access', { userId: Number(userId), active: !!active }, fetchImpl);
+async function tellAccess(userId, active, fetchImpl, course) {
+    const body = { userId: Number(userId), active: !!active };
+    if (typeof course === 'boolean') body.course = course;
+    return postAssistant('/access', body, fetchImpl);
 }
 
 async function tellCommunity(row, fetchImpl) {
@@ -404,12 +430,13 @@ async function tellCommunity(row, fetchImpl) {
     }, fetchImpl);
 }
 
-async function applyEvent(kind, userId, name, fetchImpl) {
+async function applyEvent(kind, userId, name, fetchImpl, amount) {
     const active = accessChange(kind);
     const id = vkId(userId);
     if (active === null || !id) return { changed: false };
-    await db.upsertAssistantDon(id, name || '', active);
-    const sent = await tellAccess(id, active, fetchImpl);
+    const paid = Number(amount);
+    const row = await db.upsertAssistantDon(id, name || '', active, Number.isInteger(paid) && paid > 0 ? paid : 0);
+    const sent = await tellAccess(id, !!(row && row.active), fetchImpl, courseAllowed(row && row.active, row && row.amount));
     const communities = await db.listAssistantCommunities(id);
     if (active) {
         await db.clearAssistantPurge(id);
@@ -1132,6 +1159,9 @@ module.exports = {
     installDemo,
     stopDemo,
     vkId,
+    FOOD_MAX,
+    foodAmount,
+    courseAllowed,
     accessChange,
     maskToken,
     cleanReply,

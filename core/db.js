@@ -263,6 +263,7 @@ async function initDB() {
     )
   `);
   await pool.query(`ALTER TABLE vk_assistant_don ADD COLUMN IF NOT EXISTS drop_open BOOLEAN NOT NULL DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE vk_assistant_don ADD COLUMN IF NOT EXISTS amount INTEGER NOT NULL DEFAULT 0`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS vk_assistant_community (
       group_id BIGINT PRIMARY KEY,
@@ -516,7 +517,7 @@ async function clearDonutSurvey(userId, groupId) {
 }
 
 async function recordDonut(groupId, userId, kind, amount) {
-  const allowed = new Set(['create', 'prolong', 'cancel', 'expire']);
+  const allowed = new Set(['create', 'prolong', 'cancel', 'expire', 'price']);
   const eventKind = allowed.has(kind) ? kind : '';
   const id = String(groupId || '').replace(/\D/g, '');
   const person = Number(userId);
@@ -545,7 +546,7 @@ async function getAssistantDon(userId) {
   const id = assistantPerson(userId);
   if (!id) return null;
   const res = await pool.query(
-    'SELECT user_id, name, active, updated_at FROM vk_assistant_don WHERE user_id = $1',
+    'SELECT user_id, name, active, amount, updated_at FROM vk_assistant_don WHERE user_id = $1',
     [id]
   );
   return res.rows[0] || null;
@@ -553,29 +554,44 @@ async function getAssistantDon(userId) {
 
 async function listAssistantDons() {
   const res = await pool.query(
-    'SELECT user_id, name, active, updated_at FROM vk_assistant_don ORDER BY active DESC, updated_at DESC'
+    'SELECT user_id, name, active, amount, updated_at FROM vk_assistant_don ORDER BY active DESC, updated_at DESC'
   );
   return res.rows;
 }
 
-async function upsertAssistantDon(userId, name, active) {
+async function latestDonutAmount(userId) {
+  const id = assistantPerson(userId);
+  if (!id) return 0;
+  const res = await pool.query(
+    `SELECT amount FROM vk_donut_log
+     WHERE user_id = $1 AND amount > 0 AND kind IN ('create', 'prolong', 'price')
+     ORDER BY id DESC LIMIT 1`,
+    [id]
+  );
+  return Number(res.rows[0] && res.rows[0].amount) || 0;
+}
+
+async function upsertAssistantDon(userId, name, active, amount) {
   const id = assistantPerson(userId);
   if (!id) return null;
   const title = String(name || '').trim().slice(0, 120);
+  const paid = Number(amount);
+  const nextAmount = Number.isInteger(paid) && paid > 0 ? paid : 0;
   const res = await pool.query(
-    `INSERT INTO vk_assistant_don (user_id, name, active, updated_at)
-     VALUES ($1, $2, $3, NOW())
+    `INSERT INTO vk_assistant_don (user_id, name, active, amount, updated_at)
+     VALUES ($1, $2, $3, $4, NOW())
      ON CONFLICT (user_id) DO UPDATE SET
        name = CASE WHEN EXCLUDED.name <> '' THEN EXCLUDED.name ELSE vk_assistant_don.name END,
        active = EXCLUDED.active,
+       amount = CASE WHEN EXCLUDED.amount > 0 THEN EXCLUDED.amount ELSE vk_assistant_don.amount END,
        drop_open = CASE
          WHEN vk_assistant_don.active = TRUE AND EXCLUDED.active = FALSE THEN TRUE
          WHEN EXCLUDED.active = TRUE THEN FALSE
          ELSE vk_assistant_don.drop_open
        END,
        updated_at = NOW()
-     RETURNING user_id, name, active, drop_open, updated_at`,
-    [id, title, !!active]
+     RETURNING user_id, name, active, amount, drop_open, updated_at`,
+    [id, title, !!active, nextAmount]
   );
   return res.rows[0] || null;
 }
@@ -1664,6 +1680,7 @@ module.exports = {
   listAssistantDons,
   listAssistantDrops,
   clearAssistantDrop,
+  latestDonutAmount,
   upsertAssistantDon,
   listAssistantCommunities,
   saveAssistantCommunity,

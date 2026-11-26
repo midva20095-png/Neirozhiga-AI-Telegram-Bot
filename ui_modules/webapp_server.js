@@ -382,6 +382,14 @@ function startWebApp() {
             res.status(403).json({ error: 'Кафедра открыта донам НейроЯги.', join: gate.view.join || assistant.JOIN_URL });
             return '';
         }
+        if (gate.view.course === false) {
+            const join = gate.view.join || assistant.JOIN_URL;
+            res.status(403).json({
+                error: `Кафедра открыта с уровня выше фудфото. Уровень около 50 ₽ остаётся донатом сообщества. Следующий уровень: ${join}`,
+                join
+            });
+            return '';
+        }
         return String(req.userId);
     }
 
