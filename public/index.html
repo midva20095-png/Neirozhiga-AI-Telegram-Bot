@@ -2302,6 +2302,13 @@ async function loadAssist(){
     bind();
     return;
   }
+  if (data.course === false) {
+    assistPane = 'home';
+    box.innerHTML = '<div class="card"><button type="button" class="back" id="assistBack">В кабинет</button><div class="kicker">Кафедра</div><p class="now">Кафедра для этого номера закрыта. Донат остаётся. Повысить уровень можно кнопкой ниже.</p>'+
+      '<a class="btn" href="'+esc(data.join || 'https://vk.com/donut/club214554778')+'" target="_blank" rel="noopener">Повысить уровень</a></div>';
+    bind();
+    return;
+  }
   assistView = data;
   await renderCourse(box);
 }

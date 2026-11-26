@@ -28,19 +28,18 @@ test('номер дона берётся и из кабинета ВК, и из 
     assert.equal(assistant.maskToken('vk1.a.secretKEY'), '···tKEY');
 });
 
-test('уровень около 50 рублей остаётся донатом и закрывает кафедру', () => {
-    assert.equal(assistant.courseAllowed(true, 50), false);
-    assert.equal(assistant.courseAllowed(true, 59), false);
-    assert.equal(assistant.courseAllowed(true, 100), true);
-    assert.equal(assistant.courseAllowed(true, 0), true);
-    assert.equal(assistant.courseAllowed(false, 150), false);
+test('кафедра закрывается только вручную, цена подписки её не трогает', () => {
+    assert.equal(assistant.courseAllowed(true, false), true);
+    assert.equal(assistant.courseAllowed(true, true), false);
+    assert.equal(assistant.courseAllowed(false, false), false);
     const calls = assistant.replayPlan(
-        [{ user_id: 5, active: true, amount: 50 }, { user_id: 8, active: true, amount: 150 }],
+        [{ user_id: 5, active: true, amount: 50 }, { user_id: 8, active: true, amount: 50, course_hold: true }],
         []
     );
     assert.equal(calls[0].body.active, true);
-    assert.equal(calls[0].body.course, false);
-    assert.equal(calls[1].body.course, true);
+    assert.equal(calls[0].body.course, true);
+    assert.equal(calls[1].body.active, true);
+    assert.equal(calls[1].body.course, false);
 });
 
 test('живой список донов включает текущих и выключает пропавших', () => {

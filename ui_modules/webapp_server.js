@@ -385,8 +385,9 @@ function startWebApp() {
         if (gate.view.course === false) {
             const join = gate.view.join || assistant.JOIN_URL;
             res.status(403).json({
-                error: `Кафедра открыта с уровня выше фудфото. Уровень около 50 ₽ остаётся донатом сообщества. Следующий уровень: ${join}`,
-                join
+                error: 'Кафедра для этого номера закрыта. Повысить уровень можно кнопкой ниже.',
+                join,
+                upgrade: true
             });
             return '';
         }
@@ -1313,6 +1314,19 @@ function startWebApp() {
             res.json({ ok: true, on: result.on, off: result.off });
         } catch (e) {
             res.status(500).json({ ok: false, error: 'Список донов не обновился.' });
+        }
+    });
+
+    app.post('/api/admin/vk/assistant/course', requireAdmin, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const userId = assistant.vkId(body.userId);
+            if (!userId || typeof body.open !== 'boolean') return res.status(400).json({ ok: false, error: 'Нужен номер ВК.' });
+            const result = await assistant.setCourse(userId, body.open);
+            if (!result) return res.status(404).json({ ok: false, error: 'Этот дон ещё не записан.' });
+            res.json({ ok: true, course: result.course });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Доступ к кафедре не изменился.' });
         }
     });
 

@@ -13,15 +13,8 @@ function vkId(account) {
     return positive;
 }
 
-const FOOD_MAX = 59;
-
-function foodAmount(amount) {
-    const value = Number(amount);
-    return Number.isInteger(value) && value > 0 && value <= FOOD_MAX;
-}
-
-function courseAllowed(active, amount) {
-    return !!active && !foodAmount(amount);
+function courseAllowed(active, held) {
+    return !!active && held !== true;
 }
 
 function accessChange(kind) {
@@ -345,23 +338,11 @@ async function cabinet(account) {
     if (!userId) return { don: false, active: false, join: JOIN_URL, community: null };
     const row = await db.getAssistantDon(userId);
     if (!row) return { don: false, active: false, join: JOIN_URL, community: null };
-    if (row.active && !(Number(row.amount) > 0)) {
-        try {
-            const found = await db.latestDonutAmount(userId);
-            if (found) {
-                const saved = await db.upsertAssistantDon(userId, row.name || '', true, found);
-                if (saved) row.amount = saved.amount;
-                if (foodAmount(found)) await tellAccess(userId, true, undefined, false);
-            }
-        } catch (error) {
-            // Старая сумма не прочиталась: кафедра остаётся открытой, пока цена не придёт событием.
-        }
-    }
     const communities = await db.listAssistantCommunities(userId);
     return {
         don: true,
         active: !!row.active,
-        course: courseAllowed(row.active, row.amount),
+        course: courseAllowed(row.active, row.course_hold === true),
         join: JOIN_URL,
         name: row.name || '',
         community: communityCard(communities[0]),
@@ -374,7 +355,7 @@ function replayPlan(dons, communities) {
     (Array.isArray(dons) ? dons : []).forEach(don => {
         const id = vkId(don && don.user_id);
         if (!id) return;
-        calls.push({ path: '/access', body: { userId: id, active: !!(don && don.active), course: courseAllowed(don && don.active, don && don.amount) } });
+        calls.push({ path: '/access', body: { userId: id, active: !!(don && don.active), course: courseAllowed(don && don.active, don && don.course_hold === true) } });
         if (!don.active) return;
         (Array.isArray(communities) ? communities : []).forEach(item => {
             if (!item || Number(item.owner_id) !== id || !String(item.token || '').trim()) return;
@@ -436,7 +417,7 @@ async function applyEvent(kind, userId, name, fetchImpl, amount) {
     if (active === null || !id) return { changed: false };
     const paid = Number(amount);
     const row = await db.upsertAssistantDon(id, name || '', active, Number.isInteger(paid) && paid > 0 ? paid : 0);
-    const sent = await tellAccess(id, !!(row && row.active), fetchImpl, courseAllowed(row && row.active, row && row.amount));
+    const sent = await tellAccess(id, !!(row && row.active), fetchImpl, courseAllowed(row && row.active, row && row.course_hold === true));
     const communities = await db.listAssistantCommunities(id);
     if (active) {
         await db.clearAssistantPurge(id);
@@ -449,6 +430,16 @@ async function applyEvent(kind, userId, name, fetchImpl, amount) {
         await db.markAssistantOwner(id, sent.ok ? 'off' : 'fail', sent.error || '');
     }
     return { changed: true, active, sent };
+}
+
+async function setCourse(userId, open, fetchImpl) {
+    const id = vkId(userId);
+    if (!id || typeof open !== 'boolean') return null;
+    const row = await db.setAssistantCourse(id, !open);
+    if (!row) return null;
+    const course = courseAllowed(row.active, row.course_hold === true);
+    const sent = await tellAccess(id, !!row.active, fetchImpl, course);
+    return { ok: true, course, sent };
 }
 
 async function listCourseDrops() {
@@ -1082,6 +1073,7 @@ async function adminList(fetchImpl) {
             userId: Number(row.user_id),
             name: row.name || `ВК ${row.user_id}`,
             active: !!row.active,
+            course: courseAllowed(row.active, row.course_hold === true),
             updatedAt: row.updated_at,
             communities: communities.filter(item => Number(item.owner_id) === Number(row.user_id)).map(item => ({
                 groupId: String(item.group_id),
@@ -1159,9 +1151,8 @@ module.exports = {
     installDemo,
     stopDemo,
     vkId,
-    FOOD_MAX,
-    foodAmount,
     courseAllowed,
+    setCourse,
     accessChange,
     maskToken,
     cleanReply,

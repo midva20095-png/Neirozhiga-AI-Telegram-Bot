@@ -649,7 +649,7 @@ async function loadAssist(){
     '<p id="gatemsg" class="note"></p></div>'+
     courseCard(course)+
     '<div class="card"><h3>Доступ донов</h3>'+
-    '<p class="note">'+line+' Список берётся из основного бота: кто оплатил донат НейроЯги. Пока донат жив, второй бот открывает этому человеку кафедру в его сообществе. Чужим в том же диалоге кафедра закрыта. Когда срок кончился, второй бот замолкает только у этого номера.</p>'+
+    '<p class="note">'+line+' Список берётся из основного бота: кто оплатил донат НейроЯги. Пока донат жив, второй бот открывает этому человеку кафедру в его сообществе. Чужим в том же диалоге кафедра закрыта. Когда срок кончился, второй бот замолкает только у этого номера. Кнопка «Закрыть кафедру» оставляет донат и прячет материалы: у человека появляется кнопка «Повысить уровень».</p>'+
     '<div class="grid">'+
     '<div class="stat"><div class="n">'+dons.length+'</div><div class="l">Зарегистрировано</div></div>'+
     '<div class="stat"><div class="n">'+on+'</div><div class="l">Донат жив</div></div>'+
@@ -665,9 +665,11 @@ async function loadAssist(){
         '<div class="row"><button type="button" class="ghost" onclick="dropAssist(\''+esc(group.groupId)+'\')">Отключить сообщество</button><button type="button" class="hot" onclick="wipeAssist(\''+esc(group.groupId)+'\')">Удалить данные</button></div></div>'
       ).join('') : '<p class="note">Сообщество ещё не подключено.</p>';
       return '<div class="stat" style="margin-top:8px"><div class="n" style="font-size:16px">'+esc(item.name)+'</div>'+
-        '<div class="l">ВК '+esc(item.userId)+' · '+(item.active ? '<span class="ok">кафедра включена</span>' : '<span class="bad">кафедра выключена</span>')+'</div>'+
+        '<div class="l">ВК '+esc(item.userId)+' · '+(item.active ? '<span class="ok">кафедра включена</span>' : '<span class="bad">кафедра выключена</span>')+(item.active && item.course === false ? ' · <span class="bad">материалы закрыты</span>' : '')+'</div>'+
         groups+
-        '<div class="row" style="margin-top:8px"><button type="button" onclick="setAssist('+item.userId+','+(item.active?'false':'true')+')">'+(item.active?'Выключить':'Включить')+'</button></div></div>';
+        '<div class="row" style="margin-top:8px"><button type="button" onclick="setAssist('+item.userId+','+(item.active?'false':'true')+')">'+(item.active?'Выключить':'Включить')+'</button>'+
+        (item.active ? '<button type="button" class="ghost" onclick="setCourse('+item.userId+','+(item.course === false ? 'true' : 'false')+')">'+(item.course === false ? 'Открыть кафедру' : 'Закрыть кафедру')+'</button>' : '')+
+        '</div></div>';
     }).join('') : '<p class="note">Донов пока нет. Нажмите «Взять донов из ВК» или дождитесь новой подписки.</p>')+
     '</div>';
 }
@@ -719,6 +721,11 @@ async function syncAssist(){
 }
 async function setAssist(userId, active){
   const data = await api('/api/admin/vk/assistant/active', { method:'POST', body: JSON.stringify({ userId: userId, active: active }) });
+  if (!data.ok) alert(data.error || 'Не получилось');
+  loadAssist();
+}
+async function setCourse(userId, open){
+  const data = await api('/api/admin/vk/assistant/course', { method:'POST', body: JSON.stringify({ userId: userId, open: !!open }) });
   if (!data.ok) alert(data.error || 'Не получилось');
   loadAssist();
 }

@@ -264,6 +264,7 @@ async function initDB() {
   `);
   await pool.query(`ALTER TABLE vk_assistant_don ADD COLUMN IF NOT EXISTS drop_open BOOLEAN NOT NULL DEFAULT FALSE`);
   await pool.query(`ALTER TABLE vk_assistant_don ADD COLUMN IF NOT EXISTS amount INTEGER NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE vk_assistant_don ADD COLUMN IF NOT EXISTS course_hold BOOLEAN NOT NULL DEFAULT FALSE`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS vk_assistant_community (
       group_id BIGINT PRIMARY KEY,
@@ -546,7 +547,7 @@ async function getAssistantDon(userId) {
   const id = assistantPerson(userId);
   if (!id) return null;
   const res = await pool.query(
-    'SELECT user_id, name, active, amount, updated_at FROM vk_assistant_don WHERE user_id = $1',
+    'SELECT user_id, name, active, amount, course_hold, updated_at FROM vk_assistant_don WHERE user_id = $1',
     [id]
   );
   return res.rows[0] || null;
@@ -554,9 +555,22 @@ async function getAssistantDon(userId) {
 
 async function listAssistantDons() {
   const res = await pool.query(
-    'SELECT user_id, name, active, amount, updated_at FROM vk_assistant_don ORDER BY active DESC, updated_at DESC'
+    'SELECT user_id, name, active, amount, course_hold, updated_at FROM vk_assistant_don ORDER BY active DESC, updated_at DESC'
   );
   return res.rows;
+}
+
+async function setAssistantCourse(userId, held) {
+  const id = assistantPerson(userId);
+  if (!id) return null;
+  const res = await pool.query(
+    `UPDATE vk_assistant_don
+     SET course_hold = $2, updated_at = NOW()
+     WHERE user_id = $1
+     RETURNING user_id, name, active, amount, course_hold, drop_open, updated_at`,
+    [id, !!held]
+  );
+  return res.rows[0] || null;
 }
 
 async function latestDonutAmount(userId) {
@@ -590,7 +604,7 @@ async function upsertAssistantDon(userId, name, active, amount) {
          ELSE vk_assistant_don.drop_open
        END,
        updated_at = NOW()
-     RETURNING user_id, name, active, amount, drop_open, updated_at`,
+     RETURNING user_id, name, active, amount, course_hold, drop_open, updated_at`,
     [id, title, !!active, nextAmount]
   );
   return res.rows[0] || null;
@@ -1680,6 +1694,7 @@ module.exports = {
   listAssistantDons,
   listAssistantDrops,
   clearAssistantDrop,
+  setAssistantCourse,
   latestDonutAmount,
   upsertAssistantDon,
   listAssistantCommunities,
