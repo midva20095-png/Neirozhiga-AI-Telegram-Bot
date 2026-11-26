@@ -2328,16 +2328,22 @@ async function renderCourse(box) {
   const sections = pack.sections || [];
   const lessons = pack.lessons || [];
   const door = /^https:\/\/vk\.com\/[A-Za-z0-9_.]{2,64}$/.test(pack.door || '') ? pack.door : '';
-  const chips = sections.map(function(item){
-    return '<button type="button" class="course-tile" data-course="'+esc(item.id)+'">'+esc(item.title)+'</button>';
-  }).join('');
-  const cards = lessons.map(function(item){
-    return '<details class="course-lesson" data-lesson="'+esc(item.section)+'" data-lesson-id="'+esc(item.id)+'"><summary>'+esc(item.title)+'</summary><div class="body">'+linkText(item.body)+lessonTools(item)+'</div></details>';
+  const shelves = pack.shelves && pack.shelves.length ? pack.shelves : sections.map(function(item){
+    return { id: item.shelf || item.id, title: item.shelfTitle || item.title };
+  }).filter(function(item, index, list){
+    return list.findIndex(function(other){ return other.id === item.id; }) === index;
+  });
+  courseShelves = shelves;
+  courseSections = sections;
+  courseLessons = lessons;
+  courseShelf = '';
+  courseFilter = '';
+  const chips = shelves.map(function(item){
+    return '<button type="button" class="course-tile" data-shelf="'+esc(item.id)+'">'+esc(item.title)+'</button>';
   }).join('');
   const doorHtml = door
     ? '<a class="course-door" href="'+esc(door)+'" target="_blank" rel="noopener">Перейти в сообщество кафедры<small>'+esc(pack.community || 'Бот отвечает донам здесь')+'</small></a>'
     : '';
-  courseLessons = lessons;
   try {
     const saved = await fetch('/api/vk/course/thread', { headers: authHeaders() });
     const data = await saved.json();
@@ -2355,13 +2361,14 @@ async function renderCourse(box) {
       '<button type="button" data-cpane="marks"'+(coursePane==='marks'?' class="on"':'')+'>Закладки</button>'+
     '</div>'+
     '<div id="courseLessonsPane"'+(coursePane==='lessons'?'':' hidden')+'>'+
-      '<p class="now">ВК, Директ, Авито, поиск, письма и фудфото лежат в своих разделах. Откройте раздел и нажмите урок.</p>'+
+      '<p class="now">Откройте дверь: ВКонтакте, Яндекс Директ, Авито или фудфото. Внутри неё все её разделы и все уроки.</p>'+
       doorHtml+
       clubBlock()+
       '<label class="flabel" for="courseFind">Найти в материалах</label>'+
       '<input id="courseFind" placeholder="Обложка, реклама, бот">'+
-      '<div class="course-grid">'+chips+'</div>'+
-      '<div id="courseLessons">'+cards+'</div>'+
+      '<div class="course-grid" id="courseShelves">'+chips+'</div>'+
+      '<div class="course-grid" id="courseSections"></div>'+
+      '<div id="courseLessons"></div>'+
     '</div>'+
     '<div id="courseChatPane"'+(coursePane==='chat'?'':' hidden')+'>'+
       '<div class="course-chat" id="courseThread"></div>'+
@@ -2377,6 +2384,7 @@ async function renderCourse(box) {
   paintThread();
   paintMarks();
   bind();
+  paintCourseBoard();
 }
 let coursePane = 'lessons';
 let courseLessons = [];
@@ -2480,19 +2488,64 @@ function linkText(value){
   });
 }
 let courseFilter = '';
+let courseShelf = '';
+let courseSections = [];
+let courseShelves = [];
+function showCourseShelf(id) {
+  courseShelf = courseShelf === id ? '' : (id || '');
+  courseFilter = '';
+  paintCourseBoard();
+}
 function showCourseSection(id) {
   courseFilter = courseFilter === id ? '' : (id || '');
-  document.querySelectorAll('[data-course]').forEach(function(button){
-    button.classList.toggle('on', button.getAttribute('data-course') === courseFilter);
-  });
-  filterCourse();
+  paintCourseBoard();
 }
 function filterCourse(){
+  paintCourseBoard();
+}
+function paintCourseBoard() {
+  document.querySelectorAll('[data-shelf]').forEach(function(button){
+    button.classList.toggle('on', button.getAttribute('data-shelf') === courseShelf);
+  });
+  const sectionBox = document.getElementById('courseSections');
+  const lessonBox = document.getElementById('courseLessons');
+  if (!sectionBox || !lessonBox) return;
   const query = ((document.getElementById('courseFind') || {}).value || '').trim().toLowerCase();
-  document.querySelectorAll('[data-lesson]').forEach(function(node){
-    const blob = (node.textContent || '').toLowerCase();
-    const sectionOk = !courseFilter || node.getAttribute('data-lesson') === courseFilter;
-    node.hidden = !sectionOk || (!!query && blob.indexOf(query) < 0);
+  const shelfSections = courseSections.filter(function(item){
+    return courseShelf && (item.shelf === courseShelf || (!item.shelf && item.id === courseShelf));
+  });
+  sectionBox.innerHTML = shelfSections.map(function(item){
+    return '<button type="button" class="course-tile'+(courseFilter===item.id?' on':'')+'" data-course="'+esc(item.id)+'">'+esc(item.title)+'</button>';
+  }).join('');
+  const visible = courseLessons.filter(function(item){
+    const section = courseSections.find(function(row){ return row.id === item.section; });
+    const shelfId = section && section.shelf ? section.shelf : '';
+    if (query) return (item.title + '\n' + item.body).toLowerCase().indexOf(query) >= 0;
+    if (!courseShelf) return false;
+    if (shelfId !== courseShelf) return false;
+    if (courseFilter && item.section !== courseFilter) return false;
+    return true;
+  });
+  const groups = [];
+  visible.forEach(function(item){
+    let group = groups.find(function(row){ return row.id === item.section; });
+    if (!group) {
+      const section = courseSections.find(function(row){ return row.id === item.section; });
+      group = { id: item.section, title: section ? section.title : '', items: [] };
+      groups.push(group);
+    }
+    group.items.push(item);
+  });
+  lessonBox.innerHTML = groups.map(function(group){
+    const head = !query && courseShelf && !courseFilter && group.title ? '<div class="kicker" style="margin-top:14px">'+esc(group.title)+'</div>' : '';
+    const cards = group.items.map(function(item){
+      return '<details class="course-lesson" data-lesson="'+esc(item.section)+'" data-lesson-id="'+esc(item.id)+'"><summary>'+esc(item.title)+'</summary><div class="body">'+linkText(item.body)+lessonTools(item)+'</div></details>';
+    }).join('');
+    return head + cards;
+  }).join('');
+  bindCourseBits();
+  document.querySelectorAll('[data-course]').forEach(function(button){
+    button.onclick = function(){ showCourseSection(button.getAttribute('data-course') || ''); };
   });
 }
 async function askCourse() {
@@ -4462,6 +4515,9 @@ function bind(){
     button.onclick = function(){ showCoursePane(button.getAttribute('data-cpane') || 'lessons'); };
   });
   bindCourseBits();
+  document.querySelectorAll('[data-shelf]').forEach(function(button){
+    button.onclick = function(){ showCourseShelf(button.getAttribute('data-shelf') || ''); };
+  });
   document.querySelectorAll('[data-course]').forEach(function(button){
     button.onclick = function(){ showCourseSection(button.getAttribute('data-course') || ''); };
   });

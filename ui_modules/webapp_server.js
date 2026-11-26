@@ -401,6 +401,7 @@ function startWebApp() {
             const course = await assistant.courseList();
             if (!course.ok) return res.status(502).json({ error: course.error || 'Материалы не открылись.' });
             res.json({
+                shelves: course.shelves || [],
                 sections: course.sections || [],
                 lessons: course.lessons || [],
                 door: /^https:\/\/vk\.com\/[A-Za-z0-9_.]{2,64}$/.test(course.door || '') ? course.door : '',

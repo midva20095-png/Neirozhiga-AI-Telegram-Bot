@@ -553,13 +553,13 @@ function courseCard(course) {
     return '<div class="card"><h3>Уроки второго бота</h3><p class="note">'+esc(coursePack.error)+'</p></div>';
   }
   const sectionOptions = (coursePack.sections || []).map(function(item){
-    return '<option value="'+esc(item.id)+'">'+esc(item.title)+'</option>';
+    return '<option value="'+esc(item.id)+'">'+esc((item.shelfTitle ? item.shelfTitle + ' · ' : '') + item.title)+'</option>';
   }).join('');
   const lessonOptions = '<option value="">Новый урок</option>'+(coursePack.lessons || []).map(function(item){
     return '<option value="'+esc(item.id)+'">'+esc(item.title)+'</option>';
   }).join('');
   return '<div class="card"><h3>Уроки второго бота</h3>'+
-    '<p class="note">Этот текст читают доны. Название до 40 знаков: оно же становится кнопкой во втором боте. В текст кладут факт и ссылку на справку той полки, про которую урок: ВК, Директ, Авито или Вебмастер.</p>'+
+    '<p class="note">Этот текст читают доны. Название до 40 знаков: оно же становится кнопкой во втором боте. Раздел уже лежит внутри своей двери: ВКонтакте, Яндекс Директ, Авито или фудфото.</p>'+
     '<label>Урок</label><select id="lessonPick" onchange="fillLesson()">'+lessonOptions+'</select>'+
     '<label>Раздел</label><select id="lessonSection">'+sectionOptions+'</select>'+
     '<label>Название на кнопке</label><input id="lessonTitle" maxlength="40" placeholder="До 40 знаков">'+
