@@ -1574,6 +1574,7 @@ async function sendPm(id){
 /* ---- Шаблоны ---- */
 const TCATS = [['image','Картинки'],['fix','Улучшение фото'],['chat','Текст'],['video','Видео'],['audio','Голос']];
 const TOPIC_GROUPS = [
+  ['Бизнес', ['Карточка товара', 'Улучшить товар', 'Услуга', 'Витрина', 'Меню и прайс', 'Реклама', 'Упаковка', 'Соцсети', 'Фирменный стиль', 'До и после']],
   ['Люди', ['Портрет', 'Семья', 'Дети', 'Пара', 'Свадьба', 'Бизнес-фото']],
   ['Праздники', ['День рождения', 'Новый год', '8 марта', '23 февраля', 'Праздник']],
   ['Стиль', ['Неон', 'Ретро', 'Кино', 'Аниме', 'Фэнтези', 'Студия']],
@@ -1588,17 +1589,21 @@ function splitTopics(value){
   String(value || '').split(/[,;|]/).forEach(part => {
     const name = part.trim().replace(/\s+/g, ' ').slice(0, 40);
     const key = name.toLowerCase();
-    if (!name || seen[key] || out.length >= 40) return;
+    if (!name || seen[key] || out.length >= 80) return;
     seen[key] = 1;
     out.push(name);
   });
   return out;
 }
+let savedTopics = [];
 function knownTopics(){
   const out = [];
-  templates.forEach(t => splitTopics(t.topics).forEach(name => {
-    if (!out.some(item => item.toLowerCase() === name.toLowerCase())) out.push(name);
-  }));
+  function add(name){
+    if (!name || out.some(item => item.toLowerCase() === name.toLowerCase())) return;
+    out.push(name);
+  }
+  templates.forEach(t => splitTopics(t.topics).forEach(add));
+  splitTopics(savedTopics.join(', ')).forEach(add);
   return out.sort(function(a, b){ return a.localeCompare(b, 'ru'); });
 }
 function presetTopics(){
@@ -1665,6 +1670,12 @@ function addTopic(){
   });
   if (field) field.value = '';
   writeTopics(list);
+  fresh.forEach(name => {
+    if (!savedTopics.some(item => String(item).toLowerCase() === name.toLowerCase())) savedTopics.push(name);
+  });
+  if (typeof api === 'function') {
+    api('/api/admin/template-topics', { method: 'POST', body: JSON.stringify({ name: fresh.join(', ') }) }).catch(function(){});
+  }
 }
 function topicCatalog(){
   return topicGroupsHtml(null, true);
@@ -1766,6 +1777,7 @@ async function loadTpl(){
   }
   const d = await api('/api/admin/templates?all=1'+(place==='vk' ? '&audience=vk'+groupQuery() : ''));
   templates = d.templates||[];
+  savedTopics = Array.isArray(d.topicCatalog) ? d.topicCatalog : [];
   const editing = tplEdit;
   const preferred = modelsData.some(m=>m.key==='kie-banana-lite') ? 'kie-banana-lite' : 'nanobanana';
   const currentModel = editing && editing.model ? editing.model : preferred;
@@ -1789,7 +1801,7 @@ async function loadTpl(){
     '<label>Категории</label><input id="ttopics" type="hidden" value="'+esc(editing&&editing.topics?editing.topics:'')+'">'+
     '<div id="topiclist"></div>'+
     '<div class="topicadd"><input id="tnewtopic" placeholder="Своя категория, если её нет в списке"><button type="button" id="taddtopic">Добавить</button></div>'+
-    '<p class="note">Нажмите готовую категорию, чтобы повесить её на этот шаблон. Своё название нужно только если его нет выше. В кабинете категория появляется после сохранения.</p>'+
+    '<p class="note">Нажмите готовую категорию, чтобы повесить её на этот шаблон. Своё название сохраняется в списке и остаётся после обновления страницы. В кабинете категория видна, когда в ней есть шаблон.</p>'+
     '<label>3. Что должна сделать нейросеть. Человек это не видит</label><textarea id="tp" placeholder="Опишите стиль, свет и что оставить от фото человека. Ответы полей пишите как {имя}">'+esc(editing?editing.prompt:'')+'</textarea>'+
     '<label>Поля для ответов человека. Пусто — одно своё фото</label><textarea id="tfields" placeholder="фото | Ваше фото | до 3&#10;текст | имя | Как вас зовут?&#10;выбор | стиль | Стиль | Неон; Плёнка&#10;дата | дата | Дата рождения | необязательно&#10;число | возраст | Сколько лет?">'+esc(editing&&editing.fields?editing.fields:'')+'</textarea>'+
     '<p class="note">Каждая строка — одно поле: фото, текст, выбор, дата или число. В тексте запроса {имя} заменится ответом человека. Несколько фото уходят в модель вместе, текст запроса не переписывается.</p>'+

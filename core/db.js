@@ -395,6 +395,13 @@ async function initDB() {
       created_at TIMESTAMP DEFAULT NOW()
     )
   `);
+  try {
+    const business = require('./business-templates');
+    const seeded = await business.ensure({ getSettings, setSetting, listTemplates, saveTemplate });
+    if (seeded && seeded.added) console.log('Бизнес-шаблоны добавлены: ' + seeded.added);
+  } catch (e) {
+    console.error('Бизнес-шаблоны не добавлены:', e.message);
+  }
   console.log('✅ Таблица users готова (PostgreSQL)');
 }
 
@@ -1509,13 +1516,46 @@ async function listTemplates(all = false, audience) {
   return res.rows;
 }
 
+function topicNames(value) {
+  const seen = new Set();
+  const out = [];
+  const list = Array.isArray(value) ? value : String(value || '').split(/[,;|]/);
+  list.forEach(part => {
+    const name = String(part || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+    const key = name.toLowerCase();
+    if (!name || seen.has(key) || out.length >= 80) return;
+    seen.add(key);
+    out.push(name);
+  });
+  return out;
+}
+
+async function listTopicCatalog() {
+  const saved = await getSettings(['template_topics']);
+  return topicNames(saved.template_topics);
+}
+
+async function rememberTopics(value) {
+  const fresh = topicNames(value);
+  if (!fresh.length) return listTopicCatalog();
+  const current = await listTopicCatalog();
+  let changed = false;
+  fresh.forEach(name => {
+    if (current.some(item => item.toLowerCase() === name.toLowerCase())) return;
+    current.push(name);
+    changed = true;
+  });
+  if (changed) await setSetting('template_topics', current.slice(0, 80));
+  return current.slice(0, 80);
+}
+
 function cleanTopics(value) {
   const seen = new Set();
   const out = [];
   String(value || '').split(/[,;|]/).forEach(part => {
     const name = part.trim().replace(/\s+/g, ' ').slice(0, 40);
     const key = name.toLowerCase();
-    if (!name || seen.has(key) || out.length >= 40) return;
+    if (!name || seen.has(key) || out.length >= 80) return;
     seen.add(key);
     out.push(name);
   });
@@ -1564,14 +1604,18 @@ async function saveTemplate(data) {
        WHERE id=$17 RETURNING *`,
       [...values, data.id]
     );
-    return res.rows[0];
+    const saved = res.rows[0];
+    try { await rememberTopics(saved && saved.topics); } catch (e) {}
+    return saved;
   }
   const res = await pool.query(
     `INSERT INTO templates (title, category, prompt, model, cost, active, image, description, hide_prompt, formats, sort, quality, duration, audience, fields, topics)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
     values
   );
-  return res.rows[0];
+  const saved = res.rows[0];
+  try { await rememberTopics(saved && saved.topics); } catch (e) {}
+  return saved;
 }
 
 async function deleteTemplate(id) {
@@ -1672,6 +1716,8 @@ module.exports = {
   releaseShare,
   listHistory,
   listTemplates,
+  listTopicCatalog,
+  rememberTopics,
   saveTemplate,
   deleteTemplate,
   peekGiga,

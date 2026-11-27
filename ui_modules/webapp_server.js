@@ -1014,8 +1014,9 @@ function startWebApp() {
                     prompt = templateFields.buildPrompt(tpl.prompt, tpl.fields, answers);
                 } else {
                     prompt = tpl.prompt || prompt;
-                    if (tpl.photo && !body.image) return res.status(400).json({ error: 'Прикрепите фото' });
-                    if (body.image) photos = [body.image];
+                    const extra = Array.isArray(body.photos) ? body.photos.filter(Boolean) : [];
+                    photos = (extra.length ? extra : (body.image ? [body.image] : [])).slice(0, templateFields.MAX_PHOTOS);
+                    if (tpl.photo && !photos.length) return res.status(400).json({ error: 'Прикрепите фото' });
                 }
                 if (!prompt) prompt = 'Сделай изображение по прикреплённому фото';
                 const templateKind = (catalog.getModel(modelKey, { includeDisabled: true, audience }) || {}).kind;
@@ -1753,8 +1754,18 @@ function startWebApp() {
             const group = String(req.query.group || '').replace(/\D/g, '');
             const name = botUsername();
             const templates = (await db.listTemplates(true, every ? undefined : audience)).map(row => templatesSrc.attachChannelLink(row, name, place, group));
-            res.json({ templates });
+            const topicCatalog = await db.listTopicCatalog();
+            res.json({ templates, topicCatalog });
         } catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.post('/api/admin/template-topics', requireAdmin, async (req, res) => {
+        try {
+            const topicCatalog = await db.rememberTopics(req.body && req.body.name);
+            res.json({ ok: true, topicCatalog });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
     });
 
     app.post('/api/admin/templates', requireAdmin, async (req, res) => {
