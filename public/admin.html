@@ -194,19 +194,32 @@ function tgInit(){ try{ return (window.Telegram&&window.Telegram.WebApp&&window.
 
 async function api(path, opts){
   opts = Object.assign({}, opts||{});
-  const wait = Number(opts.timeout) || 12000;
+  const wait = Number(opts.timeout) || 20000;
+  const method = String(opts.method || 'GET').toUpperCase();
+  const attempts = opts.retry === false || method !== 'GET' ? 1 : 2;
   delete opts.timeout;
-  opts.headers = Object.assign({'Content-Type':'application/json'}, opts.headers||{});
-  if (token) opts.headers['Authorization'] = 'Bearer '+token;
-  const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
-  const timer = ctrl ? setTimeout(function(){ ctrl.abort(); }, wait) : 0;
-  if (ctrl) opts.signal = ctrl.signal;
-  let r;
-  try { r = await fetch(path, opts); }
-  catch (e) { throw new Error('Сервер не ответил. Откройте раздел ещё раз.'); }
-  finally { if (timer) clearTimeout(timer); }
-  if (r.status===401){ logout(); throw new Error('Требуется вход'); }
-  return r.json().catch(function(){ return { error: 'Сервер ответил пустой страницей.' }; });
+  delete opts.retry;
+  let last = null;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const headers = Object.assign({'Content-Type':'application/json'}, opts.headers||{});
+    if (token) headers.Authorization = 'Bearer '+token;
+    const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(function(){ ctrl.abort(); }, wait) : 0;
+    try {
+      const r = await fetch(path, Object.assign({}, opts, { headers: headers, signal: ctrl ? ctrl.signal : undefined }));
+      if (timer) clearTimeout(timer);
+      if (r.status===401){ logout(); throw new Error('Требуется вход'); }
+      return r.json().catch(function(){ return { error: 'Сервер ответил пустой страницей.' }; });
+    } catch (e) {
+      if (timer) clearTimeout(timer);
+      if (e && e.message === 'Требуется вход') throw e;
+      last = e;
+    }
+  }
+  throw new Error((last && last.name === 'AbortError') ? 'Связь оборвалась. Нажмите «Повторить».' : 'Сервер не ответил. Нажмите «Повторить».');
+}
+function failCard(message, again){
+  return '<div class="card" data-retry="1"><p class="bad">'+esc(message || 'Раздел не открылся.')+'</p><button type="button" onclick="'+again+'">Повторить</button></div>';
 }
 
 async function login(){
@@ -476,24 +489,33 @@ async function showPanel(){
 }
 
 async function loadSection(k){
+  const node = document.getElementById('section-'+k);
+  const seq = ((window.__adminSeq = window.__adminSeq || {})[k] = ((window.__adminSeq || {})[k] || 0) + 1);
+  if (node && !node.getAttribute('data-ready')) node.innerHTML = '<div class="card">Открываю…</div>';
   try {
-    if (k==='home') return await loadHome();
-    if (k==='stats') return await loadStats();
-    if (k==='rate') return await loadRate();
-    if (k==='shop') return await loadShop();
-    if (k==='donut') return await loadDonut();
-    if (k==='assist') return await loadAssist();
-    if (k==='users') return await loadUsers('');
-    if (k==='tpl') return await loadTpl();
-    if (k==='models') return await loadModels();
-    if (k==='journal') return await loadJournal();
-    if (k==='packages') return await loadPackages();
-    if (k==='tickets') return await loadTickets('open');
-    if (k==='broadcast') return await renderBroadcast();
-    if (k==='settings') return await loadSettings();
+    if (k==='home') await loadHome();
+    else if (k==='stats') await loadStats();
+    else if (k==='rate') await loadRate();
+    else if (k==='shop') await loadShop();
+    else if (k==='donut') await loadDonut();
+    else if (k==='assist') await loadAssist();
+    else if (k==='users') await loadUsers('');
+    else if (k==='tpl') await loadTpl();
+    else if (k==='models') await loadModels();
+    else if (k==='journal') await loadJournal();
+    else if (k==='packages') await loadPackages();
+    else if (k==='tickets') await loadTickets('open');
+    else if (k==='broadcast') await renderBroadcast();
+    else if (k==='settings') await loadSettings();
+    if (window.__adminSeq[k] !== seq) return;
+    if (node) node.setAttribute('data-ready', '1');
   } catch (e) {
-    const node = document.getElementById('section-'+k);
-    if (node) node.innerHTML = '<div class="card bad">'+esc(e.message || 'Раздел не открылся. Нажмите вкладку ещё раз.')+'</div>';
+    if (window.__adminSeq[k] !== seq) return;
+    if (!node) return;
+    node.querySelectorAll('[data-retry]').forEach(function(item){ item.remove(); });
+    const card = failCard(e.message, "go('"+k+"')");
+    if (!node.getAttribute('data-ready')) node.innerHTML = card;
+    else node.insertAdjacentHTML('afterbegin', card);
   }
 }
 async function loadHome(){
@@ -1212,7 +1234,7 @@ async function loadDonut(){
       (events.length?'':'<tr><td colspan="3" class="note">Новых событий доната ещё не было.</td></tr>')+
       '</table></div>';
   } catch (e) {
-    el.innerHTML = '<div class="card bad">'+esc(e.message)+'</div>';
+    el.innerHTML = failCard(e.message, 'loadDonut()');
   }
 }
 let ratePeriod = 'current';
@@ -1246,7 +1268,7 @@ async function loadRate(){
       ((d.hidden||[]).length?'':'<tr><td colspan="2" class="note">Никого не исключали.</td></tr>')+
       '</table></div>';
   } catch (e) {
-    el.innerHTML = '<div class="card bad">'+esc(e.message)+'</div>';
+    el.innerHTML = failCard(e.message, 'loadRate()');
   }
 }
 function ratePrizes(){
@@ -1339,7 +1361,7 @@ async function loadShop(){
       (orders.length?'':'<tr><td colspan="4" class="note">Заявок пока нет.</td></tr>')+
       '</table></div>';
   } catch (e) {
-    el.innerHTML = '<div class="card bad">'+esc(e.message)+'</div>';
+    el.innerHTML = failCard(e.message, 'loadShop()');
   }
 }
 function shopPayload(extra){
@@ -1422,7 +1444,7 @@ async function loadStats(){
     ];
     el.innerHTML = '<div class="card"><h3>Статистика · '+placeName()+'</h3><div class="grid">'+
       cells.map(c=>'<div class="stat"><div class="n">'+(c[1]??0)+'</div><div class="l">'+c[0]+'</div></div>').join('')+'</div></div>';
-  }catch(e){ el.innerHTML = '<div class="card bad">'+esc(e.message)+'</div>'; }
+  }catch(e){ el.innerHTML = failCard(e.message, 'loadStats()'); }
 }
 
 /* ---- Клиенты ---- */
@@ -1439,11 +1461,11 @@ async function loadUsers(q){
   try {
     d = await api('/api/admin/users?platform='+place+'&q='+encodeURIComponent(usersQuery)+groupQuery());
   } catch (e) {
-    el.innerHTML = '<div class="card bad">'+esc(e.message)+'</div>';
+    el.innerHTML = failCard(e.message, 'loadUsers(\'\')');
     return;
   }
   if (d.error && !d.users) {
-    el.innerHTML = '<div class="card bad">'+esc(d.error)+'</div>';
+    el.innerHTML = failCard(d.error, 'loadUsers(\'\')');
     return;
   }
   users = d.users||[];
@@ -2037,7 +2059,7 @@ async function loadJournal(){
     el.innerHTML = '<div class="card"><h3>Журнал</h3><p class="note">Общий журнал обоих чатов. Шаблоны пишутся отдельно: старт, размер фото, модель и ответ сервиса, если фото или генерация не прошли. Текст запроса сюда не попадает.</p>'+
       (rows?'<table><tr><th>Когда</th><th></th><th>Событие</th></tr>'+rows+'</table>':'<p class="note">Пока пусто. После перезапуска здесь появится «Бот запущен».</p>')+
       '<div class="row" style="margin-top:12px"><button class="ghost" onclick="loadJournal()">Обновить</button></div></div>';
-  }catch(e){ el.innerHTML = '<div class="card"><p class="bad">'+esc(e.message)+'</p></div>'; }
+  }catch(e){ el.innerHTML = failCard(e.message, 'loadJournal()'); }
 }
 
 async function loadPackages(){

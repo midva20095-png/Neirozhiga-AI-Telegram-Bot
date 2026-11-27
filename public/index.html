@@ -505,7 +505,7 @@ a.course-tile{display:flex;flex-direction:column;justify-content:center;text-dec
       <a href="https://babayagaland.ru" data-out="https://babayagaland.ru">Сайт</a>
     </div>
   </div>
-  <div id="view"></div>
+  <div id="view"><div class="card"><p class="empty">Открываю кабинет…</p></div></div>
 </div>
 <div class="tabbar" id="tabs">
   <button data-t="menu" id="tabmenu"><span class="ic">⌂</span>Меню</button>
@@ -523,6 +523,8 @@ a.course-tile{display:flex;flex-direction:column;justify-content:center;text-dec
 <script>
 const KIND = {text:'Текст', image:'Картинка', video:'Видео', audio:'Музыка'};
 let tab='gen', me=null, cfg=null, templates=[], works=null, worksLoading=false, userId=null, token=null, busy=false, last=null, wantMenu=false, tplAnswers={}, tplPhotos={};
+let cfgReady=false, cfgFailed=false, templatesReady=false, templatesFailed=false, worksFailed=false;
+let cfgJob=null, templatesJob=null;
 let openTpl=null, photoData=null, pickedFormat=null, genPhoto=null, genPhotos=[], genVoice=null, genVoiceSeconds=0, draft='', pendingTpl='', pendingPkg='';
 let tplKind='', tplTopic='', tplQuery='';
 const TCAT = {image:'Картинки', fix:'Улучшение', chat:'Текст', video:'Видео', audio:'Голос'};
@@ -637,15 +639,60 @@ function fetchT(url, opts, ms){
   if (ctrl) next.signal = ctrl.signal;
   return fetch(url, next).finally(function(){ if (timer) clearTimeout(timer); });
 }
+function netError(error){
+  const name = error && error.name;
+  if (name === 'AbortError') return 'Связь оборвалась. Нажмите «Повторить».';
+  return (error && error.message) || 'Сервер не ответил. Нажмите «Повторить».';
+}
 function retryOpen(){
   window.__vkOffline = false;
   load();
 }
 async function loadConfig(){
-  try { cfg = await (await fetchT('/api/config'+(isVk()?'?audience=vk':''))).json(); }
-  catch(e){ cfg = {models:[],packages:[],groups:{}}; }
-  const s = document.getElementById('site');
-  if (cfg.site_url){ s.href = cfg.site_url; s.style.display=''; } else s.style.display='none';
+  if (cfgJob) return cfgJob;
+  cfgJob = (async function(){
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const next = await (await fetchT('/api/config'+((isVk()||inVkApp())?'?audience=vk':''), {}, 18000)).json();
+        if (next && typeof next === 'object' && Array.isArray(next.models)) {
+          cfg = next;
+          cfgReady = true;
+          cfgFailed = false;
+          return;
+        }
+      } catch (e) {}
+    }
+    if (!cfgReady) {
+      cfg = cfg || { models: [], packages: [], groups: {} };
+      cfgFailed = true;
+    }
+    const s = document.getElementById('site');
+    if (s) {
+      if (cfg && cfg.site_url) { s.href = cfg.site_url; s.style.display = ''; }
+      else s.style.display = 'none';
+    }
+  })();
+  cfgJob.then(function(){ cfgJob = null; }, function(){ cfgJob = null; });
+  return cfgJob;
+}
+async function loadTemplates(){
+  if (templatesJob) return templatesJob;
+  templatesJob = (async function(){
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const data = await (await fetchT('/api/templates'+(inVkApp()?'?audience=vk':''), {}, 20000)).json();
+        if (data && Array.isArray(data.templates)) {
+          templates = data.templates;
+          templatesReady = true;
+          templatesFailed = false;
+          return;
+        }
+      } catch (e) {}
+    }
+    if (!templatesReady) templatesFailed = true;
+  })();
+  templatesJob.then(function(){ templatesJob = null; }, function(){ templatesJob = null; });
+  return templatesJob;
 }
 function launchFields(extra){
   const bag = {};
@@ -678,7 +725,7 @@ async function adoptVkLaunch(extra){
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(bag)
-    });
+    }, 15000);
     const d = await r.json();
     if (d && d.tk) {
       token = d.tk;
@@ -763,21 +810,27 @@ async function load(){
   paintVkBot();
   if (!userId && window.__vkGoal === 'rate') {
     tab = 'rate';
-    await loadConfig();
     draw();
     return;
   }
   const sharedTpl = pendingTpl || (typeof hashTpl === 'function' ? (hashTpl(location.href) || hashTpl(window.__nyTpl || '')) : '');
   if (sharedTpl) pendingTpl = pendingTpl || sharedTpl;
   if (!userId && pendingTpl) {
-    try { templates = ((await (await fetchT('/api/templates?audience=vk')).json()).templates) || []; } catch (e) { templates = templates || []; }
+    draw();
+    await loadTemplates();
+    if (!live()) return;
     openSharedTpl(pendingTpl, false);
     draw();
     return;
   }
   if (!userId) { draw(); return; }
   try {
-    const r = await fetchT('/api/me', {headers: authHeaders()});
+    let r;
+    try { r = await fetchT('/api/me', {headers: authHeaders()}, 18000); }
+    catch (first) {
+      if (!live()) return;
+      r = await fetchT('/api/me', {headers: authHeaders()}, 18000);
+    }
     if (!live()) return;
     if (r.status === 401) { me = null; draw(); return; }
     if (r.status === 503) {
@@ -799,17 +852,19 @@ async function load(){
     window.__vkOffline = true;
   }
   if (!live()) return;
-  await loadConfig();
-  try { templates = ((await (await fetchT('/api/templates'+(inVkApp()?'?audience=vk':''))).json()).templates)||[]; } catch(e){ templates=[]; }
-  openSharedTpl(pendingTpl, false);
-  if (pendingPkg) tab = 'top';
-  document.getElementById('bal').textContent = (me.balance||0)+' кр';
+  const bal = document.getElementById('bal');
+  if (bal) bal.textContent = (me.balance||0)+' кр';
   markVkChrome();
   if (!isVk() && (tab==='rate' || tab==='shop' || tab==='menu' || tab==='cab' || tab==='assist')) tab = 'gen';
   if (isVk() && tab === 'menu' && !window.__vkGoal) tab = 'gen';
   if (window.__vkGoal === 'rate') tab = 'rate';
   if (window.__vkGoal === 'shop') tab = 'shop';
   if (window.__vkGoal === 'help') tab = 'help';
+  if (pendingPkg) tab = 'top';
+  draw();
+  await Promise.all([loadConfig(), loadTemplates()]);
+  if (!live()) return;
+  openSharedTpl(pendingTpl, false);
   draw();
   if (window.__vkGoal === 'site') openOut((cfg && cfg.site_url) || 'https://babayagaland.ru');
   if (window.__vkGoal === 'sub' && me && me.user_id && !me.mail) subscribeMail(true);
@@ -2270,12 +2325,12 @@ async function loadAssist(){
   if (!box) return;
   let data = {};
   try {
-    const response = await fetch('/api/vk/assistant', { headers: authHeaders() });
+    const response = await fetchT('/api/vk/assistant', { headers: authHeaders() }, 18000);
     data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Раздел не открылся');
   } catch (error) {
     assistPane = 'home';
-    box.innerHTML = '<div class="card"><button type="button" class="back" id="assistBack">В кабинет</button><p class="err">'+esc(error.message || 'Раздел не открылся')+'</p></div>';
+    box.innerHTML = '<div class="card"><button type="button" class="back" id="assistBack">В кабинет</button><p class="err">'+esc(netError(error))+'</p><button class="btn" type="button" onclick="loadAssist()">Повторить</button></div>';
     bind();
     return;
   }
@@ -4052,6 +4107,9 @@ function modelPicker(cur){
   return html+'</select>';
 }
 function viewGen(){
+  if (!cfgReady) {
+    return '<div class="card"><div class="kicker">Чат</div><p class="empty">'+(cfgFailed?'Чат не загрузился.':'Открываю чат…')+'</p>'+(cfgFailed?'<button class="btn" type="button" id="retryCfg">Повторить</button>':'')+'</div>';
+  }
   const cur = (me&&me.current_model)||(cfg&&cfg.default_model)||'flash';
   const m = modelOf(cur);
   syncPicks(m);
@@ -4089,6 +4147,9 @@ function viewGen(){
     photo+go+note+res+'</div>';
 }
 function viewModels(){
+  if (!cfgReady) {
+    return '<div class="card"><div class="empty">'+(cfgFailed?'Модели не загрузились.':'Открываю модели…')+'</div>'+(cfgFailed?'<button class="btn" type="button" id="retryCfg">Повторить</button>':'')+'</div>';
+  }
   const cur = (me&&me.current_model)||'flash';
   const groups = (cfg&&cfg.groups)||{};
   const order = Object.keys(groups);
@@ -4101,7 +4162,7 @@ function viewModels(){
         '<div><div class="name">'+(m.key===cur?'✅ ':'')+esc(m.name)+'</div><div class="meta">'+esc((KIND[m.kind]?KIND[m.kind]+' · ':'')+(m.desc||''))+(m.limit!=null?(' · лимит '+m.limit+'/день'):(m.limit===null?' · без лимита':''))+'</div></div>'+
         '<div class="cost'+(m.free?' free':'')+'">'+costLabel(m)+'</div></button>').join('')+'</div>';
   }
-  return html || '<div class="card"><div class="empty">Модели недоступны</div></div>';
+  return html || '<div class="card"><div class="empty">Модели недоступны</div><button class="btn" type="button" id="retryCfg">Повторить</button></div>';
 }
 function tplTopics(t){
   return Array.isArray(t && t.cats) ? t.cats : [];
@@ -4116,9 +4177,17 @@ function tplShareLink(t){
   return (t && t.link) || '';
 }
 function viewTpl(){
-  if (openTpl) return viewTplRun();
-  if (pendingTpl && !(templates && templates.length)) return '<div class="card"><div class="empty">Открываю шаблон…</div></div>';
-  if (pendingTpl) return '<div class="card"><div class="empty">Шаблон не найден</div></div>';
+  if (openTpl && templates.some(function(item){ return String(item.id)===String(openTpl); })) return viewTplRun();
+  if ((openTpl || pendingTpl) && !templates.length) {
+    return '<div class="card"><div class="empty">'+(templatesFailed?'Шаблон не загрузился.':'Открываю шаблон…')+'</div>'+(templatesFailed?'<button class="btn" type="button" id="retryTpl">Повторить</button>':'')+'</div>';
+  }
+  if (openTpl && templatesReady && !templates.some(function(item){ return String(item.id)===String(openTpl); })) {
+    return '<div class="card"><div class="empty">Шаблон не найден</div></div>';
+  }
+  if (pendingTpl && templates.length) return '<div class="card"><div class="empty">Шаблон не найден</div></div>';
+  if (!templatesReady && !templates.length) {
+    return '<div class="card"><div class="empty">'+(templatesFailed?'Шаблоны не загрузились.':'Открываю шаблоны…')+'</div>'+(templatesFailed?'<button class="btn" type="button" id="retryTpl">Повторить</button>':'')+'</div>';
+  }
   const q = tplQuery.trim().toLowerCase();
   const have = {};
   templates.forEach(t=>{ have[t.category||'image'] = 1; });
@@ -4189,17 +4258,20 @@ function viewTplRun(){
     create+
     pinned+res+'</div>';
 }
-function ensureWorks(){
-  if (works || worksLoading) return;
+function ensureWorks(force){
+  if (worksLoading) return;
+  if (works && !force && !worksFailed) return;
   worksLoading = true;
-  fetch('/api/works', {headers: authHeaders()})
-    .then(function(r){ return r.json(); })
-    .then(function(d){ works = (d && d.works) || []; })
-    .catch(function(){ works = []; })
+  worksFailed = false;
+  fetchT('/api/works', {headers: authHeaders()}, 18000)
+    .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+    .then(function(d){ works = (d && d.works) || []; worksFailed = false; })
+    .catch(function(){ if (!works) works = []; worksFailed = true; })
     .finally(function(){ worksLoading = false; if (tab==='hist') draw(); });
 }
 function viewWorks(){
   ensureWorks();
+  if (worksFailed && (!works || !works.length)) return '<div class="card"><div class="empty">Картинки не загрузились.</div><button class="btn" type="button" onclick="ensureWorks(true)">Повторить</button></div>';
   if (!works) return '<div class="card"><div class="empty">Загружаю картинки…</div></div>';
   if (!works.length) return '<div class="card"><div class="empty">Картинок пока нет. Новые появятся здесь после генерации в кабинете или в чате бота.</div></div>';
   return '<div class="groupttl">Мои работы</div><div class="gallery">'+works.map(function(w){
@@ -4235,6 +4307,9 @@ function shortOf(cost){
 function viewTop(){
   const packs = (cfg&&cfg.packages)||[];
   const site = (cfg&&cfg.site_url) || 'сайт';
+  const waitPacks = (!packs.length && !cfgReady)
+    ? '<div class="card"><div class="empty">'+(cfgFailed?'Пакеты не загрузились.':'Открываю пакеты…')+'</div>'+(cfgFailed?'<button class="btn" id="retryCfg" type="button">Повторить</button>':'')+'</div>'
+    : '';
   const paid = window.__vkPaid ? '<div class="card"><p class="hint">Оплата принята банком. Кредиты появятся на этом балансе в течение минуты.</p></div>' : '';
   const head = paid+'<div class="card"><div class="now">Текущий баланс</div><div id="topbal" style="font-size:28px;font-weight:800">'+((me&&me.balance)||0)+' кр</div></div>';
   if (isVk()) {
@@ -4244,7 +4319,7 @@ function viewTop(){
     const packBlock = packs.length
       ? '<div class="groupttl">Пакеты</div><div class="card">'+mail+packs.map(p=>'<div class="pack"><div><div class="name">'+esc(p.title)+'</div><div class="meta">'+p.credits+' кредитов</div></div><button data-pkg="'+esc(p.id)+'">'+p.price+' ₽</button></div>').join('')+'<p class="hint">Откроется страница банка. Кредиты придут в чат этого сообщества.</p></div>'
       : '';
-    return head+packBlock+
+    return head+waitPacks+packBlock+
       '<div class="card"><button class="btn ghost" id="vktop" type="button">Пополнить в чате</button><p id="vktopmsg" class="hint">Если удобнее в переписке: откроется чат, там пакет, почта и кнопка «Оплатить».</p></div>'+
       '<div class="card"><div class="now">Перенос</div>'+
       '<p class="hint">Баланс ВК и Telegram разные. Ваш номер ВК: <b>'+esc(mine)+'</b>. Его вписывают в Telegram: «Перенос» → «Во ВК».</p>'+
@@ -4263,7 +4338,7 @@ function viewTop(){
     '<input id="ppass" type="password" autocomplete="current-password" placeholder="пароль на сайте">'+
     '<input id="pamt" type="number" min="1" inputmode="numeric" placeholder="сколько кредитов">'+
     '<button class="btn" id="pull">Перенести в бот</button><p id="pmsg" class="hint"></p></div>';
-  if (!packs.length) return head+move+back+'<div class="card"><div class="empty">Пакеты недоступны. Пополнение — в чате бота кнопкой «Пополнить».</div></div>';
+  if (!packs.length) return head+move+back+(waitPacks || '<div class="card"><div class="empty">Пакеты недоступны. Пополнение — в чате бота кнопкой «Пополнить».</div></div>');
   return head+move+back+'<div class="groupttl">Пакеты</div><div class="card">'+packs.map(p=>'<div class="pack"><div><div class="name">'+esc(p.title)+'</div><div class="meta">'+p.credits+' кредитов</div></div><button data-pkg="'+esc(p.id)+'">'+p.price+' ₽</button></div>').join('')+
     '</div><div class="hint">Оплата открывается в чате бота: мы отправим кнопку оплаты туда.</div>';
 }
@@ -4791,6 +4866,10 @@ function bind(){
   const pull = document.getElementById('pull'); if (pull) pull.onclick = sendPull;
   const vktop = document.getElementById('vktop'); if (vktop) vktop.onclick = openVkTopup;
   const vkmove = document.getElementById('vkmove'); if (vkmove) vkmove.onclick = sendVkMove;
+  const retryTpl = document.getElementById('retryTpl');
+  if (retryTpl) retryTpl.onclick = function(){ templatesFailed = false; loadTemplates().then(function(){ openSharedTpl(pendingTpl, false); draw(); }); };
+  const retryCfg = document.getElementById('retryCfg');
+  if (retryCfg) retryCfg.onclick = function(){ cfgFailed = false; loadConfig().then(function(){ draw(); }); };
   const currentTab = document.querySelector('.tabbar button.on');
   if (currentTab && currentTab.scrollIntoView) currentTab.scrollIntoView({ inline: 'center', block: 'nearest' });
   paintVkBot();
@@ -5365,7 +5444,7 @@ async function loadShop(){
   const box = document.getElementById('shopbox');
   if (!box) return;
   try {
-    const r = await fetch('/api/shop?group='+encodeURIComponent(vkGroupId()), { headers: authHeaders() });
+    const r = await fetchT('/api/shop?group='+encodeURIComponent(vkGroupId()), { headers: authHeaders() }, 18000);
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Не удалось открыть магазин');
     const live = document.getElementById('shopbox');
@@ -5373,7 +5452,7 @@ async function loadShop(){
     bindShop();
   } catch (e) {
     const live = document.getElementById('shopbox');
-    if (live) live.innerHTML = '<p class="err">'+esc(e.message)+'</p>';
+    if (live) live.innerHTML = '<div class="card"><p class="err">'+esc(netError(e))+'</p><button class="btn" type="button" onclick="loadShop()">Повторить</button></div>';
   }
 }
 async function buyPromo(packageId){
@@ -5420,24 +5499,27 @@ async function loadRating(){
   if (!box) return;
   try {
     const gid = vkGroupId();
-    const r = await fetch('/api/rating' + (gid ? '?group=' + encodeURIComponent(gid) : ''), { headers: authHeaders() });
+    const r = await fetchT('/api/rating' + (gid ? '?group=' + encodeURIComponent(gid) : ''), { headers: authHeaders() }, 18000);
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Не удалось открыть рейтинг');
     if (document.getElementById('ratebox')) document.getElementById('ratebox').innerHTML = renderRating(d);
     bindShop();
   } catch (e) {
     const live = document.getElementById('ratebox');
-    if (live) live.innerHTML = '<p class="err">'+esc(e.message)+'</p>';
+    if (live) live.innerHTML = '<div class="card"><p class="err">'+esc(netError(e))+'</p><button class="btn" type="button" onclick="loadRating()">Повторить</button></div>';
   }
 }
 document.getElementById('tabs').onclick = function(e){
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.t!=='tpl') { openTpl=null; photoData=null; }
-  tab = b.dataset.t; draw();
+  tab = b.dataset.t;
+  draw();
+  if (tab === 'tpl' && !templatesReady) loadTemplates().then(function(){ if (tab==='tpl') { openSharedTpl(pendingTpl, false); draw(); } });
+  if ((tab === 'gen' || tab === 'models' || tab === 'top') && !cfgReady) loadConfig().then(function(){ if (tab===b.dataset.t) draw(); });
 };
 const w = tg(); if (w){ try{ w.ready(); w.expand(); }catch(e){} }
 detectAuth();
-(async function boot(){ await loadConfig(); await load(); })();
+(async function boot(){ draw(); await load(); })();
 setTimeout(function(){
   if (userId || !window.__nyApi) return;
   adoptVkUser().then(function(){ if (userId) load(); else draw(); });
