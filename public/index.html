@@ -2414,9 +2414,9 @@ async function renderCourse(box) {
       '<button type="button" data-cpane="marks"'+(coursePane==='marks'?' class="on"':'')+'>Закладки</button>'+
     '</div>'+
     '<div id="courseLessonsPane"'+(coursePane==='lessons'?'':' hidden')+'>'+
-      '<p class="now">Откройте дверь: ВКонтакте, Яндекс Директ, Авито или фудфото. Внутри неё все её разделы и все уроки.</p>'+
+      '<p class="now" id="courseLead">Откройте дверь. Внутри неё разделы, в разделе только его уроки.</p>'+
       doorHtml+
-      clubBlock()+
+      '<div id="courseClub">'+clubBlock()+'</div>'+
       '<label class="flabel" for="courseFind">Найти в материалах</label>'+
       '<input id="courseFind" placeholder="Обложка, реклама, бот">'+
       '<div class="course-grid" id="courseShelves">'+chips+'</div>'+
@@ -2552,61 +2552,88 @@ let courseShelf = '';
 let courseSections = [];
 let courseShelves = [];
 function showCourseShelf(id) {
-  courseShelf = courseShelf === id ? '' : (id || '');
+  courseShelf = id || '';
   courseFilter = '';
   paintCourseBoard();
 }
 function showCourseSection(id) {
-  courseFilter = courseFilter === id ? '' : (id || '');
+  courseFilter = id || '';
+  paintCourseBoard();
+}
+function courseStepBack(where) {
+  if (where === 'doors') {
+    courseShelf = '';
+    courseFilter = '';
+  } else courseFilter = '';
   paintCourseBoard();
 }
 function filterCourse(){
   paintCourseBoard();
 }
+function courseLessonCard(item, place) {
+  const where = place ? '<small style="display:block;margin-top:4px;font-weight:600;color:#cbbbe8">'+esc(place)+'</small>' : '';
+  return '<details class="course-lesson" data-lesson="'+esc(item.section)+'" data-lesson-id="'+esc(item.id)+'"><summary>'+esc(item.title)+where+'</summary><div class="body">'+linkText(item.body)+lessonTools(item)+'</div></details>';
+}
 function paintCourseBoard() {
-  document.querySelectorAll('[data-shelf]').forEach(function(button){
-    button.classList.toggle('on', button.getAttribute('data-shelf') === courseShelf);
-  });
+  const shelfBox = document.getElementById('courseShelves');
   const sectionBox = document.getElementById('courseSections');
   const lessonBox = document.getElementById('courseLessons');
+  const lead = document.getElementById('courseLead');
+  const club = document.getElementById('courseClub');
   if (!sectionBox || !lessonBox) return;
   const query = ((document.getElementById('courseFind') || {}).value || '').trim().toLowerCase();
+  const shelf = courseShelves.find(function(item){ return item.id === courseShelf; });
+  const section = courseSections.find(function(item){ return item.id === courseFilter; });
+  const inside = !!(query || courseShelf);
+  if (shelfBox) shelfBox.hidden = inside;
+  if (lead) lead.hidden = inside;
+  if (club) club.hidden = inside;
+  if (query) {
+    const found = courseLessons.filter(function(item){
+      return (item.title + '\n' + item.body).toLowerCase().indexOf(query) >= 0;
+    });
+    sectionBox.innerHTML = '<p class="hint">Найдено: '+found.length+'.</p>';
+    lessonBox.innerHTML = found.map(function(item){
+      const room = courseSections.find(function(row){ return row.id === item.section; });
+      const place = room ? ((room.shelfTitle ? room.shelfTitle + ' · ' : '') + room.title) : '';
+      return courseLessonCard(item, place);
+    }).join('') || '<p class="hint">В материалах такого нет.</p>';
+    bindCourseBits();
+    return;
+  }
+  if (!courseShelf) {
+    sectionBox.innerHTML = '';
+    lessonBox.innerHTML = '';
+    return;
+  }
   const shelfSections = courseSections.filter(function(item){
-    return courseShelf && (item.shelf === courseShelf || (!item.shelf && item.id === courseShelf));
+    return item.shelf === courseShelf || (!item.shelf && item.id === courseShelf);
   });
-  sectionBox.innerHTML = shelfSections.map(function(item){
-    return '<button type="button" class="course-tile'+(courseFilter===item.id?' on':'')+'" data-course="'+esc(item.id)+'">'+esc(item.title)+'</button>';
-  }).join('');
-  const visible = courseLessons.filter(function(item){
-    const section = courseSections.find(function(row){ return row.id === item.section; });
-    const shelfId = section && section.shelf ? section.shelf : '';
-    if (query) return (item.title + '\n' + item.body).toLowerCase().indexOf(query) >= 0;
-    if (!courseShelf) return false;
-    if (shelfId !== courseShelf) return false;
-    if (courseFilter && item.section !== courseFilter) return false;
-    return true;
-  });
-  const groups = [];
-  visible.forEach(function(item){
-    let group = groups.find(function(row){ return row.id === item.section; });
-    if (!group) {
-      const section = courseSections.find(function(row){ return row.id === item.section; });
-      group = { id: item.section, title: section ? section.title : '', items: [] };
-      groups.push(group);
-    }
-    group.items.push(item);
-  });
-  lessonBox.innerHTML = groups.map(function(group){
-    const head = !query && courseShelf && !courseFilter && group.title ? '<div class="kicker" style="margin-top:14px">'+esc(group.title)+'</div>' : '';
-    const cards = group.items.map(function(item){
-      return '<details class="course-lesson" data-lesson="'+esc(item.section)+'" data-lesson-id="'+esc(item.id)+'"><summary>'+esc(item.title)+'</summary><div class="body">'+linkText(item.body)+lessonTools(item)+'</div></details>';
-    }).join('');
-    return head + cards;
-  }).join('');
+  if (!courseFilter || !section) {
+    sectionBox.innerHTML = '<button type="button" class="back" data-course-back="doors">К дверям</button>'+
+      '<div class="kicker" style="margin-top:8px">'+esc(shelf ? shelf.title : 'Разделы')+'</div>'+
+      '<div class="course-grid">'+shelfSections.map(function(item){
+        return '<button type="button" class="course-tile" data-course="'+esc(item.id)+'">'+esc(item.title)+'</button>';
+      }).join('')+'</div>';
+    lessonBox.innerHTML = '<p class="hint">Откройте раздел. Уроки этого раздела будут здесь, без остальных разделов.</p>';
+    bindCourseBits();
+    sectionBox.querySelectorAll('[data-course]').forEach(function(button){
+      button.onclick = function(){ showCourseSection(button.getAttribute('data-course') || ''); };
+    });
+    const back = sectionBox.querySelector('[data-course-back]');
+    if (back) back.onclick = function(){ courseStepBack('doors'); };
+    return;
+  }
+  const lessons = courseLessons.filter(function(item){ return item.section === section.id; });
+  sectionBox.innerHTML = '<button type="button" class="back" data-course-back="sections">К разделам</button>'+
+    '<div class="kicker" style="margin-top:8px">'+esc((shelf && shelf.title ? shelf.title + ' · ' : '') + section.title)+'</div>'+
+    '<p class="hint">Уроков: '+lessons.length+'.</p>';
+  lessonBox.innerHTML = lessons.map(function(item){ return courseLessonCard(item, ''); }).join('') ||
+    '<p class="hint">В этом разделе уроков пока нет.</p>';
   bindCourseBits();
-  document.querySelectorAll('[data-course]').forEach(function(button){
-    button.onclick = function(){ showCourseSection(button.getAttribute('data-course') || ''); };
-  });
+  const back = sectionBox.querySelector('[data-course-back]');
+  if (back) back.onclick = function(){ courseStepBack('sections'); };
+  sectionBox.scrollIntoView({ block: 'nearest' });
 }
 async function askCourse(preset, lessonId) {
   const field = document.getElementById('courseText');
