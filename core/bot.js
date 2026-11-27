@@ -14,6 +14,7 @@ const bridge = require('./bridge');
 const maintenance = require('./maintenance');
 const promo = require('./promo');
 const pay = require('./pay');
+const videoWait = require('./video-wait');
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 16 * 60 * 1000 });
 vk.setTelegramNotify((id, text) => bot.telegram.sendMessage(id, text));
@@ -1043,7 +1044,22 @@ async function startBot(app) {
         const notes = [];
         if (aspectRatio) notes.push(`📐 ${aspectRatio}`);
         if (job.duration) notes.push(`⏱ ${job.duration} сек`);
-        const waitMessage = await ctx.reply('⏳ *Генерирую ответ...*', { parse_mode: 'Markdown' });
+        const video = videoWait.isVideo(prepared.model);
+        const waitMessage = await ctx.reply(video ? videoWait.line(0) : '⏳ *Генерирую ответ...*', video ? {} : { parse_mode: 'Markdown' });
+        let videoTimer = null;
+        let videoLive = false;
+        if (video) {
+            const started = Date.now();
+            let shown = videoWait.line(0);
+            videoLive = true;
+            videoTimer = setInterval(() => {
+                if (!videoLive) return;
+                const next = videoWait.line(Date.now() - started);
+                if (next === shown) return;
+                shown = next;
+                ctx.telegram.editMessageText(ctx.chat.id, waitMessage.message_id, undefined, next).catch(() => {});
+            }, 8000);
+        }
         try {
             const result = await gen.run({
                 userId,
@@ -1059,9 +1075,15 @@ async function startBot(app) {
                 audioMime: job.audioMime,
                 audioSeconds: job.audioSeconds
             });
+            videoLive = false;
+            if (videoTimer) clearInterval(videoTimer);
+            videoTimer = null;
             try { await ctx.deleteMessage(waitMessage.message_id); } catch (e) {}
             await sendResult(ctx, result, notes.length ? notes.join(' | ') + ' | ' : '');
         } catch (error) {
+            videoLive = false;
+            if (videoTimer) clearInterval(videoTimer);
+            videoTimer = null;
             const { QUIET_ERROR } = gen;
             const shown = gen.userMessage(error);
             if (shown === QUIET_ERROR) db.note('gen', `${job.modelKey}: ${error.message || 'ошибка'}`).catch(() => {});
