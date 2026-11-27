@@ -1143,11 +1143,13 @@ function courseSectionRemove(body) {
     return courseCall('/course/section/remove', body || {}, 20000);
 }
 
-function courseAsk(text, history, userId) {
+function courseAsk(text, history, userId, lessonId) {
     const prior = Array.isArray(history) ? history.slice(-8) : [];
     const body = { text, history: prior };
     const id = Number(userId);
     if (Number.isInteger(id) && id > 0) body.userId = id;
+    const lesson = typeof lessonId === 'string' ? lessonId.trim().slice(0, 80) : '';
+    if (lesson) body.lessonId = lesson;
     return courseCall('/course/ask', body, 65000);
 }
 

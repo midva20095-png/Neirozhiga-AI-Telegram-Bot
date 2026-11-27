@@ -2487,7 +2487,7 @@ function paintMarks(){
 }
 function lessonTools(item){
   return '<div class="lesson-tools">'+
-    '<button type="button" data-ask-lesson="'+esc(item.title)+'">Спросить в чате</button>'+
+    '<button type="button" data-ask-lesson="'+esc(item.id)+'">Спросить в чате</button>'+
     '<button type="button" data-keep-lesson="'+esc(item.id)+'">В закладки</button>'+
     '</div>';
 }
@@ -2512,12 +2512,10 @@ function bindCourseBits(){
   });
   document.querySelectorAll('[data-ask-lesson]').forEach(function(button){
     button.onclick = function(){
+      const lesson = courseLessons.find(function(item){ return item.id === button.getAttribute('data-ask-lesson'); });
+      if (!lesson) return;
       showCoursePane('chat');
-      const field = document.getElementById('courseText');
-      if (field) {
-        field.value = 'Разбери урок «'+button.getAttribute('data-ask-lesson')+'» на моём проекте';
-        field.focus();
-      }
+      askCourse('Разбери урок «'+lesson.title+'»', lesson.id);
     };
   });
   document.querySelectorAll('[data-drop-mark]').forEach(function(button){
@@ -2610,12 +2608,12 @@ function paintCourseBoard() {
     button.onclick = function(){ showCourseSection(button.getAttribute('data-course') || ''); };
   });
 }
-async function askCourse() {
+async function askCourse(preset, lessonId) {
   const field = document.getElementById('courseText');
   const button = document.getElementById('courseSend');
-  const text = field ? field.value.trim() : '';
+  const text = (typeof preset === 'string' ? preset : (field ? field.value : '')).trim();
   if (!text) return;
-  if (field) field.value = '';
+  if (typeof preset !== 'string' && field) field.value = '';
   courseThread.push({ role: 'user', body: text });
   paintThread();
   if (button) button.disabled = true;
@@ -2623,7 +2621,7 @@ async function askCourse() {
     const response = await fetch('/api/vk/course/ask', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ text: text })
+      body: JSON.stringify({ text: text, lessonId: lessonId || '' })
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Ответ не собрался');

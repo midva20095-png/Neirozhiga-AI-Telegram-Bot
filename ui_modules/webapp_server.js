@@ -427,6 +427,7 @@ function startWebApp() {
             const account = await courseDonor(req, res);
             if (!account) return;
             await db.clearCourseChat(account);
+            await db.setSetting(`course_focus:${account}`, { id: '' });
             res.json({ ok: true, messages: [] });
         } catch (e) {
             res.status(500).json({ error: 'Диалог не очистился.' });
@@ -464,11 +465,19 @@ function startWebApp() {
             if (!account) return;
             const text = req.body && typeof req.body.text === 'string' ? req.body.text.trim() : '';
             if (!text) return res.status(400).json({ error: 'Напишите вопрос.' });
-            const prior = (await db.listCourseChat(account)).slice(-6).map(item => ({
+            const focusKey = `course_focus:${account}`;
+            let lessonId = req.body && typeof req.body.lessonId === 'string' ? req.body.lessonId.trim().slice(0, 80) : '';
+            if (lessonId) await db.setSetting(focusKey, { id: lessonId });
+            else {
+                const saved = await db.getSettings([focusKey]);
+                const focus = saved[focusKey];
+                lessonId = focus && typeof focus.id === 'string' ? focus.id.trim().slice(0, 80) : '';
+            }
+            const prior = (await db.listCourseChat(account)).slice(-8).map(item => ({
                 role: item.role === 'user' ? 'user' : 'assistant',
                 text: item.body
             }));
-            const course = await assistant.courseAsk(text.slice(0, 500), prior, assistant.vkId(account));
+            const course = await assistant.courseAsk(text.slice(0, 500), prior, assistant.vkId(account), lessonId);
             if (!course.ok) return res.status(502).json({ error: course.error || 'Ответ не собрался.' });
             await db.addCourseChat(account, 'user', text.slice(0, 500));
             await db.addCourseChat(account, 'ai', course.answer || '');
