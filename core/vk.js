@@ -16,6 +16,7 @@ const donut = require('./vk-donut');
 const lesson = require('./vk-lesson');
 const share = require('./share');
 const maintenance = require('./maintenance');
+const videoWait = require('./video-wait');
 let gigaPlugin = null;
 try { gigaPlugin = require('../ai_plugins/gigachat_plugin'); } catch (e) {}
 
@@ -550,12 +551,12 @@ async function restoreDialog(account) {
 async function sendPlain(token, params) {
     const plain = { ...params, random_id: String(Math.floor(Math.random() * 2e9)) };
     delete plain.keyboard;
-    await call(token, 'messages.send', plain);
+    return call(token, 'messages.send', plain);
 }
 
 async function sendMessage(token, params) {
     try {
-        await call(token, 'messages.send', params);
+        return await call(token, 'messages.send', params);
     } catch (error) {
         const code = Number(error && error.code);
         if (params.keyboard && (code === 912 || code === 911)) {
@@ -563,27 +564,25 @@ async function sendMessage(token, params) {
             const next = spareKeyboard(params.keyboard);
             if (next) {
                 try {
-                    await call(token, 'messages.send', {
+                    return await call(token, 'messages.send', {
                         ...params,
                         random_id: String(Math.floor(Math.random() * 2e9)),
                         keyboard: next
                     });
-                    return;
                 } catch (again) {
                     const againCode = Number(again && again.code);
                     if (againCode !== 912 && againCode !== 911 && !params.attachment) throw again;
                 }
             }
-            await sendPlain(token, params);
-            return;
+            return sendPlain(token, params);
         }
         if (!params.attachment) throw error;
-        await sendPlain(token, params);
+        return sendPlain(token, params);
     }
 }
 
 async function sendText(token, peerId, message, keyboard) {
-    await sendMessage(token, {
+    return sendMessage(token, {
         peer_id: String(peerId),
         random_id: String(Math.floor(Math.random() * 2e9)),
         message: String(message || '').slice(0, 3500),
@@ -1531,6 +1530,39 @@ async function completePhotos(token, incoming) {
     return urls.slice(0, 6);
 }
 
+function watchVideo(token, peerId, messageId, keyboard) {
+    const id = Number(messageId);
+    if (!id) return () => {};
+    const started = Date.now();
+    let shown = videoWait.line(0);
+    let cmid = 0;
+    let stopped = false;
+    const timer = setInterval(async () => {
+        if (stopped) return;
+        const next = videoWait.line(Date.now() - started);
+        if (next === shown) return;
+        shown = next;
+        try {
+            if (!cmid) {
+                const found = await call(token, 'messages.getById', { message_ids: String(id) });
+                const item = found && Array.isArray(found.items) ? found.items[0] : null;
+                cmid = Number(item && (item.conversation_message_id || item.cmid)) || 0;
+            }
+            if (!cmid || stopped) return;
+            await call(token, 'messages.edit', {
+                peer_id: String(peerId),
+                cmid: String(cmid),
+                message: next,
+                keyboard
+            });
+        } catch (error) {}
+    }, 8000);
+    return () => {
+        stopped = true;
+        clearInterval(timer);
+    };
+}
+
 async function runJob(token, peerId, account, job) {
     const key = String(account);
     if (runningJob.has(key) || gen.isBusy(account)) {
@@ -1538,6 +1570,7 @@ async function runJob(token, peerId, account, job) {
         return;
     }
     runningJob.add(key);
+    let stopVideo = () => {};
     try {
         const picked = catalog.getModel(job.modelKey, { audience: 'vk' });
         const photos = picked && picked.image === 'forbidden' ? [] : (Array.isArray(job.photos) ? job.photos.filter(Boolean) : []);
@@ -1551,12 +1584,14 @@ async function runJob(token, peerId, account, job) {
             duration: job.duration || null,
             audioSeconds: job.audioSeconds || 0
         });
-        const waiting = prepared.model.kind === 'video'
-            ? 'Собираю видео. Обычно это несколько минут, готовый ролик придёт в этот чат.'
+        const video = videoWait.isVideo(prepared.model);
+        const waiting = video
+            ? videoWait.line(0)
             : prepared.model.kind === 'audio'
                 ? 'Собираю аудио. Готовый файл придёт в этот чат.'
                 : 'Делаю ответ…';
-        await sendText(token, peerId, waiting, payLockKeyboard());
+        const messageId = await sendText(token, peerId, waiting, payLockKeyboard());
+        if (video) stopVideo = watchVideo(token, peerId, messageId, payLockKeyboard());
         const result = await gen.run({
             userId: account,
             prompt: job.prompt,
@@ -1609,6 +1644,7 @@ async function runJob(token, peerId, account, job) {
         }
         await sendText(token, peerId, gen.userMessage(error), payLockKeyboard());
     } finally {
+        stopVideo();
         runningJob.delete(key);
     }
 }

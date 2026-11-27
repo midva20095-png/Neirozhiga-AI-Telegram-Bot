@@ -5223,6 +5223,38 @@ async function onTplFieldPhoto(input){
   rememberTplAnswers();
   draw();
 }
+function videoWaitLine(elapsed) {
+  if (elapsed < 20000) return 'В очереди.';
+  if (elapsed < 90000) return 'Собираю ролик. Это занимает несколько минут.';
+  return 'Почти готово.';
+}
+let videoWaitTimer = null;
+let videoWaitGen = 0;
+function stopVideoWait() {
+  videoWaitGen += 1;
+  if (videoWaitTimer) clearInterval(videoWaitTimer);
+  videoWaitTimer = null;
+}
+function beginVideoWait(apply) {
+  stopVideoWait();
+  const gen = videoWaitGen;
+  const started = Date.now();
+  let shown = '';
+  function tick() {
+    if (gen !== videoWaitGen) return;
+    const next = videoWaitLine(Date.now() - started);
+    if (next === shown) return;
+    shown = next;
+    apply(next);
+  }
+  tick();
+  videoWaitTimer = setInterval(tick, 8000);
+}
+function paintVideoWait(text, keep) {
+  last = Object.assign({}, keep || {}, { text: text });
+  const node = document.querySelector('.result p');
+  if (node) node.textContent = text;
+}
 async function generateTemplate(){
   if (busy) return;
   const t = templates.find(x=>String(x.id)===String(openTpl));
@@ -5246,17 +5278,20 @@ async function generateTemplate(){
     if (!photos.length) { last = {error:'Прикрепите фото'}; draw(); return; }
   }
   busy = true;
-  last = { text: (t.category==='video'?'Видео готовится, это занимает несколько минут':'Создаю')+(pickedFormat?' · размер '+pickedFormat:'')+'…' };
+  const video = t.category === 'video' || (modelOf(t.model) && modelOf(t.model).kind === 'video');
+  if (video) beginVideoWait(function(text){ paintVideoWait(text); });
+  else last = { text: 'Создаю'+(pickedFormat?' · размер '+pickedFormat:'')+'…' };
   draw();
   try {
     const r = await fetch('/api/generate',{method:'POST',headers:authHeaders(),body:JSON.stringify({templateId:t.id, image:photoData, photos:photos, answers:tplAnswers, format:pickedFormat, group: vkGroupId()})});
     const d = await r.json();
+    stopVideoWait();
     if (!r.ok || d.error) throw new Error(d.error||'Ошибка');
     last = d;
     works = null;
     if (me) me.balance = d.balance;
     document.getElementById('bal').textContent = d.balance+' кр';
-  } catch(e){ last = {error:e.message}; }
+  } catch(e){ stopVideoWait(); last = {error:e.message}; }
   busy = false; draw();
 }
 function payHost(url){
@@ -5304,7 +5339,10 @@ async function generate(){
   if (m && m.image === 'required' && !genPhotos.length) { last = {_prompt:prompt, error:'Прикрепите фото'}; draw(); return; }
   if (!prompt && !genPhotos.length) return;
   if (m && m.image === 'forbidden' && !prompt) return;
-  busy = true; draft = prompt; last = {_prompt:prompt}; draw();
+  busy = true; draft = prompt;
+  if (m && m.kind === 'video') beginVideoWait(function(text){ paintVideoWait(text, {_prompt:prompt}); });
+  else last = {_prompt:prompt};
+  draw();
   try {
     const r = await fetch('/api/generate',{method:'POST',headers:authHeaders(),body:JSON.stringify({
       prompt, model: me&&me.current_model,
@@ -5316,12 +5354,13 @@ async function generate(){
       group: vkGroupId()
     })});
     const d = await r.json();
+    stopVideoWait();
     if (!r.ok || d.error) throw new Error(d.error||'Ошибка');
     last = Object.assign({_prompt:prompt}, d);
     works = null;
     if (me) me.balance = d.balance;
     document.getElementById('bal').textContent = d.balance+' кр';
-  } catch(e){ last = {_prompt:prompt, error:e.message}; }
+  } catch(e){ stopVideoWait(); last = {_prompt:prompt, error:e.message}; }
   busy = false; draw();
 }
 async function sendTransfer(){
