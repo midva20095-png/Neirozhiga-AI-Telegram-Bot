@@ -466,7 +466,7 @@ function placeScan(found, state) {
     const title = String(item.title || '').replace(/\s+/g, ' ').trim();
     const text = String(item.text || '').replace(/\s+/g, ' ').trim();
     const link = https(item.link);
-    if (kind === 'article' || kind === 'link') return;
+    if (kind === 'article' || kind === 'link' || kind === 'note') return;
     if (kind === 'address') {
       const line = title || text;
       if (line) addresses.push(line);

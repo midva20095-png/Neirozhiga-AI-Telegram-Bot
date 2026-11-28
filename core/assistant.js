@@ -749,10 +749,11 @@ async function scanShop(account, input, fetchImpl) {
     const row = rows[0];
     if (!row) throw publicError('Сначала подключите сообщество.');
     if (row.reply && row.reply.home === true) throw publicError('Это сообщество кафедры.');
+    const asked = ['wall', 'albums', 'docs', 'video', 'stories', 'places', 'topics', 'market'].includes(input && input.phase) ? input.phase : 'card';
     const pushed = await postAssistant('/community/scan', {
         userId: ownerId,
         groupId: Number(row.group_id),
-        phase: input && input.phase === 'wall' ? 'wall' : 'card',
+        phase: asked,
         offset: Number(input && input.offset) || 0
     }, fetchImpl, undefined, 20000);
     if (!pushed.ok) throw publicError(pushed.error || 'Сканирование остановилось.');
@@ -761,7 +762,7 @@ async function scanShop(account, input, fetchImpl) {
         reading: typeof pushed.reading === 'string' ? pushed.reading : 'Смотрю сообщество',
         readings: Array.isArray(pushed.readings) ? pushed.readings.filter(item => typeof item === 'string').slice(0, 12) : [],
         items: Array.isArray(pushed.items) ? pushed.items.slice(0, 40) : [],
-        phase: pushed.phase === 'wall' ? 'wall' : '',
+        phase: ['wall', 'albums', 'docs', 'video', 'stories', 'places', 'topics', 'market'].includes(pushed.phase) ? pushed.phase : '',
         offset: Number(pushed.offset) || 0,
         setup: pushed.setup && typeof pushed.setup === 'object' ? {
             kind: pushed.setup.kind || '',

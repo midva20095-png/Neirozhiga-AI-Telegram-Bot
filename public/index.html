@@ -4092,6 +4092,7 @@ async function dropAssist(){
 }
 let mineGoods = [];
 let mineFound = [];
+let mineSetup = null;
 let mineView = 'home';
 let minePage = 0;
 let mineEdit = -1;
@@ -4144,18 +4145,34 @@ function readMineForm(){
   const hello = value('mineHello');
   if (hello !== null) mineState.greeting = hello;
 }
+function mineBackRow(id, label){
+  return '<button type="button" class="btn ghost" id="'+id+'" style="width:100%;margin:0 0 12px">'+label+'</button>';
+}
 function mineHead(title, note){
-  return '<div class="card"><button type="button" class="back" id="mineSectionBack">К разделам</button><div class="kicker">'+esc(title)+'</div><p class="hint">'+esc(note)+'</p>';
+  return '<div class="card">'+mineBackRow('mineSectionBack', '← К разделам')+'<div class="kicker">'+esc(title)+'</div><p class="hint">'+esc(note)+'</p>';
+}
+function mineHave(){
+  const hello = String(mineState.greeting || '').trim();
+  const contacts = String(mineState.contacts || '').trim();
+  const goods = mineGoods.slice(0, 6).map(function(item){
+    return esc(item.name)+(item.price ? ' — '+esc(item.price) : '');
+  }).join('<br>');
+  return '<p class="now">Уже добавлено</p>'+
+    '<p class="hint">Приветствие: '+(hello ? esc(hello) : 'пусто')+'</p>'+
+    '<p class="hint">Контакты:<br>'+(contacts ? esc(contacts).replace(/\n/g, '<br>') : 'пусто')+'</p>'+
+    '<p class="hint">Каталог:<br>'+(goods || 'пусто')+'</p>';
 }
 function mineHome(community){
-  return '<div class="card"><button type="button" class="back" id="mineBack">В кабинет</button><div class="kicker">Моё сообщество</div>'+
+  const hello = String(mineState.greeting || '').trim();
+  const contacts = String(mineState.contacts || '').trim();
+  return '<div class="card">'+mineBackRow('mineBack', '← В кабинет')+'<div class="kicker">Моё сообщество</div>'+
     '<p class="now">'+esc(community.title || ('Сообщество '+community.groupId))+'</p>'+
     (community.key ? '<p class="hint">Ключ сохранён: '+esc(community.key)+'</p>' : '')+
-    '<p class="hint">Пока донат действует, бот отвечает в сообщениях. Настройки разложены по разделам, каждый сохраняется своей кнопкой.</p>'+
-    '<button type="button" class="cabrow" data-mine="buttons">Кнопки</button>'+
-    '<button type="button" class="cabrow" data-mine="catalog">Каталог</button>'+
+    '<p class="hint">Пока донат действует, бот отвечает в сообщениях. В разделе уже лежит то, что бот сохранил. Откройте его и поправьте.</p>'+
+    '<button type="button" class="cabrow" data-mine="buttons">Кнопки'+(hello ? ' · фраза есть' : ' · фразы нет')+'</button>'+
+    '<button type="button" class="cabrow" data-mine="catalog">Каталог · '+mineGoods.length+'</button>'+
     '<button type="button" class="cabrow" data-mine="orders">Заявки</button>'+
-    '<button type="button" class="cabrow" data-mine="contacts">Контакты</button>'+
+    '<button type="button" class="cabrow" data-mine="contacts">Контакты'+(contacts ? ' · текст есть' : ' · пусто')+'</button>'+
     '<button type="button" class="cabrow" data-mine="comments">Комментарии</button>'+
     '<button type="button" class="cabrow" data-mine="scan">Сканирование</button>'+
     '<button class="btn ghost" id="mineDrop" type="button" style="margin-top:8px">Удалить бота из сообщества</button>'+
@@ -4174,7 +4191,8 @@ function buttonCard(key, title, note, textId, textLabel){
   return html;
 }
 function mineButtons(){
-  return mineHead('Кнопки', 'Четыре кнопки в чате. Надпись можно заменить. Пустая фраза остаётся стандартной.')+
+  return mineHead('Кнопки', 'Четыре кнопки в чате. Надпись можно заменить. Ниже уже лежит то, что бот сохранил.')+
+    mineHave()+
     buttonCard('catalog', 'Каталог', 'Список товаров задаётся в разделе «Каталог».', 'mineTextCatalog', 'Фраза перед списком')+
     buttonCard('contacts', 'Контакты', 'Телефон и адрес задаются в разделе «Контакты».', '', '')+
     buttonCard('order', 'Заявка', 'Покупатель выбирает товар и пишет телефон. Заявка приходит вам в сообщения сообщества.', 'mineTextOrder', 'Что написать покупателю')+
@@ -4239,7 +4257,7 @@ function mineComments(){
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить комментарии</button><p id="minemsg" class="hint"></p></div>';
 }
 function mineScan(){
-  return mineHead('Сканирование', 'Бот читает открытые записи. Телефон и сайт идут в контакты, описание — в приветствие, товар со ссылкой — в каталог.')+
+  return mineHead('Сканирование', 'Ключ читает всё, что ему разрешено: карточку, альбомы, документы, видео, истории, адреса, обсуждения, витрину и записи. Отметьте, что забрать. Сохранение сразу запишет это в кнопки.')+
     '<button class="btn ghost" id="mineScan" type="button">Сканировать сообщество</button>'+
     '<div id="mineFound"></div><p id="mineTakeNote" class="now"></p><p id="minemsg" class="hint"></p></div>';
 }
@@ -4440,16 +4458,18 @@ async function connectMine(){
     if (button) button.disabled = false;
   }
 }
-function applyMineKind(){
-  readMineForm();
-  const kind = mineState.kind || 'shop';
-  const preset = {
+function minePreset(kind){
+  return {
     baker: { catalog: 'Каталог', order: 'Заявка', delivery: true, pickup: true, baker: true },
     auto: { catalog: 'Услуги', order: 'Запись', delivery: false, pickup: false, baker: false },
     nails: { catalog: 'Услуги', order: 'Запись', delivery: false, pickup: true, baker: false },
     shop: { catalog: 'Каталог', order: 'Заявка', delivery: false, pickup: false, baker: false }
-  }[kind] || null;
-  if (!preset) return;
+  }[kind] || { catalog: 'Каталог', order: 'Заявка', delivery: false, pickup: false, baker: false };
+}
+function applyMineKind(){
+  readMineForm();
+  const kind = mineState.kind || 'shop';
+  const preset = minePreset(kind);
   mineState.kind = kind;
   mineState.catalog = true;
   mineState.contactsOn = true;
@@ -4476,7 +4496,7 @@ async function saveMine(){
   if (new Set(labels).size !== labels.length) {
     if (msg) msg.textContent = 'У двух кнопок не может быть одной надписи.';
     if (button) button.disabled = false;
-    return;
+    return false;
   }
   const sheet = String((document.getElementById('mineSheet') || {}).value || '');
   try {
@@ -4511,9 +4531,11 @@ async function saveMine(){
     const skipped = Number(data.skipped) || 0;
     const fresh = document.getElementById('minemsg');
     if (fresh) fresh.textContent = (data.pending ? 'Сохранено. Бот подхватит список, когда будет на связи.' : 'Сохранено.')+(skipped ? ' Пропущено строк без ссылки: '+skipped+'.' : '');
+    return true;
   } catch (error) {
     if (msg) msg.textContent = error.message || 'Настройки не сохранились';
     if (button) button.disabled = false;
+    return false;
   }
 }
 function waitMine(ms){
@@ -4528,8 +4550,9 @@ async function scanMine(){
   let phase = 'card';
   let offset = 0;
   let guard = 0;
+  mineSetup = null;
   try {
-    while (phase && guard < 12) {
+    while (phase && guard < 48) {
       guard += 1;
       const response = await fetchT('/api/vk/shop/scan', {
         method: 'POST',
@@ -4539,17 +4562,16 @@ async function scanMine(){
       const data = await response.json();
       if (!response.ok || !data.ok) throw new Error(data.error || 'Сканирование остановилось');
       const lines = Array.isArray(data.readings) && data.readings.length ? data.readings : [data.reading || 'Смотрю сообщество'];
-      for (let i = 0; i < lines.length; i += 1) {
-        if (button) button.textContent = String(lines[i] || 'Смотрю сообщество');
-        await waitMine(400);
-      }
+      if (button) button.textContent = String(lines[lines.length - 1] || 'Смотрю сообщество');
+      await waitMine(120);
+      if (data.setup && data.setup.kind) mineSetup = data.setup;
       (Array.isArray(data.items) ? data.items : []).forEach(function(item){
-        if (!item || mineFound.length >= 40) return;
+        if (!item || mineFound.length >= 200) return;
         const key = (item.kind === 'product' || item.kind === 'service')
           ? String(item.kind)+'|'+String(item.title || '')+'|'+String(item.link || '')
           : String(item.kind || '')+'|'+(item.link || item.title || '');
         if (mineFound.some(function(row){ return row.key === key; })) return;
-        const useful = item.kind === 'product' || item.kind === 'service' || item.kind === 'contact' || item.kind === 'address' || item.kind === 'site' || item.kind === 'about';
+        const useful = item.pick === false ? false : item.kind === 'product' || item.kind === 'service' || item.kind === 'contact' || item.kind === 'address' || item.kind === 'site' || item.kind === 'about';
         mineFound.push({
           key: key,
           on: useful,
@@ -4567,8 +4589,8 @@ async function scanMine(){
     }
     if (button) button.textContent = 'Сканировать ещё раз';
     if (msg) msg.textContent = mineFound.length
-      ? 'Отметьте нужное и нажмите «Добавить отмеченное». Результат появится сразу под кнопкой.'
-      : 'В открытых записях не нашлось ссылок, товаров и контактов.';
+      ? 'Отметьте, что забрать, и нажмите «Сохранить отмеченное».'
+      : 'Ключ просмотрел карточку, альбомы, документы, видео, истории, адреса, обсуждения, витрину и записи. Товаров и телефонов не нашлось.';
   } catch (error) {
     if (button) button.textContent = 'Сканировать сообщество';
     if (msg) msg.textContent = error.message || 'Сканирование остановилось';
@@ -4582,11 +4604,22 @@ function paintMineFound(){
     box.innerHTML = '';
     return;
   }
-  box.innerHTML = '<p class="now">Можем разложить по разделам:</p>'+mineFound.map(function(item, index){
-    const kind = item.kind === 'article' ? 'Статья' : item.kind === 'product' ? 'Товар' : item.kind === 'service' ? 'Услуга' : item.kind === 'contact' ? 'Контакт' : item.kind === 'address' ? 'Адрес' : item.kind === 'about' ? 'Описание' : item.kind === 'site' ? 'Сайт' : 'Ссылка';
-    const extra = item.link ? '<br>'+esc(item.link) : (item.text ? '<br>'+esc(item.text) : '');
-    return '<label class="hint"><input type="checkbox" data-scan-on="'+index+'"'+(item.on ? ' checked' : '')+'> '+kind+': '+esc(item.title)+extra+'</label>';
-  }).join('<br>')+'<button class="btn" id="mineTake" type="button" style="margin-top:8px">Добавить отмеченное</button>';
+  const groups = [
+    ['В каталог', function(item){ return item.kind === 'product' || item.kind === 'service'; }],
+    ['В контакты', function(item){ return item.kind === 'contact' || item.kind === 'address' || item.kind === 'site'; }],
+    ['В приветствие', function(item){ return item.kind === 'about'; }],
+    ['Не добавлять', function(item){ return item.kind !== 'product' && item.kind !== 'service' && item.kind !== 'contact' && item.kind !== 'address' && item.kind !== 'site' && item.kind !== 'about'; }]
+  ];
+  box.innerHTML = groups.map(function(group){
+    const rows = mineFound.map(function(item, index){ return { item: item, index: index }; }).filter(function(row){ return group[1](row.item); });
+    if (!rows.length) return '';
+    return '<p class="now">'+group[0]+'</p>'+rows.map(function(row){
+      const item = row.item;
+      const extra = item.price ? ' — '+esc(item.price) : '';
+      const more = item.link ? '<br>'+esc(item.link) : (item.text ? '<br>'+esc(item.text) : '');
+      return '<label class="hint"><input type="checkbox" data-scan-on="'+row.index+'"'+(item.on ? ' checked' : '')+'> '+esc(item.title || 'Запись')+extra+more+'</label>';
+    }).join('<br>');
+  }).join('')+'<button class="btn" id="mineTake" type="button" style="margin-top:8px">Сохранить отмеченное</button>';
   box.querySelectorAll('[data-scan-on]').forEach(function(input){
     input.onchange = function(){
       mineFound[Number(input.getAttribute('data-scan-on'))].on = input.checked;
@@ -4611,19 +4644,38 @@ async function takeMineScan(){
     mineState.contacts = data.contacts || '';
     mineState.greeting = data.greeting || '';
     if (Array.isArray(data.goods)) mineGoods = data.goods;
+    if (mineGoods.length) mineState.catalog = true;
+    if (String(mineState.contacts || '').trim()) mineState.contactsOn = true;
+    if (mineGoods.length || mineState.contacts) {
+      mineState.order = true;
+      mineState.admin = true;
+    }
+    if (!mineState.kind && mineSetup && mineSetup.kind) {
+      const preset = minePreset(mineSetup.kind);
+      mineState.kind = mineSetup.kind;
+      mineState.delivery = preset.delivery;
+      mineState.pickup = preset.pickup;
+      mineState.baker = preset.baker;
+      if (preset.catalog === 'Каталог') delete mineState.names.catalog;
+      else mineState.names.catalog = preset.catalog;
+      if (preset.order === 'Заявка') delete mineState.names.order;
+      else mineState.names.order = preset.order;
+    }
+    mineView = 'home';
+    const saved = await saveMine();
     const added = data.added || {};
     const parts = [];
-    if (added.contacts) parts.push('в контакты: '+added.contacts);
-    if (added.about) parts.push('приветствие обновлено');
-    if (added.goods) parts.push('в каталог: '+added.goods);
-    if (note) note.textContent = parts.length
-      ? 'Добавлено. '+parts.join(', ')+'. Откройте раздел и нажмите «Сохранить».'
-      : 'В отмеченном не нашлось телефона, сайта или товара со ссылкой.';
+    if (added.goods) parts.push('каталог: '+added.goods);
+    if (added.contacts) parts.push('контакты: '+added.contacts);
+    if (added.about) parts.push('приветствие');
+    const fresh = document.getElementById('minemsg');
+    if (fresh) fresh.textContent = !saved
+      ? (fresh.textContent || 'Не сохранилось.')
+      : (parts.length ? 'Сохранено. '+parts.join(', ')+'. Откройте раздел: там уже лежит эта информация, её можно поправить.' : 'Сохранено. Откройте раздел и поправьте, если нужно.');
   } catch (error) {
     if (note) note.textContent = error.message || 'Отмеченное не разобралось';
   }
   if (button) button.disabled = false;
-  if (note && note.scrollIntoView) note.scrollIntoView({ block: 'nearest' });
 }
 async function dropAssistGroup(groupId){
   const msg = document.getElementById('minemsg');
