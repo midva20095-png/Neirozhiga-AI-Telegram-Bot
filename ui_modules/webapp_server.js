@@ -615,6 +615,7 @@ function startWebApp() {
                         : [1, 2, 3, 4, 5, 6, 7],
                     hourDaysChosen: reply.shopHourDaysChosen === true,
                     hourZone: Number.isInteger(reply.shopHourZone) ? reply.shopHourZone : 3,
+                    newsLink: typeof reply.shopNewsLink === 'string' ? reply.shopNewsLink : '',
                     contacts: reply.contacts || '',
                     greeting: reply.greeting || '',
                     names: reply.shopNames || {},

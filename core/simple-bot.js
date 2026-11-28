@@ -27,6 +27,7 @@ function shopPack(input) {
     shopHourDays: hourDays(input.shopHourDays),
     shopHourDaysChosen: on(input.shopHourDaysChosen),
     shopHourZone: hourZone(input.shopHourZone),
+    shopNewsLink: https(input.shopNewsLink),
     shopNames: cleanNames(input.shopNames),
     shopTexts: cleanTexts(input.shopTexts),
     shopCommentLinks: cleanCommentLinks(input.shopCommentLinks),

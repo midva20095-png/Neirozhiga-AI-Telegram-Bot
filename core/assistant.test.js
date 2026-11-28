@@ -343,6 +343,8 @@ test('простой бот хранит товары отдельно от ка
     assert.equal(reply.shopHours, false);
     assert.deepEqual(reply.shopHourDays, [1, 2, 3, 4, 5, 6, 7]);
     assert.equal(reply.shopHourDaysChosen, false);
+    assert.equal(reply.shopNewsLink, '');
+    assert.equal(assistant.cleanReply({ level: 1, shopNewsLink: 'https://example.com/agree' }).shopNewsLink, 'https://example.com/agree');
     const sundayOff = assistant.cleanReply({ level: 1, shopHourDays: [1, 2, 3, 4, 5, 6], shopHourDaysChosen: true });
     assert.deepEqual(sundayOff.shopHourDays, [1, 2, 3, 4, 5, 6]);
     assert.equal(sundayOff.shopHourDaysChosen, true);

@@ -725,6 +725,9 @@ async function saveShop(account, input, fetchImpl) {
         shopSections: !!(input && input.sections),
         shopChatLinks: !!(input && input.chatLinks),
         ...shopHourFields(input, row.reply),
+        shopNewsLink: input && Object.prototype.hasOwnProperty.call(input, 'newsLink')
+            ? String(input.newsLink || '')
+            : ((row.reply && row.reply.shopNewsLink) || ''),
         shopNames: input && input.names ? input.names : ((row.reply && row.reply.shopNames) || {}),
         shopTexts: input && input.texts ? input.texts : ((row.reply && row.reply.shopTexts) || {}),
         goods
@@ -781,6 +784,7 @@ async function saveShop(account, input, fetchImpl) {
         shopHourDays: reply.shopHourDays,
         shopHourDaysChosen: reply.shopHourDaysChosen === true,
         shopHourZone: reply.shopHourZone,
+        shopNewsLink: reply.shopNewsLink || '',
         shopNames: reply.shopNames || {},
         shopTexts: reply.shopTexts || {},
         goods: reply.goods || []

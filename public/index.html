@@ -4103,7 +4103,7 @@ let mineEdit = -1;
 let mineCommunity = null;
 let mineState = emptyMine();
 function emptyMine(){
-  return { catalog: false, contactsOn: false, order: false, admin: false, comments: false, commentLinks: [], chatLinks: false, sections: false, delivery: false, pickup: false, baker: false, kind: '', board: 'fixed', names: {}, texts: {}, contacts: '', greeting: '', hours: false, hourStart: 10, hourEnd: 19, hourDays: [1, 2, 3, 4, 5, 6, 7], hourZone: 3 };
+  return { catalog: false, contactsOn: false, order: false, admin: false, comments: false, commentLinks: [], chatLinks: false, sections: false, delivery: false, pickup: false, baker: false, kind: '', board: 'fixed', names: {}, texts: {}, contacts: '', greeting: '', hours: false, hourStart: 10, hourEnd: 19, hourDays: [1, 2, 3, 4, 5, 6, 7], hourZone: 3, newsLink: '' };
 }
 function mineBack(){
   tab = 'cab';
@@ -4159,6 +4159,8 @@ function readMineForm(){
   if (board) mineState.board = board.value === 'inline' ? 'inline' : 'fixed';
   if (flag('mineSections') !== null) mineState.sections = flag('mineSections');
   if (flag('mineChatLinks') !== null) mineState.chatLinks = flag('mineChatLinks');
+  const newsLink = document.getElementById('mineNewsLink');
+  if (newsLink) mineState.newsLink = String(newsLink.value || '').trim();
   const kindPick = document.getElementById('mineKindPick');
   if (kindPick) mineState.kind = kindPick.value;
   [['catalog', 'mineNamecatalog'], ['contacts', 'mineNamecontacts'], ['order', 'mineNameorder'], ['admin', 'mineNameadmin']].forEach(function(pair){
@@ -4332,7 +4334,11 @@ function mineClients(){
     '<div id="minePeople"><p class="hint">Загружаю клиентов…</p></div><p id="minemsg" class="hint"></p></div>';
 }
 function mineMail(){
-  return mineHead('Рассылка', 'Уходит только тем, кто в боте нажал «Новости». Можно закрепить до двух открытых ссылок.')+
+  return mineHead('Рассылка', 'Уходит только тем, кто в боте принял согласие кнопкой «Новости». Можно закрепить до двух открытых ссылок.')+
+    '<p class="now">Согласие на новости</p>'+
+    '<label class="flabel" for="mineNewsLink">Ссылка на соглашение https</label><input id="mineNewsLink" maxlength="300" value="'+esc(mineState.newsLink || '')+'" placeholder="https://...">'+
+    '<p class="hint">Необязательно. Если ссылки нет, бот всё равно покажет «Да» и «Нет». Если ссылка есть, появится кнопка «Соглашение».</p>'+
+    '<button class="btn ghost" id="mineNewsSave" type="button" style="margin-top:8px">Сохранить соглашение</button>'+
     '<label class="flabel" for="mineMailText">Текст</label>'+mineBox('mineMailText', 900, '', 6)+
     '<label class="flabel" for="mineMailLabel1">Подпись первой ссылки</label><input id="mineMailLabel1" maxlength="40">'+
     '<label class="flabel" for="mineMailLink1">Ссылка https</label><input id="mineMailLink1" maxlength="300">'+
@@ -4448,6 +4454,8 @@ function bindMine(community){
   if (file) file.onchange = function(){ readMineFile(file); };
   const scan = document.getElementById('mineScan');
   if (scan) scan.onclick = scanMine;
+  const newsSave = document.getElementById('mineNewsSave');
+  if (newsSave) newsSave.onclick = saveMine;
   const mail = document.getElementById('mineMailSend');
   if (mail) mail.onclick = sendMineMail;
   const audit = document.getElementById('mineAuditRun');
@@ -4594,7 +4602,8 @@ async function loadMine(){
     hourStart: Number.isInteger(community.hourStart) ? community.hourStart : 10,
     hourEnd: Number.isInteger(community.hourEnd) ? community.hourEnd : 19,
     hourDays: community.hourDaysChosen && Array.isArray(community.hourDays) ? community.hourDays.map(Number).filter(function(day){ return day >= 1 && day <= 7; }) : [1, 2, 3, 4, 5, 6, 7],
-    hourZone: Number.isInteger(community.hourZone) ? community.hourZone : 3
+    hourZone: Number.isInteger(community.hourZone) ? community.hourZone : 3,
+    newsLink: community.newsLink || ''
   };
   paintMine();
 }
@@ -4734,7 +4743,8 @@ async function saveMine(){
         hourEnd: Number(mineState.hourEnd),
         hourDays: Array.isArray(mineState.hourDays) ? mineState.hourDays : [1, 2, 3, 4, 5, 6, 7],
         hourDaysChosen: true,
-        hourZone: Number(mineState.hourZone)
+        hourZone: Number(mineState.hourZone),
+        newsLink: mineState.newsLink || ''
       })
     });
     const data = await response.json();
