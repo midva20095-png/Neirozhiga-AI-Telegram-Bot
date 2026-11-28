@@ -41,7 +41,7 @@ function shopPack(input) {
   };
 }
 
-const CATALOG_BUTTON_SLOTS = 10;
+const CATALOG_BUTTON_SLOTS = 4;
 
 function cleanCatalogButtons(value) {
   const source = Array.isArray(value) ? value : [];

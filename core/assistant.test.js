@@ -428,6 +428,9 @@ test('чат и каталог в комментариях стоят в раз�
     assert.equal(html.includes('id="mineCatalogLink"'), true);
     assert.equal(html.includes('data-catalog-door'), true);
     assert.equal(html.includes('mineDoorName'), true);
+    assert.equal(html.includes('data-mine="setup"'), true);
+    assert.equal(html.includes('До 4 кнопок внутри'), true);
+    assert.equal(html.includes('До 10 кнопок'), false);
     assert.equal(html.includes('id="mineSections"'), false);
 });
 
