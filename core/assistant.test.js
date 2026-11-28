@@ -308,6 +308,20 @@ test('простой бот хранит товары отдельно от ка
     assert.equal(reply.shopOrder, false);
     assert.equal(reply.shopComments, false);
     assert.equal(assistant.cleanReply({ level: 1, shopComments: true }).shopComments, true);
+    const links = assistant.cleanReply({
+        level: 1,
+        shopCommentLinks: [
+            { kind: 'chat' },
+            { kind: 'catalog' },
+            { kind: 'own', label: 'Сайт', link: 'https://bakery.example' },
+            { kind: 'own', label: 'нет', link: 'notaurl' }
+        ]
+    });
+    assert.deepEqual(links.shopCommentLinks, [
+        { kind: 'chat' },
+        { kind: 'catalog' },
+        { kind: 'own', label: 'Сайт', link: 'https://bakery.example/' }
+    ]);
     assert.equal(reply.goods[0].name, 'Торт');
     assert.equal(reply.goods[0].price, '1500');
     assert.equal(assistant.cleanReply({ greeting: 'Здравствуйте' }).level, undefined);

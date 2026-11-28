@@ -574,6 +574,7 @@ async function saveDesk(account, input, fetchImpl) {
         shopOrder: row.reply.shopOrder === true,
         shopAdmin: row.reply.shopAdmin === true,
         shopComments: row.reply.shopComments === true,
+        shopCommentLinks: row.reply.shopCommentLinks || [],
         shopDelivery: row.reply.shopDelivery === true,
         shopPickup: row.reply.shopPickup === true,
         shopBaker: row.reply.shopBaker === true,
@@ -624,6 +625,7 @@ async function saveDesk(account, input, fetchImpl) {
             shopOrder: reply.shopOrder === true,
             shopAdmin: reply.shopAdmin === true,
             shopComments: reply.shopComments === true,
+            shopCommentLinks: reply.shopCommentLinks || [],
             shopDelivery: reply.shopDelivery === true,
             shopPickup: reply.shopPickup === true,
             shopBaker: reply.shopBaker === true,
@@ -665,6 +667,9 @@ async function saveShop(account, input, fetchImpl) {
         shopOrder: !!(input && input.order),
         shopAdmin: !!(input && input.admin),
         shopComments: !!(input && input.comments),
+        shopCommentLinks: input && Array.isArray(input.commentLinks)
+            ? input.commentLinks
+            : ((row.reply && row.reply.shopCommentLinks) || []),
         shopDelivery: !!(input && input.delivery),
         shopPickup: !!(input && input.pickup),
         shopBaker: !!(input && input.baker),
@@ -712,6 +717,7 @@ async function saveShop(account, input, fetchImpl) {
         shopOrder: reply.shopOrder === true,
         shopAdmin: reply.shopAdmin === true,
         shopComments: reply.shopComments === true,
+        shopCommentLinks: reply.shopCommentLinks || [],
         shopDelivery: reply.shopDelivery === true,
         shopPickup: reply.shopPickup === true,
         shopBaker: reply.shopBaker === true,

@@ -572,6 +572,7 @@ function startWebApp() {
                     order: reply.shopOrder === true,
                     admin: reply.shopAdmin === true,
                     comments: reply.shopComments === true,
+                    commentLinks: Array.isArray(reply.shopCommentLinks) ? reply.shopCommentLinks : [],
                     delivery: reply.shopDelivery === true,
                     pickup: reply.shopPickup === true,
                     baker: reply.shopBaker === true,

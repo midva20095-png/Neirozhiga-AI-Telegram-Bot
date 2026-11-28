@@ -21,6 +21,7 @@ function shopPack(input) {
     shopBoard: input.shopBoard === 'fixed' ? 'fixed' : '',
     shopNames: cleanNames(input.shopNames),
     shopTexts: cleanTexts(input.shopTexts),
+    shopCommentLinks: cleanCommentLinks(input.shopCommentLinks),
     goods: cleanGoods(input.goods),
   };
 }
@@ -429,6 +430,30 @@ function positiveGroup(value) {
 }
 
 const SHOP_DEFAULTS = { catalog: 'Каталог', contacts: 'Контакты', order: 'Заявка', admin: 'Администратор' };
+
+function cleanCommentLinks(value) {
+  if (!Array.isArray(value)) return [];
+  const links = [];
+  let chat = false;
+  let catalog = false;
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    if ((item.kind === 'chat' || item.kind === 'catalog') && (item.kind === 'chat' ? chat : catalog)) continue;
+    if (item.kind === 'chat') {
+      links.push({ kind: 'chat' });
+      chat = true;
+    } else if (item.kind === 'catalog') {
+      links.push({ kind: 'catalog' });
+      catalog = true;
+    } else if (item.kind === 'own') {
+      const label = String(item.label || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+      const link = https(item.link);
+      if (label.length >= 2 && link) links.push({ kind: 'own', label, link });
+    }
+    if (links.length >= 4) break;
+  }
+  return links;
+}
 
 function cleanNames(value) {
   const source = value && typeof value === 'object' ? value : {};

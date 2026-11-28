@@ -4099,7 +4099,7 @@ let mineEdit = -1;
 let mineCommunity = null;
 let mineState = emptyMine();
 function emptyMine(){
-  return { catalog: false, contactsOn: false, order: false, admin: false, comments: false, delivery: false, pickup: false, baker: false, kind: '', board: '', names: {}, texts: {}, contacts: '', greeting: '' };
+  return { catalog: false, contactsOn: false, order: false, admin: false, comments: false, commentLinks: [], delivery: false, pickup: false, baker: false, kind: '', board: '', names: {}, texts: {}, contacts: '', greeting: '' };
 }
 function mineBack(){
   tab = 'cab';
@@ -4125,6 +4125,12 @@ function readMineForm(){
   if (flag('mineOrder') !== null) mineState.order = flag('mineOrder');
   if (flag('mineAdmin') !== null) mineState.admin = flag('mineAdmin');
   if (flag('mineComments') !== null) mineState.comments = flag('mineComments');
+  const commentLinks = readCommentLinks();
+  if (commentLinks && commentLinks.error) mineState.commentError = commentLinks.error;
+  else if (commentLinks) {
+    mineState.commentLinks = commentLinks;
+    mineState.commentError = '';
+  } else mineState.commentError = '';
   if (flag('mineDelivery') !== null) mineState.delivery = flag('mineDelivery');
   if (flag('minePickup') !== null) mineState.pickup = flag('minePickup');
   if (flag('mineBaker') !== null) mineState.baker = flag('mineBaker');
@@ -4251,9 +4257,35 @@ function mineContacts(){
     '<label class="flabel" for="mineContacts">Текст кнопки</label><textarea id="mineContacts" maxlength="1500" rows="6">'+esc(mineState.contacts || '')+'</textarea>'+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить контакты</button><p id="minemsg" class="hint"></p></div>';
 }
+function readCommentLinks(){
+  if (!document.getElementById('mineCommentChat')) return null;
+  const links = [];
+  if (document.getElementById('mineCommentChat').checked) links.push({ kind: 'chat' });
+  if (document.getElementById('mineCommentCatalog').checked) links.push({ kind: 'catalog' });
+  const label = String((document.getElementById('mineCommentLabel') || {}).value || '').replace(/\s+/g, ' ').trim();
+  const link = String((document.getElementById('mineCommentLink') || {}).value || '').trim();
+  if (label || link) {
+    if (label.length < 2 || !/^https:\/\/\S+$/i.test(link)) {
+      return { error: 'Своему варианту нужны надпись и ссылка, которая начинается с https://' };
+    }
+    links.push({ kind: 'own', label: label, link: link });
+  }
+  return links;
+}
 function mineComments(){
-  return mineHead('Комментарии', 'Это не кнопка в чате. Комментарий с названием товара или вопросом о цене получит ссылку из каталога. Обычный комментарий бот не трогает.')+
-    '<label><input id="mineComments" type="checkbox"'+(mineState.comments ? ' checked' : '')+'> Отвечать ссылкой в комментариях</label>'+
+  const links = Array.isArray(mineState.commentLinks) ? mineState.commentLinks : [];
+  const chat = links.some(function(item){ return item.kind === 'chat'; });
+  const catalog = links.some(function(item){ return item.kind === 'catalog'; });
+  const own = links.find(function(item){ return item.kind === 'own'; }) || { label: '', link: '' };
+  return mineHead('Комментарии', 'Это не кнопка в чате. Комментарий с названием товара или вопросом о цене получит ссылку из каталога. Сюда можно добавить ссылку на чат, каталог или свою.')+
+    '<label><input id="mineComments" type="checkbox"'+(mineState.comments ? ' checked' : '')+'> Отвечать в комментариях</label>'+
+    '<p class="now">Какие ссылки добавить в ответ</p>'+
+    '<label><input id="mineCommentChat" type="checkbox"'+(chat ? ' checked' : '')+'> Ссылка на чат</label>'+
+    '<label><input id="mineCommentCatalog" type="checkbox"'+(catalog ? ' checked' : '')+'> Ссылка на каталог</label>'+
+    '<p class="now">Свой вариант</p>'+
+    '<label class="flabel" for="mineCommentLabel">Надпись</label><input id="mineCommentLabel" maxlength="40" value="'+esc(own.label || '')+'">'+
+    '<label class="flabel" for="mineCommentLink">Ссылка https</label><input id="mineCommentLink" maxlength="300" value="'+esc(own.link || '')+'">'+
+    '<p class="hint">Пустой свой вариант не попадёт в ответ. Обычный комментарий бот не трогает.</p>'+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить комментарии</button><p id="minemsg" class="hint"></p></div>';
 }
 function mineScan(){
@@ -4386,6 +4418,7 @@ async function loadMine(){
     order: !!community.order,
     admin: !!community.admin,
     comments: !!community.comments,
+    commentLinks: Array.isArray(community.commentLinks) ? community.commentLinks.slice() : [],
     delivery: !!community.delivery,
     pickup: !!community.pickup,
     baker: !!community.baker,
@@ -4489,6 +4522,10 @@ function applyMineKind(){
 async function saveMine(){
   readMineForm();
   const msg = document.getElementById('minemsg');
+  if (mineState.commentError) {
+    if (msg) msg.textContent = mineState.commentError;
+    return false;
+  }
   const button = document.getElementById('mineSave');
   if (button) button.disabled = true;
   if (msg) msg.textContent = 'Сохраняю…';
@@ -4509,6 +4546,7 @@ async function saveMine(){
         order: !!mineState.order,
         admin: !!mineState.admin,
         comments: !!mineState.comments,
+        commentLinks: Array.isArray(mineState.commentLinks) ? mineState.commentLinks : [],
         delivery: !!mineState.delivery,
         pickup: !!mineState.pickup,
         baker: !!mineState.baker,
