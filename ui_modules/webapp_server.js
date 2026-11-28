@@ -573,11 +573,29 @@ function startWebApp() {
                     admin: reply.shopAdmin === true,
                     comments: reply.shopComments === true,
                     contacts: reply.contacts || '',
+                    greeting: reply.greeting || '',
+                    names: reply.shopNames || {},
+                    texts: reply.shopTexts || {},
                     goods: Array.isArray(reply.goods) ? reply.goods : []
                 } : null
             });
         } catch (e) {
             res.status(500).json({ error: 'Раздел сообщества не открылся.' });
+        }
+    });
+
+    app.post('/api/vk/shop/place', requireUser, async (req, res) => {
+        try {
+            if (refuseCommunity(res)) return;
+            const userId = assistant.vkId(req.userId);
+            if (!userId) return res.status(400).json({ ok: false, error: 'Раздел открыт из ВК.' });
+            const gate = await donorView(userId);
+            const community = gate.view && gate.view.community;
+            const reply = community && community.reply ? community.reply : {};
+            const placed = assistant.arrangeScan(req.body || {}, reply);
+            res.json({ ok: true, ...placed });
+        } catch (e) {
+            res.status(400).json({ ok: false, error: 'Отмеченное не разобралось.' });
         }
     });
 

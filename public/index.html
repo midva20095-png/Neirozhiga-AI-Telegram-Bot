@@ -4092,24 +4092,194 @@ async function dropAssist(){
 }
 let mineGoods = [];
 let mineFound = [];
+let mineView = 'home';
+let minePage = 0;
+let mineEdit = -1;
+let mineCommunity = null;
+let mineState = emptyMine();
+function emptyMine(){
+  return { catalog: false, contactsOn: false, order: false, admin: false, comments: false, names: {}, texts: {}, contacts: '', greeting: '' };
+}
 function mineBack(){
   tab = 'cab';
   draw();
 }
-function mineRow(item, index){
-  const price = item.price ? ' — '+esc(item.price)+(/^\d+$/.test(String(item.price)) ? ' ₽' : '') : '';
-  return '<p class="hint">'+esc(item.name)+price+'<br>'+esc(item.link)+' <button type="button" class="btn ghost" data-mine-del="'+index+'">Убрать</button></p>';
+function openMine(view){
+  readMineForm();
+  mineView = view || 'home';
+  mineEdit = -1;
+  paintMine();
 }
-function paintMineGoods(){
-  const list = document.getElementById('mineGoods');
-  if (!list) return;
-  list.innerHTML = mineGoods.length ? mineGoods.map(mineRow).join('') : '<p class="hint">Товаров пока нет. Добавьте строку или загрузите файл.</p>';
-  list.querySelectorAll('[data-mine-del]').forEach(function(button){
+function readMineForm(){
+  const value = function(id){
+    const node = document.getElementById(id);
+    return node ? String(node.value || '') : null;
+  };
+  const flag = function(id){
+    const node = document.getElementById(id);
+    return node ? !!node.checked : null;
+  };
+  if (flag('mineCatalog') !== null) mineState.catalog = flag('mineCatalog');
+  if (flag('mineContactsOn') !== null) mineState.contactsOn = flag('mineContactsOn');
+  if (flag('mineOrder') !== null) mineState.order = flag('mineOrder');
+  if (flag('mineAdmin') !== null) mineState.admin = flag('mineAdmin');
+  if (flag('mineComments') !== null) mineState.comments = flag('mineComments');
+  [['catalog', 'mineNamecatalog'], ['contacts', 'mineNamecontacts'], ['order', 'mineNameorder'], ['admin', 'mineNameadmin']].forEach(function(pair){
+    const text = value(pair[1]);
+    if (text !== null) mineState.names[pair[0]] = text.replace(/\s+/g, ' ').trim();
+  });
+  [['catalog', 'mineTextCatalog'], ['order', 'mineTextOrder'], ['admin', 'mineTextAdmin']].forEach(function(pair){
+    const text = value(pair[1]);
+    if (text !== null) mineState.texts[pair[0]] = text.replace(/\s+/g, ' ').trim();
+  });
+  const contacts = value('mineContacts');
+  if (contacts !== null) mineState.contacts = contacts;
+  const hello = value('mineHello');
+  if (hello !== null) mineState.greeting = hello;
+}
+function mineHead(title, note){
+  return '<div class="card"><button type="button" class="back" id="mineSectionBack">К разделам</button><div class="kicker">'+esc(title)+'</div><p class="hint">'+esc(note)+'</p>';
+}
+function mineHome(community){
+  return '<div class="card"><button type="button" class="back" id="mineBack">В кабинет</button><div class="kicker">Моё сообщество</div>'+
+    '<p class="now">'+esc(community.title || ('Сообщество '+community.groupId))+'</p>'+
+    (community.key ? '<p class="hint">Ключ сохранён: '+esc(community.key)+'</p>' : '')+
+    '<p class="hint">Пока донат действует, бот отвечает в сообщениях. Настройки разложены по разделам, каждый сохраняется своей кнопкой.</p>'+
+    '<button type="button" class="cabrow" data-mine="buttons">Кнопки</button>'+
+    '<button type="button" class="cabrow" data-mine="catalog">Каталог</button>'+
+    '<button type="button" class="cabrow" data-mine="orders">Заявки</button>'+
+    '<button type="button" class="cabrow" data-mine="contacts">Контакты</button>'+
+    '<button type="button" class="cabrow" data-mine="comments">Комментарии</button>'+
+    '<button type="button" class="cabrow" data-mine="scan">Сканирование</button>'+
+    '<button class="btn ghost" id="mineDrop" type="button" style="margin-top:8px">Удалить бота из сообщества</button>'+
+    '<p class="hint">Ключ забудется, а кнопки в чатах снимутся, пока ключ ещё действует.</p>'+
+    '<p id="minemsg" class="hint"></p></div>';
+}
+function buttonCard(key, title, note, textId, textLabel){
+  const on = key === 'catalog' ? mineState.catalog : key === 'contacts' ? mineState.contactsOn : key === 'order' ? mineState.order : mineState.admin;
+  const flagId = key === 'catalog' ? 'mineCatalog' : key === 'contacts' ? 'mineContactsOn' : key === 'order' ? 'mineOrder' : 'mineAdmin';
+  const name = mineState.names[key] || title;
+  let html = '<p class="now">'+esc(title)+'</p>'+
+    '<label><input id="'+flagId+'" type="checkbox"'+(on ? ' checked' : '')+'> Показывать кнопку</label>'+
+    '<label class="flabel" for="mineName'+key+'">Надпись для покупателя</label><input id="mineName'+key+'" maxlength="40" value="'+esc(name)+'">'+
+    '<p class="hint">'+esc(note)+'</p>';
+  if (textId) html += '<label class="flabel" for="'+textId+'">'+esc(textLabel)+'</label><textarea id="'+textId+'" maxlength="500" rows="2">'+esc(mineState.texts[key] || '')+'</textarea>';
+  return html;
+}
+function mineButtons(){
+  return mineHead('Кнопки', 'Четыре кнопки в чате. Надпись можно заменить. Пустая фраза остаётся стандартной.')+
+    buttonCard('catalog', 'Каталог', 'Список товаров задаётся в разделе «Каталог».', 'mineTextCatalog', 'Фраза перед списком')+
+    buttonCard('contacts', 'Контакты', 'Телефон и адрес задаются в разделе «Контакты».', '', '')+
+    buttonCard('order', 'Заявка', 'Покупатель выбирает товар и пишет телефон. Заявка приходит вам в сообщения сообщества.', 'mineTextOrder', 'Что написать покупателю')+
+    buttonCard('admin', 'Администратор', 'После этой кнопки бот молчит, пока покупатель не нажмёт «К помощнику».', 'mineTextAdmin', 'Что написать покупателю')+
+    '<label class="flabel" for="mineHello">Фраза при входе</label><textarea id="mineHello" maxlength="400" rows="3">'+esc(mineState.greeting || '')+'</textarea>'+
+    '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить кнопки</button><p id="minemsg" class="hint"></p></div>';
+}
+function mineCatalog(){
+  const pages = Math.max(1, Math.ceil(mineGoods.length / 8));
+  if (minePage > pages - 1) minePage = pages - 1;
+  if (minePage < 0) minePage = 0;
+  const start = minePage * 8;
+  const rows = mineGoods.slice(start, start + 8).map(function(item, index){
+    const real = start + index;
+    const price = item.price ? ' — '+esc(item.price)+(/^\d+$/.test(String(item.price)) ? ' ₽' : '') : '';
+    return '<div style="margin:10px 0;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.08)"><p class="now">'+esc(item.name)+price+'</p><p class="hint">'+esc(item.link)+'</p>'+
+      '<button type="button" class="btn ghost" data-mine-edit="'+real+'">Изменить</button> <button type="button" class="btn ghost" data-mine-del="'+real+'">Убрать</button></div>';
+  }).join('');
+  const editing = mineEdit >= 0 ? mineGoods[mineEdit] : null;
+  const pager = mineGoods.length > 8
+    ? '<div class="row" style="gap:8px;align-items:center"><button type="button" class="btn ghost" id="minePrev"'+(minePage ? '' : ' disabled')+'>Назад</button><span class="hint">'+(minePage + 1)+' / '+pages+'</span><button type="button" class="btn ghost" id="mineNext"'+(minePage < pages - 1 ? '' : ' disabled')+'>Дальше</button></div>'
+    : '';
+  return mineHead('Каталог', 'На странице восемь товаров. В чате кнопками показываются первые пять, остальные покупатель выбирает номером.')+
+    '<p class="hint">В списке '+mineGoods.length+' из 40.</p>'+
+    (rows || '<p class="hint">Товаров пока нет.</p>')+
+    pager+
+    '<p class="now">'+(editing ? 'Изменить товар' : 'Новый товар')+'</p>'+
+    '<label class="flabel" for="mineName">Название</label><input id="mineName" maxlength="80" value="'+esc(editing ? editing.name : '')+'">'+
+    '<label class="flabel" for="minePrice">Цена</label><input id="minePrice" maxlength="40" value="'+esc(editing ? editing.price : '')+'">'+
+    '<label class="flabel" for="mineLink">Ссылка https</label><input id="mineLink" maxlength="300" value="'+esc(editing ? editing.link : '')+'">'+
+    '<button class="btn" id="mineAdd" type="button" style="margin-top:8px">'+(editing ? 'Сохранить товар' : 'Добавить товар')+'</button>'+
+    (editing ? '<button class="btn ghost" id="mineEditCancel" type="button" style="margin-top:8px">Отмена</button>' : '')+
+    '<label class="flabel" for="mineFile">Файл со списком</label><input id="mineFile" type="file" accept=".txt,.csv,.yml,.yaml,text/plain">'+
+    '<textarea id="mineSheet" hidden></textarea>'+
+    '<p class="hint">Строка файла: название | цена | ссылка. Файл заменяет весь список.</p>'+
+    '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить каталог</button><p id="minemsg" class="hint"></p></div>';
+}
+function mineOrders(){
+  return mineHead('Заявки', 'Кнопка включается в разделе «Кнопки». Покупатель выбирает товар и пишет телефон. Заявка приходит вам в сообщения сообщества.')+
+    '<label class="flabel" for="mineTextOrder">Что написать, когда просят заявку</label><textarea id="mineTextOrder" maxlength="500" rows="3">'+esc(mineState.texts.order || '')+'</textarea>'+
+    '<p class="hint">Пустое поле — бот напишет: «Напишите номер или название, затем телефон.»</p>'+
+    '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить заявки</button><p id="minemsg" class="hint"></p></div>';
+}
+function mineContacts(){
+  return mineHead('Контакты', 'Этот текст уходит по кнопке контактов. Описание сообщества сюда само не попадает.')+
+    '<label class="flabel" for="mineContacts">Текст кнопки</label><textarea id="mineContacts" maxlength="1500" rows="6">'+esc(mineState.contacts || '')+'</textarea>'+
+    '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить контакты</button><p id="minemsg" class="hint"></p></div>';
+}
+function mineComments(){
+  return mineHead('Комментарии', 'Это не кнопка в чате. Комментарий с названием товара или вопросом о цене получит ссылку из каталога. Обычный комментарий бот не трогает.')+
+    '<label><input id="mineComments" type="checkbox"'+(mineState.comments ? ' checked' : '')+'> Отвечать ссылкой в комментариях</label>'+
+    '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить комментарии</button><p id="minemsg" class="hint"></p></div>';
+}
+function mineScan(){
+  return mineHead('Сканирование', 'Бот читает открытые записи. Телефон и сайт идут в контакты, описание — в приветствие, товар со ссылкой — в каталог.')+
+    '<button class="btn ghost" id="mineScan" type="button">Сканировать сообщество</button>'+
+    '<div id="mineFound"></div><p id="mineTakeNote" class="now"></p><p id="minemsg" class="hint"></p></div>';
+}
+function paintMine(){
+  const box = document.getElementById('minebox');
+  const community = mineCommunity;
+  if (!box || !community || community.home) return;
+  if (mineView === 'buttons') box.innerHTML = mineButtons();
+  else if (mineView === 'catalog') box.innerHTML = mineCatalog();
+  else if (mineView === 'orders') box.innerHTML = mineOrders();
+  else if (mineView === 'contacts') box.innerHTML = mineContacts();
+  else if (mineView === 'comments') box.innerHTML = mineComments();
+  else if (mineView === 'scan') box.innerHTML = mineScan();
+  else box.innerHTML = mineHome(community);
+  bindMine(community);
+  if (mineView === 'scan') paintMineFound();
+}
+function bindMine(community){
+  const back = document.getElementById('mineBack');
+  if (back) back.onclick = mineBack;
+  const section = document.getElementById('mineSectionBack');
+  if (section) section.onclick = function(){ openMine('home'); };
+  document.querySelectorAll('[data-mine]').forEach(function(button){
+    button.onclick = function(){ openMine(button.getAttribute('data-mine')); };
+  });
+  const save = document.getElementById('mineSave');
+  if (save) save.onclick = saveMine;
+  const add = document.getElementById('mineAdd');
+  if (add) add.onclick = addMineGood;
+  const cancel = document.getElementById('mineEditCancel');
+  if (cancel) cancel.onclick = function(){ mineEdit = -1; paintMine(); };
+  const file = document.getElementById('mineFile');
+  if (file) file.onchange = function(){ readMineFile(file); };
+  const scan = document.getElementById('mineScan');
+  if (scan) scan.onclick = scanMine;
+  const prev = document.getElementById('minePrev');
+  if (prev) prev.onclick = function(){ minePage -= 1; paintMine(); };
+  const next = document.getElementById('mineNext');
+  if (next) next.onclick = function(){ minePage += 1; paintMine(); };
+  document.querySelectorAll('[data-mine-edit]').forEach(function(button){
     button.onclick = function(){
-      mineGoods.splice(Number(button.getAttribute('data-mine-del')), 1);
-      paintMineGoods();
+      mineEdit = Number(button.getAttribute('data-mine-edit'));
+      paintMine();
     };
   });
+  document.querySelectorAll('[data-mine-del]').forEach(function(button){
+    button.onclick = function(){
+      mineGoods.splice(Number(button.getAttribute('data-mine-del')), 1);
+      mineEdit = -1;
+      paintMine();
+    };
+  });
+  const drop = document.getElementById('mineDrop');
+  if (drop) drop.onclick = function(){
+    if (!confirm('Удалить бота из сообщества? Ключ забудется, кнопки в чатах снимутся.')) return;
+    dropAssistGroup(community.groupId);
+  };
 }
 async function loadMine(){
   const box = document.getElementById('minebox');
@@ -4146,10 +4316,11 @@ async function loadMine(){
     return;
   }
   const community = data.community;
-  mineGoods = community && Array.isArray(community.goods) ? community.goods.slice() : [];
+  mineCommunity = community;
   if (!community) {
+    mineView = 'home';
     box.innerHTML = '<div class="card"><button type="button" class="back" id="mineBack">В кабинет</button><div class="kicker">Моё сообщество</div>'+
-      '<p class="now">Подключите сообщество. Бот ответит покупателям кнопками: каталог, контакты, заявка и администратор.</p>'+
+      '<p class="now">Подключите сообщество. Дальше бот настраивается по разделам: кнопки, каталог, заявки и контакты.</p>'+
       '<label class="flabel" for="mineGroup">Номер сообщества</label><input id="mineGroup" inputmode="numeric" placeholder="1234567">'+
       '<label class="flabel" for="mineToken">Ключ сообщества</label><input id="mineToken" type="password" autocomplete="off" placeholder="Ключ из настроек сообщества">'+
       '<button class="btn" id="mineConnect" type="button" style="margin-top:12px">Подключить</button><p id="minemsg" class="hint"></p></div>';
@@ -4158,6 +4329,7 @@ async function loadMine(){
     return;
   }
   if (community.home) {
+    mineView = 'home';
     box.innerHTML = '<div class="card"><button type="button" class="back" id="mineBack">В кабинет</button><div class="kicker">Моё сообщество</div>'+
       '<p class="now">Это сообщество кафедры. Подключите другое сообщество, кафедра останется на месте.</p>'+
       '<label class="flabel" for="mineGroup">Номер сообщества</label><input id="mineGroup" inputmode="numeric" placeholder="1234567">'+
@@ -4167,41 +4339,19 @@ async function loadMine(){
     document.getElementById('mineConnect').onclick = connectMine;
     return;
   }
-  box.innerHTML = '<div class="card"><button type="button" class="back" id="mineBack">В кабинет</button><div class="kicker">Моё сообщество</div>'+
-    '<p class="now">'+esc(community.title || ('Сообщество '+community.groupId))+'</p>'+
-    (community.key ? '<p class="hint">Ключ сохранён: '+esc(community.key)+'</p>' : '')+
-    '<p class="hint">Пока донат действует, бот отвечает покупателям. Включите только то, что нужно. Пустую кнопку бот не выдумывает.</p>'+
-    '<label><input id="mineCatalog" type="checkbox"'+(community.catalog?' checked':'')+'> Каталог</label><br>'+
-    '<label><input id="mineContactsOn" type="checkbox"'+(community.contactsOn?' checked':'')+'> Контакты</label><br>'+
-    '<label><input id="mineOrder" type="checkbox"'+(community.order?' checked':'')+'> Заявка</label><br>'+
-    '<label><input id="mineAdmin" type="checkbox"'+(community.admin?' checked':'')+'> Администратор</label><br>'+
-    '<label><input id="mineComments" type="checkbox"'+(community.comments?' checked':'')+'> Ссылки в комментариях</label>'+
-    '<p class="hint">Комментарий про товар или с вопросом о цене получит ссылку из базы. Обычные комментарии бот не трогает.</p>'+
-    '<button class="btn ghost" id="mineScan" type="button">Сканировать сообщество</button>'+
-    '<div id="mineFound"></div>'+
-    '<label class="flabel" for="mineContacts">Текст контактов</label><textarea id="mineContacts" maxlength="1500" rows="3" placeholder="Телефон, адрес, как написать">'+esc(community.contacts || '')+'</textarea>'+
-    '<div id="mineGoods"></div>'+
-    '<label class="flabel" for="mineName">Название</label><input id="mineName" maxlength="80" placeholder="Торт">'+
-    '<label class="flabel" for="minePrice">Цена</label><input id="minePrice" maxlength="40" placeholder="1500">'+
-    '<label class="flabel" for="mineLink">Ссылка https</label><input id="mineLink" maxlength="300" placeholder="https://vk.com/market-1_2">'+
-    '<button class="btn ghost" id="mineAdd" type="button" style="margin-top:8px">Добавить товар</button>'+
-    '<label class="flabel" for="mineFile">Файл со списком</label><input id="mineFile" type="file" accept=".txt,.csv,.yml,.yaml,text/plain">'+
-    '<textarea id="mineSheet" hidden></textarea>'+
-    '<p class="hint">Строка файла: название | цена | ссылка. Подойдёт и выгрузка товаров ВК, если в ней есть ссылка или номер товара. Файл заменяет список. Товаров не больше 40.</p>'+
-    '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить</button>'+
-    '<button class="btn ghost" id="mineDrop" type="button" style="margin-top:8px">Удалить бота из сообщества</button>'+
-    '<p class="hint">Ключ забудется, а кнопки в чатах снимутся, пока ключ ещё действует.</p>'+
-    '<p id="minemsg" class="hint"></p></div>';
-  document.getElementById('mineBack').onclick = mineBack;
-  document.getElementById('mineAdd').onclick = addMineGood;
-  document.getElementById('mineFile').onchange = readMineFile;
-  document.getElementById('mineSave').onclick = saveMine;
-  document.getElementById('mineScan').onclick = scanMine;
-  document.getElementById('mineDrop').onclick = function(){
-    if (!confirm('Удалить бота из сообщества? Ключ забудется, кнопки в чатах снимутся.')) return;
-    dropAssistGroup(community.groupId);
+  mineGoods = Array.isArray(community.goods) ? community.goods.slice() : [];
+  mineState = {
+    catalog: !!community.catalog,
+    contactsOn: !!community.contactsOn,
+    order: !!community.order,
+    admin: !!community.admin,
+    comments: !!community.comments,
+    names: Object.assign({}, community.names || {}),
+    texts: Object.assign({}, community.texts || {}),
+    contacts: community.contacts || '',
+    greeting: community.greeting || ''
   };
-  paintMineGoods();
+  paintMine();
 }
 function addMineGood(){
   const msg = document.getElementById('minemsg');
@@ -4212,18 +4362,19 @@ function addMineGood(){
     if (msg) msg.textContent = 'Нужны название и ссылка, которая начинается с https://';
     return;
   }
-  if (mineGoods.length >= 40) {
+  if (mineEdit < 0 && mineGoods.length >= 40) {
     if (msg) msg.textContent = 'В списке уже 40 товаров.';
     return;
   }
-  mineGoods.push({ name: name, price: price, link: link });
-  document.getElementById('mineName').value = '';
-  document.getElementById('minePrice').value = '';
-  document.getElementById('mineLink').value = '';
+  const row = { name: name, price: price, link: link };
+  if (mineEdit >= 0 && mineGoods[mineEdit]) mineGoods[mineEdit] = row;
+  else mineGoods.push(row);
+  mineEdit = -1;
   const sheet = document.getElementById('mineSheet');
   if (sheet) sheet.value = '';
-  if (msg) msg.textContent = '';
-  paintMineGoods();
+  paintMine();
+  const fresh = document.getElementById('minemsg');
+  if (fresh) fresh.textContent = 'Товар в списке. Нажмите «Сохранить каталог».';
 }
 function readMineFile(input){
   const file = input.files && input.files[0];
@@ -4233,7 +4384,7 @@ function readMineFile(input){
   reader.onload = function(){
     const sheet = document.getElementById('mineSheet');
     if (sheet) sheet.value = String(reader.result || '');
-    if (msg) msg.textContent = 'Файл прочитан. Нажмите «Сохранить», список заменится им.';
+    if (msg) msg.textContent = 'Файл прочитан. Нажмите «Сохранить каталог», список заменится им.';
   };
   reader.readAsText(file);
 }
@@ -4254,6 +4405,7 @@ async function connectMine(){
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Сообщество не подключилось');
+    mineView = 'home';
     loadMine();
   } catch (error) {
     if (msg) msg.textContent = error.message || 'Сообщество не подключилось';
@@ -4261,22 +4413,32 @@ async function connectMine(){
   }
 }
 async function saveMine(){
+  readMineForm();
   const msg = document.getElementById('minemsg');
   const button = document.getElementById('mineSave');
   if (button) button.disabled = true;
   if (msg) msg.textContent = 'Сохраняю…';
+  const labels = ['catalog', 'contacts', 'order', 'admin'].map(function(key){ return mineState.names[key] || ''; }).filter(Boolean);
+  if (new Set(labels).size !== labels.length) {
+    if (msg) msg.textContent = 'У двух кнопок не может быть одной надписи.';
+    if (button) button.disabled = false;
+    return;
+  }
   const sheet = String((document.getElementById('mineSheet') || {}).value || '');
   try {
     const response = await fetch('/api/vk/shop', {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({
-        catalog: !!(document.getElementById('mineCatalog') || {}).checked,
-        contactsOn: !!(document.getElementById('mineContactsOn') || {}).checked,
-        order: !!(document.getElementById('mineOrder') || {}).checked,
-        admin: !!(document.getElementById('mineAdmin') || {}).checked,
-        comments: !!(document.getElementById('mineComments') || {}).checked,
-        contacts: (document.getElementById('mineContacts') || {}).value || '',
+        catalog: !!mineState.catalog,
+        contactsOn: !!mineState.contactsOn,
+        order: !!mineState.order,
+        admin: !!mineState.admin,
+        comments: !!mineState.comments,
+        contacts: mineState.contacts,
+        greeting: mineState.greeting,
+        names: mineState.names,
+        texts: mineState.texts,
         goods: mineGoods,
         sheet: sheet
       })
@@ -4286,13 +4448,14 @@ async function saveMine(){
     if (Array.isArray(data.goods)) mineGoods = data.goods;
     const area = document.getElementById('mineSheet');
     if (area) area.value = '';
-    paintMineGoods();
+    paintMine();
     const skipped = Number(data.skipped) || 0;
-    if (msg) msg.textContent = (data.pending ? 'Сохранено. Бот подхватит список, когда будет на связи.' : 'Сохранено. Покупатель увидит включённые кнопки.')+(skipped ? ' Пропущено строк без ссылки: '+skipped+'.' : '');
+    const fresh = document.getElementById('minemsg');
+    if (fresh) fresh.textContent = (data.pending ? 'Сохранено. Бот подхватит список, когда будет на связи.' : 'Сохранено.')+(skipped ? ' Пропущено строк без ссылки: '+skipped+'.' : '');
   } catch (error) {
     if (msg) msg.textContent = error.message || 'Настройки не сохранились';
+    if (button) button.disabled = false;
   }
-  if (button) button.disabled = false;
 }
 function waitMine(ms){
   return new Promise(function(resolve){ setTimeout(resolve, ms); });
@@ -4342,7 +4505,7 @@ async function scanMine(){
     }
     if (button) button.textContent = 'Сканировать ещё раз';
     if (msg) msg.textContent = mineFound.length
-      ? 'Можем добавить в базу следующее. Снимите галочку с лишнего и нажмите «Добавить отмеченное».'
+      ? 'Отметьте нужное и нажмите «Добавить отмеченное». Результат появится сразу под кнопкой.'
       : 'В открытых записях не нашлось ссылок, товаров и контактов.';
   } catch (error) {
     if (button) button.textContent = 'Сканировать сообщество';
@@ -4357,7 +4520,7 @@ function paintMineFound(){
     box.innerHTML = '';
     return;
   }
-  box.innerHTML = '<p class="now">Можем добавить в базу:</p>'+mineFound.map(function(item, index){
+  box.innerHTML = '<p class="now">Можем разложить по разделам:</p>'+mineFound.map(function(item, index){
     const kind = item.kind === 'article' ? 'Статья' : item.kind === 'product' ? 'Товар' : item.kind === 'contact' ? 'Контакт' : item.kind === 'about' ? 'Описание' : item.kind === 'site' ? 'Сайт' : 'Ссылка';
     const extra = item.link ? '<br>'+esc(item.link) : (item.text ? '<br>'+esc(item.text) : '');
     return '<label class="hint"><input type="checkbox" data-scan-on="'+index+'"'+(item.on ? ' checked' : '')+'> '+kind+': '+esc(item.title)+extra+'</label>';
@@ -4370,30 +4533,35 @@ function paintMineFound(){
   const take = document.getElementById('mineTake');
   if (take) take.onclick = takeMineScan;
 }
-function takeMineScan(){
-  const contacts = document.getElementById('mineContacts');
-  const lines = [];
-  mineFound.forEach(function(item){
-    if (!item.on) return;
-    if (item.kind === 'about' || item.kind === 'contact' || item.kind === 'site') {
-      const line = [item.title, item.text, item.link].filter(Boolean).join(' — ');
-      if (line) lines.push(line);
-      return;
-    }
-    if (!/^https:\/\//i.test(item.link) || mineGoods.length >= 40) return;
-    const title = String(item.title || '').replace(/\s+/g, ' ').trim();
-    if (title.length < 2) return;
-    if (mineGoods.some(function(good){ return good.link === item.link || String(good.name || '').toLowerCase() === title.toLowerCase(); })) return;
-    mineGoods.push({ name: title, price: item.price || '', link: item.link });
-  });
-  if (contacts && lines.length) {
-    const prev = String(contacts.value || '').trim();
-    const add = lines.filter(function(line){ return prev.indexOf(line) === -1; }).join('\n');
-    if (add) contacts.value = prev ? prev+'\n'+add : add;
+async function takeMineScan(){
+  const note = document.getElementById('mineTakeNote');
+  const button = document.getElementById('mineTake');
+  if (button) button.disabled = true;
+  if (note) note.textContent = 'Раскладываю…';
+  try {
+    const response = await fetch('/api/vk/shop/place', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ items: mineFound.filter(function(item){ return item.on; }) })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Отмеченное не разобралось');
+    mineState.contacts = data.contacts || '';
+    mineState.greeting = data.greeting || '';
+    if (Array.isArray(data.goods)) mineGoods = data.goods;
+    const added = data.added || {};
+    const parts = [];
+    if (added.contacts) parts.push('в контакты: '+added.contacts);
+    if (added.about) parts.push('приветствие обновлено');
+    if (added.goods) parts.push('в каталог: '+added.goods);
+    if (note) note.textContent = parts.length
+      ? 'Добавлено. '+parts.join(', ')+'. Откройте раздел и нажмите «Сохранить».'
+      : 'В отмеченном не нашлось телефона, сайта или товара со ссылкой.';
+  } catch (error) {
+    if (note) note.textContent = error.message || 'Отмеченное не разобралось';
   }
-  paintMineGoods();
-  const msg = document.getElementById('minemsg');
-  if (msg) msg.textContent = 'Отмеченное стоит в списке. Нажмите «Сохранить», чтобы бот начал этим пользоваться.';
+  if (button) button.disabled = false;
+  if (note && note.scrollIntoView) note.scrollIntoView({ block: 'nearest' });
 }
 async function dropAssistGroup(groupId){
   const msg = document.getElementById('minemsg');
@@ -4405,6 +4573,7 @@ async function dropAssistGroup(groupId){
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Сообщество не отключилось');
+    mineView = 'home';
     loadMine();
   } catch (error) {
     if (msg) msg.textContent = error.message || 'Сообщество не отключилось';

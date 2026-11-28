@@ -1,5 +1,5 @@
 const db = require('./db');
-const { cleanGoods, parseSheet, shopPack } = require('./simple-bot');
+const { cleanGoods, parseSheet, placeScan, shopPack } = require('./simple-bot');
 const { cleanProducts, cleanServices, tradeById } = require('../public/trades');
 
 const JOIN_URL = 'https://vk.com/donut/club214554778';
@@ -558,6 +558,8 @@ async function saveDesk(account, input, fetchImpl) {
         shopOrder: row.reply.shopOrder === true,
         shopAdmin: row.reply.shopAdmin === true,
         shopComments: row.reply.shopComments === true,
+        shopNames: row.reply.shopNames,
+        shopTexts: row.reply.shopTexts,
         goods: row.reply.goods
     } : null;
     const reply = cleanReply(keptShop ? Object.assign({}, input, keptShop) : input);
@@ -600,6 +602,8 @@ async function saveDesk(account, input, fetchImpl) {
             shopOrder: reply.shopOrder === true,
             shopAdmin: reply.shopAdmin === true,
             shopComments: reply.shopComments === true,
+            shopNames: reply.shopNames || {},
+            shopTexts: reply.shopTexts || {},
             goods: reply.goods || []
         } : {})
     }, fetchImpl);
@@ -627,12 +631,15 @@ async function saveShop(account, input, fetchImpl) {
     const goods = parsed ? parsed.goods : cleanGoods(input && input.goods);
     const reply = cleanReply(Object.assign({}, row.reply || {}, {
         level: 1,
+        greeting: input && input.greeting != null ? String(input.greeting) : ((row.reply && row.reply.greeting) || ''),
         contacts: input && input.contacts != null ? String(input.contacts) : ((row.reply && row.reply.contacts) || ''),
         shopCatalog: !!(input && input.catalog),
         shopContacts: !!(input && input.contactsOn),
         shopOrder: !!(input && input.order),
         shopAdmin: !!(input && input.admin),
         shopComments: !!(input && input.comments),
+        shopNames: input && input.names ? input.names : ((row.reply && row.reply.shopNames) || {}),
+        shopTexts: input && input.texts ? input.texts : ((row.reply && row.reply.shopTexts) || {}),
         goods
     }));
     if (!reply || reply.level !== 1) throw publicError('Настройки бота не собрались.');
@@ -673,6 +680,8 @@ async function saveShop(account, input, fetchImpl) {
         shopOrder: reply.shopOrder === true,
         shopAdmin: reply.shopAdmin === true,
         shopComments: reply.shopComments === true,
+        shopNames: reply.shopNames || {},
+        shopTexts: reply.shopTexts || {},
         goods: reply.goods || []
     }, fetchImpl);
     if (!pushed.ok && /кафедр/i.test(pushed.error || '')) throw publicError(pushed.error);
@@ -685,6 +694,14 @@ async function saveShop(account, input, fetchImpl) {
         goods: reply.goods || [],
         community: communityCard(Object.assign({}, saved || row, { reply, sync_state: pushed.ok ? 'on' : 'fail' }))
     };
+}
+
+function arrangeScan(input, current) {
+    return placeScan(input && input.items, {
+        contacts: current && current.contacts,
+        greeting: current && current.greeting,
+        goods: current && current.goods
+    });
 }
 
 async function scanShop(account, input, fetchImpl) {
@@ -1319,6 +1336,7 @@ module.exports = {
     connectCommunity,
     saveDesk,
     saveShop,
+    arrangeScan,
     scanShop,
     setupNote,
     setupCard,

@@ -311,6 +311,22 @@ test('простой бот хранит товары отдельно от ка
     assert.equal(reply.goods[0].name, 'Торт');
     assert.equal(reply.goods[0].price, '1500');
     assert.equal(assistant.cleanReply({ greeting: 'Здравствуйте' }).level, undefined);
+    const named = assistant.cleanReply({ level: 1, shopNames: { catalog: 'Торты' }, shopTexts: { order: 'Напишите телефон.' } });
+    assert.equal(named.shopNames.catalog, 'Торты');
+    assert.equal(named.shopTexts.order, 'Напишите телефон.');
+    const about = 'Закажи торт своей мечты в Малоярославце с доставкой и длинным описанием витрины';
+    const placed = require('./simple-bot').placeScan([
+        { on: true, kind: 'about', title: 'Статус', text: about },
+        { on: true, kind: 'contact', title: '89620964928', text: '' },
+        { on: true, kind: 'site', title: 'Уроки', link: 'https://vk.com/club208590198' },
+        { on: true, kind: 'product', title: 'Наполеон', price: '2000', link: 'https://vk.com/market-9_3' }
+    ], { contacts: about, goods: [] });
+    assert.match(placed.contacts, /89620964928/);
+    assert.match(placed.contacts, /club208590198/);
+    assert.equal(placed.contacts.includes('витрины'), false);
+    assert.match(placed.greeting, /витрины/);
+    assert.equal(placed.goods[0].name, 'Наполеон');
+    assert.equal(placed.added.goods, 1);
     const sheet = require('./simple-bot').parseSheet('Торт | 1500 | https://vk.com/market-9_1\nпусто', 9);
     assert.equal(sheet.goods.length, 1);
     assert.equal(sheet.skipped, 1);

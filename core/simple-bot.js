@@ -13,6 +13,8 @@ function shopPack(input) {
     shopOrder: on(input.shopOrder),
     shopAdmin: on(input.shopAdmin),
     shopComments: on(input.shopComments),
+    shopNames: cleanNames(input.shopNames),
+    shopTexts: cleanTexts(input.shopTexts),
     goods: cleanGoods(input.goods),
   };
 }
@@ -420,4 +422,92 @@ function positiveGroup(value) {
   return Number.isSafeInteger(id) && id > 0;
 }
 
-module.exports = { shopPack, cleanGoods, parseSheet };
+const SHOP_DEFAULTS = { catalog: 'Каталог', contacts: 'Контакты', order: 'Заявка', admin: 'Администратор' };
+
+function cleanNames(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  const names = {};
+  Object.keys(SHOP_DEFAULTS).forEach((keyName) => {
+    const text = String(source[keyName] == null ? '' : source[keyName]).replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (text.length >= 2 && text !== SHOP_DEFAULTS[keyName]) names[keyName] = text;
+  });
+  return names;
+}
+
+function cleanTexts(value) {
+  const source = value && typeof value === 'object' ? value : {};
+  const texts = {};
+  ['catalog', 'order', 'admin'].forEach((keyName) => {
+    const text = String(source[keyName] == null ? '' : source[keyName]).replace(/\s+/g, ' ').trim().slice(0, 500);
+    if (text) texts[keyName] = text;
+  });
+  return texts;
+}
+
+function placeScan(found, state) {
+  const current = state && typeof state === 'object' ? state : {};
+  const goods = cleanGoods(current.goods);
+  let contacts = String(current.contacts || '').trim();
+  let greeting = String(current.greeting || '').trim();
+  const phones = [];
+  const sites = [];
+  const abouts = [];
+  let addedGoods = 0;
+  (Array.isArray(found) ? found : []).forEach((item) => {
+    if (!item || item.on === false) return;
+    const kind = String(item.kind || '');
+    const title = String(item.title || '').replace(/\s+/g, ' ').trim();
+    const text = String(item.text || '').replace(/\s+/g, ' ').trim();
+    const link = https(item.link);
+    if (kind === 'product' || kind === 'article') {
+      const row = cleanGood({ name: title, price: item.price, link });
+      if (!row || goods.length >= GOODS_LIMIT) return;
+      if (goods.some((good) => good.link === row.link || good.name.toLowerCase() === row.name.toLowerCase())) return;
+      goods.push(row);
+      addedGoods += 1;
+      return;
+    }
+    if (kind === 'contact') {
+      const phone = phoneLine(`${title} ${text}`);
+      if (phone) phones.push(phone);
+      return;
+    }
+    if (kind === 'site' || kind === 'link') {
+      if (link) sites.push(link);
+      return;
+    }
+    if (kind === 'about') {
+      const body = text && text !== title ? text : (text || title);
+      if (body && body !== 'Статус' && body !== 'Описание') abouts.push(body);
+    }
+  });
+  const lines = [...new Set(phones), ...[...new Set(sites)].map((url) => `Сайт: ${url}`)];
+  const dumped = abouts.some((body) => body.length >= 40 && contacts.includes(body.slice(0, 40)));
+  if (lines.length) {
+    const block = lines.join('\n');
+    if (dumped || !contacts) contacts = block;
+    else if (!contacts.includes(block)) contacts = `${contacts}\n${block}`;
+  } else if (dumped) contacts = '';
+  const freshHello = !greeting || greeting === 'Здравствуйте. Выберите кнопку ниже.' || greeting === 'Здравствуйте. Напишите, что вас интересует.';
+  let aboutAdded = 0;
+  if (abouts.length && freshHello) {
+    greeting = abouts[0].slice(0, 400);
+    aboutAdded = 1;
+  }
+  return {
+    contacts: contacts.slice(0, 1500),
+    greeting: greeting.slice(0, 400),
+    goods,
+    added: { contacts: lines.length, about: aboutAdded, goods: addedGoods },
+  };
+}
+
+function phoneLine(value) {
+  const match = String(value || '').match(/(?:\+?\d[\d\s\-()]{8,}\d)/);
+  if (!match) return '';
+  const digits = match[0].replace(/\D/g, '');
+  if (digits.length < 10 || digits.length > 15) return '';
+  return match[0].replace(/\s+/g, ' ').trim().slice(0, 40);
+}
+
+module.exports = { shopPack, cleanGoods, parseSheet, placeScan };
