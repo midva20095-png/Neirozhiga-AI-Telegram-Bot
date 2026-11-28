@@ -853,7 +853,7 @@ async function load(){
   const bal = document.getElementById('bal');
   if (bal) bal.textContent = (me.balance||0)+' кр';
   markVkChrome();
-  if (!isVk() && (tab==='rate' || tab==='shop' || tab==='menu' || tab==='cab' || tab==='assist')) tab = 'gen';
+  if (!isVk() && (tab==='rate' || tab==='shop' || tab==='menu' || tab==='cab' || tab==='assist' || tab==='mine')) tab = 'gen';
   if (isVk() && tab === 'menu' && !window.__vkGoal) tab = 'gen';
   if (window.__vkGoal === 'rate') tab = 'rate';
   if (window.__vkGoal === 'shop') tab = 'shop';
@@ -917,6 +917,7 @@ function draw(){
   else if (tab==='rate') { box.innerHTML = '<div id="ratebox"><div class="card"><p>Считаю баллы…</p></div></div>'; loadRating(); }
   else if (tab==='shop') { box.innerHTML = '<div id="shopbox"><div class="card"><p>Открываю магазин…</p></div></div>'; loadShop(); }
   else if (tab==='assist') { box.innerHTML = '<div id="assistbox"><div class="card"><p>Открываю сообщество…</p></div></div>'; loadAssist(); }
+  else if (tab==='mine') { box.innerHTML = '<div id="minebox"><div class="card"><p>Открываю сообщество…</p></div></div>'; loadMine(); }
   else box.innerHTML = viewHelp();
   if (inVkApp() && tab !== 'gen' && tab !== 'tpl' && tab !== 'rate' && tab !== 'shop' && tab !== 'cab') {
     box.insertAdjacentHTML('afterbegin', '<button type="button" class="back" id="cab-back">Кабинет</button>');
@@ -4089,6 +4090,326 @@ async function dropAssist(){
     if (msg) msg.textContent = error.message;
   }
 }
+let mineGoods = [];
+let mineFound = [];
+function mineBack(){
+  tab = 'cab';
+  draw();
+}
+function mineRow(item, index){
+  const price = item.price ? ' — '+esc(item.price)+(/^\d+$/.test(String(item.price)) ? ' ₽' : '') : '';
+  return '<p class="hint">'+esc(item.name)+price+'<br>'+esc(item.link)+' <button type="button" class="btn ghost" data-mine-del="'+index+'">Убрать</button></p>';
+}
+function paintMineGoods(){
+  const list = document.getElementById('mineGoods');
+  if (!list) return;
+  list.innerHTML = mineGoods.length ? mineGoods.map(mineRow).join('') : '<p class="hint">Товаров пока нет. Добавьте строку или загрузите файл.</p>';
+  list.querySelectorAll('[data-mine-del]').forEach(function(button){
+    button.onclick = function(){
+      mineGoods.splice(Number(button.getAttribute('data-mine-del')), 1);
+      paintMineGoods();
+    };
+  });
+}
+async function loadMine(){
+  const box = document.getElementById('minebox');
+  if (!box) return;
+  let data = {};
+  try {
+    const response = await fetchT('/api/vk/shop', { headers: authHeaders() }, 18000);
+    data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Раздел не открылся');
+  } catch (error) {
+    box.innerHTML = '<div class="card"><button type="button" class="back" id="mineBack">В кабинет</button><p class="err">'+esc(netError(error))+'</p><button class="btn" type="button" onclick="loadMine()">Повторить</button></div>';
+    const back = document.getElementById('mineBack');
+    if (back) back.onclick = mineBack;
+    return;
+  }
+  if (data.closed) {
+    box.innerHTML = '<div class="card"><button type="button" class="back" id="mineBack">В кабинет</button><div class="kicker">Моё сообщество</div><p class="now">Раздел сейчас закрыт.</p></div>';
+    document.getElementById('mineBack').onclick = mineBack;
+    return;
+  }
+  if (data.check === false || !data.don) {
+    const note = data.check === false
+      ? 'Не удалось сверить донат. Откройте раздел ещё раз.'
+      : 'Бот сообщества открыт донам НейроЯги. После оплаты здесь подключается ваше сообщество.';
+    box.innerHTML = '<div class="card"><button type="button" class="back" id="mineBack">В кабинет</button><div class="kicker">Моё сообщество</div><p class="now">'+esc(note)+'</p>'+
+      '<a class="btn" href="'+esc(data.join || 'https://vk.com/donut/club214554778')+'" target="_blank" rel="noopener">Оформить донат</a></div>';
+    document.getElementById('mineBack').onclick = mineBack;
+    return;
+  }
+  if (!data.active) {
+    box.innerHTML = '<div class="card"><button type="button" class="back" id="mineBack">В кабинет</button><div class="kicker">Моё сообщество</div><p class="now">Донат не продлён, бот молчит. После оплаты он снова ответит в вашем сообществе.</p>'+
+      '<a class="btn" href="'+esc(data.join)+'" target="_blank" rel="noopener">Продлить донат</a></div>';
+    document.getElementById('mineBack').onclick = mineBack;
+    return;
+  }
+  const community = data.community;
+  mineGoods = community && Array.isArray(community.goods) ? community.goods.slice() : [];
+  if (!community) {
+    box.innerHTML = '<div class="card"><button type="button" class="back" id="mineBack">В кабинет</button><div class="kicker">Моё сообщество</div>'+
+      '<p class="now">Подключите сообщество. Бот ответит покупателям кнопками: каталог, контакты, заявка и администратор.</p>'+
+      '<label class="flabel" for="mineGroup">Номер сообщества</label><input id="mineGroup" inputmode="numeric" placeholder="1234567">'+
+      '<label class="flabel" for="mineToken">Ключ сообщества</label><input id="mineToken" type="password" autocomplete="off" placeholder="Ключ из настроек сообщества">'+
+      '<button class="btn" id="mineConnect" type="button" style="margin-top:12px">Подключить</button><p id="minemsg" class="hint"></p></div>';
+    document.getElementById('mineBack').onclick = mineBack;
+    document.getElementById('mineConnect').onclick = connectMine;
+    return;
+  }
+  if (community.home) {
+    box.innerHTML = '<div class="card"><button type="button" class="back" id="mineBack">В кабинет</button><div class="kicker">Моё сообщество</div>'+
+      '<p class="now">Это сообщество кафедры. Подключите другое сообщество, кафедра останется на месте.</p>'+
+      '<label class="flabel" for="mineGroup">Номер сообщества</label><input id="mineGroup" inputmode="numeric" placeholder="1234567">'+
+      '<label class="flabel" for="mineToken">Ключ сообщества</label><input id="mineToken" type="password" autocomplete="off">'+
+      '<button class="btn" id="mineConnect" type="button" style="margin-top:12px">Подключить другое</button><p id="minemsg" class="hint"></p></div>';
+    document.getElementById('mineBack').onclick = mineBack;
+    document.getElementById('mineConnect').onclick = connectMine;
+    return;
+  }
+  box.innerHTML = '<div class="card"><button type="button" class="back" id="mineBack">В кабинет</button><div class="kicker">Моё сообщество</div>'+
+    '<p class="now">'+esc(community.title || ('Сообщество '+community.groupId))+'</p>'+
+    (community.key ? '<p class="hint">Ключ сохранён: '+esc(community.key)+'</p>' : '')+
+    '<p class="hint">Пока донат действует, бот отвечает покупателям. Включите только то, что нужно. Пустую кнопку бот не выдумывает.</p>'+
+    '<label><input id="mineCatalog" type="checkbox"'+(community.catalog?' checked':'')+'> Каталог</label><br>'+
+    '<label><input id="mineContactsOn" type="checkbox"'+(community.contactsOn?' checked':'')+'> Контакты</label><br>'+
+    '<label><input id="mineOrder" type="checkbox"'+(community.order?' checked':'')+'> Заявка</label><br>'+
+    '<label><input id="mineAdmin" type="checkbox"'+(community.admin?' checked':'')+'> Администратор</label><br>'+
+    '<label><input id="mineComments" type="checkbox"'+(community.comments?' checked':'')+'> Ссылки в комментариях</label>'+
+    '<p class="hint">Комментарий про товар или с вопросом о цене получит ссылку из базы. Обычные комментарии бот не трогает.</p>'+
+    '<button class="btn ghost" id="mineScan" type="button">Сканировать сообщество</button>'+
+    '<div id="mineFound"></div>'+
+    '<label class="flabel" for="mineContacts">Текст контактов</label><textarea id="mineContacts" maxlength="1500" rows="3" placeholder="Телефон, адрес, как написать">'+esc(community.contacts || '')+'</textarea>'+
+    '<div id="mineGoods"></div>'+
+    '<label class="flabel" for="mineName">Название</label><input id="mineName" maxlength="80" placeholder="Торт">'+
+    '<label class="flabel" for="minePrice">Цена</label><input id="minePrice" maxlength="40" placeholder="1500">'+
+    '<label class="flabel" for="mineLink">Ссылка https</label><input id="mineLink" maxlength="300" placeholder="https://vk.com/market-1_2">'+
+    '<button class="btn ghost" id="mineAdd" type="button" style="margin-top:8px">Добавить товар</button>'+
+    '<label class="flabel" for="mineFile">Файл со списком</label><input id="mineFile" type="file" accept=".txt,.csv,.yml,.yaml,text/plain">'+
+    '<textarea id="mineSheet" hidden></textarea>'+
+    '<p class="hint">Строка файла: название | цена | ссылка. Подойдёт и выгрузка товаров ВК, если в ней есть ссылка или номер товара. Файл заменяет список. Товаров не больше 40.</p>'+
+    '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить</button>'+
+    '<button class="btn ghost" id="mineDrop" type="button" style="margin-top:8px">Удалить бота из сообщества</button>'+
+    '<p class="hint">Ключ забудется, а кнопки в чатах снимутся, пока ключ ещё действует.</p>'+
+    '<p id="minemsg" class="hint"></p></div>';
+  document.getElementById('mineBack').onclick = mineBack;
+  document.getElementById('mineAdd').onclick = addMineGood;
+  document.getElementById('mineFile').onchange = readMineFile;
+  document.getElementById('mineSave').onclick = saveMine;
+  document.getElementById('mineScan').onclick = scanMine;
+  document.getElementById('mineDrop').onclick = function(){
+    if (!confirm('Удалить бота из сообщества? Ключ забудется, кнопки в чатах снимутся.')) return;
+    dropAssistGroup(community.groupId);
+  };
+  paintMineGoods();
+}
+function addMineGood(){
+  const msg = document.getElementById('minemsg');
+  const name = String((document.getElementById('mineName') || {}).value || '').replace(/\s+/g, ' ').trim();
+  const price = String((document.getElementById('minePrice') || {}).value || '').replace(/\s+/g, ' ').trim();
+  const link = String((document.getElementById('mineLink') || {}).value || '').trim();
+  if (name.length < 2 || !/^https:\/\/\S+$/i.test(link)) {
+    if (msg) msg.textContent = 'Нужны название и ссылка, которая начинается с https://';
+    return;
+  }
+  if (mineGoods.length >= 40) {
+    if (msg) msg.textContent = 'В списке уже 40 товаров.';
+    return;
+  }
+  mineGoods.push({ name: name, price: price, link: link });
+  document.getElementById('mineName').value = '';
+  document.getElementById('minePrice').value = '';
+  document.getElementById('mineLink').value = '';
+  const sheet = document.getElementById('mineSheet');
+  if (sheet) sheet.value = '';
+  if (msg) msg.textContent = '';
+  paintMineGoods();
+}
+function readMineFile(input){
+  const file = input.files && input.files[0];
+  const msg = document.getElementById('minemsg');
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(){
+    const sheet = document.getElementById('mineSheet');
+    if (sheet) sheet.value = String(reader.result || '');
+    if (msg) msg.textContent = 'Файл прочитан. Нажмите «Сохранить», список заменится им.';
+  };
+  reader.readAsText(file);
+}
+async function connectMine(){
+  const msg = document.getElementById('minemsg');
+  const button = document.getElementById('mineConnect');
+  if (button) button.disabled = true;
+  if (msg) msg.textContent = 'Проверяю ключ…';
+  try {
+    const response = await fetch('/api/vk/assistant/community', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        groupId: (document.getElementById('mineGroup') || {}).value || '',
+        token: (document.getElementById('mineToken') || {}).value || '',
+        shop: true
+      })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Сообщество не подключилось');
+    loadMine();
+  } catch (error) {
+    if (msg) msg.textContent = error.message || 'Сообщество не подключилось';
+    if (button) button.disabled = false;
+  }
+}
+async function saveMine(){
+  const msg = document.getElementById('minemsg');
+  const button = document.getElementById('mineSave');
+  if (button) button.disabled = true;
+  if (msg) msg.textContent = 'Сохраняю…';
+  const sheet = String((document.getElementById('mineSheet') || {}).value || '');
+  try {
+    const response = await fetch('/api/vk/shop', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        catalog: !!(document.getElementById('mineCatalog') || {}).checked,
+        contactsOn: !!(document.getElementById('mineContactsOn') || {}).checked,
+        order: !!(document.getElementById('mineOrder') || {}).checked,
+        admin: !!(document.getElementById('mineAdmin') || {}).checked,
+        comments: !!(document.getElementById('mineComments') || {}).checked,
+        contacts: (document.getElementById('mineContacts') || {}).value || '',
+        goods: mineGoods,
+        sheet: sheet
+      })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Настройки не сохранились');
+    if (Array.isArray(data.goods)) mineGoods = data.goods;
+    const area = document.getElementById('mineSheet');
+    if (area) area.value = '';
+    paintMineGoods();
+    const skipped = Number(data.skipped) || 0;
+    if (msg) msg.textContent = (data.pending ? 'Сохранено. Бот подхватит список, когда будет на связи.' : 'Сохранено. Покупатель увидит включённые кнопки.')+(skipped ? ' Пропущено строк без ссылки: '+skipped+'.' : '');
+  } catch (error) {
+    if (msg) msg.textContent = error.message || 'Настройки не сохранились';
+  }
+  if (button) button.disabled = false;
+}
+function waitMine(ms){
+  return new Promise(function(resolve){ setTimeout(resolve, ms); });
+}
+async function scanMine(){
+  const button = document.getElementById('mineScan');
+  const msg = document.getElementById('minemsg');
+  if (button) button.disabled = true;
+  mineFound = [];
+  paintMineFound();
+  let phase = 'card';
+  let offset = 0;
+  let guard = 0;
+  try {
+    while (phase && guard < 12) {
+      guard += 1;
+      const response = await fetchT('/api/vk/shop/scan', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ phase: phase, offset: offset })
+      }, 22000);
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Сканирование остановилось');
+      const lines = Array.isArray(data.readings) && data.readings.length ? data.readings : [data.reading || 'Смотрю сообщество'];
+      for (let i = 0; i < lines.length; i += 1) {
+        if (button) button.textContent = String(lines[i] || 'Смотрю сообщество');
+        await waitMine(400);
+      }
+      (Array.isArray(data.items) ? data.items : []).forEach(function(item){
+        if (!item || mineFound.length >= 40) return;
+        const key = String(item.kind || '')+'|'+(item.link || item.title || '');
+        if (mineFound.some(function(row){ return row.key === key; })) return;
+        mineFound.push({
+          key: key,
+          on: true,
+          kind: item.kind || '',
+          title: String(item.title || ''),
+          text: String(item.text || ''),
+          link: String(item.link || ''),
+          price: String(item.price || '')
+        });
+      });
+      paintMineFound();
+      if (data.done) break;
+      phase = data.phase || '';
+      offset = Number(data.offset) || 0;
+    }
+    if (button) button.textContent = 'Сканировать ещё раз';
+    if (msg) msg.textContent = mineFound.length
+      ? 'Можем добавить в базу следующее. Снимите галочку с лишнего и нажмите «Добавить отмеченное».'
+      : 'В открытых записях не нашлось ссылок, товаров и контактов.';
+  } catch (error) {
+    if (button) button.textContent = 'Сканировать сообщество';
+    if (msg) msg.textContent = error.message || 'Сканирование остановилось';
+  }
+  if (button) button.disabled = false;
+}
+function paintMineFound(){
+  const box = document.getElementById('mineFound');
+  if (!box) return;
+  if (!mineFound.length) {
+    box.innerHTML = '';
+    return;
+  }
+  box.innerHTML = '<p class="now">Можем добавить в базу:</p>'+mineFound.map(function(item, index){
+    const kind = item.kind === 'article' ? 'Статья' : item.kind === 'product' ? 'Товар' : item.kind === 'contact' ? 'Контакт' : item.kind === 'about' ? 'Описание' : item.kind === 'site' ? 'Сайт' : 'Ссылка';
+    const extra = item.link ? '<br>'+esc(item.link) : (item.text ? '<br>'+esc(item.text) : '');
+    return '<label class="hint"><input type="checkbox" data-scan-on="'+index+'"'+(item.on ? ' checked' : '')+'> '+kind+': '+esc(item.title)+extra+'</label>';
+  }).join('<br>')+'<button class="btn" id="mineTake" type="button" style="margin-top:8px">Добавить отмеченное</button>';
+  box.querySelectorAll('[data-scan-on]').forEach(function(input){
+    input.onchange = function(){
+      mineFound[Number(input.getAttribute('data-scan-on'))].on = input.checked;
+    };
+  });
+  const take = document.getElementById('mineTake');
+  if (take) take.onclick = takeMineScan;
+}
+function takeMineScan(){
+  const contacts = document.getElementById('mineContacts');
+  const lines = [];
+  mineFound.forEach(function(item){
+    if (!item.on) return;
+    if (item.kind === 'about' || item.kind === 'contact' || item.kind === 'site') {
+      const line = [item.title, item.text, item.link].filter(Boolean).join(' — ');
+      if (line) lines.push(line);
+      return;
+    }
+    if (!/^https:\/\//i.test(item.link) || mineGoods.length >= 40) return;
+    const title = String(item.title || '').replace(/\s+/g, ' ').trim();
+    if (title.length < 2) return;
+    if (mineGoods.some(function(good){ return good.link === item.link || String(good.name || '').toLowerCase() === title.toLowerCase(); })) return;
+    mineGoods.push({ name: title, price: item.price || '', link: item.link });
+  });
+  if (contacts && lines.length) {
+    const prev = String(contacts.value || '').trim();
+    const add = lines.filter(function(line){ return prev.indexOf(line) === -1; }).join('\n');
+    if (add) contacts.value = prev ? prev+'\n'+add : add;
+  }
+  paintMineGoods();
+  const msg = document.getElementById('minemsg');
+  if (msg) msg.textContent = 'Отмеченное стоит в списке. Нажмите «Сохранить», чтобы бот начал этим пользоваться.';
+}
+async function dropAssistGroup(groupId){
+  const msg = document.getElementById('minemsg');
+  try {
+    const response = await fetch('/api/vk/assistant/community/remove', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ groupId: groupId })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Сообщество не отключилось');
+    loadMine();
+  } catch (error) {
+    if (msg) msg.textContent = error.message || 'Сообщество не отключилось';
+  }
+}
 function viewCab(){
   const balance = (me && me.balance) || 0;
   const rows = [
@@ -4097,7 +4418,7 @@ function viewCab(){
     ['help', 'Помощь']
   ];
   if (vkAdmin()) rows.push(['menu', 'Кнопки сообщества']);
-  if (inVkApp() || isVk()) rows.splice(1, 0, ['assist', 'Кафедра']);
+  if (inVkApp() || isVk()) rows.splice(1, 0, ['assist', 'Кафедра'], ['mine', 'Моё сообщество']);
   return '<div class="card"><div class="kicker">Кабинет</div><div class="cabbal">'+balance+' кр</div><p class="now">Чат, шаблоны, рейтинг и магазин — внизу.</p></div>'+
     rows.map(function(row){ return '<button type="button" class="cabrow" data-go="'+row[0]+'">'+row[1]+'</button>'; }).join('');
 }

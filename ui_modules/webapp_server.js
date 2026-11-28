@@ -539,10 +539,66 @@ function startWebApp() {
             const userId = assistant.vkId(req.userId);
             const body = req.body || {};
             const checked = await vk.checkCommunityToken(body.token, body.groupId);
-            const saved = await assistant.connectCommunity(userId, checked.id, body.token, checked.name);
+            const saved = await assistant.connectCommunity(userId, checked.id, body.token, checked.name, undefined, body.shop === true);
             res.json(saved);
         } catch (e) {
             const message = e && e.public ? e.message : 'Сообщество не подключилось.';
+            res.status(400).json({ ok: false, error: message });
+        }
+    });
+
+    app.get('/api/vk/shop', requireUser, async (req, res) => {
+        try {
+            if (communityClosed()) return res.json({ closed: true, don: false, active: false, community: null });
+            const userId = assistant.vkId(req.userId);
+            if (!userId) return res.json({ don: false, active: false, join: assistant.JOIN_URL, community: null });
+            const gate = await donorView(userId);
+            const view = gate.view || {};
+            const community = view.community;
+            const reply = community && community.reply ? community.reply : {};
+            res.json({
+                check: gate.check,
+                don: !!view.don,
+                active: !!view.active,
+                join: view.join || assistant.JOIN_URL,
+                community: community ? {
+                    groupId: community.groupId,
+                    title: community.title || '',
+                    key: community.key || '',
+                    home: reply.home === true,
+                    level: reply.level === 1 ? 1 : 0,
+                    catalog: reply.shopCatalog === true,
+                    contactsOn: reply.shopContacts === true,
+                    order: reply.shopOrder === true,
+                    admin: reply.shopAdmin === true,
+                    comments: reply.shopComments === true,
+                    contacts: reply.contacts || '',
+                    goods: Array.isArray(reply.goods) ? reply.goods : []
+                } : null
+            });
+        } catch (e) {
+            res.status(500).json({ error: 'Раздел сообщества не открылся.' });
+        }
+    });
+
+    app.post('/api/vk/shop/scan', requireUser, async (req, res) => {
+        try {
+            if (refuseCommunity(res)) return;
+            const found = await assistant.scanShop(req.userId, req.body || {});
+            res.json(found);
+        } catch (e) {
+            const message = e && e.public ? e.message : 'Сканирование остановилось.';
+            res.status(400).json({ ok: false, error: message });
+        }
+    });
+
+    app.post('/api/vk/shop', requireUser, async (req, res) => {
+        try {
+            if (refuseCommunity(res)) return;
+            const saved = await assistant.saveShop(req.userId, req.body || {});
+            res.json(saved);
+        } catch (e) {
+            const message = e && e.public ? e.message : 'Настройки бота не сохранились.';
             res.status(400).json({ ok: false, error: message });
         }
     });
