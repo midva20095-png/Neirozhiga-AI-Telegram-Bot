@@ -4363,7 +4363,7 @@ function mineComments(){
       '<p class="hint">Каталог: '+(groupId ? 'https://vk.com/market-'+groupId : 'адрес товаров сообщества')+'</p></div>'+
     '<label><input id="mineChatLinks" type="checkbox"'+(mineState.chatLinks ? ' checked' : '')+'> Эти ссылки кнопками в чате</label>'+
     '<p class="hint">Выключено — ссылки только в комментариях. Включено — те же ссылки становятся кнопками внизу чата.</p>'+
-    '<p class="hint">Пустое окно в ответ не попадает. Обычный комментарий бот не трогает.</p>'+
+    '<p class="hint">Если галочки включены, бот сам пишет в комментарий ссылку на чат и каталог, который задан. Если у каталога есть свои ссылки, они тоже попадают в ответ. Пустой комментарий бот не трогает. Без галочек обычный комментарий остаётся без ответа.</p>'+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить комментарии</button><p id="minemsg" class="hint"></p></div>';
 }
 function mineScan(){

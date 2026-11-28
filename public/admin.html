@@ -1017,6 +1017,7 @@ function setupReadRow(row){
   return item;
 }
 let setupGoods = [];
+let setupDoors = [];
 function shopPreset(kind){
   return {
     baker: { catalog: 'Каталог', order: 'Заявка', delivery: true, pickup: true, baker: true },
@@ -1057,6 +1058,47 @@ function paintShopGoods(){
     };
   });
 }
+function blankShopDoors(source){
+  const rows = Array.isArray(source) ? source.slice(0, 4) : [];
+  while (rows.length < 4) rows.push({ on: false, name: '', link: '' });
+  return rows.map(function(item){
+    return { on: !!(item && item.on), name: (item && item.name) || '', link: (item && item.link) || '' };
+  });
+}
+function shopDoorsHtml(){
+  return setupDoors.map(function(item, index){
+    return '<div data-shop-door="'+index+'">'+
+      '<p class="note" style="margin-top:8px"><b>Кнопка '+(index + 1)+'</b></p>'+
+      '<label class="check"><input class="shopDoorOn" type="checkbox"'+(item.on ? ' checked' : '')+'> Включить</label>'+
+      '<label>Название</label><input class="shopDoorName" maxlength="40" value="'+esc(item.name || '')+'">'+
+      '<label>Ссылка https</label><input class="shopDoorLink" maxlength="300" value="'+esc(item.link || '')+'">'+
+      '</div>';
+  }).join('');
+}
+function readShopDoors(){
+  const doors = [];
+  document.querySelectorAll('[data-shop-door]').forEach(function(row){
+    doors.push({
+      on: !!((row.querySelector('.shopDoorOn') || {}).checked),
+      name: String((row.querySelector('.shopDoorName') || {}).value || '').replace(/\s+/g, ' ').trim(),
+      link: String((row.querySelector('.shopDoorLink') || {}).value || '').trim()
+    });
+  });
+  while (doors.length < 4) doors.push({ on: false, name: '', link: '' });
+  return doors.slice(0, 4);
+}
+function shopDoorError(doors){
+  const names = [];
+  for (let index = 0; index < doors.length; index += 1) {
+    const item = doors[index];
+    if (!item.on) continue;
+    if (!item.name || item.name.length < 2) return 'У включённой кнопки '+(index + 1)+' нужно название.';
+    if (!/^https:\/\/\S+$/i.test(item.link || '')) return 'У включённой кнопки '+(index + 1)+' нужна ссылка https://';
+    names.push(item.name.toLowerCase());
+  }
+  if (new Set(names).size !== names.length) return 'У двух кнопок каталога не может быть одного названия.';
+  return '';
+}
 function shopDesk(reply, groupId){
   const texts = reply.shopTexts || {};
   const links = Array.isArray(reply.shopCommentLinks) ? reply.shopCommentLinks : [];
@@ -1068,6 +1110,9 @@ function shopDesk(reply, groupId){
   const kind = ['baker', 'auto', 'nails', 'shop'].indexOf(reply.shopKind) >= 0 ? reply.shopKind : 'shop';
   const board = reply.shopBoard === 'inline' ? 'inline' : 'fixed';
   const id = String(groupId || '').replace(/\D/g, '');
+  const catalogLink = String(reply.shopCatalogLink || '').trim();
+  const catalogShown = catalogLink || (id ? 'https://vk.com/market-'+id : '');
+  setupDoors = blankShopDoors(reply.shopCatalogButtons);
   return '<p class="note">Те же поля, что у этого человека в приложении, в разделе «Моё сообщество». Сохранение записывает их ему в бота.</p>'+
     '<h3>Кнопки</h3>'+
     shopButtonRow('Catalog', 'Каталог', reply.shopCatalog === true, 'shopTextCatalog', 'Фраза перед списком', texts.catalog)+
@@ -1085,6 +1130,10 @@ function shopDesk(reply, groupId){
     '<label class="check"><input type="radio" name="shopBoard" value="inline"'+(board === 'inline' ? ' checked' : '')+'> Под сообщением</label>'+
     '<label>Фраза при входе</label><textarea id="shopHello" maxlength="2000">'+esc(reply.greeting || '')+'</textarea>'+
     '<h3>Каталог</h3>'+
+    '<label>Ссылка для кнопки «Каталог»</label><input id="shopCatalogLink" maxlength="300" value="'+esc(catalogLink)+'">'+
+    '<p class="note">Если ссылка задана, кнопка «Каталог» сразу её открывает. В комментарии уходит она же. Если ссылки нет, в чате внутри каталога до 4 кнопок и «Назад».</p>'+
+    '<p class="note">До 4 кнопок внутри. В комментарий попадают только включённые, с названием и ссылкой. Пока у каталога есть своя ссылка, эти кнопки в чат не выходят.</p>'+
+    shopDoorsHtml()+
     '<label class="check"><input id="shopSections" type="checkbox"'+(reply.shopSections === true ? ' checked' : '')+'> Кнопка на каждую категорию</label>'+
     '<div id="shopGoods">'+shopGoodsHtml()+'</div>'+
     '<label>Название</label><input id="shopGoodName" maxlength="80">'+
@@ -1102,7 +1151,8 @@ function shopDesk(reply, groupId){
     '<h3>Комментарии</h3>'+
     '<label class="check"><input id="shopComments" type="checkbox"'+(reply.shopComments === true ? ' checked' : '')+'> Отвечать в комментариях</label>'+
     '<label class="check"><input id="shopCommentChat" type="checkbox"'+(chat ? ' checked' : '')+'> Ссылка на чат'+(id ? ': https://vk.me/club'+esc(id) : '')+'</label>'+
-    '<label class="check"><input id="shopCommentCatalog" type="checkbox"'+(catalog ? ' checked' : '')+'> Ссылка на каталог'+(id ? ': https://vk.com/market-'+esc(id) : '')+'</label>'+
+    '<label class="check"><input id="shopCommentCatalog" type="checkbox"'+(catalog ? ' checked' : '')+'> Ссылка на каталог'+(catalogShown ? ': '+esc(catalogShown) : '')+'</label>'+
+    '<p class="note">Если галочки включены, бот сам пишет в комментарий ссылку на чат и заданный каталог. Включённые ссылки каталога тоже попадают в ответ.</p>'+
     '<label class="check"><input id="shopChatLinks" type="checkbox"'+(reply.shopChatLinks === true ? ' checked' : '')+'> Эти ссылки кнопками в чате</label>'+
     '<div class="row" style="margin-top:12px"><button type="button" id="setupSave">Сохранить настройки бота</button></div>';
 }
@@ -1166,7 +1216,13 @@ async function saveShopDesk(){
   const msg = document.getElementById('setupmsg');
   const names = lockedShopNames(shopField('shopKind') || 'shop');
   const comment = shopLinks();
+  const doors = readShopDoors();
+  const doorError = shopDoorError(doors);
   const board = document.querySelector('input[name="shopBoard"]:checked');
+  if (doorError) {
+    if (msg) msg.textContent = doorError;
+    return;
+  }
   if (msg) msg.textContent = 'Сохраняю настройки бота…';
   const data = await api('/api/admin/vk/assistant/shop', { method:'POST', body: JSON.stringify({
     userId: setupUserId,
@@ -1191,7 +1247,9 @@ async function saveShopDesk(){
       order: shopField('shopTextOrder'),
       admin: shopField('shopTextAdmin')
     },
-    goods: setupGoods
+    goods: setupGoods,
+    catalogLink: shopField('shopCatalogLink'),
+    catalogButtons: doors
   }) });
   if (!data.ok) {
     if (msg) msg.textContent = data.error || 'Настройки не сохранились';

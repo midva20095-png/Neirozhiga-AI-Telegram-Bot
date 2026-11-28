@@ -307,6 +307,9 @@ test('админка профиля повторяет настройки бот
     assert.match(html, /Сохранить настройки бота/);
     assert.match(html, /shopDelivery/);
     assert.match(html, /shopCommentChat/);
+    assert.match(html, /id="shopCatalogLink"/);
+    assert.match(html, /data-shop-door/);
+    assert.match(html, /До 4 кнопок внутри/);
     assert.match(server, /\/api\/admin\/vk\/assistant\/shop/);
     assert.match(server, /saveShop\(body\.userId, body\)/);
 });
