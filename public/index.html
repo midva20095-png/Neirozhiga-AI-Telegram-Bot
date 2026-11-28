@@ -4201,9 +4201,9 @@ function mineButtons(){
     '<select id="mineKindPick"><option value="baker"'+(mineState.kind === 'baker' ? ' selected' : '')+'>Кондитер</option><option value="auto"'+(mineState.kind === 'auto' ? ' selected' : '')+'>Автосервис</option><option value="nails"'+(mineState.kind === 'nails' ? ' selected' : '')+'>Маникюр</option><option value="shop"'+(!mineState.kind || mineState.kind === 'shop' ? ' selected' : '')+'>Магазин</option></select>'+
     '<p class="hint">Категория включает нужные поля заявки и подписи кнопок. Свои надписи выше остаются, пока не нажмёте «Кнопки категории».</p>'+
     '<button class="btn ghost" id="mineKindApply" type="button">Кнопки категории</button>'+
-    '<p class="now">Как показывать кнопки</p>'+
-    '<label><input type="radio" name="mineBoard" value=""'+(!mineState.board ? ' checked' : '')+'> Под сообщением, как сейчас</label>'+
-    '<label><input type="radio" name="mineBoard" value="fixed"'+(mineState.board === 'fixed' ? ' checked' : '')+'> Закрепить внизу чата</label>'+
+    '<p class="now">Стиль кнопок</p>'+
+    '<label><input type="radio" name="mineBoard" value=""'+(!mineState.board ? ' checked' : '')+'> Под сообщением</label>'+
+    '<label><input type="radio" name="mineBoard" value="fixed"'+(mineState.board === 'fixed' ? ' checked' : '')+'> Внизу чата</label>'+
     '<label class="flabel" for="mineHello">Фраза при входе</label><textarea id="mineHello" maxlength="400" rows="3">'+esc(mineState.greeting || '')+'</textarea>'+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить кнопки</button><p id="minemsg" class="hint"></p></div>';
 }
