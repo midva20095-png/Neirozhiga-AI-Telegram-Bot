@@ -151,6 +151,7 @@ const BASE_GENERAL = {
         'Цены на кнопках — это стоимость для вас в кредитах. Один кредит равен одному рублю.',
     support_enabled: true,
     community_closed: false,
+    shop_gate: '',
     site_url: 'https://babayagaland.ru'
 };
 
@@ -464,6 +465,7 @@ function sanitizeGeneral(input) {
     if (typeof g.help_text === 'string' && g.help_text.trim()) out.help_text = g.help_text.trim().slice(0, 3900);
     if (typeof g.support_enabled === 'boolean') out.support_enabled = g.support_enabled;
     if (typeof g.community_closed === 'boolean') out.community_closed = g.community_closed;
+    if (g.shop_gate === 'all' || g.shop_gate === 'new' || g.shop_gate === '') out.shop_gate = g.shop_gate;
     if (typeof g.site_url === 'string') out.site_url = g.site_url.trim().slice(0, 200);
     return out;
 }

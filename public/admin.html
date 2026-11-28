@@ -775,6 +775,14 @@ async function loadAssist(){
     '<p class="note">'+(data.closed ? '<span class="bad">Закрыто.</span> В приложении вместо кафедры стоит короткая заглушка.' : '<span class="ok">Вход открыт.</span> Дон видит материалы и может задать вопрос.')+'</p>'+
     '<div class="row"><button type="button" class="'+(data.closed ? '' : 'ghost')+'" onclick="setCommunityGate('+(data.closed ? 'false' : 'true')+')">'+(data.closed ? 'Открыть вход' : 'Закрыть вход')+'</button></div>'+
     '<p id="gatemsg" class="note"></p></div>'+
+    '<div class="card"><h3>Вход в «Моё сообщество»</h3>'+
+    '<p class="note">'+shopGateLine(data.shopGate)+'</p>'+
+    '<p class="note">Текст для дона: Раздел «Моё сообщество» обновляется. Зайдите позже: настройки бота снова откроются здесь.</p>'+
+    '<p class="note">Для всех — раздел закрыт у каждого. Для новых — кто уже подключил сообщество, продолжает его править. Новый дон видит текст про обновление и не подключает бота.</p>'+
+    '<div class="row"><button type="button" class="'+(data.shopGate ? 'ghost' : '')+'" onclick="setShopGate(\'\')">Открыть</button>'+
+    '<button type="button" class="'+(data.shopGate === 'all' ? '' : 'ghost')+'" onclick="setShopGate(\'all\')">Для всех</button>'+
+    '<button type="button" class="'+(data.shopGate === 'new' ? '' : 'ghost')+'" onclick="setShopGate(\'new\')">Для новых</button></div>'+
+    '<p id="shopgatemsg" class="note"></p></div>'+
     courseCard(course)+
     '<div class="card"><h3>Доступ донов</h3>'+
     '<p class="note">'+line+' Список берётся из основного бота: кто оплатил донат НейроЯги. Пока донат жив, второй бот открывает этому человеку кафедру в его сообществе. Чужим в том же диалоге кафедра закрыта. Когда срок кончился, второй бот замолкает только у этого номера. Кнопка «Закрыть кафедру» оставляет донат и прячет материалы: у человека появляется кнопка «Повысить уровень».</p>'+
@@ -801,6 +809,21 @@ async function loadAssist(){
     }).join('') : '<p class="note">Донов пока нет. Нажмите «Взять донов из ВК» или дождитесь новой подписки.</p>')+
     '</div>';
   bindCourseDesk();
+}
+function shopGateLine(gate){
+  if (gate === 'all') return '<span class="bad">Закрыто для всех.</span> Никто не входит в «Моё сообщество», пока идёт обновление.';
+  if (gate === 'new') return '<span class="bad">Закрыто для новых.</span> Уже подключённые сообщества открываются. Новый дон видит текст про обновление.';
+  return '<span class="ok">Вход открыт.</span> Дон подключает сообщество и правит кнопки.';
+}
+async function setShopGate(gate){
+  const msg = document.getElementById('shopgatemsg');
+  if (msg) msg.textContent = 'Сохраняю…';
+  const data = await api('/api/admin/vk/assistant/shop-gate', { method:'POST', body: JSON.stringify({ gate: gate }) });
+  if (!data.ok) {
+    if (msg) msg.textContent = data.error || 'Не получилось';
+    return;
+  }
+  await loadAssist();
 }
 async function setCommunityGate(closed){
   const msg = document.getElementById('gatemsg');

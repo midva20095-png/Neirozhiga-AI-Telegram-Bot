@@ -339,8 +339,21 @@ function startWebApp() {
         }
     });
 
+    const SHOP_UPDATE = 'Раздел «Моё сообщество» обновляется. Зайдите позже: настройки бота снова откроются здесь.';
+
     function communityClosed() {
         return catalog.getGeneral().community_closed === true;
+    }
+
+    function shopGate() {
+        const gate = catalog.getGeneral().shop_gate;
+        return gate === 'all' || gate === 'new' ? gate : '';
+    }
+
+    function shopHeld(hasCommunity) {
+        const gate = shopGate();
+        if (gate === 'all') return true;
+        return gate === 'new' && !hasCommunity;
     }
 
     function refuseCommunity(res) {
@@ -535,8 +548,11 @@ function startWebApp() {
 
     app.post('/api/vk/assistant/community', requireUser, async (req, res) => {
         try {
-            if (refuseCommunity(res)) return;
             const userId = assistant.vkId(req.userId);
+            const known = userId ? await assistant.cabinet(userId) : null;
+            if (shopHeld(!!(known && known.community))) {
+                return res.status(403).json({ ok: false, closed: true, error: SHOP_UPDATE });
+            }
             const body = req.body || {};
             const checked = await vk.checkCommunityToken(body.token, body.groupId);
             const saved = await assistant.connectCommunity(userId, checked.id, body.token, checked.name, undefined, body.shop === true, body.kind, checked.description);
@@ -549,12 +565,23 @@ function startWebApp() {
 
     app.get('/api/vk/shop', requireUser, async (req, res) => {
         try {
-            if (communityClosed()) return res.json({ closed: true, don: false, active: false, community: null });
             const userId = assistant.vkId(req.userId);
             if (!userId) return res.json({ don: false, active: false, join: assistant.JOIN_URL, community: null });
             const gate = await donorView(userId);
             const view = gate.view || {};
             const community = view.community;
+            if (shopHeld(!!community)) {
+                return res.json({
+                    closed: true,
+                    update: true,
+                    note: SHOP_UPDATE,
+                    check: gate.check,
+                    don: !!view.don,
+                    active: !!view.active,
+                    join: view.join || assistant.JOIN_URL,
+                    community: null
+                });
+            }
             const reply = community && community.reply ? community.reply : {};
             res.json({
                 check: gate.check,
@@ -592,8 +619,9 @@ function startWebApp() {
 
     app.post('/api/vk/shop/place', requireUser, async (req, res) => {
         try {
-            if (refuseCommunity(res)) return;
             const userId = assistant.vkId(req.userId);
+            const known = userId ? await assistant.cabinet(userId) : null;
+            if (shopHeld(!!(known && known.community))) return res.status(403).json({ ok: false, error: SHOP_UPDATE });
             if (!userId) return res.status(400).json({ ok: false, error: 'Раздел открыт из ВК.' });
             const gate = await donorView(userId);
             const community = gate.view && gate.view.community;
@@ -607,7 +635,9 @@ function startWebApp() {
 
     app.post('/api/vk/shop/scan', requireUser, async (req, res) => {
         try {
-            if (refuseCommunity(res)) return;
+            const userId = assistant.vkId(req.userId);
+            const known = userId ? await assistant.cabinet(userId) : null;
+            if (shopHeld(!!(known && known.community))) return res.status(403).json({ ok: false, error: SHOP_UPDATE });
             const found = await assistant.scanShop(req.userId, req.body || {});
             res.json(found);
         } catch (e) {
@@ -618,7 +648,9 @@ function startWebApp() {
 
     app.post('/api/vk/shop', requireUser, async (req, res) => {
         try {
-            if (refuseCommunity(res)) return;
+            const userId = assistant.vkId(req.userId);
+            const known = userId ? await assistant.cabinet(userId) : null;
+            if (shopHeld(!!(known && known.community))) return res.status(403).json({ ok: false, error: SHOP_UPDATE });
             const saved = await assistant.saveShop(req.userId, req.body || {});
             res.json(saved);
         } catch (e) {
@@ -1405,6 +1437,7 @@ function startWebApp() {
         try {
             const pack = await assistant.adminList();
             pack.closed = communityClosed();
+            pack.shopGate = shopGate();
             res.json(pack);
         } catch (e) {
             res.status(500).json({ error: 'Помощник доната не открылся.' });
@@ -1416,6 +1449,18 @@ function startWebApp() {
             const closed = !!(req.body && req.body.closed);
             const general = await catalog.saveGeneral(db, { community_closed: closed });
             res.json({ ok: true, closed: general.community_closed === true });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: 'Вход не переключился.' });
+        }
+    });
+
+    app.post('/api/admin/vk/assistant/shop-gate', requireAdmin, async (req, res) => {
+        try {
+            const raw = req.body && req.body.gate;
+            const gate = raw === 'all' || raw === 'new' ? raw : '';
+            const general = await catalog.saveGeneral(db, { shop_gate: gate });
+            const saved = general.shop_gate === 'all' || general.shop_gate === 'new' ? general.shop_gate : '';
+            res.json({ ok: true, gate: saved });
         } catch (e) {
             res.status(500).json({ ok: false, error: 'Вход не переключился.' });
         }

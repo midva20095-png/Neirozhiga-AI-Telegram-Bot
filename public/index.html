@@ -460,6 +460,7 @@ a.course-tile{display:flex;flex-direction:column;justify-content:center;text-dec
 @media(prefers-reduced-motion:reduce){.course-door,.course-tile,.course-lesson{animation:none}}
 .cabbal{font-size:32px;font-weight:800;line-height:1.1;margin:4px 0 6px}
 .cabrow{display:flex;width:100%;text-align:left;align-items:center;justify-content:space-between;background:#1c1233;border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:8px;font-weight:800}
+.cabrow small{display:block;margin-top:3px;color:var(--mut);font-size:12px;font-weight:600}
 .cabrow:after{content:'›';color:var(--mut);font-size:22px}
 .atabs,.aslices{display:flex;gap:6px;overflow-x:auto;margin:10px 0;padding:8px 0}
 .atabs[hidden]{display:none}
@@ -4177,12 +4178,11 @@ function mineHome(community){
     '<p class="now">'+esc(community.title || ('Сообщество '+community.groupId))+'</p>'+
     (community.key ? '<p class="hint">Ключ сохранён: '+esc(community.key)+'</p>' : '')+
     '<p class="hint">Пока донат действует, бот отвечает в сообщениях. В разделе уже лежит то, что бот сохранил. Откройте его и поправьте.</p>'+
-    '<button type="button" class="cabrow" data-mine="buttons">Кнопки'+(hello ? ' · фраза есть' : ' · фразы нет')+'</button>'+
-    '<button type="button" class="cabrow" data-mine="catalog">Каталог · '+mineGoods.length+'</button>'+
-    '<button type="button" class="cabrow" data-mine="orders">Заявки</button>'+
-    '<button type="button" class="cabrow" data-mine="contacts">Контакты'+(contacts ? ' · текст есть' : ' · пусто')+'</button>'+
-    '<button type="button" class="cabrow" data-mine="comments">Комментарии</button>'+
-    '<button type="button" class="cabrow" data-mine="scan">Сканирование</button>'+
+    '<button type="button" class="cabrow" data-mine="buttons"><span>Кнопки<small>'+(hello ? 'Фраза при входе уже есть' : 'Надписи, приветствие и как кнопки стоят в чате')+'</small></span></button>'+
+    '<button type="button" class="cabrow" data-mine="catalog"><span>Каталог<small>Товары и цены. Сейчас '+mineGoods.length+'</small></span></button>'+
+    '<button type="button" class="cabrow" data-mine="orders"><span>Заявки<small>Что бот спрашивает перед заявкой</small></span></button>'+
+    '<button type="button" class="cabrow" data-mine="contacts"><span>Контакты<small>'+(contacts ? 'Текст кнопки уже есть' : 'Текст, который уходит по кнопке контактов')+'</small></span></button>'+
+    '<button type="button" class="cabrow" data-mine="comments"><span>Комментарии<small>Какие ссылки дописать под товаром</small></span></button>'+
     '<button class="btn ghost" id="mineDrop" type="button" style="margin-top:8px">Удалить бота из сообщества</button>'+
     '<p class="hint">Ключ забудется, а кнопки в чатах снимутся, пока ключ ещё действует.</p>'+
     '<p id="minemsg" class="hint"></p></div>';
@@ -4323,10 +4323,8 @@ function paintMine(){
   else if (mineView === 'orders') box.innerHTML = mineOrders();
   else if (mineView === 'contacts') box.innerHTML = mineContacts();
   else if (mineView === 'comments') box.innerHTML = mineComments();
-  else if (mineView === 'scan') box.innerHTML = mineScan();
   else box.innerHTML = mineHome(community);
   bindMine(community);
-  if (mineView === 'scan') paintMineFound();
 }
 function bindMine(community){
   const back = document.getElementById('mineBack');
@@ -4417,7 +4415,8 @@ async function loadMine(){
     return;
   }
   if (data.closed) {
-    box.innerHTML = '<div class="card"><button type="button" class="back" id="mineBack">В кабинет</button><div class="kicker">Моё сообщество</div><p class="now">Раздел сейчас закрыт.</p></div>';
+    const note = data.note || 'Раздел «Моё сообщество» обновляется. Зайдите позже: настройки бота снова откроются здесь.';
+    box.innerHTML = '<div class="card"><button type="button" class="back" id="mineBack">В кабинет</button><div class="kicker">Моё сообщество</div><p class="now">'+esc(note)+'</p></div>';
     document.getElementById('mineBack').onclick = mineBack;
     return;
   }

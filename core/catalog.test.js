@@ -24,6 +24,7 @@ const SITE_KEYS = [
 
 test('вход в моё сообщество по умолчанию открыт', () => {
     assert.equal(catalog.getGeneral().community_closed, false);
+    assert.equal(catalog.getGeneral().shop_gate, '');
 });
 
 test('модели сайта есть в боте и помечены как запрос с сайта', () => {
@@ -243,6 +244,14 @@ test('цена из админки ВК не включает модель в Te
     assert.equal(catalog.getModel('flash'), null);
     await catalog.saveModels(db, {});
     assert.equal(catalog.getModel('flash').cost, 4);
+});
+
+test('блокировка моего сообщества бывает для всех или только для новых', async () => {
+    const db = { setSetting: async () => {} };
+    assert.equal((await catalog.saveGeneral(db, { shop_gate: 'all' })).shop_gate, 'all');
+    assert.equal((await catalog.saveGeneral(db, { shop_gate: 'город' })).shop_gate, 'all');
+    assert.equal((await catalog.saveGeneral(db, { shop_gate: 'new' })).shop_gate, 'new');
+    assert.equal((await catalog.saveGeneral(db, { shop_gate: '' })).shop_gate, '');
 });
 
 test('модель можно выключить только во ВК', async () => {
