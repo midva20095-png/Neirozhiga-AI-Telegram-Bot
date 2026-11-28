@@ -327,6 +327,15 @@ test('простой бот хранит товары отдельно от ка
     assert.match(placed.greeting, /витрины/);
     assert.equal(placed.goods[0].name, 'Наполеон');
     assert.equal(placed.added.goods, 1);
+    const mixed = require('./simple-bot').placeScan([
+        { on: true, kind: 'article', title: 'История', link: 'https://vk.com/@club-story' },
+        { on: true, kind: 'link', title: 'Чужое', link: 'https://vk.com/away' },
+        { on: true, kind: 'product', title: 'Наполеон', price: '1800', link: 'https://vk.com/wall-9_5' },
+        { on: true, kind: 'product', title: 'Медовик', price: '1400', link: 'https://vk.com/wall-9_5' }
+    ], { goods: [] });
+    assert.equal(mixed.goods.length, 2);
+    assert.equal(mixed.contacts.includes('away'), false);
+    assert.equal(require('./simple-bot').kindFrom('Стар Торт', 'Малоярославец'), 'baker');
     const sheet = require('./simple-bot').parseSheet('Торт | 1500 | https://vk.com/market-9_1\nпусто', 9);
     assert.equal(sheet.goods.length, 1);
     assert.equal(sheet.skipped, 1);

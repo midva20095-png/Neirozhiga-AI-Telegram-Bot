@@ -1,5 +1,5 @@
 const db = require('./db');
-const { cleanGoods, parseSheet, placeScan, shopPack } = require('./simple-bot');
+const { cleanGoods, kindFrom, kindPreset, parseSheet, placeScan, shopPack } = require('./simple-bot');
 const { cleanProducts, cleanServices, tradeById } = require('../public/trades');
 
 const JOIN_URL = 'https://vk.com/donut/club214554778';
@@ -482,7 +482,7 @@ async function registerLive(donors, fetchImpl) {
     return { on: plan.on.length, off: plan.off.length };
 }
 
-async function connectCommunity(account, groupId, token, title, fetchImpl, shop) {
+async function connectCommunity(account, groupId, token, title, fetchImpl, shop, kind, about) {
     const ownerId = vkId(account);
     const communityId = String(groupId || '').replace(/\D/g, '');
     const key = String(token || '').replace(/\s+/g, '');
@@ -506,12 +506,27 @@ async function connectCommunity(account, groupId, token, title, fetchImpl, shop)
     const kept = previous.find(item => String(item.group_id) === communityId);
     let reply = cleanReply(kept && kept.reply) || { greeting: '', buttons: [] };
     if (shop === true && !(kept && kept.reply && kept.reply.home === true)) {
+        const fresh = reply.level !== 1;
+        const chosen = ['baker', 'auto', 'nails', 'shop'].includes(kind) ? kind : '';
+        const preset = (chosen || fresh) ? kindPreset(chosen || kindFrom(title, about)) : null;
+        const names = Object.assign({}, reply.shopNames || {});
+        if (preset) {
+            if (preset.catalog === 'Каталог') delete names.catalog;
+            else names.catalog = preset.catalog;
+            if (preset.order === 'Заявка') delete names.order;
+            else names.order = preset.order;
+        }
         reply = cleanReply(Object.assign({}, reply, {
             level: 1,
-            shopCatalog: reply.shopCatalog === true,
-            shopContacts: reply.shopContacts === true,
-            shopOrder: reply.shopOrder === true,
-            shopAdmin: reply.shopAdmin === true,
+            shopCatalog: preset ? true : reply.shopCatalog === true,
+            shopContacts: preset ? true : reply.shopContacts === true,
+            shopOrder: preset ? true : reply.shopOrder === true,
+            shopAdmin: preset ? true : reply.shopAdmin === true,
+            shopDelivery: preset ? preset.delivery : reply.shopDelivery === true,
+            shopPickup: preset ? preset.pickup : reply.shopPickup === true,
+            shopBaker: preset ? preset.baker : reply.shopBaker === true,
+            shopKind: preset ? preset.kind : (reply.shopKind || ''),
+            shopNames: names,
             goods: reply.goods || []
         }));
     }
@@ -558,6 +573,12 @@ async function saveDesk(account, input, fetchImpl) {
         shopOrder: row.reply.shopOrder === true,
         shopAdmin: row.reply.shopAdmin === true,
         shopComments: row.reply.shopComments === true,
+        shopDelivery: row.reply.shopDelivery === true,
+        shopPickup: row.reply.shopPickup === true,
+        shopBaker: row.reply.shopBaker === true,
+        shopAuto: row.reply.shopAuto === true,
+        shopKind: row.reply.shopKind || '',
+        shopBoard: row.reply.shopBoard === 'fixed' ? 'fixed' : '',
         shopNames: row.reply.shopNames,
         shopTexts: row.reply.shopTexts,
         goods: row.reply.goods
@@ -602,6 +623,11 @@ async function saveDesk(account, input, fetchImpl) {
             shopOrder: reply.shopOrder === true,
             shopAdmin: reply.shopAdmin === true,
             shopComments: reply.shopComments === true,
+            shopDelivery: reply.shopDelivery === true,
+            shopPickup: reply.shopPickup === true,
+            shopBaker: reply.shopBaker === true,
+            shopKind: reply.shopKind || '',
+            shopBoard: reply.shopBoard === 'fixed' ? 'fixed' : '',
             shopNames: reply.shopNames || {},
             shopTexts: reply.shopTexts || {},
             goods: reply.goods || []
@@ -638,6 +664,11 @@ async function saveShop(account, input, fetchImpl) {
         shopOrder: !!(input && input.order),
         shopAdmin: !!(input && input.admin),
         shopComments: !!(input && input.comments),
+        shopDelivery: !!(input && input.delivery),
+        shopPickup: !!(input && input.pickup),
+        shopBaker: !!(input && input.baker),
+        shopKind: ['baker', 'auto', 'nails', 'shop'].includes(input && input.kind) ? input.kind : ((row.reply && row.reply.shopKind) || ''),
+        shopBoard: input && input.board === 'fixed' ? 'fixed' : '',
         shopNames: input && input.names ? input.names : ((row.reply && row.reply.shopNames) || {}),
         shopTexts: input && input.texts ? input.texts : ((row.reply && row.reply.shopTexts) || {}),
         goods
@@ -680,6 +711,11 @@ async function saveShop(account, input, fetchImpl) {
         shopOrder: reply.shopOrder === true,
         shopAdmin: reply.shopAdmin === true,
         shopComments: reply.shopComments === true,
+        shopDelivery: reply.shopDelivery === true,
+        shopPickup: reply.shopPickup === true,
+        shopBaker: reply.shopBaker === true,
+        shopKind: reply.shopKind || '',
+        shopBoard: reply.shopBoard === 'fixed' ? 'fixed' : '',
         shopNames: reply.shopNames || {},
         shopTexts: reply.shopTexts || {},
         goods: reply.goods || []
@@ -727,6 +763,10 @@ async function scanShop(account, input, fetchImpl) {
         items: Array.isArray(pushed.items) ? pushed.items.slice(0, 40) : [],
         phase: pushed.phase === 'wall' ? 'wall' : '',
         offset: Number(pushed.offset) || 0,
+        setup: pushed.setup && typeof pushed.setup === 'object' ? {
+            kind: pushed.setup.kind || '',
+            label: pushed.setup.label || ''
+        } : null,
         done: pushed.done !== false
     };
 }

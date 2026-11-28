@@ -3099,7 +3099,7 @@ async function checkCommunityToken(token, groupId) {
         error.public = true;
         throw error;
     }
-    const info = await call(key, 'groups.getById', {});
+    const info = await call(key, 'groups.getById', { fields: 'description,status' });
     const group = info && (info.groups ? info.groups[0] : (Array.isArray(info) ? info[0] : null));
     const id = group && String(group.id || '').replace(/\D/g, '');
     if (!id || id !== wanted) {
@@ -3107,7 +3107,11 @@ async function checkCommunityToken(token, groupId) {
         error.public = true;
         throw error;
     }
-    return { id, name: String(group.name || '').trim().slice(0, 120) };
+    return {
+        id,
+        name: String(group.name || '').trim().slice(0, 120),
+        description: String(group.description || group.status || '').replace(/\s+/g, ' ').trim().slice(0, 500)
+    };
 }
 
 async function communityDonut(groupId) {

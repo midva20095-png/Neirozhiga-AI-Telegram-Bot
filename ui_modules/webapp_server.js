@@ -539,7 +539,7 @@ function startWebApp() {
             const userId = assistant.vkId(req.userId);
             const body = req.body || {};
             const checked = await vk.checkCommunityToken(body.token, body.groupId);
-            const saved = await assistant.connectCommunity(userId, checked.id, body.token, checked.name, undefined, body.shop === true);
+            const saved = await assistant.connectCommunity(userId, checked.id, body.token, checked.name, undefined, body.shop === true, body.kind, checked.description);
             res.json(saved);
         } catch (e) {
             const message = e && e.public ? e.message : 'Сообщество не подключилось.';
@@ -572,6 +572,11 @@ function startWebApp() {
                     order: reply.shopOrder === true,
                     admin: reply.shopAdmin === true,
                     comments: reply.shopComments === true,
+                    delivery: reply.shopDelivery === true,
+                    pickup: reply.shopPickup === true,
+                    baker: reply.shopBaker === true,
+                    kind: reply.shopKind || '',
+                    board: reply.shopBoard === 'fixed' ? 'fixed' : '',
                     contacts: reply.contacts || '',
                     greeting: reply.greeting || '',
                     names: reply.shopNames || {},

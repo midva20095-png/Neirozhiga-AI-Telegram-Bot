@@ -4098,7 +4098,7 @@ let mineEdit = -1;
 let mineCommunity = null;
 let mineState = emptyMine();
 function emptyMine(){
-  return { catalog: false, contactsOn: false, order: false, admin: false, comments: false, names: {}, texts: {}, contacts: '', greeting: '' };
+  return { catalog: false, contactsOn: false, order: false, admin: false, comments: false, delivery: false, pickup: false, baker: false, kind: '', board: '', names: {}, texts: {}, contacts: '', greeting: '' };
 }
 function mineBack(){
   tab = 'cab';
@@ -4124,6 +4124,13 @@ function readMineForm(){
   if (flag('mineOrder') !== null) mineState.order = flag('mineOrder');
   if (flag('mineAdmin') !== null) mineState.admin = flag('mineAdmin');
   if (flag('mineComments') !== null) mineState.comments = flag('mineComments');
+  if (flag('mineDelivery') !== null) mineState.delivery = flag('mineDelivery');
+  if (flag('minePickup') !== null) mineState.pickup = flag('minePickup');
+  if (flag('mineBaker') !== null) mineState.baker = flag('mineBaker');
+  const board = document.querySelector('input[name="mineBoard"]:checked');
+  if (board) mineState.board = board.value === 'fixed' ? 'fixed' : '';
+  const kindPick = document.getElementById('mineKindPick');
+  if (kindPick) mineState.kind = kindPick.value;
   [['catalog', 'mineNamecatalog'], ['contacts', 'mineNamecontacts'], ['order', 'mineNameorder'], ['admin', 'mineNameadmin']].forEach(function(pair){
     const text = value(pair[1]);
     if (text !== null) mineState.names[pair[0]] = text.replace(/\s+/g, ' ').trim();
@@ -4172,6 +4179,13 @@ function mineButtons(){
     buttonCard('contacts', 'Контакты', 'Телефон и адрес задаются в разделе «Контакты».', '', '')+
     buttonCard('order', 'Заявка', 'Покупатель выбирает товар и пишет телефон. Заявка приходит вам в сообщения сообщества.', 'mineTextOrder', 'Что написать покупателю')+
     buttonCard('admin', 'Администратор', 'После этой кнопки бот молчит, пока покупатель не нажмёт «К помощнику».', 'mineTextAdmin', 'Что написать покупателю')+
+    '<p class="now">Категория</p>'+
+    '<select id="mineKindPick"><option value="baker"'+(mineState.kind === 'baker' ? ' selected' : '')+'>Кондитер</option><option value="auto"'+(mineState.kind === 'auto' ? ' selected' : '')+'>Автосервис</option><option value="nails"'+(mineState.kind === 'nails' ? ' selected' : '')+'>Маникюр</option><option value="shop"'+(!mineState.kind || mineState.kind === 'shop' ? ' selected' : '')+'>Магазин</option></select>'+
+    '<p class="hint">Категория включает нужные поля заявки и подписи кнопок. Свои надписи выше остаются, пока не нажмёте «Кнопки категории».</p>'+
+    '<button class="btn ghost" id="mineKindApply" type="button">Кнопки категории</button>'+
+    '<p class="now">Как показывать кнопки</p>'+
+    '<label><input type="radio" name="mineBoard" value=""'+(!mineState.board ? ' checked' : '')+'> Под сообщением, как сейчас</label>'+
+    '<label><input type="radio" name="mineBoard" value="fixed"'+(mineState.board === 'fixed' ? ' checked' : '')+'> Закрепить внизу чата</label>'+
     '<label class="flabel" for="mineHello">Фраза при входе</label><textarea id="mineHello" maxlength="400" rows="3">'+esc(mineState.greeting || '')+'</textarea>'+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить кнопки</button><p id="minemsg" class="hint"></p></div>';
 }
@@ -4206,9 +4220,12 @@ function mineCatalog(){
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить каталог</button><p id="minemsg" class="hint"></p></div>';
 }
 function mineOrders(){
-  return mineHead('Заявки', 'Кнопка включается в разделе «Кнопки». Покупатель выбирает товар и пишет телефон. Заявка приходит вам в сообщения сообщества.')+
-    '<label class="flabel" for="mineTextOrder">Что написать, когда просят заявку</label><textarea id="mineTextOrder" maxlength="500" rows="3">'+esc(mineState.texts.order || '')+'</textarea>'+
-    '<p class="hint">Пустое поле — бот напишет: «Напишите номер или название, затем телефон.»</p>'+
+  return mineHead('Заявки', 'Бот спрашивает имя, что нужно, телефон и дату. Потом заявка приходит вам, а покупатель выбирает связь: телефон или чат.')+
+    '<label><input id="mineDelivery" type="checkbox"'+(mineState.delivery ? ' checked' : '')+'> Спрашивать доставку и адрес</label>'+
+    '<label><input id="minePickup" type="checkbox"'+(mineState.pickup ? ' checked' : '')+'> Предлагать самовывоз</label>'+
+    '<label><input id="mineBaker" type="checkbox"'+(mineState.baker ? ' checked' : '')+'> Режим кондитера: ссылка на пример и вес</label>'+
+    '<label class="flabel" for="mineTextOrder">Что написать в начале заявки</label><textarea id="mineTextOrder" maxlength="500" rows="3">'+esc(mineState.texts.order || '')+'</textarea>'+
+    '<p class="hint">Пустое поле — бот сразу спрашивает имя.</p>'+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить заявки</button><p id="minemsg" class="hint"></p></div>';
 }
 function mineContacts(){
@@ -4250,6 +4267,8 @@ function bindMine(community){
   });
   const save = document.getElementById('mineSave');
   if (save) save.onclick = saveMine;
+  const kindApply = document.getElementById('mineKindApply');
+  if (kindApply) kindApply.onclick = applyMineKind;
   const add = document.getElementById('mineAdd');
   if (add) add.onclick = addMineGood;
   const cancel = document.getElementById('mineEditCancel');
@@ -4323,6 +4342,8 @@ async function loadMine(){
       '<p class="now">Подключите сообщество. Дальше бот настраивается по разделам: кнопки, каталог, заявки и контакты.</p>'+
       '<label class="flabel" for="mineGroup">Номер сообщества</label><input id="mineGroup" inputmode="numeric" placeholder="1234567">'+
       '<label class="flabel" for="mineToken">Ключ сообщества</label><input id="mineToken" type="password" autocomplete="off" placeholder="Ключ из настроек сообщества">'+
+      '<label class="flabel" for="mineKind">Какое это сообщество</label><select id="mineKind"><option value="">Определить по сообществу</option><option value="baker">Кондитер</option><option value="auto">Автосервис</option><option value="nails">Маникюр</option><option value="shop">Магазин</option></select>'+
+      '<p class="hint">От категории зависят кнопки и поля заявки. Кондитер спрашивает доставку, самовывоз, пример и вес. Автосервис и маникюр открывают услуги и запись. Свои надписи кнопок правятся после подключения.</p>'+
       '<button class="btn" id="mineConnect" type="button" style="margin-top:12px">Подключить</button><p id="minemsg" class="hint"></p></div>';
     document.getElementById('mineBack').onclick = mineBack;
     document.getElementById('mineConnect').onclick = connectMine;
@@ -4334,6 +4355,7 @@ async function loadMine(){
       '<p class="now">Это сообщество кафедры. Подключите другое сообщество, кафедра останется на месте.</p>'+
       '<label class="flabel" for="mineGroup">Номер сообщества</label><input id="mineGroup" inputmode="numeric" placeholder="1234567">'+
       '<label class="flabel" for="mineToken">Ключ сообщества</label><input id="mineToken" type="password" autocomplete="off">'+
+      '<label class="flabel" for="mineKind">Какое это сообщество</label><select id="mineKind"><option value="">Определить по сообществу</option><option value="baker">Кондитер</option><option value="auto">Автосервис</option><option value="nails">Маникюр</option><option value="shop">Магазин</option></select>'+
       '<button class="btn" id="mineConnect" type="button" style="margin-top:12px">Подключить другое</button><p id="minemsg" class="hint"></p></div>';
     document.getElementById('mineBack').onclick = mineBack;
     document.getElementById('mineConnect').onclick = connectMine;
@@ -4346,6 +4368,11 @@ async function loadMine(){
     order: !!community.order,
     admin: !!community.admin,
     comments: !!community.comments,
+    delivery: !!community.delivery,
+    pickup: !!community.pickup,
+    baker: !!community.baker,
+    kind: community.kind || '',
+    board: community.board === 'fixed' ? 'fixed' : '',
     names: Object.assign({}, community.names || {}),
     texts: Object.assign({}, community.texts || {}),
     contacts: community.contacts || '',
@@ -4400,7 +4427,8 @@ async function connectMine(){
       body: JSON.stringify({
         groupId: (document.getElementById('mineGroup') || {}).value || '',
         token: (document.getElementById('mineToken') || {}).value || '',
-        shop: true
+        shop: true,
+        kind: (document.getElementById('mineKind') || {}).value || ''
       })
     });
     const data = await response.json();
@@ -4411,6 +4439,32 @@ async function connectMine(){
     if (msg) msg.textContent = error.message || 'Сообщество не подключилось';
     if (button) button.disabled = false;
   }
+}
+function applyMineKind(){
+  readMineForm();
+  const kind = mineState.kind || 'shop';
+  const preset = {
+    baker: { catalog: 'Каталог', order: 'Заявка', delivery: true, pickup: true, baker: true },
+    auto: { catalog: 'Услуги', order: 'Запись', delivery: false, pickup: false, baker: false },
+    nails: { catalog: 'Услуги', order: 'Запись', delivery: false, pickup: true, baker: false },
+    shop: { catalog: 'Каталог', order: 'Заявка', delivery: false, pickup: false, baker: false }
+  }[kind] || null;
+  if (!preset) return;
+  mineState.kind = kind;
+  mineState.catalog = true;
+  mineState.contactsOn = true;
+  mineState.order = true;
+  mineState.admin = true;
+  mineState.delivery = preset.delivery;
+  mineState.pickup = preset.pickup;
+  mineState.baker = preset.baker;
+  if (preset.catalog === 'Каталог') delete mineState.names.catalog;
+  else mineState.names.catalog = preset.catalog;
+  if (preset.order === 'Заявка') delete mineState.names.order;
+  else mineState.names.order = preset.order;
+  paintMine();
+  const note = document.getElementById('minemsg');
+  if (note) note.textContent = 'Кнопки категории подставлены. Нажмите «Сохранить кнопки».';
 }
 async function saveMine(){
   readMineForm();
@@ -4435,6 +4489,11 @@ async function saveMine(){
         order: !!mineState.order,
         admin: !!mineState.admin,
         comments: !!mineState.comments,
+        delivery: !!mineState.delivery,
+        pickup: !!mineState.pickup,
+        baker: !!mineState.baker,
+        kind: mineState.kind || 'shop',
+        board: mineState.board === 'fixed' ? 'fixed' : '',
         contacts: mineState.contacts,
         greeting: mineState.greeting,
         names: mineState.names,
@@ -4486,11 +4545,14 @@ async function scanMine(){
       }
       (Array.isArray(data.items) ? data.items : []).forEach(function(item){
         if (!item || mineFound.length >= 40) return;
-        const key = String(item.kind || '')+'|'+(item.link || item.title || '');
+        const key = (item.kind === 'product' || item.kind === 'service')
+          ? String(item.kind)+'|'+String(item.title || '')+'|'+String(item.link || '')
+          : String(item.kind || '')+'|'+(item.link || item.title || '');
         if (mineFound.some(function(row){ return row.key === key; })) return;
+        const useful = item.kind === 'product' || item.kind === 'service' || item.kind === 'contact' || item.kind === 'address' || item.kind === 'site' || item.kind === 'about';
         mineFound.push({
           key: key,
-          on: true,
+          on: useful,
           kind: item.kind || '',
           title: String(item.title || ''),
           text: String(item.text || ''),
@@ -4521,7 +4583,7 @@ function paintMineFound(){
     return;
   }
   box.innerHTML = '<p class="now">Можем разложить по разделам:</p>'+mineFound.map(function(item, index){
-    const kind = item.kind === 'article' ? 'Статья' : item.kind === 'product' ? 'Товар' : item.kind === 'contact' ? 'Контакт' : item.kind === 'about' ? 'Описание' : item.kind === 'site' ? 'Сайт' : 'Ссылка';
+    const kind = item.kind === 'article' ? 'Статья' : item.kind === 'product' ? 'Товар' : item.kind === 'service' ? 'Услуга' : item.kind === 'contact' ? 'Контакт' : item.kind === 'address' ? 'Адрес' : item.kind === 'about' ? 'Описание' : item.kind === 'site' ? 'Сайт' : 'Ссылка';
     const extra = item.link ? '<br>'+esc(item.link) : (item.text ? '<br>'+esc(item.text) : '');
     return '<label class="hint"><input type="checkbox" data-scan-on="'+index+'"'+(item.on ? ' checked' : '')+'> '+kind+': '+esc(item.title)+extra+'</label>';
   }).join('<br>')+'<button class="btn" id="mineTake" type="button" style="margin-top:8px">Добавить отмеченное</button>';

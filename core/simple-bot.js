@@ -13,6 +13,12 @@ function shopPack(input) {
     shopOrder: on(input.shopOrder),
     shopAdmin: on(input.shopAdmin),
     shopComments: on(input.shopComments),
+    shopDelivery: on(input.shopDelivery),
+    shopPickup: on(input.shopPickup),
+    shopBaker: on(input.shopBaker),
+    shopAuto: on(input.shopAuto),
+    shopKind: cleanKind(input.shopKind),
+    shopBoard: input.shopBoard === 'fixed' ? 'fixed' : '',
     shopNames: cleanNames(input.shopNames),
     shopTexts: cleanTexts(input.shopTexts),
     goods: cleanGoods(input.goods),
@@ -452,6 +458,7 @@ function placeScan(found, state) {
   const phones = [];
   const sites = [];
   const abouts = [];
+  const addresses = [];
   let addedGoods = 0;
   (Array.isArray(found) ? found : []).forEach((item) => {
     if (!item || item.on === false) return;
@@ -459,10 +466,19 @@ function placeScan(found, state) {
     const title = String(item.title || '').replace(/\s+/g, ' ').trim();
     const text = String(item.text || '').replace(/\s+/g, ' ').trim();
     const link = https(item.link);
-    if (kind === 'product' || kind === 'article') {
+    if (kind === 'article' || kind === 'link') return;
+    if (kind === 'address') {
+      const line = title || text;
+      if (line) addresses.push(line);
+      return;
+    }
+    if (kind === 'product' || kind === 'service') {
       const row = cleanGood({ name: title, price: item.price, link });
       if (!row || goods.length >= GOODS_LIMIT) return;
-      if (goods.some((good) => good.link === row.link || good.name.toLowerCase() === row.name.toLowerCase())) return;
+      const sameName = goods.some((good) => good.name.toLowerCase() === row.name.toLowerCase());
+      const wall = /\/wall-\d+_/.test(row.link);
+      const sameLink = row.link && !wall && goods.some((good) => good.link === row.link);
+      if (sameName || sameLink) return;
       goods.push(row);
       addedGoods += 1;
       return;
@@ -481,7 +497,7 @@ function placeScan(found, state) {
       if (body && body !== 'Статус' && body !== 'Описание') abouts.push(body);
     }
   });
-  const lines = [...new Set(phones), ...[...new Set(sites)].map((url) => `Сайт: ${url}`)];
+  const lines = [...new Set(phones), ...[...new Set(addresses)].map((line) => `Адрес: ${line}`), ...[...new Set(sites)].map((url) => `Сайт: ${url}`)];
   const dumped = abouts.some((body) => body.length >= 40 && contacts.includes(body.slice(0, 40)));
   if (lines.length) {
     const block = lines.join('\n');
@@ -510,4 +526,29 @@ function phoneLine(value) {
   return match[0].replace(/\s+/g, ' ').trim().slice(0, 40);
 }
 
-module.exports = { shopPack, cleanGoods, parseSheet, placeScan };
+function cleanKind(value) {
+  const text = String(value || '');
+  if (text === 'baker' || text === 'auto' || text === 'nails' || text === 'shop') return text;
+  return '';
+}
+
+function kindFrom(name, text) {
+  const blob = `${name || ''}\n${text || ''}`.toLowerCase();
+  if (/торт|капкейк|кондитер|бенто|пирожн|десерт|выпечк/.test(blob)) return 'baker';
+  if (/автосервис|шиномонтаж|автомой|детейлинг|автоэлектрик|\bсто\b/.test(blob)) return 'auto';
+  if (/маникюр|педикюр|ногт|бров|ресниц|парикмах|барбер/.test(blob)) return 'nails';
+  return 'shop';
+}
+
+function kindPreset(kind) {
+  const id = cleanKind(kind) || 'shop';
+  const row = {
+    baker: { label: 'Кондитер', catalog: 'Каталог', order: 'Заявка', delivery: true, pickup: true, baker: true },
+    auto: { label: 'Автосервис', catalog: 'Услуги', order: 'Запись', delivery: false, pickup: false, baker: false },
+    nails: { label: 'Маникюр', catalog: 'Услуги', order: 'Запись', delivery: false, pickup: true, baker: false },
+    shop: { label: 'Магазин', catalog: 'Каталог', order: 'Заявка', delivery: false, pickup: false, baker: false },
+  }[id];
+  return { kind: id, ...row };
+}
+
+module.exports = { shopPack, cleanGoods, parseSheet, placeScan, kindFrom, kindPreset };
