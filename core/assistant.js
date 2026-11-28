@@ -650,6 +650,36 @@ async function saveDesk(account, input, fetchImpl) {
     };
 }
 
+function shopHourFields(input, previous) {
+    const prev = previous && typeof previous === 'object' ? previous : {};
+    const given = !!(input && Object.prototype.hasOwnProperty.call(input, 'hours'));
+    return {
+        shopHours: given ? input.hours === true || input.hours === 'true' : prev.shopHours === true,
+        shopHourStart: input && input.hourStart != null ? clampHour(input.hourStart, 10) : clampHour(prev.shopHourStart, 10),
+        shopHourEnd: input && input.hourEnd != null ? clampHour(input.hourEnd, 19) : clampHour(prev.shopHourEnd, 19),
+        shopHourDays: input && Array.isArray(input.hourDays) ? clampDays(input.hourDays) : clampDays(prev.shopHourDays),
+        shopHourZone: input && input.hourZone != null ? clampZone(input.hourZone) : clampZone(prev.shopHourZone)
+    };
+}
+
+function clampHour(value, fallback) {
+    const number = Number(value);
+    if (!Number.isInteger(number) || number < 0 || number > 23) return fallback;
+    return number;
+}
+
+function clampDays(value) {
+    const list = Array.isArray(value) ? value.map(Number).filter(day => day >= 1 && day <= 7) : [];
+    const unique = [...new Set(list)];
+    return unique.length ? unique : [1, 2, 3, 4, 5];
+}
+
+function clampZone(value) {
+    const number = Number(value);
+    if (!Number.isInteger(number) || number < 2 || number > 12) return 3;
+    return number;
+}
+
 async function saveShop(account, input, fetchImpl) {
     const ownerId = vkId(account);
     if (!ownerId) throw publicError('Раздел открыт из ВК.');
@@ -681,6 +711,7 @@ async function saveShop(account, input, fetchImpl) {
         shopBoard: input && input.board === 'inline' ? 'inline' : 'fixed',
         shopSections: !!(input && input.sections),
         shopChatLinks: !!(input && input.chatLinks),
+        ...shopHourFields(input, row.reply),
         shopNames: input && input.names ? input.names : ((row.reply && row.reply.shopNames) || {}),
         shopTexts: input && input.texts ? input.texts : ((row.reply && row.reply.shopTexts) || {}),
         goods
@@ -731,6 +762,11 @@ async function saveShop(account, input, fetchImpl) {
         shopBoard: reply.shopBoard === 'inline' ? 'inline' : 'fixed',
         shopSections: reply.shopSections === true,
         shopChatLinks: reply.shopChatLinks === true,
+        shopHours: reply.shopHours === true,
+        shopHourStart: reply.shopHourStart,
+        shopHourEnd: reply.shopHourEnd,
+        shopHourDays: reply.shopHourDays,
+        shopHourZone: reply.shopHourZone,
         shopNames: reply.shopNames || {},
         shopTexts: reply.shopTexts || {},
         goods: reply.goods || []
@@ -969,7 +1005,8 @@ function publicPeople(list) {
         name: String(item && item.name || '').replace(/\s+/g, ' ').trim().slice(0, 80),
         phone: String(item && item.phone || '').replace(/[^\d+]/g, '').slice(0, 16),
         note: String(item && item.note || '').replace(/\s+/g, ' ').trim().slice(0, 180),
-        seen: Math.max(0, Number(item && item.seen) || 0)
+        seen: Math.max(0, Number(item && item.seen) || 0),
+        mail: !!(item && (item.mail === true || item.mail === 1))
     })).filter(item => item.peerId > 0);
 }
 
@@ -1071,9 +1108,10 @@ async function loadClients(account, fetchImpl) {
     const row = rows[0];
     if (!row) return { total: 0, people: [] };
     const result = await postAssistant('/clients', { userId, groupId: Number(row.group_id) }, fetchImpl);
-    if (!result.ok) return { total: 0, people: [], pending: true };
+    if (!result.ok) return { total: 0, people: [], pending: true, muted: [] };
     const people = publicPeople(result.clients);
-    return { total: Number(result.total) || people.length, people };
+    const muted = Array.isArray(result.muted) ? result.muted.map(Number).filter(id => Number.isSafeInteger(id) && id > 0) : [];
+    return { total: Number(result.total) || people.length, people, muted };
 }
 
 async function sendBroadcast(account, text, offset, fetchImpl) {
@@ -1101,6 +1139,142 @@ async function sendBroadcast(account, text, offset, fetchImpl) {
         total: Number(result.total) || 0,
         next: Number(result.next) || 0
     };
+}
+
+async function ownShop(account) {
+    const ownerId = vkId(account);
+    if (!ownerId) throw publicError('Раздел открыт из ВК.');
+    const don = await db.getAssistantDon(ownerId);
+    if (!don || !don.active) throw publicError('Раздел открыт дону НейроЯги с живой подпиской.');
+    const rows = await db.listAssistantCommunities(ownerId);
+    const row = rows[0];
+    if (!row) throw publicError('Сначала подключите сообщество.');
+    if (row.reply && row.reply.home === true) throw publicError('Это сообщество кафедры. Подключите другое.');
+    return { ownerId, row, groupId: Number(row.group_id) };
+}
+
+function mailLinks(value) {
+    const rows = [];
+    const list = Array.isArray(value) ? value : [];
+    for (const item of list) {
+        if (rows.length >= 2) break;
+        if (!item || typeof item !== 'object') continue;
+        const label = String(item.label || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+        const link = String(item.link || '').trim();
+        if (label.length < 2 || !/^https:\/\//i.test(link) || link.length > 300 || /\s/.test(link)) continue;
+        rows.push({ label, link });
+    }
+    return rows;
+}
+
+async function shopMail(account, text, links, offset, fetchImpl) {
+    const owned = await ownShop(account);
+    const body = cleanBody(text, 900, false);
+    if (!body) throw publicError('Напишите текст рассылки, до 900 знаков.');
+    const start = Number.isInteger(Number(offset)) && Number(offset) >= 0 ? Number(offset) : 0;
+    const result = await postAssistant('/broadcast', {
+        userId: owned.ownerId,
+        groupId: owned.groupId,
+        text: body,
+        offset: start,
+        consent: true,
+        links: mailLinks(links)
+    }, fetchImpl, null, 40000);
+    if (!result.ok) throw publicError('Рассылка не ушла. Попробуйте ещё раз.');
+    return {
+        ok: true,
+        sent: Number(result.sent) || 0,
+        failed: Number(result.failed) || 0,
+        total: Number(result.total) || 0,
+        next: Number(result.next) || 0
+    };
+}
+
+async function shopBlock(account, peerId, drop, fetchImpl) {
+    const owned = await ownShop(account);
+    const id = Number(peerId);
+    if (!Number.isSafeInteger(id) || id <= 0) throw publicError('Не вижу клиента.');
+    const result = await postAssistant('/mute', {
+        userId: owned.ownerId,
+        groupId: owned.groupId,
+        peerId: id,
+        drop: drop === true
+    }, fetchImpl);
+    if (!result.ok) throw publicError('Список не сохранился.');
+    return { ok: true, peerId: id, muted: drop !== true };
+}
+
+async function shopStats(account, fetchImpl) {
+    const owned = await ownShop(account);
+    const send = fetchImpl || fetch;
+    const clients = await loadClients(account, fetchImpl);
+    const orders = await loadOrders(account, fetchImpl);
+    let visitors = null;
+    let reach = null;
+    let views = null;
+    let note = '';
+    const token = String(owned.row.token || '').trim();
+    if (!token) note = 'Ключ сообщества не сохранён, статистика ВК недоступна.';
+    else {
+        try {
+            const now = Math.floor(Date.now() / 1000);
+            const params = new URLSearchParams({
+                group_id: String(owned.groupId),
+                timestamp_from: String(now - 7 * 86400),
+                timestamp_to: String(now),
+                interval: 'day',
+                v: '5.199',
+                access_token: token
+            });
+            const response = await send(`https://api.vk.com/method/stats.get?${params}`);
+            const data = await response.json();
+            if (!data || data.error) note = 'Ключ не открыл статистику сообщества. Клиенты и заявки ниже всё равно видны.';
+            else {
+                const sum = sumShopStats(data.response);
+                visitors = sum.visitors;
+                reach = sum.reach;
+                views = sum.views;
+            }
+        } catch (error) {
+            note = 'Статистика ВК сейчас не открылась. Клиенты и заявки ниже всё равно видны.';
+        }
+    }
+    return {
+        ok: true,
+        clients: Number(clients.total) || 0,
+        orders: Array.isArray(orders.rows) ? orders.rows.length : 0,
+        visitors,
+        reach,
+        views,
+        note
+    };
+}
+
+function sumShopStats(response) {
+    const rows = Array.isArray(response) ? response : [];
+    let visitors = 0;
+    let reach = 0;
+    let views = 0;
+    for (const row of rows) {
+        const people = row && row.visitors && typeof row.visitors === 'object' ? row.visitors : {};
+        const cover = row && row.reach && typeof row.reach === 'object' ? row.reach : {};
+        visitors += Number(people.visitors) || 0;
+        views += Number(people.views) || 0;
+        reach += Number(cover.reach) || 0;
+    }
+    return { visitors, reach, views };
+}
+
+async function shopAudit(account) {
+    const owned = await ownShop(account);
+    const audit = require('./vk-audit');
+    try {
+        const report = await audit.run(`https://vk.com/club${owned.groupId}`, owned.row.token);
+        return { ok: true, report: String(report || '').slice(0, 12000) };
+    } catch (error) {
+        const message = error && error.audit ? error.message : 'Аудит этого сообщества сейчас не собрался.';
+        throw publicError(String(message).replace(/\s+/g, ' ').trim().slice(0, 300));
+    }
 }
 
 async function setupRequests(rows) {
@@ -1420,6 +1594,10 @@ module.exports = {
     pushSaved,
     loadListen,
     sendBroadcast,
+    shopMail,
+    shopBlock,
+    shopStats,
+    shopAudit,
     publicPeople,
     disconnectCommunity,
     adminDrop,

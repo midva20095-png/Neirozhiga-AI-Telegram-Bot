@@ -340,6 +340,8 @@ test('простой бот хранит товары отдельно от ка
     assert.equal(reply.goods[0].name, 'Торт');
     assert.equal(reply.goods[0].price, '1500');
     assert.equal(reply.shopBoard, 'fixed');
+    assert.equal(reply.shopHours, false);
+    assert.equal(assistant.cleanReply({ level: 1, shopHours: true, shopHourZone: 5 }).shopHourZone, 5);
     assert.equal(reply.shopSections, false);
     assert.equal(reply.shopChatLinks, false);
     const wide = assistant.cleanReply({

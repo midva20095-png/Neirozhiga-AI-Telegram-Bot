@@ -21,6 +21,11 @@ function shopPack(input) {
     shopBoard: input.shopBoard === 'inline' ? 'inline' : 'fixed',
     shopSections: on(input.shopSections),
     shopChatLinks: on(input.shopChatLinks),
+    shopHours: on(input.shopHours),
+    shopHourStart: hourValue(input.shopHourStart, 10),
+    shopHourEnd: hourValue(input.shopHourEnd, 19),
+    shopHourDays: hourDays(input.shopHourDays),
+    shopHourZone: hourZone(input.shopHourZone),
     shopNames: cleanNames(input.shopNames),
     shopTexts: cleanTexts(input.shopTexts),
     shopCommentLinks: cleanCommentLinks(input.shopCommentLinks),
@@ -346,6 +351,24 @@ function asId(value) {
 
 function on(value) {
   return value === true || value === 'true';
+}
+
+function hourValue(value, fallback) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 0 || number > 23) return fallback;
+  return number;
+}
+
+function hourDays(value) {
+  const list = Array.isArray(value) ? value.map(Number).filter((day) => day >= 1 && day <= 7) : [];
+  const unique = [...new Set(list)];
+  return unique.length ? unique : [1, 2, 3, 4, 5];
+}
+
+function hourZone(value) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 2 || number > 12) return 3;
+  return number;
 }
 
 function cleanGood(item) {

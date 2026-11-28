@@ -4100,7 +4100,7 @@ let mineEdit = -1;
 let mineCommunity = null;
 let mineState = emptyMine();
 function emptyMine(){
-  return { catalog: false, contactsOn: false, order: false, admin: false, comments: false, commentLinks: [], chatLinks: false, sections: false, delivery: false, pickup: false, baker: false, kind: '', board: 'fixed', names: {}, texts: {}, contacts: '', greeting: '' };
+  return { catalog: false, contactsOn: false, order: false, admin: false, comments: false, commentLinks: [], chatLinks: false, sections: false, delivery: false, pickup: false, baker: false, kind: '', board: 'fixed', names: {}, texts: {}, contacts: '', greeting: '', hours: false, hourStart: 10, hourEnd: 19, hourDays: [1, 2, 3, 4, 5], hourZone: 3 };
 }
 function mineBack(){
   tab = 'cab';
@@ -4137,6 +4137,21 @@ function readMineForm(){
   if (flag('mineDelivery') !== null) mineState.delivery = flag('mineDelivery');
   if (flag('minePickup') !== null) mineState.pickup = flag('minePickup');
   if (flag('mineBaker') !== null) mineState.baker = flag('mineBaker');
+  if (flag('mineHours') !== null) mineState.hours = flag('mineHours');
+  const hourStart = document.getElementById('mineHourStart');
+  if (hourStart) mineState.hourStart = Number(hourStart.value);
+  const hourEnd = document.getElementById('mineHourEnd');
+  if (hourEnd) mineState.hourEnd = Number(hourEnd.value);
+  const hourZone = document.getElementById('mineHourZone');
+  if (hourZone) mineState.hourZone = Number(hourZone.value);
+  if (document.getElementById('mineDay1')) {
+    const days = [];
+    for (let day = 1; day <= 7; day += 1) {
+      const box = document.getElementById('mineDay' + day);
+      if (box && box.checked) days.push(day);
+    }
+    mineState.hourDays = days;
+  }
   const board = document.querySelector('input[name="mineBoard"]:checked');
   if (board) mineState.board = board.value === 'inline' ? 'inline' : 'fixed';
   if (flag('mineSections') !== null) mineState.sections = flag('mineSections');
@@ -4185,6 +4200,10 @@ function mineHome(community){
     '<button type="button" class="cabrow" data-mine="orders"><span>Заявки<small>Что бот спрашивает перед заявкой</small></span></button>'+
     '<button type="button" class="cabrow" data-mine="contacts"><span>Контакты<small>'+(contacts ? 'Текст кнопки уже есть' : 'Текст, который уходит по кнопке контактов')+'</small></span></button>'+
     '<button type="button" class="cabrow" data-mine="comments"><span>Комментарии<small>Какие ссылки дописать под товаром</small></span></button>'+
+    '<button type="button" class="cabrow" data-mine="clients"><span>Клиенты<small>Кто писал боту, и чёрный список</small></span></button>'+
+    '<button type="button" class="cabrow" data-mine="mail"><span>Рассылка<small>Только тем, кто нажал «Новости»</small></span></button>'+
+    '<button type="button" class="cabrow" data-mine="stats"><span>Статистика<small>Посетители сообщества и заявки</small></span></button>'+
+    '<button type="button" class="cabrow" data-mine="audit"><span>Аудит<small>Разбор только этого сообщества</small></span></button>'+
     '<button class="btn ghost" id="mineDrop" type="button" style="margin-top:8px">Удалить бота из сообщества</button>'+
     '<p class="hint">Ключ забудется, а кнопки в чатах снимутся, пока ключ ещё действует.</p>'+
     '<p id="minemsg" class="hint"></p></div>';
@@ -4270,7 +4289,62 @@ function mineOrders(){
     '<label><input id="mineBaker" type="checkbox"'+(mineState.baker ? ' checked' : '')+'> Режим кондитера: ссылка на пример и вес</label>'+
     '<label class="flabel" for="mineTextOrder">Что написать в начале заявки</label>'+mineBox('mineTextOrder', 2000, mineState.texts.order || '', 6)+
     '<p class="hint">Пустое поле — бот сразу спрашивает имя.</p>'+
+    '<p class="now">Нерабочее время</p>'+
+    '<label><input id="mineHours" type="checkbox"'+(mineState.hours ? ' checked' : '')+'> Писать, что сейчас нерабочее время</label>'+
+    '<p class="hint">По умолчанию выключено. Пока выключено, бот отвечает в любой час. Часы считаются в выбранном поясе, в тексте бот называет этот пояс.</p>'+
+    '<label class="flabel" for="mineHourStart">С</label><select id="mineHourStart">'+hourOptions(mineState.hourStart)+'</select>'+
+    '<label class="flabel" for="mineHourEnd">До</label><select id="mineHourEnd">'+hourOptions(mineState.hourEnd == null ? 19 : mineState.hourEnd)+'</select>'+
+    '<label class="flabel" for="mineHourZone">Часовой пояс</label><select id="mineHourZone">'+zoneOptions(mineState.hourZone)+'</select>'+
+    '<p class="hint">Дни, когда бот на связи. Если ни один не отмечен, берутся будни.</p>'+
+    dayChecks(mineState.hourDays)+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить заявки</button><p id="minemsg" class="hint"></p></div>';
+}
+function hourOptions(selected){
+  let html = '';
+  const current = Number(selected);
+  for (let hour = 0; hour < 24; hour += 1) {
+    const label = (hour < 10 ? '0' : '') + hour + ':00';
+    html += '<option value="'+hour+'"'+(current === hour ? ' selected' : '')+'>'+label+'</option>';
+  }
+  return html;
+}
+function zoneOptions(selected){
+  const zones = [[2, 'Калининград, UTC+2'], [3, 'Москва, UTC+3'], [4, 'Самара, UTC+4'], [5, 'Екатеринбург, UTC+5'], [6, 'Омск, UTC+6'], [7, 'Красноярск, UTC+7'], [8, 'Иркутск, UTC+8'], [9, 'Якутск, UTC+9'], [10, 'Владивосток, UTC+10'], [11, 'Магадан, UTC+11'], [12, 'Камчатка, UTC+12']];
+  const current = selected == null ? 3 : Number(selected);
+  return zones.map(function(item){
+    return '<option value="'+item[0]+'"'+(current === item[0] ? ' selected' : '')+'>'+item[1]+'</option>';
+  }).join('');
+}
+function dayChecks(days){
+  const names = ['', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+  const picked = Array.isArray(days) ? days.map(Number) : [1, 2, 3, 4, 5];
+  let html = '';
+  for (let day = 1; day <= 7; day += 1) {
+    html += '<label><input id="mineDay'+day+'" type="checkbox"'+(picked.indexOf(day) >= 0 ? ' checked' : '')+'> '+names[day]+'</label>';
+  }
+  return html;
+}
+function mineClients(){
+  return mineHead('Клиенты', 'Здесь те, кто писал боту. «В чёрный список» глушит человека только в этом сообществе: бот ему больше не отвечает.')+
+    '<div id="minePeople"><p class="hint">Загружаю клиентов…</p></div><p id="minemsg" class="hint"></p></div>';
+}
+function mineMail(){
+  return mineHead('Рассылка', 'Уходит только тем, кто в боте нажал «Новости». Можно закрепить до двух открытых ссылок.')+
+    '<label class="flabel" for="mineMailText">Текст</label>'+mineBox('mineMailText', 900, '', 6)+
+    '<label class="flabel" for="mineMailLabel1">Подпись первой ссылки</label><input id="mineMailLabel1" maxlength="40">'+
+    '<label class="flabel" for="mineMailLink1">Ссылка https</label><input id="mineMailLink1" maxlength="300">'+
+    '<label class="flabel" for="mineMailLabel2">Подпись второй ссылки</label><input id="mineMailLabel2" maxlength="40">'+
+    '<label class="flabel" for="mineMailLink2">Ссылка https</label><input id="mineMailLink2" maxlength="300">'+
+    '<button class="btn" id="mineMailSend" type="button" style="margin-top:12px">Отправить согласившимся</button><p id="minemsg" class="hint"></p></div>';
+}
+function mineStats(){
+  return mineHead('Статистика', 'Семь дней сообщества. Если ключ без права «Статистика», всё равно видны клиенты и заявки бота.')+
+    '<div id="mineStatsBody"><p class="hint">Считаю…</p></div><p id="minemsg" class="hint"></p></div>';
+}
+function mineAudit(){
+  return mineHead('Аудит', 'Это тот же разбор, что в основном боте, но только для вашего сообщества. Аудит основного бота не меняется.')+
+    '<button class="btn" id="mineAuditRun" type="button">Провести аудит</button>'+
+    '<div id="mineAuditBody" style="white-space:pre-wrap;margin-top:12px"></div><p id="minemsg" class="hint"></p></div>';
 }
 function mineContacts(){
   return mineHead('Контакты', 'Этот текст уходит по кнопке контактов. Описание сообщества сюда само не попадает.')+
@@ -4343,6 +4417,10 @@ function paintMine(){
   else if (mineView === 'orders') box.innerHTML = mineOrders();
   else if (mineView === 'contacts') box.innerHTML = mineContacts();
   else if (mineView === 'comments') box.innerHTML = mineComments();
+  else if (mineView === 'clients') box.innerHTML = mineClients();
+  else if (mineView === 'mail') box.innerHTML = mineMail();
+  else if (mineView === 'stats') box.innerHTML = mineStats();
+  else if (mineView === 'audit') box.innerHTML = mineAudit();
   else box.innerHTML = mineHome(community);
   bindMine(community);
 }
@@ -4367,6 +4445,12 @@ function bindMine(community){
   if (file) file.onchange = function(){ readMineFile(file); };
   const scan = document.getElementById('mineScan');
   if (scan) scan.onclick = scanMine;
+  const mail = document.getElementById('mineMailSend');
+  if (mail) mail.onclick = sendMineMail;
+  const audit = document.getElementById('mineAuditRun');
+  if (audit) audit.onclick = runMineAudit;
+  if (mineView === 'clients') loadMineClients();
+  if (mineView === 'stats') loadMineStats();
   const prev = document.getElementById('minePrev');
   if (prev) prev.onclick = function(){ minePage -= 1; paintMine(); };
   const next = document.getElementById('mineNext');
@@ -4502,7 +4586,12 @@ async function loadMine(){
     names: Object.assign({}, community.names || {}),
     texts: Object.assign({}, community.texts || {}),
     contacts: community.contacts || '',
-    greeting: community.greeting || ''
+    greeting: community.greeting || '',
+    hours: !!community.hours,
+    hourStart: Number.isInteger(community.hourStart) ? community.hourStart : 10,
+    hourEnd: Number.isInteger(community.hourEnd) ? community.hourEnd : 19,
+    hourDays: Array.isArray(community.hourDays) ? community.hourDays.slice() : [1, 2, 3, 4, 5],
+    hourZone: Number.isInteger(community.hourZone) ? community.hourZone : 3
   };
   paintMine();
 }
@@ -4636,7 +4725,12 @@ async function saveMine(){
         names: mineState.names,
         texts: mineState.texts,
         goods: mineGoods,
-        sheet: sheet
+        sheet: sheet,
+        hours: !!mineState.hours,
+        hourStart: Number(mineState.hourStart),
+        hourEnd: Number(mineState.hourEnd),
+        hourDays: Array.isArray(mineState.hourDays) ? mineState.hourDays : [1, 2, 3, 4, 5],
+        hourZone: Number(mineState.hourZone)
       })
     });
     const data = await response.json();
@@ -4657,6 +4751,114 @@ async function saveMine(){
 }
 function waitMine(ms){
   return new Promise(function(resolve){ setTimeout(resolve, ms); });
+}
+async function loadMineClients(){
+  const box = document.getElementById('minePeople');
+  if (!box) return;
+  try {
+    const response = await fetchT('/api/vk/shop/clients', { method: 'POST', headers: authHeaders(), body: '{}' }, 18000);
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Клиенты не открылись');
+    const muted = Array.isArray(data.muted) ? data.muted.map(Number) : [];
+    const people = Array.isArray(data.people) ? data.people : [];
+    if (!people.length) {
+      box.innerHTML = '<p class="hint">Пока никто не писал боту.</p>';
+      return;
+    }
+    box.innerHTML = people.map(function(person){
+      const quiet = muted.indexOf(Number(person.peerId)) >= 0;
+      const mail = person.mail ? 'Новости: да' : 'Новости: нет';
+      return '<div style="margin:10px 0;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.08)"><p class="now">'+esc(person.name || ('id'+person.peerId))+'</p>'+
+        '<p class="hint">'+esc(person.phone || 'телефона нет')+' · писал '+esc(String(person.seen || 0))+' · '+mail+'</p>'+
+        '<a class="hint" href="https://vk.com/gim'+(mineCommunity && mineCommunity.groupId ? mineCommunity.groupId : '')+'?sel='+encodeURIComponent(person.peerId)+'" target="_blank" rel="noopener">Открыть диалог</a><br>'+
+        '<button type="button" class="btn ghost" data-mine-block="'+person.peerId+'" data-mine-drop="'+(quiet ? '1' : '0')+'">'+(quiet ? 'Вернуть из чёрного списка' : 'В чёрный список')+'</button></div>';
+    }).join('');
+    box.querySelectorAll('[data-mine-block]').forEach(function(button){
+      button.onclick = function(){ blockMineClient(button.getAttribute('data-mine-block'), button.getAttribute('data-mine-drop') === '1'); };
+    });
+  } catch (error) {
+    box.innerHTML = '<p class="err">'+esc(error.message || 'Клиенты не открылись')+'</p>';
+  }
+}
+async function blockMineClient(peerId, drop){
+  const msg = document.getElementById('minemsg');
+  if (msg) msg.textContent = drop ? 'Возвращаю…' : 'Добавляю в чёрный список…';
+  try {
+    const response = await fetch('/api/vk/shop/block', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ peerId: Number(peerId), drop: !!drop })
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Список не сохранился');
+    if (msg) msg.textContent = drop ? 'Человек снова может писать боту.' : 'Бот больше не отвечает этому человеку в вашем сообществе.';
+    loadMineClients();
+  } catch (error) {
+    if (msg) msg.textContent = error.message || 'Список не сохранился';
+  }
+}
+async function sendMineMail(){
+  const msg = document.getElementById('minemsg');
+  const button = document.getElementById('mineMailSend');
+  const text = String((document.getElementById('mineMailText') || {}).value || '').trim();
+  const links = [];
+  [1, 2].forEach(function(index){
+    const label = String((document.getElementById('mineMailLabel' + index) || {}).value || '').trim();
+    const link = String((document.getElementById('mineMailLink' + index) || {}).value || '').trim();
+    if (label || link) links.push({ label: label, link: link });
+  });
+  if (!text) {
+    if (msg) msg.textContent = 'Напишите текст рассылки.';
+    return;
+  }
+  if (button) button.disabled = true;
+  if (msg) msg.textContent = 'Отправляю…';
+  try {
+    const response = await fetchT('/api/vk/shop/mail', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ text: text, links: links, offset: 0 })
+    }, 40000);
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Рассылка не ушла');
+    if (msg) msg.textContent = 'Ушло '+data.sent+' из '+data.total+'. Не согласившимся на новости не отправлялось.';
+  } catch (error) {
+    if (msg) msg.textContent = error.message || 'Рассылка не ушла';
+    if (button) button.disabled = false;
+  }
+}
+async function loadMineStats(){
+  const box = document.getElementById('mineStatsBody');
+  if (!box) return;
+  try {
+    const response = await fetchT('/api/vk/shop/stats', { method: 'POST', headers: authHeaders(), body: '{}' }, 20000);
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Статистика не открылась');
+    const line = function(label, value){ return '<p class="now">'+label+': '+(value == null ? 'нет данных' : esc(String(value)))+'</p>'; };
+    box.innerHTML = line('Посетители за 7 дней', data.visitors)+line('Охват за 7 дней', data.reach)+line('Просмотры за 7 дней', data.views)+
+      line('Клиенты бота', data.clients)+line('Заявки', data.orders)+
+      (data.note ? '<p class="hint">'+esc(data.note)+'</p>' : '');
+  } catch (error) {
+    box.innerHTML = '<p class="err">'+esc(error.message || 'Статистика не открылась')+'</p>';
+  }
+}
+async function runMineAudit(){
+  const box = document.getElementById('mineAuditBody');
+  const msg = document.getElementById('minemsg');
+  const button = document.getElementById('mineAuditRun');
+  if (button) button.disabled = true;
+  if (msg) msg.textContent = 'Собираю аудит…';
+  if (box) box.textContent = '';
+  try {
+    const response = await fetchT('/api/vk/shop/audit', { method: 'POST', headers: authHeaders(), body: '{}' }, 60000);
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'Аудит не собрался');
+    if (box) box.textContent = data.report || '';
+    if (msg) msg.textContent = 'Аудит готов.';
+  } catch (error) {
+    if (msg) msg.textContent = error.message || 'Аудит не собрался';
+  }
+  if (button) button.disabled = false;
 }
 async function scanMine(){
   const button = document.getElementById('mineScan');

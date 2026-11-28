@@ -607,6 +607,11 @@ function startWebApp() {
                     board: reply.shopBoard === 'inline' ? 'inline' : 'fixed',
                     sections: reply.shopSections === true,
                     chatLinks: reply.shopChatLinks === true,
+                    hours: reply.shopHours === true,
+                    hourStart: Number.isInteger(reply.shopHourStart) ? reply.shopHourStart : 10,
+                    hourEnd: Number.isInteger(reply.shopHourEnd) ? reply.shopHourEnd : 19,
+                    hourDays: Array.isArray(reply.shopHourDays) ? reply.shopHourDays : [1, 2, 3, 4, 5],
+                    hourZone: Number.isInteger(reply.shopHourZone) ? reply.shopHourZone : 3,
                     contacts: reply.contacts || '',
                     greeting: reply.greeting || '',
                     names: reply.shopNames || {},
@@ -644,6 +649,58 @@ function startWebApp() {
             res.json(found);
         } catch (e) {
             const message = e && e.public ? e.message : 'Сканирование остановилось.';
+            res.status(400).json({ ok: false, error: message });
+        }
+    });
+
+    app.post('/api/vk/shop/clients', requireUser, async (req, res) => {
+        try {
+            const people = await assistant.loadClients(req.userId);
+            res.json({ ok: true, ...people, muted: Array.isArray(people.muted) ? people.muted : [] });
+        } catch (e) {
+            const message = e && e.public ? e.message : 'Клиенты не открылись.';
+            res.status(400).json({ ok: false, error: message });
+        }
+    });
+
+    app.post('/api/vk/shop/mail', requireUser, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const result = await assistant.shopMail(req.userId, body.text, body.links, body.offset);
+            res.json(result);
+        } catch (e) {
+            const message = e && e.public ? e.message : 'Рассылка не ушла.';
+            res.status(400).json({ ok: false, error: message });
+        }
+    });
+
+    app.post('/api/vk/shop/block', requireUser, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const result = await assistant.shopBlock(req.userId, body.peerId, body.drop === true);
+            res.json(result);
+        } catch (e) {
+            const message = e && e.public ? e.message : 'Список не сохранился.';
+            res.status(400).json({ ok: false, error: message });
+        }
+    });
+
+    app.post('/api/vk/shop/stats', requireUser, async (req, res) => {
+        try {
+            const result = await assistant.shopStats(req.userId);
+            res.json(result);
+        } catch (e) {
+            const message = e && e.public ? e.message : 'Статистика не открылась.';
+            res.status(400).json({ ok: false, error: message });
+        }
+    });
+
+    app.post('/api/vk/shop/audit', requireUser, async (req, res) => {
+        try {
+            const result = await assistant.shopAudit(req.userId);
+            res.json(result);
+        } catch (e) {
+            const message = e && e.public ? e.message : 'Аудит не собрался.';
             res.status(400).json({ ok: false, error: message });
         }
     });
