@@ -657,9 +657,23 @@ function shopHourFields(input, previous) {
         shopHours: given ? input.hours === true || input.hours === 'true' : prev.shopHours === true,
         shopHourStart: input && input.hourStart != null ? clampHour(input.hourStart, 10) : clampHour(prev.shopHourStart, 10),
         shopHourEnd: input && input.hourEnd != null ? clampHour(input.hourEnd, 19) : clampHour(prev.shopHourEnd, 19),
-        shopHourDays: input && Array.isArray(input.hourDays) ? clampDays(input.hourDays) : clampDays(prev.shopHourDays),
+        shopHourDays: chosenDays(input, prev),
+        shopHourDaysChosen: daysChosen(input, prev),
         shopHourZone: input && input.hourZone != null ? clampZone(input.hourZone) : clampZone(prev.shopHourZone)
     };
+}
+
+function daysChosen(input, prev) {
+    return !!(input && (input.hourDaysChosen === true || input.hourDaysChosen === 'true')) || prev.shopHourDaysChosen === true;
+}
+
+function chosenDays(input, prev) {
+    const all = [1, 2, 3, 4, 5, 6, 7];
+    if (input && (input.hourDaysChosen === true || input.hourDaysChosen === 'true') && Array.isArray(input.hourDays)) {
+        return clampDays(input.hourDays);
+    }
+    if (prev.shopHourDaysChosen === true && Array.isArray(prev.shopHourDays)) return clampDays(prev.shopHourDays);
+    return all;
 }
 
 function clampHour(value, fallback) {
@@ -670,8 +684,7 @@ function clampHour(value, fallback) {
 
 function clampDays(value) {
     const list = Array.isArray(value) ? value.map(Number).filter(day => day >= 1 && day <= 7) : [];
-    const unique = [...new Set(list)];
-    return unique.length ? unique : [1, 2, 3, 4, 5];
+    return [...new Set(list)];
 }
 
 function clampZone(value) {
@@ -766,6 +779,7 @@ async function saveShop(account, input, fetchImpl) {
         shopHourStart: reply.shopHourStart,
         shopHourEnd: reply.shopHourEnd,
         shopHourDays: reply.shopHourDays,
+        shopHourDaysChosen: reply.shopHourDaysChosen === true,
         shopHourZone: reply.shopHourZone,
         shopNames: reply.shopNames || {},
         shopTexts: reply.shopTexts || {},

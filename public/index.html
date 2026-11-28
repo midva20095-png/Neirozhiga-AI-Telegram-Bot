@@ -380,6 +380,9 @@ a.btn{display:block;text-align:center;text-decoration:none}
 .setup{margin-top:14px}
 input,select,textarea{width:100%;border-radius:14px;border:1px solid var(--line);background:#1c1233;padding:12px;outline:none;margin-top:8px;color:inherit;font:inherit}
 input[type=checkbox],input[type=radio]{width:auto;padding:0;margin:0 8px 0 0;vertical-align:middle;accent-color:#7c5cff}
+.daypicks{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.daypick{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--line);border-radius:14px;background:#1c1233;font-weight:700}
+.daypick input{width:22px;height:22px;margin:0;flex:none}
 #genmodel{font-size:16px;margin:0 0 10px}
 .flabel{display:block;margin-top:12px;font-weight:800;font-size:13px}
 .stepsbox{margin-top:10px}
@@ -4100,7 +4103,7 @@ let mineEdit = -1;
 let mineCommunity = null;
 let mineState = emptyMine();
 function emptyMine(){
-  return { catalog: false, contactsOn: false, order: false, admin: false, comments: false, commentLinks: [], chatLinks: false, sections: false, delivery: false, pickup: false, baker: false, kind: '', board: 'fixed', names: {}, texts: {}, contacts: '', greeting: '', hours: false, hourStart: 10, hourEnd: 19, hourDays: [1, 2, 3, 4, 5], hourZone: 3 };
+  return { catalog: false, contactsOn: false, order: false, admin: false, comments: false, commentLinks: [], chatLinks: false, sections: false, delivery: false, pickup: false, baker: false, kind: '', board: 'fixed', names: {}, texts: {}, contacts: '', greeting: '', hours: false, hourStart: 10, hourEnd: 19, hourDays: [1, 2, 3, 4, 5, 6, 7], hourZone: 3 };
 }
 function mineBack(){
   tab = 'cab';
@@ -4295,7 +4298,7 @@ function mineOrders(){
     '<label class="flabel" for="mineHourStart">С</label><select id="mineHourStart">'+hourOptions(mineState.hourStart)+'</select>'+
     '<label class="flabel" for="mineHourEnd">До</label><select id="mineHourEnd">'+hourOptions(mineState.hourEnd == null ? 19 : mineState.hourEnd)+'</select>'+
     '<label class="flabel" for="mineHourZone">Часовой пояс</label><select id="mineHourZone">'+zoneOptions(mineState.hourZone)+'</select>'+
-    '<p class="hint">Дни, когда бот на связи. Если ни один не отмечен, берутся будни.</p>'+
+    '<p class="hint">Дни, когда бот отвечает. По умолчанию включены все, включая воскресенье. Галочку можно снять.</p>'+
     dayChecks(mineState.hourDays)+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить заявки</button><p id="minemsg" class="hint"></p></div>';
 }
@@ -4316,13 +4319,13 @@ function zoneOptions(selected){
   }).join('');
 }
 function dayChecks(days){
-  const names = ['', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-  const picked = Array.isArray(days) ? days.map(Number) : [1, 2, 3, 4, 5];
-  let html = '';
+  const names = ['', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
+  const picked = Array.isArray(days) ? days.map(Number) : [1, 2, 3, 4, 5, 6, 7];
+  let html = '<div class="daypicks">';
   for (let day = 1; day <= 7; day += 1) {
-    html += '<label><input id="mineDay'+day+'" type="checkbox"'+(picked.indexOf(day) >= 0 ? ' checked' : '')+'> '+names[day]+'</label>';
+    html += '<label class="daypick"><input id="mineDay'+day+'" type="checkbox"'+(picked.indexOf(day) >= 0 ? ' checked' : '')+'> '+names[day]+'</label>';
   }
-  return html;
+  return html + '</div>';
 }
 function mineClients(){
   return mineHead('Клиенты', 'Здесь те, кто писал боту. «В чёрный список» глушит человека только в этом сообществе: бот ему больше не отвечает.')+
@@ -4590,7 +4593,7 @@ async function loadMine(){
     hours: !!community.hours,
     hourStart: Number.isInteger(community.hourStart) ? community.hourStart : 10,
     hourEnd: Number.isInteger(community.hourEnd) ? community.hourEnd : 19,
-    hourDays: Array.isArray(community.hourDays) ? community.hourDays.slice() : [1, 2, 3, 4, 5],
+    hourDays: community.hourDaysChosen && Array.isArray(community.hourDays) ? community.hourDays.map(Number).filter(function(day){ return day >= 1 && day <= 7; }) : [1, 2, 3, 4, 5, 6, 7],
     hourZone: Number.isInteger(community.hourZone) ? community.hourZone : 3
   };
   paintMine();
@@ -4729,7 +4732,8 @@ async function saveMine(){
         hours: !!mineState.hours,
         hourStart: Number(mineState.hourStart),
         hourEnd: Number(mineState.hourEnd),
-        hourDays: Array.isArray(mineState.hourDays) ? mineState.hourDays : [1, 2, 3, 4, 5],
+        hourDays: Array.isArray(mineState.hourDays) ? mineState.hourDays : [1, 2, 3, 4, 5, 6, 7],
+        hourDaysChosen: true,
         hourZone: Number(mineState.hourZone)
       })
     });

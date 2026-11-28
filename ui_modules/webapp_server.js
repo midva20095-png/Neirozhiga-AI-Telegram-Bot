@@ -610,7 +610,10 @@ function startWebApp() {
                     hours: reply.shopHours === true,
                     hourStart: Number.isInteger(reply.shopHourStart) ? reply.shopHourStart : 10,
                     hourEnd: Number.isInteger(reply.shopHourEnd) ? reply.shopHourEnd : 19,
-                    hourDays: Array.isArray(reply.shopHourDays) ? reply.shopHourDays : [1, 2, 3, 4, 5],
+                    hourDays: reply.shopHourDaysChosen === true && Array.isArray(reply.shopHourDays)
+                        ? reply.shopHourDays.map(Number).filter((day) => day >= 1 && day <= 7)
+                        : [1, 2, 3, 4, 5, 6, 7],
+                    hourDaysChosen: reply.shopHourDaysChosen === true,
                     hourZone: Number.isInteger(reply.shopHourZone) ? reply.shopHourZone : 3,
                     contacts: reply.contacts || '',
                     greeting: reply.greeting || '',
