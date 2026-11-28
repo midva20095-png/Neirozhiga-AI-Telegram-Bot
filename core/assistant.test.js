@@ -416,7 +416,9 @@ test('чат и каталог в комментариях стоят в раз�
     assert.equal(html.includes('id="mineChatLinks"'), true);
     assert.equal(html.includes("mineBox('mineHello', 2000"), true);
     assert.equal(html.includes("mineBox('mineContacts', 2500"), true);
-    assert.equal(html.includes("mineBox(textId, 2000"), true);
+    assert.equal(html.includes("mineBox('mineTextCatalog', 2000"), true);
+    assert.equal(html.includes('data-mine="buttons"'), false);
+    assert.equal(html.includes('function mineButtons'), false);
     assert.equal(html.includes(" из "), true);
     assert.equal(html.includes('id="mineMailLink"'), true);
     assert.equal(html.includes('mineMailLink1'), false);

@@ -4106,7 +4106,7 @@ function mineBack(){
 }
 function openMine(view){
   readMineForm();
-  mineView = view || 'home';
+  mineView = view === 'buttons' ? 'home' : (view || 'home');
   mineEdit = -1;
   paintMine();
 }
@@ -4194,25 +4194,25 @@ function mineBackRow(id, label){
 function mineHead(title, note){
   return '<div class="card">'+mineBackRow('mineSectionBack', '← К разделам')+'<div class="kicker">'+esc(title)+'</div><p class="hint">'+esc(note)+'</p>';
 }
-function mineHave(){
-  const hello = String(mineState.greeting || '').trim();
-  const contacts = String(mineState.contacts || '').trim();
-  const goods = mineGoods.slice(0, 6).map(function(item){
-    return esc(item.name)+(item.price ? ' — '+esc(item.price) : '');
-  }).join('<br>');
-  return '<p class="now">Уже добавлено</p>'+
-    '<p class="hint">Приветствие: '+(hello ? esc(hello) : 'пусто')+'</p>'+
-    '<p class="hint">Контакты:<br>'+(contacts ? esc(contacts).replace(/\n/g, '<br>') : 'пусто')+'</p>'+
-    '<p class="hint">Каталог:<br>'+(goods || 'пусто')+'</p>';
-}
 function mineHome(community){
-  const hello = String(mineState.greeting || '').trim();
   const contacts = String(mineState.contacts || '').trim();
   return '<div class="card">'+mineBackRow('mineBack', '← В кабинет')+'<div class="kicker">Моё сообщество</div>'+
     '<p class="now">'+esc(community.title || ('Сообщество '+community.groupId))+'</p>'+
     (community.key ? '<p class="hint">Ключ сохранён: '+esc(community.key)+'</p>' : '')+
-    '<p class="hint">Пока донат действует, бот отвечает в сообщениях. В разделе уже лежит то, что бот сохранил. Откройте его и поправьте.</p>'+
-    '<button type="button" class="cabrow" data-mine="buttons"><span>Кнопки<small>'+(hello ? 'Фраза при входе уже есть' : 'Надписи, приветствие и как кнопки стоят в чате')+'</small></span></button>'+
+    '<p class="hint">Пока донат действует, бот отвечает в сообщениях. Кнопки включаются в своих разделах: каталог, заявки, контакты.</p>'+
+    '<label class="flabel" for="mineHello">Фраза при входе</label>'+mineBox('mineHello', 2000, mineState.greeting || '', 6)+
+    '<p class="now">Стиль кнопок</p>'+
+    '<label><input type="radio" name="mineBoard" value="fixed"'+(mineState.board !== 'inline' ? ' checked' : '')+'> Внизу чата</label>'+
+    '<label><input type="radio" name="mineBoard" value="inline"'+(mineState.board === 'inline' ? ' checked' : '')+'> Под сообщением</label>'+
+    '<p class="now">Категория</p>'+
+    '<select id="mineKindPick"><option value="baker"'+(mineState.kind === 'baker' ? ' selected' : '')+'>Кондитер</option><option value="auto"'+(mineState.kind === 'auto' ? ' selected' : '')+'>Автосервис</option><option value="nails"'+(mineState.kind === 'nails' ? ' selected' : '')+'>Маникюр</option><option value="shop"'+(!mineState.kind || mineState.kind === 'shop' ? ' selected' : '')+'>Магазин</option></select>'+
+    '<p class="hint">Категория включает нужные поля заявки и готовые надписи. «Каталог» становится «Услуги», «Заявка» — «Запись».</p>'+
+    '<button class="btn ghost" id="mineKindApply" type="button">Подставить категорию</button>'+
+    '<p class="now">Администратор</p>'+
+    '<label><input id="mineAdmin" type="checkbox"'+(mineState.admin ? ' checked' : '')+'> Показывать кнопку</label>'+
+    '<p class="hint">После этой кнопки бот молчит, пока покупатель не нажмёт «Назад».</p>'+
+    '<label class="flabel" for="mineTextAdmin">Что написать покупателю</label>'+mineBox('mineTextAdmin', 2000, mineState.texts.admin || '', 5)+
+    '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить настройки</button>'+
     '<button type="button" class="cabrow" data-mine="catalog"><span>Каталог<small>'+(mineCatalogOnCount() ? 'Включено кнопок: '+mineCatalogOnCount() : 'Ссылка и до 10 кнопок')+'</small></span></button>'+
     '<button type="button" class="cabrow" data-mine="orders"><span>Заявки<small>Что бот спрашивает перед заявкой</small></span></button>'+
     '<button type="button" class="cabrow" data-mine="contacts"><span>Контакты<small>'+(contacts ? 'Текст кнопки уже есть' : 'Текст, который уходит по кнопке контактов')+'</small></span></button>'+
@@ -4236,32 +4236,6 @@ function mineCount(node){
   const note = node.nextElementSibling;
   if (note && note.hasAttribute('data-count')) note.textContent = node.value.length + ' из ' + limit;
 }
-function buttonCard(key, title, note, textId, textLabel){
-  const on = key === 'catalog' ? mineState.catalog : key === 'contacts' ? mineState.contactsOn : key === 'order' ? mineState.order : mineState.admin;
-  const flagId = key === 'catalog' ? 'mineCatalog' : key === 'contacts' ? 'mineContactsOn' : key === 'order' ? 'mineOrder' : 'mineAdmin';
-  let html = '<p class="now">'+esc(title)+'</p>'+
-    '<label><input id="'+flagId+'" type="checkbox"'+(on ? ' checked' : '')+'> Показывать кнопку</label>'+
-    '<p class="hint">'+esc(note)+'</p>';
-  if (textId) html += '<label class="flabel" for="'+textId+'">'+esc(textLabel)+'</label>'+mineBox(textId, 2000, mineState.texts[key] || '', 5);
-  return html;
-}
-function mineButtons(){
-  return mineHead('Кнопки', 'Только эти кнопки: Каталог, Контакты, Заявка, Администратор. Свои кнопки поставить нельзя. Категория меняет «Каталог» на «Услуги» и «Заявку» на «Запись».')+
-    mineHave()+
-    buttonCard('catalog', 'Каталог', 'Ссылка и кнопки каталога задаются в разделе «Каталог».', 'mineTextCatalog', 'Фраза перед ссылкой')+
-    buttonCard('contacts', 'Контакты', 'Телефон и адрес задаются в разделе «Контакты».', '', '')+
-    buttonCard('order', 'Заявка', 'Покупатель выбирает товар и пишет телефон. Заявка приходит вам в сообщения сообщества.', 'mineTextOrder', 'Что написать покупателю')+
-    buttonCard('admin', 'Администратор', 'После этой кнопки бот молчит, пока покупатель не нажмёт «Назад».', 'mineTextAdmin', 'Что написать покупателю')+
-    '<p class="now">Категория</p>'+
-    '<select id="mineKindPick"><option value="baker"'+(mineState.kind === 'baker' ? ' selected' : '')+'>Кондитер</option><option value="auto"'+(mineState.kind === 'auto' ? ' selected' : '')+'>Автосервис</option><option value="nails"'+(mineState.kind === 'nails' ? ' selected' : '')+'>Маникюр</option><option value="shop"'+(!mineState.kind || mineState.kind === 'shop' ? ' selected' : '')+'>Магазин</option></select>'+
-    '<p class="hint">Категория включает нужные поля заявки и готовые надписи кнопок.</p>'+
-    '<button class="btn ghost" id="mineKindApply" type="button">Кнопки категории</button>'+
-    '<p class="now">Стиль кнопок</p>'+
-    '<label><input type="radio" name="mineBoard" value="fixed"'+(mineState.board !== 'inline' ? ' checked' : '')+'> Внизу чата</label>'+
-    '<label><input type="radio" name="mineBoard" value="inline"'+(mineState.board === 'inline' ? ' checked' : '')+'> Под сообщением</label>'+
-    '<label class="flabel" for="mineHello">Фраза при входе</label>'+mineBox('mineHello', 2000, mineState.greeting || '', 6)+
-    '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить кнопки</button><p id="minemsg" class="hint"></p></div>';
-}
 function mineCatalogOnCount(){
   return mineCatalogButtons().filter(function(item){ return item && item.on && item.name && item.link; }).length;
 }
@@ -4274,16 +4248,19 @@ function mineCatalog(){
       '<label class="flabel">Ссылка https</label><input class="mineDoorLink" maxlength="300" value="'+esc(item.link || '')+'" placeholder="https://...">'+
       '</div>';
   }).join('');
-  return mineHead('Каталог', 'По умолчанию одна кнопка «Каталог» — для неё нужна ссылка ниже. Можно включить до 10 кнопок каталога: название и ссылка. Других кнопок в чат поставить нельзя.')+
+  return mineHead('Каталог', 'По умолчанию одна кнопка «Каталог» — для неё нужна ссылка ниже. Можно включить до 10 кнопок: название и ссылка.')+
+    '<label><input id="mineCatalog" type="checkbox"'+(mineState.catalog ? ' checked' : '')+'> Показывать кнопку</label>'+
+    '<label class="flabel" for="mineTextCatalog">Фраза перед ссылкой</label>'+mineBox('mineTextCatalog', 2000, mineState.texts.catalog || '', 5)+
     '<label class="flabel" for="mineCatalogLink">Ссылка для кнопки «Каталог»</label><input id="mineCatalogLink" maxlength="300" value="'+esc(mineState.catalogLink || '')+'" placeholder="https://vk.com/market-...">'+
-    '<p class="hint">Нужна, если кнопки каталога выключены.</p>'+
-    '<p class="now">Кнопки каталога</p>'+
+    '<p class="hint">Нужна, если кнопки ниже выключены.</p>'+
+    '<p class="now">До 10 кнопок</p>'+
     '<p class="hint">Все выключены по умолчанию. Включите, задайте название и ссылку.</p>'+
     doors+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить каталог</button><p id="minemsg" class="hint"></p></div>';
 }
 function mineOrders(){
   return mineHead('Заявки', 'Бот спрашивает имя, что нужно, телефон и дату. Потом заявка приходит вам, а покупатель выбирает связь: телефон или чат.')+
+    '<label><input id="mineOrder" type="checkbox"'+(mineState.order ? ' checked' : '')+'> Показывать кнопку</label>'+
     '<label><input id="mineDelivery" type="checkbox"'+(mineState.delivery ? ' checked' : '')+'> Спрашивать доставку и адрес</label>'+
     '<label><input id="minePickup" type="checkbox"'+(mineState.pickup ? ' checked' : '')+'> Предлагать самовывоз</label>'+
     '<label><input id="mineBaker" type="checkbox"'+(mineState.baker ? ' checked' : '')+'> Режим кондитера: ссылка на пример и вес</label>'+
@@ -4350,6 +4327,7 @@ function mineAudit(){
 }
 function mineContacts(){
   return mineHead('Контакты', 'Этот текст уходит по кнопке контактов. Описание сообщества сюда само не попадает.')+
+    '<label><input id="mineContactsOn" type="checkbox"'+(mineState.contactsOn ? ' checked' : '')+'> Показывать кнопку</label>'+
     '<label class="flabel" for="mineContacts">Текст кнопки</label>'+mineBox('mineContacts', 2500, mineState.contacts || '', 8)+
     '<label><input id="mineGeoOn" type="checkbox"'+(mineState.geoOn ? ' checked' : '')+'> Геометка с контактами и самовывозом</label>'+
     '<p class="hint">Если включено, вместе с текстом уйдёт точка на карте ВК. Та же точка — когда клиент выбирает самовывоз в заявке.</p>'+
@@ -4393,8 +4371,7 @@ function paintMine(){
   const box = document.getElementById('minebox');
   const community = mineCommunity;
   if (!box || !community || community.home) return;
-  if (mineView === 'buttons') box.innerHTML = mineButtons();
-  else if (mineView === 'catalog') box.innerHTML = mineCatalog();
+  if (mineView === 'catalog') box.innerHTML = mineCatalog();
   else if (mineView === 'orders') box.innerHTML = mineOrders();
   else if (mineView === 'contacts') box.innerHTML = mineContacts();
   else if (mineView === 'comments') box.innerHTML = mineComments();
@@ -4497,7 +4474,7 @@ async function loadMine(){
   if (!community) {
     mineView = 'home';
     box.innerHTML = '<div class="card"><button type="button" class="back" id="mineBack">В кабинет</button><div class="kicker">Моё сообщество</div>'+
-      '<p class="now">Подключите сообщество. Дальше бот настраивается по разделам: кнопки, каталог, заявки и контакты.</p>'+
+      '<p class="now">Подключите сообщество. Дальше бот настраивается по разделам: каталог, заявки и контакты.</p>'+
       '<label class="flabel" for="mineGroup">Номер сообщества</label><input id="mineGroup" inputmode="numeric" placeholder="1234567">'+
       '<label class="flabel" for="mineToken">Ключ сообщества</label><input id="mineToken" type="password" autocomplete="off" placeholder="Ключ из настроек сообщества">'+
       '<label class="flabel" for="mineKind">Какое это сообщество</label><select id="mineKind"><option value="">Определить по сообществу</option><option value="baker">Кондитер</option><option value="auto">Автосервис</option><option value="nails">Маникюр</option><option value="shop">Магазин</option></select>'+
@@ -4650,7 +4627,7 @@ function applyMineKind(){
   mineState.names = lockedMineNames(kind);
   paintMine();
   const note = document.getElementById('minemsg');
-  if (note) note.textContent = 'Кнопки категории подставлены. Нажмите «Сохранить кнопки».';
+  if (note) note.textContent = 'Категория подставлена. Нажмите «Сохранить настройки».';
 }
 async function saveMine(){
   readMineForm();
