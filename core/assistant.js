@@ -1,4 +1,5 @@
 const db = require('./db');
+const { cleanGoods, parseSheet, shopPack } = require('./simple-bot');
 const { cleanProducts, cleanServices, tradeById } = require('../public/trades');
 
 const JOIN_URL = 'https://vk.com/donut/club214554778';
@@ -106,7 +107,7 @@ function cleanReply(input) {
         products: cleanProducts(input.products),
         pickupMap: pickupMap,
         desk: input.desk === 'simple' || input.desk === 'full' ? input.desk : ''
-    }, fields);
+    }, fields, shopPack(input));
 }
 
 function yandexMapLink(value) {
@@ -295,7 +296,18 @@ async function postAssistant(path, body, fetchImpl, env, timeoutMs) {
     } catch (error) {
         return { ok: false, error: 'Второй бот не ответил.' };
     }
-    if (!response || !response.ok) return { ok: false, error: 'Второй бот не принял команду.' };
+    if (!response || !response.ok) {
+        let reason = '';
+        if (response && typeof response.json === 'function') {
+            try {
+                const failed = await response.json();
+                if (failed && typeof failed.error === 'string') reason = failed.error;
+            } catch (error) {
+                reason = '';
+            }
+        }
+        return { ok: false, error: reason || 'Второй бот не принял команду.' };
+    }
     let data = {};
     if (typeof response.json === 'function') {
         try {
@@ -470,7 +482,7 @@ async function registerLive(donors, fetchImpl) {
     return { on: plan.on.length, off: plan.off.length };
 }
 
-async function connectCommunity(account, groupId, token, title, fetchImpl) {
+async function connectCommunity(account, groupId, token, title, fetchImpl, shop) {
     const ownerId = vkId(account);
     const communityId = String(groupId || '').replace(/\D/g, '');
     const key = String(token || '').replace(/\s+/g, '');
@@ -492,7 +504,17 @@ async function connectCommunity(account, groupId, token, title, fetchImpl) {
     }
     const previous = await db.listAssistantCommunities(ownerId);
     const kept = previous.find(item => String(item.group_id) === communityId);
-    const reply = cleanReply(kept && kept.reply) || { greeting: '', buttons: [] };
+    let reply = cleanReply(kept && kept.reply) || { greeting: '', buttons: [] };
+    if (shop === true && !(kept && kept.reply && kept.reply.home === true)) {
+        reply = cleanReply(Object.assign({}, reply, {
+            level: 1,
+            shopCatalog: reply.shopCatalog === true,
+            shopContacts: reply.shopContacts === true,
+            shopOrder: reply.shopOrder === true,
+            shopAdmin: reply.shopAdmin === true,
+            goods: reply.goods || []
+        }));
+    }
     for (const old of previous) {
         if (String(old.group_id) === communityId) continue;
         await postAssistant('/community/remove', { userId: ownerId, groupId: Number(old.group_id) }, fetchImpl);
@@ -526,11 +548,19 @@ async function saveDesk(account, input, fetchImpl) {
     if (String(input && input.pickupMap || '').trim() && !yandexMapLink(input.pickupMap)) {
         throw publicError('Для самовывоза нужна ссылка Яндекс Карт, например https://yandex.ru/maps/.');
     }
-    const reply = cleanReply(input);
-    if (!reply) throw publicError('У кнопки нужна надпись до 24 знаков и действие: текст, ссылка или кнопки внутри. Своих кнопок не больше восьми, «Записаться» остаётся сама.');
     const rows = await db.listAssistantCommunities(ownerId);
     const row = rows[0];
     if (!row) throw publicError('Сначала подключите сообщество.');
+    const keptShop = row.reply && row.reply.level === 1 ? {
+        level: 1,
+        shopCatalog: row.reply.shopCatalog === true,
+        shopContacts: row.reply.shopContacts === true,
+        shopOrder: row.reply.shopOrder === true,
+        shopAdmin: row.reply.shopAdmin === true,
+        goods: row.reply.goods
+    } : null;
+    const reply = cleanReply(keptShop ? Object.assign({}, input, keptShop) : input);
+    if (!reply) throw publicError('У кнопки нужна надпись до 24 знаков и действие: текст, ссылка или кнопки внутри. Своих кнопок не больше восьми, «Записаться» остаётся сама.');
     const pushed = await postAssistant('/community/reply', {
         userId: ownerId,
         groupId: Number(row.group_id),
@@ -561,7 +591,15 @@ async function saveDesk(account, input, fetchImpl) {
         buttons: reply.buttons,
         schedule: reply.schedule,
         scenario: reply.scenario,
-        desk: reply.desk
+        desk: reply.desk,
+        ...(reply.level === 1 ? {
+            level: 1,
+            shopCatalog: reply.shopCatalog === true,
+            shopContacts: reply.shopContacts === true,
+            shopOrder: reply.shopOrder === true,
+            shopAdmin: reply.shopAdmin === true,
+            goods: reply.goods || []
+        } : {})
     }, fetchImpl);
     const saved = await db.saveAssistantReply(row.group_id, ownerId, reply);
     await db.markAssistantCommunity(row.group_id, pushed.ok ? 'on' : 'fail', pushed.ok ? '' : 'Ответы сохранены и ждут передачи.');
@@ -569,6 +607,78 @@ async function saveDesk(account, input, fetchImpl) {
         ok: true,
         reply,
         pending: !pushed.ok,
+        community: communityCard(Object.assign({}, saved || row, { reply, sync_state: pushed.ok ? 'on' : 'fail' }))
+    };
+}
+
+async function saveShop(account, input, fetchImpl) {
+    const ownerId = vkId(account);
+    if (!ownerId) throw publicError('Раздел открыт из ВК.');
+    const don = await db.getAssistantDon(ownerId);
+    if (!don || !don.active) throw publicError('Бота включает дон НейроЯги с живой подпиской.');
+    const rows = await db.listAssistantCommunities(ownerId);
+    const row = rows[0];
+    if (!row) throw publicError('Сначала подключите сообщество.');
+    if (row.reply && row.reply.home === true) throw publicError('Это сообщество кафедры. Подключите другое.');
+    const sheet = String(input && input.sheet || '').trim();
+    const parsed = sheet ? parseSheet(sheet, row.group_id) : null;
+    const goods = parsed ? parsed.goods : cleanGoods(input && input.goods);
+    const reply = cleanReply(Object.assign({}, row.reply || {}, {
+        level: 1,
+        contacts: input && input.contacts != null ? String(input.contacts) : ((row.reply && row.reply.contacts) || ''),
+        shopCatalog: !!(input && input.catalog),
+        shopContacts: !!(input && input.contactsOn),
+        shopOrder: !!(input && input.order),
+        shopAdmin: !!(input && input.admin),
+        goods
+    }));
+    if (!reply || reply.level !== 1) throw publicError('Настройки бота не собрались.');
+    const pushed = await postAssistant('/community/reply', {
+        userId: ownerId,
+        groupId: Number(row.group_id),
+        greeting: reply.greeting,
+        about: reply.about,
+        guide: reply.guide,
+        contacts: reply.contacts,
+        address: reply.address,
+        order: reply.order,
+        choices: reply.choices,
+        payment: reply.payment,
+        booking: reply.booking,
+        pickup: reply.pickup,
+        pickupMap: reply.pickupMap,
+        delivery: reply.delivery,
+        deliveryPrice: reply.deliveryPrice,
+        pickupOn: reply.pickupOn,
+        deliveryOn: reply.deliveryOn,
+        goodsOn: reply.goodsOn,
+        bookingOn: reply.bookingOn,
+        linkOn: reply.linkOn,
+        orderOn: reply.orderOn,
+        multi: reply.multi,
+        trade: reply.trade,
+        services: reply.services,
+        products: reply.products,
+        handoff: reply.handoff,
+        buttons: reply.buttons,
+        schedule: reply.schedule,
+        scenario: reply.scenario,
+        desk: reply.desk,
+        level: 1,
+        shopCatalog: reply.shopCatalog === true,
+        shopContacts: reply.shopContacts === true,
+        shopOrder: reply.shopOrder === true,
+        shopAdmin: reply.shopAdmin === true,
+        goods: reply.goods || []
+    }, fetchImpl);
+    if (!pushed.ok && /кафедр/i.test(pushed.error || '')) throw publicError(pushed.error);
+    const saved = await db.saveAssistantReply(row.group_id, ownerId, reply);
+    await db.markAssistantCommunity(row.group_id, pushed.ok ? 'on' : 'fail', pushed.ok ? '' : 'Настройки сохранены и ждут передачи.');
+    return {
+        ok: true,
+        pending: !pushed.ok,
+        skipped: parsed ? parsed.skipped : 0,
+        goods: reply.goods || [],
         community: communityCard(Object.assign({}, saved || row, { reply, sync_state: pushed.ok ? 'on' : 'fail' }))
     };
 }
@@ -1177,6 +1287,7 @@ module.exports = {
     registerLive,
     connectCommunity,
     saveDesk,
+    saveShop,
     setupNote,
     setupCard,
     askSetup,

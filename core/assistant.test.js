@@ -296,6 +296,24 @@ test('адрес помощника понимает хост без https и с
     }
 });
 
+test('простой бот хранит товары отдельно от карточки кафедры', () => {
+    const reply = assistant.cleanReply({
+        level: 1,
+        shopCatalog: true,
+        contacts: 'Телефон +7 900 000-00-00',
+        goods: [{ name: 'Торт', price: '1500', link: 'https://vk.com/market-1_2' }]
+    });
+    assert.equal(reply.level, 1);
+    assert.equal(reply.shopCatalog, true);
+    assert.equal(reply.shopOrder, false);
+    assert.equal(reply.goods[0].name, 'Торт');
+    assert.equal(reply.goods[0].price, '1500');
+    assert.equal(assistant.cleanReply({ greeting: 'Здравствуйте' }).level, undefined);
+    const sheet = require('./simple-bot').parseSheet('Торт | 1500 | https://vk.com/market-9_1\nпусто', 9);
+    assert.equal(sheet.goods.length, 1);
+    assert.equal(sheet.skipped, 1);
+});
+
 test('без адреса второго бота здоровье показывает, что он не подключён', async () => {
     const health = await assistant.readHealth(async () => { throw new Error('нет сети'); }, {});
     assert.equal(health.configured, false);
