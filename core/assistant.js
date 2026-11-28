@@ -1143,11 +1143,14 @@ async function sendBroadcast(account, text, offset, fetchImpl) {
     const row = rows[0];
     if (!row) throw publicError('Сначала подключите сообщество.');
     const start = Number.isInteger(Number(offset)) && Number(offset) >= 0 ? Number(offset) : 0;
+    const shop = !!(row.reply && row.reply.level === 1 && row.reply.home !== true);
     const result = await postAssistant('/broadcast', {
         userId: ownerId,
         groupId: Number(row.group_id),
         text: body,
-        offset: start
+        offset: start,
+        // Магазинный бот — только согласившиеся на «Новости», чужим клиентам не пишем.
+        ...(shop ? { consent: true } : {})
     }, fetchImpl, null, 40000);
     if (!result.ok) throw publicError('Помощник не отправил рассылку. Попробуйте ещё раз.');
     return {
