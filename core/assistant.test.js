@@ -326,6 +326,24 @@ test('простой бот хранит товары отдельно от ка
     ]);
     assert.equal(reply.goods[0].name, 'Торт');
     assert.equal(reply.goods[0].price, '1500');
+    assert.equal(reply.shopBoard, 'fixed');
+    assert.equal(reply.shopSections, false);
+    assert.equal(reply.shopChatLinks, false);
+    const wide = assistant.cleanReply({
+        level: 1,
+        shopBoard: 'inline',
+        shopSections: true,
+        shopChatLinks: true,
+        contacts: 'б'.repeat(2400),
+        shopTexts: { catalog: 'а'.repeat(1800) },
+        goods: [{ name: 'Торт', price: '1500', link: 'https://vk.com/market-1_2', section: 'Торты' }]
+    });
+    assert.equal(wide.shopBoard, 'inline');
+    assert.equal(wide.shopSections, true);
+    assert.equal(wide.shopChatLinks, true);
+    assert.equal(wide.contacts.length, 2400);
+    assert.equal(wide.shopTexts.catalog.length, 1800);
+    assert.equal(wide.goods[0].section, 'Торты');
     assert.equal(assistant.cleanReply({ greeting: 'Здравствуйте' }).level, undefined);
     const named = assistant.cleanReply({ level: 1, shopNames: { catalog: 'Торты' }, shopTexts: { order: 'Напишите телефон.' } });
     assert.equal(named.shopNames.catalog, 'Торты');
@@ -365,6 +383,12 @@ test('чат и каталог в комментариях стоят в раз�
     assert.equal(html.slice(chat, catalog).includes('class="brow"'), true);
     assert.equal(html.includes('mineCommentLabel'), false);
     assert.equal(html.includes('Ещё одна ссылка'), true);
+    assert.equal(html.includes('id="mineSections"'), true);
+    assert.equal(html.includes('id="mineChatLinks"'), true);
+    assert.equal(html.includes("mineBox('mineHello', 2000"), true);
+    assert.equal(html.includes("mineBox('mineContacts', 2500"), true);
+    assert.equal(html.includes("mineBox(textId, 2000"), true);
+    assert.equal(html.includes(" из "), true);
 });
 
 test('без адреса второго бота здоровье показывает, что он не подключён', async () => {

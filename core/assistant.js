@@ -34,7 +34,7 @@ function maskToken(token) {
 const REPLY_FIELDS = [
     ['about', 2500],
     ['guide', 2500],
-    ['contacts', 1500],
+    ['contacts', 2500],
     ['address', 1500],
     ['order', 2500],
     ['choices', 1500],
@@ -580,7 +580,9 @@ async function saveDesk(account, input, fetchImpl) {
         shopBaker: row.reply.shopBaker === true,
         shopAuto: row.reply.shopAuto === true,
         shopKind: row.reply.shopKind || '',
-        shopBoard: row.reply.shopBoard === 'fixed' ? 'fixed' : '',
+        shopBoard: row.reply.shopBoard === 'inline' ? 'inline' : 'fixed',
+        shopSections: row.reply.shopSections === true,
+        shopChatLinks: row.reply.shopChatLinks === true,
         shopNames: row.reply.shopNames,
         shopTexts: row.reply.shopTexts,
         goods: row.reply.goods
@@ -630,7 +632,9 @@ async function saveDesk(account, input, fetchImpl) {
             shopPickup: reply.shopPickup === true,
             shopBaker: reply.shopBaker === true,
             shopKind: reply.shopKind || '',
-            shopBoard: reply.shopBoard === 'fixed' ? 'fixed' : '',
+            shopBoard: reply.shopBoard === 'inline' ? 'inline' : 'fixed',
+            shopSections: reply.shopSections === true,
+            shopChatLinks: reply.shopChatLinks === true,
             shopNames: reply.shopNames || {},
             shopTexts: reply.shopTexts || {},
             goods: reply.goods || []
@@ -674,7 +678,9 @@ async function saveShop(account, input, fetchImpl) {
         shopPickup: !!(input && input.pickup),
         shopBaker: !!(input && input.baker),
         shopKind: ['baker', 'auto', 'nails', 'shop'].includes(input && input.kind) ? input.kind : ((row.reply && row.reply.shopKind) || ''),
-        shopBoard: input && input.board === 'fixed' ? 'fixed' : '',
+        shopBoard: input && input.board === 'inline' ? 'inline' : 'fixed',
+        shopSections: !!(input && input.sections),
+        shopChatLinks: !!(input && input.chatLinks),
         shopNames: input && input.names ? input.names : ((row.reply && row.reply.shopNames) || {}),
         shopTexts: input && input.texts ? input.texts : ((row.reply && row.reply.shopTexts) || {}),
         goods
@@ -722,7 +728,9 @@ async function saveShop(account, input, fetchImpl) {
         shopPickup: reply.shopPickup === true,
         shopBaker: reply.shopBaker === true,
         shopKind: reply.shopKind || '',
-        shopBoard: reply.shopBoard === 'fixed' ? 'fixed' : '',
+        shopBoard: reply.shopBoard === 'inline' ? 'inline' : 'fixed',
+        shopSections: reply.shopSections === true,
+        shopChatLinks: reply.shopChatLinks === true,
         shopNames: reply.shopNames || {},
         shopTexts: reply.shopTexts || {},
         goods: reply.goods || []

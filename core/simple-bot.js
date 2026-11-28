@@ -18,7 +18,9 @@ function shopPack(input) {
     shopBaker: on(input.shopBaker),
     shopAuto: on(input.shopAuto),
     shopKind: cleanKind(input.shopKind),
-    shopBoard: input.shopBoard === 'fixed' ? 'fixed' : '',
+    shopBoard: input.shopBoard === 'inline' ? 'inline' : 'fixed',
+    shopSections: on(input.shopSections),
+    shopChatLinks: on(input.shopChatLinks),
     shopNames: cleanNames(input.shopNames),
     shopTexts: cleanTexts(input.shopTexts),
     shopCommentLinks: cleanCommentLinks(input.shopCommentLinks),
@@ -351,7 +353,10 @@ function cleanGood(item) {
   const name = String(item.name || item.title || '').replace(/\s+/g, ' ').trim().slice(0, 80);
   const link = https(item.link || item.url);
   if (name.length < 2 || !link) return null;
-  return { name, price: cleanPrice(item.price), link };
+  const section = String(item.section || '').replace(/\s+/g, ' ').trim().slice(0, 24);
+  const row = { name, price: cleanPrice(item.price), link };
+  if (section) row.section = section;
+  return row;
 }
 
 function cleanPrice(value) {
@@ -469,7 +474,7 @@ function cleanTexts(value) {
   const source = value && typeof value === 'object' ? value : {};
   const texts = {};
   ['catalog', 'order', 'admin'].forEach((keyName) => {
-    const text = String(source[keyName] == null ? '' : source[keyName]).replace(/\s+/g, ' ').trim().slice(0, 500);
+    const text = String(source[keyName] == null ? '' : source[keyName]).replace(/\s+/g, ' ').trim().slice(0, 2000);
     if (text) texts[keyName] = text;
   });
   return texts;
@@ -532,12 +537,12 @@ function placeScan(found, state) {
   const freshHello = !greeting || greeting === 'Здравствуйте. Выберите кнопку ниже.' || greeting === 'Здравствуйте. Напишите, что вас интересует.';
   let aboutAdded = 0;
   if (abouts.length && freshHello) {
-    greeting = abouts[0].slice(0, 400);
+    greeting = abouts[0].slice(0, 2000);
     aboutAdded = 1;
   }
   return {
-    contacts: contacts.slice(0, 1500),
-    greeting: greeting.slice(0, 400),
+    contacts: contacts.slice(0, 2500),
+    greeting: greeting.slice(0, 2000),
     goods,
     added: { contacts: lines.length, about: aboutAdded, goods: addedGoods },
   };

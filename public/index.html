@@ -4100,7 +4100,7 @@ let mineEdit = -1;
 let mineCommunity = null;
 let mineState = emptyMine();
 function emptyMine(){
-  return { catalog: false, contactsOn: false, order: false, admin: false, comments: false, commentLinks: [], delivery: false, pickup: false, baker: false, kind: '', board: '', names: {}, texts: {}, contacts: '', greeting: '' };
+  return { catalog: false, contactsOn: false, order: false, admin: false, comments: false, commentLinks: [], chatLinks: false, sections: false, delivery: false, pickup: false, baker: false, kind: '', board: 'fixed', names: {}, texts: {}, contacts: '', greeting: '' };
 }
 function mineBack(){
   tab = 'cab';
@@ -4138,7 +4138,9 @@ function readMineForm(){
   if (flag('minePickup') !== null) mineState.pickup = flag('minePickup');
   if (flag('mineBaker') !== null) mineState.baker = flag('mineBaker');
   const board = document.querySelector('input[name="mineBoard"]:checked');
-  if (board) mineState.board = board.value === 'fixed' ? 'fixed' : '';
+  if (board) mineState.board = board.value === 'inline' ? 'inline' : 'fixed';
+  if (flag('mineSections') !== null) mineState.sections = flag('mineSections');
+  if (flag('mineChatLinks') !== null) mineState.chatLinks = flag('mineChatLinks');
   const kindPick = document.getElementById('mineKindPick');
   if (kindPick) mineState.kind = kindPick.value;
   [['catalog', 'mineNamecatalog'], ['contacts', 'mineNamecontacts'], ['order', 'mineNameorder'], ['admin', 'mineNameadmin']].forEach(function(pair){
@@ -4187,6 +4189,17 @@ function mineHome(community){
     '<p class="hint">Ключ забудется, а кнопки в чатах снимутся, пока ключ ещё действует.</p>'+
     '<p id="minemsg" class="hint"></p></div>';
 }
+function mineBox(id, limit, value, rows){
+  const text = String(value || '');
+  return '<textarea id="'+id+'" maxlength="'+limit+'" rows="'+rows+'" oninput="mineCount(this)">'+esc(text)+'</textarea>'+
+    '<p class="hint" data-count>'+text.length+' из '+limit+'</p>';
+}
+function mineCount(node){
+  if (!node) return;
+  const limit = Number(node.getAttribute('maxlength')) || 0;
+  const note = node.nextElementSibling;
+  if (note && note.hasAttribute('data-count')) note.textContent = node.value.length + ' из ' + limit;
+}
 function buttonCard(key, title, note, textId, textLabel){
   const on = key === 'catalog' ? mineState.catalog : key === 'contacts' ? mineState.contactsOn : key === 'order' ? mineState.order : mineState.admin;
   const flagId = key === 'catalog' ? 'mineCatalog' : key === 'contacts' ? 'mineContactsOn' : key === 'order' ? 'mineOrder' : 'mineAdmin';
@@ -4195,7 +4208,7 @@ function buttonCard(key, title, note, textId, textLabel){
     '<label><input id="'+flagId+'" type="checkbox"'+(on ? ' checked' : '')+'> Показывать кнопку</label>'+
     '<label class="flabel" for="mineName'+key+'">Надпись для покупателя</label><input id="mineName'+key+'" maxlength="40" value="'+esc(name)+'">'+
     '<p class="hint">'+esc(note)+'</p>';
-  if (textId) html += '<label class="flabel" for="'+textId+'">'+esc(textLabel)+'</label><textarea id="'+textId+'" maxlength="500" rows="2">'+esc(mineState.texts[key] || '')+'</textarea>';
+  if (textId) html += '<label class="flabel" for="'+textId+'">'+esc(textLabel)+'</label>'+mineBox(textId, 2000, mineState.texts[key] || '', 5);
   return html;
 }
 function mineButtons(){
@@ -4204,15 +4217,15 @@ function mineButtons(){
     buttonCard('catalog', 'Каталог', 'Список товаров задаётся в разделе «Каталог».', 'mineTextCatalog', 'Фраза перед списком')+
     buttonCard('contacts', 'Контакты', 'Телефон и адрес задаются в разделе «Контакты».', '', '')+
     buttonCard('order', 'Заявка', 'Покупатель выбирает товар и пишет телефон. Заявка приходит вам в сообщения сообщества.', 'mineTextOrder', 'Что написать покупателю')+
-    buttonCard('admin', 'Администратор', 'После этой кнопки бот молчит, пока покупатель не нажмёт «К помощнику».', 'mineTextAdmin', 'Что написать покупателю')+
+    buttonCard('admin', 'Администратор', 'После этой кнопки бот молчит, пока покупатель не нажмёт «Назад».', 'mineTextAdmin', 'Что написать покупателю')+
     '<p class="now">Категория</p>'+
     '<select id="mineKindPick"><option value="baker"'+(mineState.kind === 'baker' ? ' selected' : '')+'>Кондитер</option><option value="auto"'+(mineState.kind === 'auto' ? ' selected' : '')+'>Автосервис</option><option value="nails"'+(mineState.kind === 'nails' ? ' selected' : '')+'>Маникюр</option><option value="shop"'+(!mineState.kind || mineState.kind === 'shop' ? ' selected' : '')+'>Магазин</option></select>'+
     '<p class="hint">Категория включает нужные поля заявки и подписи кнопок. Свои надписи выше остаются, пока не нажмёте «Кнопки категории».</p>'+
     '<button class="btn ghost" id="mineKindApply" type="button">Кнопки категории</button>'+
     '<p class="now">Стиль кнопок</p>'+
-    '<label><input type="radio" name="mineBoard" value=""'+(!mineState.board ? ' checked' : '')+'> Под сообщением</label>'+
-    '<label><input type="radio" name="mineBoard" value="fixed"'+(mineState.board === 'fixed' ? ' checked' : '')+'> Внизу чата</label>'+
-    '<label class="flabel" for="mineHello">Фраза при входе</label><textarea id="mineHello" maxlength="400" rows="3">'+esc(mineState.greeting || '')+'</textarea>'+
+    '<label><input type="radio" name="mineBoard" value="fixed"'+(mineState.board !== 'inline' ? ' checked' : '')+'> Внизу чата</label>'+
+    '<label><input type="radio" name="mineBoard" value="inline"'+(mineState.board === 'inline' ? ' checked' : '')+'> Под сообщением</label>'+
+    '<label class="flabel" for="mineHello">Фраза при входе</label>'+mineBox('mineHello', 2000, mineState.greeting || '', 6)+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить кнопки</button><p id="minemsg" class="hint"></p></div>';
 }
 function mineCatalog(){
@@ -4223,7 +4236,8 @@ function mineCatalog(){
   const rows = mineGoods.slice(start, start + 8).map(function(item, index){
     const real = start + index;
     const price = item.price ? ' — '+esc(item.price)+(/^\d+$/.test(String(item.price)) ? ' ₽' : '') : '';
-    return '<div style="margin:10px 0;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.08)"><p class="now">'+esc(item.name)+price+'</p><p class="hint">'+esc(item.link)+'</p>'+
+    const section = item.section ? esc(item.section)+' · ' : '';
+    return '<div style="margin:10px 0;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.08)"><p class="now">'+section+esc(item.name)+price+'</p><p class="hint">'+esc(item.link)+'</p>'+
       '<button type="button" class="btn ghost" data-mine-edit="'+real+'">Изменить</button> <button type="button" class="btn ghost" data-mine-del="'+real+'">Убрать</button></div>';
   }).join('');
   const editing = mineEdit >= 0 ? mineGoods[mineEdit] : null;
@@ -4231,11 +4245,15 @@ function mineCatalog(){
     ? '<div class="row" style="gap:8px;align-items:center"><button type="button" class="btn ghost" id="minePrev"'+(minePage ? '' : ' disabled')+'>Назад</button><span class="hint">'+(minePage + 1)+' / '+pages+'</span><button type="button" class="btn ghost" id="mineNext"'+(minePage < pages - 1 ? '' : ' disabled')+'>Дальше</button></div>'
     : '';
   return mineHead('Каталог', 'На странице восемь товаров. В чате кнопками показываются первые пять, остальные покупатель выбирает номером.')+
+    '<label><input id="mineSections" type="checkbox"'+(mineState.sections ? ' checked' : '')+'> Кнопка на каждую категорию</label>'+
+    '<p class="hint">Выключено — одна кнопка на весь каталог. Включено — до четырёх кнопок по категории товара.</p>'+
     '<p class="hint">В списке '+mineGoods.length+' из 40.</p>'+
     (rows || '<p class="hint">Товаров пока нет.</p>')+
     pager+
     '<p class="now">'+(editing ? 'Изменить товар' : 'Новый товар')+'</p>'+
     '<label class="flabel" for="mineName">Название</label><input id="mineName" maxlength="80" value="'+esc(editing ? editing.name : '')+'">'+
+    '<label class="flabel" for="mineSection">Категория</label><input id="mineSection" maxlength="24" value="'+esc(editing && editing.section ? editing.section : '')+'">'+
+    '<p class="hint">Нужна, только если включены кнопки по категориям. Например: Торты.</p>'+
     '<label class="flabel" for="minePrice">Цена</label><input id="minePrice" maxlength="40" value="'+esc(editing ? editing.price : '')+'">'+
     '<label class="flabel" for="mineLink">Ссылка https</label><input id="mineLink" maxlength="300" value="'+esc(editing ? editing.link : '')+'">'+
     '<button class="btn" id="mineAdd" type="button" style="margin-top:8px">'+(editing ? 'Сохранить товар' : 'Добавить товар')+'</button>'+
@@ -4250,13 +4268,13 @@ function mineOrders(){
     '<label><input id="mineDelivery" type="checkbox"'+(mineState.delivery ? ' checked' : '')+'> Спрашивать доставку и адрес</label>'+
     '<label><input id="minePickup" type="checkbox"'+(mineState.pickup ? ' checked' : '')+'> Предлагать самовывоз</label>'+
     '<label><input id="mineBaker" type="checkbox"'+(mineState.baker ? ' checked' : '')+'> Режим кондитера: ссылка на пример и вес</label>'+
-    '<label class="flabel" for="mineTextOrder">Что написать в начале заявки</label><textarea id="mineTextOrder" maxlength="500" rows="3">'+esc(mineState.texts.order || '')+'</textarea>'+
+    '<label class="flabel" for="mineTextOrder">Что написать в начале заявки</label>'+mineBox('mineTextOrder', 2000, mineState.texts.order || '', 6)+
     '<p class="hint">Пустое поле — бот сразу спрашивает имя.</p>'+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить заявки</button><p id="minemsg" class="hint"></p></div>';
 }
 function mineContacts(){
   return mineHead('Контакты', 'Этот текст уходит по кнопке контактов. Описание сообщества сюда само не попадает.')+
-    '<label class="flabel" for="mineContacts">Текст кнопки</label><textarea id="mineContacts" maxlength="1500" rows="6">'+esc(mineState.contacts || '')+'</textarea>'+
+    '<label class="flabel" for="mineContacts">Текст кнопки</label>'+mineBox('mineContacts', 2500, mineState.contacts || '', 8)+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить контакты</button><p id="minemsg" class="hint"></p></div>';
 }
 function commentOwnSlots(){
@@ -4306,6 +4324,8 @@ function mineComments(){
       '<p class="hint">Каталог: '+(groupId ? 'https://vk.com/market-'+groupId : 'адрес товаров сообщества')+'</p></div>'+
     own+
     (room > 0 ? '<button type="button" class="btn ghost" id="mineCommentAdd">Ещё одна ссылка</button>' : '')+
+    '<label><input id="mineChatLinks" type="checkbox"'+(mineState.chatLinks ? ' checked' : '')+'> Эти ссылки кнопками в чате</label>'+
+    '<p class="hint">Выключено — ссылки только в комментариях. Включено — те же ссылки становятся кнопками внизу чата.</p>'+
     '<p class="hint">Пустое окно в ответ не попадает. Обычный комментарий бот не трогает.</p>'+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить комментарии</button><p id="minemsg" class="hint"></p></div>';
 }
@@ -4327,6 +4347,7 @@ function paintMine(){
   bindMine(community);
 }
 function bindMine(community){
+  document.querySelectorAll('#minebox textarea[maxlength]').forEach(mineCount);
   const back = document.getElementById('mineBack');
   if (back) back.onclick = mineBack;
   const section = document.getElementById('mineSectionBack');
@@ -4475,7 +4496,9 @@ async function loadMine(){
     pickup: !!community.pickup,
     baker: !!community.baker,
     kind: community.kind || '',
-    board: community.board === 'fixed' ? 'fixed' : '',
+    board: community.board === 'inline' ? 'inline' : 'fixed',
+    sections: !!community.sections,
+    chatLinks: !!community.chatLinks,
     names: Object.assign({}, community.names || {}),
     texts: Object.assign({}, community.texts || {}),
     contacts: community.contacts || '',
@@ -4496,7 +4519,9 @@ function addMineGood(){
     if (msg) msg.textContent = 'В списке уже 40 товаров.';
     return;
   }
+  const section = String((document.getElementById('mineSection') || {}).value || '').replace(/\s+/g, ' ').trim().slice(0, 24);
   const row = { name: name, price: price, link: link };
+  if (section) row.section = section;
   if (mineEdit >= 0 && mineGoods[mineEdit]) mineGoods[mineEdit] = row;
   else mineGoods.push(row);
   mineEdit = -1;
@@ -4603,7 +4628,9 @@ async function saveMine(){
         pickup: !!mineState.pickup,
         baker: !!mineState.baker,
         kind: mineState.kind || 'shop',
-        board: mineState.board === 'fixed' ? 'fixed' : '',
+        board: mineState.board === 'inline' ? 'inline' : 'fixed',
+        sections: !!mineState.sections,
+        chatLinks: !!mineState.chatLinks,
         contacts: mineState.contacts,
         greeting: mineState.greeting,
         names: mineState.names,
