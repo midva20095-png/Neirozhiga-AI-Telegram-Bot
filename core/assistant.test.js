@@ -298,6 +298,19 @@ test('адрес помощника понимает хост без https и с
     }
 });
 
+test('админка профиля повторяет настройки бота из приложения', () => {
+    const html = fs.readFileSync(path.join(__dirname, '../public/admin.html'), 'utf8');
+    const server = fs.readFileSync(path.join(__dirname, '../ui_modules/webapp_server.js'), 'utf8');
+    const script = html.slice(html.indexOf('<script>') + 8, html.lastIndexOf('</script>'));
+    assert.doesNotThrow(() => new Function(script));
+    assert.match(html, /Настройки бота/);
+    assert.match(html, /Сохранить настройки бота/);
+    assert.match(html, /shopDelivery/);
+    assert.match(html, /shopCommentChat/);
+    assert.match(server, /\/api\/admin\/vk\/assistant\/shop/);
+    assert.match(server, /saveShop\(body\.userId, body\)/);
+});
+
 test('простой бот хранит товары отдельно от карточки кафедры', () => {
     const reply = assistant.cleanReply({
         level: 1,

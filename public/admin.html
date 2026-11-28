@@ -797,13 +797,14 @@ async function loadAssist(){
     (dons.length ? dons.map(item => {
       const list = item.communities || [];
       const groups = list.length ? list.map(group =>
-        '<div class="note">'+esc(group.title)+' · '+esc(group.groupId)+' · ключ '+esc(group.token || 'скрыт')+' · '+esc(group.syncLabel)+' · клиентов '+esc(group.clients || 0)+(group.desk ? ' · '+esc(group.desk) : '')+(group.error ? ' · '+esc(group.error) : '')+(group.purgeAt ? ' · если подписку не продлить, данные сотрутся '+esc(purgeWhen(group.purgeAt)) : '')+
+        '<div class="note">'+esc(group.title)+' · '+esc(group.groupId)+' · ключ '+esc(group.token || 'скрыт')+' · '+esc(group.syncLabel)+' · клиентов '+esc(group.clients || 0)+(group.reply && group.reply.level === 1 ? ' · простой бот' : '')+(group.desk ? ' · '+esc(group.desk) : '')+(group.error ? ' · '+esc(group.error) : '')+(group.purgeAt ? ' · если подписку не продлить, данные сотрутся '+esc(purgeWhen(group.purgeAt)) : '')+
         '<div class="row"><button type="button" class="ghost" onclick="dropAssist(\''+esc(group.groupId)+'\')">Отключить сообщество</button><button type="button" class="hot" onclick="wipeAssist(\''+esc(group.groupId)+'\')">Удалить данные</button></div></div>'
       ).join('') : '<p class="note">Сообщество ещё не подключено.</p>';
       return '<div class="stat" style="margin-top:8px"><div class="n" style="font-size:16px">'+esc(item.name)+'</div>'+
         '<div class="l">ВК '+esc(item.userId)+' · '+(item.active ? '<span class="ok">кафедра включена</span>' : '<span class="bad">кафедра выключена</span>')+(item.active && item.course === false ? ' · <span class="bad">материалы закрыты</span>' : '')+'</div>'+
         groups+
-        '<div class="row" style="margin-top:8px"><button type="button" onclick="setAssist('+item.userId+','+(item.active?'false':'true')+')">'+(item.active?'Выключить':'Включить')+'</button>'+
+        '<div class="row" style="margin-top:8px"><button type="button" onclick="openSetup('+item.userId+')">Настройки бота</button>'+
+        '<button type="button" class="ghost" onclick="setAssist('+item.userId+','+(item.active?'false':'true')+')">'+(item.active?'Выключить':'Включить')+'</button>'+
         (item.active ? '<button type="button" class="ghost" onclick="setCourse('+item.userId+','+(item.course === false ? 'true' : 'false')+')">'+(item.course === false ? 'Открыть кафедру' : 'Закрыть кафедру')+'</button>' : '')+
         '</div></div>';
     }).join('') : '<p class="note">Донов пока нет. Нажмите «Взять донов из ВК» или дождитесь новой подписки.</p>')+
@@ -1015,6 +1016,267 @@ function setupReadRow(row){
   if (color === 'primary' || color === 'positive' || color === 'negative' || color === 'secondary') item.color = color;
   return item;
 }
+let setupGoods = [];
+let setupOwn = [{ label: '', link: '' }];
+function shopPreset(kind){
+  return {
+    baker: { catalog: 'Каталог', order: 'Заявка', delivery: true, pickup: true, baker: true },
+    auto: { catalog: 'Услуги', order: 'Запись', delivery: false, pickup: false, baker: false },
+    nails: { catalog: 'Услуги', order: 'Запись', delivery: false, pickup: true, baker: false },
+    shop: { catalog: 'Каталог', order: 'Заявка', delivery: false, pickup: false, baker: false }
+  }[kind] || { catalog: 'Каталог', order: 'Заявка', delivery: false, pickup: false, baker: false };
+}
+function shopButtonRow(key, title, on, textId, textLabel, text){
+  let html = '<p class="note" style="margin-top:12px"><b>'+esc(title)+'</b></p>'+
+    '<label class="check"><input id="shop'+key+'" type="checkbox"'+(on ? ' checked' : '')+'> Показывать кнопку</label>'+
+    '<label>Надпись для покупателя</label><input id="shopName'+key+'" maxlength="40" value="'+esc(shopNameValue(key, title))+'">';
+  if (textId) html += '<label>'+esc(textLabel)+'</label><textarea id="'+textId+'" maxlength="2000">'+esc(text || '')+'</textarea>';
+  return html;
+}
+function shopNameValue(key, title){
+  const names = setupNames || {};
+  const id = key.charAt(0).toLowerCase() + key.slice(1);
+  return names[id] || title;
+}
+let setupNames = {};
+function shopGoodsHtml(){
+  if (!setupGoods.length) return '<p class="note">Товаров пока нет.</p>';
+  return setupGoods.map(function(item, index){
+    const price = item.price ? ' — '+esc(item.price) : '';
+    const section = item.section ? esc(item.section)+' · ' : '';
+    return '<div class="note">'+section+esc(item.name)+price+'<br>'+esc(item.link)+
+      ' <button type="button" class="ghost" data-shop-del="'+index+'">Убрать</button></div>';
+  }).join('');
+}
+function shopOwnHtml(){
+  return setupOwn.map(function(item, index){
+    return '<div data-shop-own><label>Надпись</label><input class="shopOwnLabel" maxlength="40" value="'+esc(item.label || '')+'">'+
+      '<label>Ссылка https</label><input class="shopOwnLink" maxlength="300" value="'+esc(item.link || '')+'">'+
+      '<button type="button" class="ghost" data-shop-own-drop="'+index+'">Убрать эту ссылку</button></div>';
+  }).join('');
+}
+function readShopOwn(){
+  const rows = [];
+  document.querySelectorAll('[data-shop-own]').forEach(function(row){
+    rows.push({
+      label: String((row.querySelector('.shopOwnLabel') || {}).value || ''),
+      link: String((row.querySelector('.shopOwnLink') || {}).value || '')
+    });
+  });
+  setupOwn = rows.length ? rows : [{ label: '', link: '' }];
+}
+function paintShopGoods(){
+  const box = document.getElementById('shopGoods');
+  if (box) box.innerHTML = shopGoodsHtml();
+  document.querySelectorAll('[data-shop-del]').forEach(function(button){
+    button.onclick = function(){
+      setupGoods.splice(Number(button.getAttribute('data-shop-del')), 1);
+      paintShopGoods();
+    };
+  });
+}
+function paintShopOwn(){
+  const box = document.getElementById('shopOwn');
+  if (!box) return;
+  box.innerHTML = shopOwnHtml();
+  document.querySelectorAll('[data-shop-own-drop]').forEach(function(button){
+    button.onclick = function(){
+      readShopOwn();
+      setupOwn.splice(Number(button.getAttribute('data-shop-own-drop')), 1);
+      if (!setupOwn.length) setupOwn = [{ label: '', link: '' }];
+      paintShopOwn();
+    };
+  });
+}
+function shopDesk(reply, groupId){
+  const texts = reply.shopTexts || {};
+  const links = Array.isArray(reply.shopCommentLinks) ? reply.shopCommentLinks : [];
+  setupNames = Object.assign({}, reply.shopNames || {});
+  setupGoods = (Array.isArray(reply.goods) ? reply.goods : []).map(function(item){
+    return { name: item.name || '', price: item.price || '', link: item.link || '', section: item.section || '' };
+  });
+  const own = links.filter(function(item){ return item && item.kind === 'own'; });
+  setupOwn = own.length ? own.map(function(item){ return { label: item.label || '', link: item.link || '' }; }) : [{ label: '', link: '' }];
+  const chat = links.some(function(item){ return item.kind === 'chat'; });
+  const catalog = links.some(function(item){ return item.kind === 'catalog'; });
+  const kind = ['baker', 'auto', 'nails', 'shop'].indexOf(reply.shopKind) >= 0 ? reply.shopKind : 'shop';
+  const board = reply.shopBoard === 'inline' ? 'inline' : 'fixed';
+  const id = String(groupId || '').replace(/\D/g, '');
+  return '<p class="note">Те же поля, что у этого человека в приложении, в разделе «Моё сообщество». Сохранение записывает их ему в бота.</p>'+
+    '<h3>Кнопки</h3>'+
+    shopButtonRow('Catalog', 'Каталог', reply.shopCatalog === true, 'shopTextCatalog', 'Фраза перед списком', texts.catalog)+
+    shopButtonRow('Contacts', 'Контакты', reply.shopContacts === true, '', '', '')+
+    shopButtonRow('Order', 'Заявка', reply.shopOrder === true, '', '', '')+
+    shopButtonRow('Admin', 'Администратор', reply.shopAdmin === true, 'shopTextAdmin', 'Что написать покупателю', texts.admin)+
+    '<label>Категория</label><select id="shopKind">'+
+      '<option value="baker"'+(kind === 'baker' ? ' selected' : '')+'>Кондитер</option>'+
+      '<option value="auto"'+(kind === 'auto' ? ' selected' : '')+'>Автосервис</option>'+
+      '<option value="nails"'+(kind === 'nails' ? ' selected' : '')+'>Маникюр</option>'+
+      '<option value="shop"'+(kind === 'shop' ? ' selected' : '')+'>Магазин</option></select>'+
+    '<button type="button" class="ghost" id="shopKindApply">Кнопки категории</button>'+
+    '<p class="note">Стиль кнопок</p>'+
+    '<label class="check"><input type="radio" name="shopBoard" value="fixed"'+(board !== 'inline' ? ' checked' : '')+'> Внизу чата</label>'+
+    '<label class="check"><input type="radio" name="shopBoard" value="inline"'+(board === 'inline' ? ' checked' : '')+'> Под сообщением</label>'+
+    '<label>Фраза при входе</label><textarea id="shopHello" maxlength="2000">'+esc(reply.greeting || '')+'</textarea>'+
+    '<h3>Каталог</h3>'+
+    '<label class="check"><input id="shopSections" type="checkbox"'+(reply.shopSections === true ? ' checked' : '')+'> Кнопка на каждую категорию</label>'+
+    '<div id="shopGoods">'+shopGoodsHtml()+'</div>'+
+    '<label>Название</label><input id="shopGoodName" maxlength="80">'+
+    '<label>Категория</label><input id="shopGoodSection" maxlength="24">'+
+    '<label>Цена</label><input id="shopGoodPrice" maxlength="40">'+
+    '<label>Ссылка https</label><input id="shopGoodLink" maxlength="300">'+
+    '<button type="button" class="ghost" id="shopAdd">Добавить товар</button>'+
+    '<h3>Заявки</h3>'+
+    '<label class="check"><input id="shopDelivery" type="checkbox"'+(reply.shopDelivery === true ? ' checked' : '')+'> Спрашивать доставку и адрес</label>'+
+    '<label class="check"><input id="shopPickup" type="checkbox"'+(reply.shopPickup === true ? ' checked' : '')+'> Предлагать самовывоз</label>'+
+    '<label class="check"><input id="shopBaker" type="checkbox"'+(reply.shopBaker === true ? ' checked' : '')+'> Режим кондитера: ссылка на пример и вес</label>'+
+    '<label>Что написать в начале заявки</label><textarea id="shopTextOrder" maxlength="2000">'+esc(texts.order || '')+'</textarea>'+
+    '<h3>Контакты</h3>'+
+    '<textarea id="shopContactsText" maxlength="2500">'+esc(reply.contacts || '')+'</textarea>'+
+    '<h3>Комментарии</h3>'+
+    '<label class="check"><input id="shopComments" type="checkbox"'+(reply.shopComments === true ? ' checked' : '')+'> Отвечать в комментариях</label>'+
+    '<label class="check"><input id="shopCommentChat" type="checkbox"'+(chat ? ' checked' : '')+'> Ссылка на чат'+(id ? ': https://vk.me/club'+esc(id) : '')+'</label>'+
+    '<label class="check"><input id="shopCommentCatalog" type="checkbox"'+(catalog ? ' checked' : '')+'> Ссылка на каталог'+(id ? ': https://vk.com/market-'+esc(id) : '')+'</label>'+
+    '<div id="shopOwn">'+shopOwnHtml()+'</div>'+
+    '<button type="button" class="ghost" id="shopOwnAdd">Ещё одна ссылка</button>'+
+    '<label class="check"><input id="shopChatLinks" type="checkbox"'+(reply.shopChatLinks === true ? ' checked' : '')+'> Эти ссылки кнопками в чате</label>'+
+    '<div class="row" style="margin-top:12px"><button type="button" id="setupSave">Сохранить настройки бота</button></div>';
+}
+function bindShopDesk(){
+  paintShopGoods();
+  paintShopOwn();
+  const add = document.getElementById('shopAdd');
+  if (add) add.onclick = function(){
+    const msg = document.getElementById('setupmsg');
+    const name = String((document.getElementById('shopGoodName') || {}).value || '').replace(/\s+/g, ' ').trim();
+    const link = String((document.getElementById('shopGoodLink') || {}).value || '').trim();
+    if (name.length < 2 || !/^https:\/\/\S+$/i.test(link)) {
+      if (msg) msg.textContent = 'Нужны название и ссылка, которая начинается с https://';
+      return;
+    }
+    if (setupGoods.length >= 40) {
+      if (msg) msg.textContent = 'В списке уже 40 товаров.';
+      return;
+    }
+    const section = String((document.getElementById('shopGoodSection') || {}).value || '').replace(/\s+/g, ' ').trim().slice(0, 24);
+    const price = String((document.getElementById('shopGoodPrice') || {}).value || '').replace(/\s+/g, ' ').trim();
+    const row = { name: name, price: price, link: link };
+    if (section) row.section = section;
+    setupGoods.push(row);
+    document.getElementById('shopGoodName').value = '';
+    document.getElementById('shopGoodSection').value = '';
+    document.getElementById('shopGoodPrice').value = '';
+    document.getElementById('shopGoodLink').value = '';
+    paintShopGoods();
+    if (msg) msg.textContent = 'Товар в списке. Нажмите «Сохранить настройки бота».';
+  };
+  const more = document.getElementById('shopOwnAdd');
+  if (more) more.onclick = function(){
+    readShopOwn();
+    const chat = !!(document.getElementById('shopCommentChat') || {}).checked;
+    const catalog = !!(document.getElementById('shopCommentCatalog') || {}).checked;
+    if ((chat ? 1 : 0) + (catalog ? 1 : 0) + setupOwn.length >= 4) return;
+    setupOwn.push({ label: '', link: '' });
+    paintShopOwn();
+  };
+  const kind = document.getElementById('shopKindApply');
+  if (kind) kind.onclick = function(){
+    const preset = shopPreset((document.getElementById('shopKind') || {}).value || 'shop');
+    const catalog = document.getElementById('shopNameCatalog');
+    const order = document.getElementById('shopNameOrder');
+    if (catalog) catalog.value = preset.catalog;
+    if (order) order.value = preset.order;
+    const delivery = document.getElementById('shopDelivery');
+    const pickup = document.getElementById('shopPickup');
+    const baker = document.getElementById('shopBaker');
+    if (delivery) delivery.checked = preset.delivery;
+    if (pickup) pickup.checked = preset.pickup;
+    if (baker) baker.checked = preset.baker;
+    ['shopCatalog', 'shopContacts', 'shopOrder', 'shopAdmin'].forEach(function(id){
+      const box = document.getElementById(id);
+      if (box) box.checked = true;
+    });
+    const msg = document.getElementById('setupmsg');
+    if (msg) msg.textContent = 'Кнопки категории подставлены. Нажмите «Сохранить настройки бота».';
+  };
+}
+function shopField(id){
+  return (document.getElementById(id) || {}).value || '';
+}
+function shopChecked(id){
+  return !!(document.getElementById(id) || {}).checked;
+}
+function shopLinks(){
+  readShopOwn();
+  const links = [];
+  if (shopChecked('shopCommentChat')) links.push({ kind: 'chat' });
+  if (shopChecked('shopCommentCatalog')) links.push({ kind: 'catalog' });
+  let error = '';
+  setupOwn.forEach(function(item){
+    const label = String(item.label || '').replace(/\s+/g, ' ').trim();
+    const link = String(item.link || '').trim();
+    if (!label && !link) return;
+    if (label.length < 2 || !/^https:\/\/\S+$/i.test(link)) error = 'Своей ссылке нужны надпись и адрес, который начинается с https://';
+    else links.push({ kind: 'own', label: label, link: link });
+  });
+  return { links: links, error: error };
+}
+async function saveShopDesk(){
+  const msg = document.getElementById('setupmsg');
+  const names = {
+    catalog: String(shopField('shopNameCatalog')).replace(/\s+/g, ' ').trim(),
+    contacts: String(shopField('shopNameContacts')).replace(/\s+/g, ' ').trim(),
+    order: String(shopField('shopNameOrder')).replace(/\s+/g, ' ').trim(),
+    admin: String(shopField('shopNameAdmin')).replace(/\s+/g, ' ').trim()
+  };
+  const labels = [names.catalog, names.contacts, names.order, names.admin].filter(Boolean);
+  if (new Set(labels).size !== labels.length) {
+    if (msg) msg.textContent = 'У двух кнопок не может быть одной надписи.';
+    return;
+  }
+  const comment = shopLinks();
+  if (comment.error) {
+    if (msg) msg.textContent = comment.error;
+    return;
+  }
+  const board = document.querySelector('input[name="shopBoard"]:checked');
+  if (msg) msg.textContent = 'Сохраняю настройки бота…';
+  const data = await api('/api/admin/vk/assistant/shop', { method:'POST', body: JSON.stringify({
+    userId: setupUserId,
+    catalog: shopChecked('shopCatalog'),
+    contactsOn: shopChecked('shopContacts'),
+    order: shopChecked('shopOrder'),
+    admin: shopChecked('shopAdmin'),
+    comments: shopChecked('shopComments'),
+    commentLinks: comment.links,
+    delivery: shopChecked('shopDelivery'),
+    pickup: shopChecked('shopPickup'),
+    baker: shopChecked('shopBaker'),
+    kind: shopField('shopKind') || 'shop',
+    board: board && board.value === 'inline' ? 'inline' : 'fixed',
+    sections: shopChecked('shopSections'),
+    chatLinks: shopChecked('shopChatLinks'),
+    contacts: shopField('shopContactsText'),
+    greeting: shopField('shopHello'),
+    names: names,
+    texts: {
+      catalog: shopField('shopTextCatalog'),
+      order: shopField('shopTextOrder'),
+      admin: shopField('shopTextAdmin')
+    },
+    goods: setupGoods
+  }) });
+  if (!data.ok) {
+    if (msg) msg.textContent = data.error || 'Настройки не сохранились';
+    return;
+  }
+  await loadAssist();
+  openSetup(setupUserId);
+  const fresh = document.getElementById('setupmsg');
+  if (fresh) fresh.textContent = data.pending
+    ? 'Сохранено. Бот подхватит настройки, когда будет на связи. В кабинете этого человека теперь то же самое.'
+    : 'Сохранено. В кабинете этого человека теперь то же самое.';
+}
 function openSetup(userId){
   setupUserId = String(userId || '').replace(/\D/g, '');
   const box = document.getElementById('setupDialog');
@@ -1031,7 +1293,9 @@ function openSetup(userId){
     const value = index + 1;
     return '<label class="check"><input type="checkbox" data-setup-day value="'+value+'"'+(days.indexOf(value)>=0?' checked':'')+'>'+name+'</label>';
   }).join('');
-  const card = community
+  const card = community && reply.level === 1
+    ? '<p class="note">Сообщество '+esc(community.title)+' · '+esc(community.groupId)+'.</p>'+shopDesk(reply, community.groupId)
+    : community
     ? '<p class="note">Сообщество '+esc(community.title)+' · '+esc(community.groupId)+'. Сохраняется только эта карточка.</p>'+
       '<label class="check"><input type="radio" name="setupScenario" value="funnel"'+(reply.scenario==='info'?'':' checked')+'> Запись и заказ</label>'+
       '<label class="check"><input type="radio" name="setupScenario" value="info"'+(reply.scenario==='info'?' checked':'')+'> Только информация</label>'+
@@ -1085,8 +1349,9 @@ function openSetup(userId){
   box.style.display = 'block';
   document.getElementById('setupClose').onclick = function(){ box.style.display = 'none'; };
   const save = document.getElementById('setupSave');
-  if (save) save.onclick = saveSetup;
-  bindSetupButtons();
+  if (save) save.onclick = reply.level === 1 ? saveShopDesk : saveSetup;
+  if (reply.level === 1) bindShopDesk();
+  else bindSetupButtons();
   const write = document.getElementById('setupWrite');
   if (write) write.onclick = writeSetup;
   const done = document.getElementById('setupDone');
@@ -1173,6 +1438,7 @@ function setupBody(){
   };
 }
 async function saveSetup(){
+  if (document.getElementById('shopCatalog')) return saveShopDesk();
   const msg = document.getElementById('setupmsg');
   if (msg) msg.textContent = 'Сохраняю карточку…';
   const data = await api('/api/admin/vk/assistant/desk', { method:'POST', body: JSON.stringify(setupBody()) });

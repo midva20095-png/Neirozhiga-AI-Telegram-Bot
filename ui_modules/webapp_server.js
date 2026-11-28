@@ -1535,6 +1535,17 @@ function startWebApp() {
         }
     });
 
+    app.post('/api/admin/vk/assistant/shop', requireAdmin, async (req, res) => {
+        try {
+            const body = req.body || {};
+            const saved = await assistant.saveShop(body.userId, body);
+            res.json(saved);
+        } catch (e) {
+            const message = e && e.public ? e.message : 'Настройки бота не сохранились.';
+            res.status(400).json({ ok: false, error: message });
+        }
+    });
+
     app.get('/api/admin/vk/assistant/ping', requireAdmin, async (req, res) => {
         try {
             res.json(await assistant.setupAlert());
