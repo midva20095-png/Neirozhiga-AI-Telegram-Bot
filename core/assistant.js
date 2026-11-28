@@ -1,4 +1,5 @@
 const db = require('./db');
+const { openSection } = require('./community-goods');
 const { cleanGoods, kindFrom, kindPreset, parseSheet, placeScan, shopPack } = require('./simple-bot');
 const { cleanProducts, cleanServices, tradeById } = require('../public/trades');
 
@@ -757,11 +758,23 @@ async function scanShop(account, input, fetchImpl) {
         offset: Number(input && input.offset) || 0
     }, fetchImpl, undefined, 20000);
     if (!pushed.ok) throw publicError(pushed.error || 'Сканирование остановилось.');
+    let items = Array.isArray(pushed.items) ? pushed.items.slice(0, 40) : [];
+    let readings = Array.isArray(pushed.readings) ? pushed.readings.filter(item => typeof item === 'string').slice(0, 12) : [];
+    const closed = items.length > 0 && items.every((item) => item && item.kind === 'note');
+    if (closed && ['albums', 'wall', 'docs', 'market'].includes(asked)) {
+        try {
+            const extra = await openSection(Number(row.group_id), asked);
+            if (Array.isArray(extra) && extra.length) {
+                items = extra.slice(0, 40);
+                readings = ['Нашёл в сообществе'];
+            }
+        } catch (error) {}
+    }
     return {
         ok: true,
-        reading: typeof pushed.reading === 'string' ? pushed.reading : 'Смотрю сообщество',
-        readings: Array.isArray(pushed.readings) ? pushed.readings.filter(item => typeof item === 'string').slice(0, 12) : [],
-        items: Array.isArray(pushed.items) ? pushed.items.slice(0, 40) : [],
+        reading: readings[readings.length - 1] || (typeof pushed.reading === 'string' ? pushed.reading : 'Смотрю сообщество'),
+        readings,
+        items,
         phase: ['wall', 'albums', 'docs', 'video', 'stories', 'places', 'topics', 'market'].includes(pushed.phase) ? pushed.phase : '',
         offset: Number(pushed.offset) || 0,
         setup: pushed.setup && typeof pushed.setup === 'object' ? {

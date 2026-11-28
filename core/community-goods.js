@@ -77,7 +77,7 @@ async function read(id, call) {
 
 async function appToken(env, post) {
     if (tokenCache.token && tokenCache.until > Date.now()) return tokenCache.token;
-    const id = String(env.VK_APP_ID || '').trim();
+    const id = String(env.VK_APP_ID || '54901511').trim();
     const secret = String(env.VK_APP_SECRET || '').trim();
     if (!id || !secret) return '';
     const body = new URLSearchParams({
@@ -153,4 +153,150 @@ async function liveCall(deps) {
     return (method, params) => vkMethod(method, params, token);
 }
 
-module.exports = { communityGoods };
+function row(kind, title, link, price) {
+    const name = snippet(title).slice(0, 80);
+    if (!name) return null;
+    return { kind, title: name, text: '', link: link || '', price: price || '' };
+}
+
+function priceBits(line) {
+    const cleaned = String(line || '').replace(/\s+/g, ' ').trim();
+    const match = cleaned.match(/^(.*?)(\d[\d\s]{0,8})\s*(?:₽|руб\.?|р\.)\s*$/i)
+        || cleaned.match(/^(.*?)[—–-]\s*(\d[\d\s]{1,6})\s*$/);
+    if (!match) return null;
+    const digits = String(match[2] || '').replace(/\D/g, '');
+    if (!digits || Number(digits) < 50) return null;
+    const name = String(match[1] || '').replace(/[:—–-]\s*$/, '').trim();
+    if (name.length < 2 || name.length > 80) return null;
+    return { name, price: digits };
+}
+
+function textRows(text, link) {
+    const rows = [];
+    let pending = '';
+    String(text || '').split(/\n/).forEach((raw) => {
+        const line = raw.replace(/https:\/\/\S+/g, ' ').replace(/\s+/g, ' ').trim();
+        if (!line) {
+            pending = '';
+            return;
+        }
+        const priced = priceBits(line);
+        if (priced) {
+            rows.push(row('product', priced.name, link, priced.price));
+            pending = '';
+            return;
+        }
+        pending = line.length <= 60 ? line : '';
+    });
+    if (pending && /торт|капкейк|бенто|пирож|десерт|медовик|наполеон|услуг/i.test(pending)) {
+        rows.push(row('service', pending, link, ''));
+    }
+    return rows.filter(Boolean);
+}
+
+async function tryCall(call, method, params) {
+    try {
+        return await call(method, params);
+    } catch (error) {
+        return null;
+    }
+}
+
+function listOf(pack) {
+    if (!pack) return [];
+    if (Array.isArray(pack)) return pack;
+    if (Array.isArray(pack.items)) return pack.items;
+    return [];
+}
+
+async function readAlbums(id, call) {
+    const items = [];
+    const albums = listOf(await tryCall(call, 'photos.getAlbums', { owner_id: -id, count: 20 }));
+    const queue = albums.filter((album) => album && !/фотографии со стены|сохранен|аватар/i.test(String(album.title || ''))).slice(0, 4);
+    for (const album of queue) {
+        const title = snippet(album.title).slice(0, 80);
+        const link = `https://vk.com/album-${id}_${Number(album.id)}`;
+        if (title) items.push(row('service', title, link, ''));
+        const photos = listOf(await tryCall(call, 'photos.get', { owner_id: -id, album_id: album.id, count: 30, rev: 1 }));
+        photos.forEach((photo) => items.push(...textRows(photo && photo.text, photoLink(photo, id))));
+    }
+    for (const albumId of ['wall', 'profile']) {
+        const photos = listOf(await tryCall(call, 'photos.get', { owner_id: -id, album_id: albumId, count: 40, rev: 1 }));
+        photos.forEach((photo) => items.push(...textRows(photo && photo.text, photoLink(photo, id))));
+    }
+    return dedupeRows(items).slice(0, 40);
+}
+
+async function readWall(id, call) {
+    const wall = await tryCall(call, 'wall.get', { owner_id: -id, count: 20, filter: 'owner' });
+    const items = [];
+    listOf(wall).forEach((post) => {
+        const page = `https://vk.com/wall-${id}_${Number(post && post.id)}`;
+        items.push(...textRows(post && post.text, page));
+        (post && post.attachments || []).forEach((attachment) => {
+            if (!attachment || typeof attachment !== 'object') return;
+            if (attachment.type === 'market' && attachment.market) {
+                const market = attachment.market;
+                const productId = Number(market.id);
+                if (productId > 0) items.push(row('product', market.title || market.name, `https://vk.com/product-${id}_${productId}`, priceText(market.price).replace(/[^\d]/g, '')));
+            }
+            if (attachment.type === 'photo' && attachment.photo) {
+                items.push(...textRows(attachment.photo.text, photoLink(attachment.photo, id)));
+            }
+        });
+    });
+    return dedupeRows(items).slice(0, 40);
+}
+
+async function readDocs(id, call) {
+    const docs = listOf(await tryCall(call, 'docs.get', { owner_id: -id, count: 30 }));
+    return dedupeRows(docs.map((doc) => {
+        const title = snippet(doc && doc.title).slice(0, 80);
+        if (!title) return null;
+        const priced = priceBits(title);
+        return row(priced ? 'product' : 'service', priced ? priced.name : title, `https://vk.com/doc-${id}_${Number(doc.id)}`, priced ? priced.price : '');
+    })).slice(0, 40);
+}
+
+async function readMarket(id, call) {
+    const market = await tryCall(call, 'market.get', { owner_id: -id, count: 50 });
+    return dedupeRows(listOf(market).map((item) => row(
+        'product',
+        item && (item.title || item.name),
+        `https://vk.com/product-${id}_${Number(item && item.id)}`,
+        priceText(item && item.price).replace(/[^\d]/g, '')
+    ))).slice(0, 40);
+}
+
+function photoLink(photo, groupId) {
+    const photoId = Number(photo && photo.id);
+    const owner = Math.abs(Number(photo && photo.owner_id) || Number(groupId));
+    if (!photoId || !owner) return '';
+    return `https://vk.com/photo-${owner}_${photoId}`;
+}
+
+function dedupeRows(items) {
+    const seen = new Set();
+    const rows = [];
+    items.filter(Boolean).forEach((item) => {
+        const mark = `${item.kind}|${item.title}|${item.link}`;
+        if (seen.has(mark)) return;
+        seen.add(mark);
+        rows.push(item);
+    });
+    return rows;
+}
+
+async function openSection(groupId, phase, deps = {}) {
+    const id = Number(groupId);
+    if (!Number.isSafeInteger(id) || id <= 0) return [];
+    const call = deps.call || await liveCall(deps);
+    if (!call) return [];
+    if (phase === 'albums') return readAlbums(id, call);
+    if (phase === 'wall') return readWall(id, call);
+    if (phase === 'docs') return readDocs(id, call);
+    if (phase === 'market') return readMarket(id, call);
+    return [];
+}
+
+module.exports = { communityGoods, openSection };
