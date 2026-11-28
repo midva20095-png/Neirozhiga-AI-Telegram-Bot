@@ -28,6 +28,8 @@ function shopPack(input) {
     shopHourDaysChosen: on(input.shopHourDaysChosen),
     shopHourZone: hourZone(input.shopHourZone),
     shopNewsLink: https(input.shopNewsLink),
+    shopCatalogLink: https(input.shopCatalogLink),
+    shopCatalogButtons: cleanCatalogButtons(input.shopCatalogButtons),
     shopGeoOn: on(input.shopGeoOn),
     shopGeoMap: mapLink(input.shopGeoMap),
     shopGeoLat: geoNumber(input.shopGeoLat, true),
@@ -37,6 +39,33 @@ function shopPack(input) {
     shopCommentLinks: cleanCommentLinks(input.shopCommentLinks),
     goods: cleanGoods(input.goods),
   };
+}
+
+const CATALOG_BUTTON_SLOTS = 10;
+
+function cleanCatalogButtons(value) {
+  const source = Array.isArray(value) ? value : [];
+  const rows = [];
+  const seen = new Set();
+  for (let index = 0; index < CATALOG_BUTTON_SLOTS; index += 1) {
+    const item = source[index];
+    const name = String(item && item.name || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    const link = https(item && item.link);
+    const onFlag = !!(item && (item.on === true || item.on === 'true' || item.on === 1 || item.on === '1'));
+    const key = name.toLowerCase();
+    if (name && seen.has(key)) {
+      rows.push({ on: false, name: '', link: '' });
+      continue;
+    }
+    if (name) seen.add(key);
+    rows.push({
+      on: onFlag,
+      name: name.length >= 2 ? name : '',
+      link: link || '',
+    });
+  }
+  while (rows.length < CATALOG_BUTTON_SLOTS) rows.push({ on: false, name: '', link: '' });
+  return rows;
 }
 
 function mapLink(value) {
@@ -635,4 +664,4 @@ function kindPreset(kind) {
   return { kind: id, ...row };
 }
 
-module.exports = { shopPack, cleanGoods, parseSheet, placeScan, kindFrom, kindPreset };
+module.exports = { shopPack, cleanGoods, cleanCatalogButtons, parseSheet, placeScan, kindFrom, kindPreset };

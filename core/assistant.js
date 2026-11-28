@@ -728,6 +728,12 @@ async function saveShop(account, input, fetchImpl) {
         shopNewsLink: input && Object.prototype.hasOwnProperty.call(input, 'newsLink')
             ? String(input.newsLink || '')
             : ((row.reply && row.reply.shopNewsLink) || ''),
+        shopCatalogLink: input && Object.prototype.hasOwnProperty.call(input, 'catalogLink')
+            ? String(input.catalogLink || '')
+            : ((row.reply && row.reply.shopCatalogLink) || ''),
+        shopCatalogButtons: input && Object.prototype.hasOwnProperty.call(input, 'catalogButtons')
+            ? input.catalogButtons
+            : ((row.reply && row.reply.shopCatalogButtons) || []),
         shopGeoOn: input && Object.prototype.hasOwnProperty.call(input, 'geoOn')
             ? !!(input && input.geoOn)
             : ((row.reply && row.reply.shopGeoOn) === true),
@@ -797,6 +803,8 @@ async function saveShop(account, input, fetchImpl) {
         shopHourDaysChosen: reply.shopHourDaysChosen === true,
         shopHourZone: reply.shopHourZone,
         shopNewsLink: reply.shopNewsLink || '',
+        shopCatalogLink: reply.shopCatalogLink || '',
+        shopCatalogButtons: reply.shopCatalogButtons || [],
         shopGeoOn: reply.shopGeoOn === true,
         shopGeoMap: reply.shopGeoMap || '',
         shopGeoLat: reply.shopGeoLat === '' || reply.shopGeoLat == null ? '' : reply.shopGeoLat,

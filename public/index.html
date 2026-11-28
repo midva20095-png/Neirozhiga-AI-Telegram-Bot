@@ -4103,7 +4103,17 @@ let mineEdit = -1;
 let mineCommunity = null;
 let mineState = emptyMine();
 function emptyMine(){
-  return { catalog: false, contactsOn: false, order: false, admin: false, comments: false, commentLinks: [], chatLinks: false, sections: false, delivery: false, pickup: false, baker: false, kind: '', board: 'fixed', names: {}, texts: {}, contacts: '', greeting: '', hours: false, hourStart: 10, hourEnd: 19, hourDays: [1, 2, 3, 4, 5, 6, 7], hourZone: 3, newsLink: '', geoOn: false, geoMap: '', geoLat: '', geoLong: '' };
+  return { catalog: false, contactsOn: false, order: false, admin: false, comments: false, commentLinks: [], chatLinks: false, sections: false, delivery: false, pickup: false, baker: false, kind: '', board: 'fixed', names: {}, texts: {}, contacts: '', greeting: '', hours: false, hourStart: 10, hourEnd: 19, hourDays: [1, 2, 3, 4, 5, 6, 7], hourZone: 3, newsLink: '', catalogLink: '', catalogButtons: emptyCatalogButtons(), geoOn: false, geoMap: '', geoLat: '', geoLong: '' };
+}
+function emptyCatalogButtons(){
+  const rows = [];
+  for (let i = 0; i < 10; i += 1) rows.push({ on: false, name: '', link: '' });
+  return rows;
+}
+function mineCatalogButtons(){
+  const rows = Array.isArray(mineState.catalogButtons) ? mineState.catalogButtons.slice(0, 10) : [];
+  while (rows.length < 10) rows.push({ on: false, name: '', link: '' });
+  return rows;
 }
 function mineBack(){
   tab = 'cab';
@@ -4182,6 +4192,20 @@ function readMineForm(){
   if (geoLat !== null) mineState.geoLat = geoLat.trim();
   const geoLong = value('mineGeoLong');
   if (geoLong !== null) mineState.geoLong = geoLong.trim();
+  const catalogLink = value('mineCatalogLink');
+  if (catalogLink !== null) mineState.catalogLink = catalogLink.trim();
+  if (document.querySelector('[data-catalog-door]')) {
+    const doors = [];
+    document.querySelectorAll('[data-catalog-door]').forEach(function(row){
+      doors.push({
+        on: !!(row.querySelector('.mineDoorOn') || {}).checked,
+        name: String((row.querySelector('.mineDoorName') || {}).value || '').replace(/\s+/g, ' ').trim(),
+        link: String((row.querySelector('.mineDoorLink') || {}).value || '').trim()
+      });
+    });
+    while (doors.length < 10) doors.push({ on: false, name: '', link: '' });
+    mineState.catalogButtons = doors.slice(0, 10);
+  }
 }
 function mineBackRow(id, label){
   return '<button type="button" class="btn ghost" id="'+id+'" style="width:100%;margin:0 0 12px">'+label+'</button>';
@@ -4208,7 +4232,7 @@ function mineHome(community){
     (community.key ? '<p class="hint">Ключ сохранён: '+esc(community.key)+'</p>' : '')+
     '<p class="hint">Пока донат действует, бот отвечает в сообщениях. В разделе уже лежит то, что бот сохранил. Откройте его и поправьте.</p>'+
     '<button type="button" class="cabrow" data-mine="buttons"><span>Кнопки<small>'+(hello ? 'Фраза при входе уже есть' : 'Надписи, приветствие и как кнопки стоят в чате')+'</small></span></button>'+
-    '<button type="button" class="cabrow" data-mine="catalog"><span>Каталог<small>Товары и цены. Сейчас '+mineGoods.length+'</small></span></button>'+
+    '<button type="button" class="cabrow" data-mine="catalog"><span>Каталог<small>'+(mineCatalogOnCount() ? 'Включено кнопок: '+mineCatalogOnCount() : 'Ссылка и до 10 кнопок')+'</small></span></button>'+
     '<button type="button" class="cabrow" data-mine="orders"><span>Заявки<small>Что бот спрашивает перед заявкой</small></span></button>'+
     '<button type="button" class="cabrow" data-mine="contacts"><span>Контакты<small>'+(contacts ? 'Текст кнопки уже есть' : 'Текст, который уходит по кнопке контактов')+'</small></span></button>'+
     '<button type="button" class="cabrow" data-mine="comments"><span>Комментарии<small>Какие ссылки дописать под товаром</small></span></button>'+
@@ -4245,7 +4269,7 @@ function buttonCard(key, title, note, textId, textLabel){
 function mineButtons(){
   return mineHead('Кнопки', 'Четыре кнопки в чате. Надпись можно заменить. Ниже уже лежит то, что бот сохранил.')+
     mineHave()+
-    buttonCard('catalog', 'Каталог', 'Список товаров задаётся в разделе «Каталог».', 'mineTextCatalog', 'Фраза перед списком')+
+    buttonCard('catalog', 'Каталог', 'Ссылка и дополнительные кнопки задаются в разделе «Каталог». Название этой кнопки можно заменить.', 'mineTextCatalog', 'Фраза перед ссылкой')+
     buttonCard('contacts', 'Контакты', 'Телефон и адрес задаются в разделе «Контакты».', '', '')+
     buttonCard('order', 'Заявка', 'Покупатель выбирает товар и пишет телефон. Заявка приходит вам в сообщения сообщества.', 'mineTextOrder', 'Что написать покупателю')+
     buttonCard('admin', 'Администратор', 'После этой кнопки бот молчит, пока покупатель не нажмёт «Назад».', 'mineTextAdmin', 'Что написать покупателю')+
@@ -4259,39 +4283,24 @@ function mineButtons(){
     '<label class="flabel" for="mineHello">Фраза при входе</label>'+mineBox('mineHello', 2000, mineState.greeting || '', 6)+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить кнопки</button><p id="minemsg" class="hint"></p></div>';
 }
+function mineCatalogOnCount(){
+  return mineCatalogButtons().filter(function(item){ return item && item.on && item.name && item.link; }).length;
+}
 function mineCatalog(){
-  const pages = Math.max(1, Math.ceil(mineGoods.length / 8));
-  if (minePage > pages - 1) minePage = pages - 1;
-  if (minePage < 0) minePage = 0;
-  const start = minePage * 8;
-  const rows = mineGoods.slice(start, start + 8).map(function(item, index){
-    const real = start + index;
-    const price = item.price ? ' — '+esc(item.price)+(/^\d+$/.test(String(item.price)) ? ' ₽' : '') : '';
-    const section = item.section ? esc(item.section)+' · ' : '';
-    return '<div style="margin:10px 0;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.08)"><p class="now">'+section+esc(item.name)+price+'</p><p class="hint">'+esc(item.link)+'</p>'+
-      '<button type="button" class="btn ghost" data-mine-edit="'+real+'">Изменить</button> <button type="button" class="btn ghost" data-mine-del="'+real+'">Убрать</button></div>';
+  const doors = mineCatalogButtons().map(function(item, index){
+    return '<div class="brow" data-catalog-door="'+index+'">'+
+      '<p class="now">Кнопка '+(index + 1)+'</p>'+
+      '<label><input class="mineDoorOn" type="checkbox"'+(item.on ? ' checked' : '')+'> Включить</label>'+
+      '<label class="flabel">Название</label><input class="mineDoorName" maxlength="40" value="'+esc(item.name || '')+'" placeholder="Например: Торты">'+
+      '<label class="flabel">Ссылка https</label><input class="mineDoorLink" maxlength="300" value="'+esc(item.link || '')+'" placeholder="https://...">'+
+      '</div>';
   }).join('');
-  const editing = mineEdit >= 0 ? mineGoods[mineEdit] : null;
-  const pager = mineGoods.length > 8
-    ? '<div class="row" style="gap:8px;align-items:center"><button type="button" class="btn ghost" id="minePrev"'+(minePage ? '' : ' disabled')+'>Назад</button><span class="hint">'+(minePage + 1)+' / '+pages+'</span><button type="button" class="btn ghost" id="mineNext"'+(minePage < pages - 1 ? '' : ' disabled')+'>Дальше</button></div>'
-    : '';
-  return mineHead('Каталог', 'На странице восемь товаров. В чате кнопками показываются первые пять, остальные покупатель выбирает номером.')+
-    '<label><input id="mineSections" type="checkbox"'+(mineState.sections ? ' checked' : '')+'> Кнопка на каждую категорию</label>'+
-    '<p class="hint">Выключено — одна кнопка на весь каталог. Включено — до четырёх кнопок по категории товара.</p>'+
-    '<p class="hint">В списке '+mineGoods.length+' из 40.</p>'+
-    (rows || '<p class="hint">Товаров пока нет.</p>')+
-    pager+
-    '<p class="now">'+(editing ? 'Изменить товар' : 'Новый товар')+'</p>'+
-    '<label class="flabel" for="mineName">Название</label><input id="mineName" maxlength="80" value="'+esc(editing ? editing.name : '')+'">'+
-    '<label class="flabel" for="mineSection">Категория</label><input id="mineSection" maxlength="24" value="'+esc(editing && editing.section ? editing.section : '')+'">'+
-    '<p class="hint">Нужна, только если включены кнопки по категориям. Например: Торты.</p>'+
-    '<label class="flabel" for="minePrice">Цена</label><input id="minePrice" maxlength="40" value="'+esc(editing ? editing.price : '')+'">'+
-    '<label class="flabel" for="mineLink">Ссылка https</label><input id="mineLink" maxlength="300" value="'+esc(editing ? editing.link : '')+'">'+
-    '<button class="btn" id="mineAdd" type="button" style="margin-top:8px">'+(editing ? 'Сохранить товар' : 'Добавить товар')+'</button>'+
-    (editing ? '<button class="btn ghost" id="mineEditCancel" type="button" style="margin-top:8px">Отмена</button>' : '')+
-    '<label class="flabel" for="mineFile">Файл со списком</label><input id="mineFile" type="file" accept=".txt,.csv,.yml,.yaml,text/plain">'+
-    '<textarea id="mineSheet" hidden></textarea>'+
-    '<p class="hint">Строка файла: название | цена | ссылка. Файл заменяет весь список.</p>'+
+  return mineHead('Каталог', 'По умолчанию одна кнопка «Каталог» — для неё нужна ссылка ниже. Можно включить до 10 своих кнопок: название и ссылка у каждой свои. Правила те же, что у остальных кнопок бота.')+
+    '<label class="flabel" for="mineCatalogLink">Ссылка для кнопки «Каталог»</label><input id="mineCatalogLink" maxlength="300" value="'+esc(mineState.catalogLink || '')+'" placeholder="https://vk.com/market-...">'+
+    '<p class="hint">Нужна, если свои кнопки выключены. Надпись «Каталог» меняется в разделе «Кнопки».</p>'+
+    '<p class="now">Свои кнопки</p>'+
+    '<p class="hint">Все выключены по умолчанию. Включите, задайте название и ссылку.</p>'+
+    doors+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить каталог</button><p id="minemsg" class="hint"></p></div>';
 }
 function mineOrders(){
@@ -4615,11 +4624,18 @@ async function loadMine(){
     hourDays: community.hourDaysChosen && Array.isArray(community.hourDays) ? community.hourDays.map(Number).filter(function(day){ return day >= 1 && day <= 7; }) : [1, 2, 3, 4, 5, 6, 7],
     hourZone: Number.isInteger(community.hourZone) ? community.hourZone : 3,
     newsLink: community.newsLink || '',
+    catalogLink: community.catalogLink || '',
+    catalogButtons: Array.isArray(community.catalogButtons) && community.catalogButtons.length
+      ? community.catalogButtons.slice(0, 10).map(function(item){
+          return { on: !!(item && item.on), name: item && item.name || '', link: item && item.link || '' };
+        })
+      : emptyCatalogButtons(),
     geoOn: !!community.geoOn,
     geoMap: community.geoMap || '',
     geoLat: community.geoLat === 0 || community.geoLat ? community.geoLat : '',
     geoLong: community.geoLong === 0 || community.geoLong ? community.geoLong : ''
   };
+  while (mineState.catalogButtons.length < 10) mineState.catalogButtons.push({ on: false, name: '', link: '' });
   paintMine();
 }
 function addMineGood(){
@@ -4719,6 +4735,11 @@ async function saveMine(){
     if (msg) msg.textContent = mineState.commentError;
     return false;
   }
+  const doorError = readCatalogDoorsOrError();
+  if (doorError) {
+    if (msg) msg.textContent = doorError;
+    return false;
+  }
   const button = document.getElementById('mineSave');
   if (button) button.disabled = true;
   if (msg) msg.textContent = 'Сохраняю…';
@@ -4760,6 +4781,8 @@ async function saveMine(){
         hourDaysChosen: true,
         hourZone: Number(mineState.hourZone),
         newsLink: mineState.newsLink || '',
+        catalogLink: mineState.catalogLink || '',
+        catalogButtons: mineCatalogButtons(),
         geoOn: !!mineState.geoOn,
         geoMap: mineState.geoMap || '',
         geoLat: mineState.geoLat,
@@ -4829,6 +4852,19 @@ async function blockMineClient(peerId, drop){
   } catch (error) {
     if (msg) msg.textContent = error.message || 'Список не сохранился';
   }
+}
+function readCatalogDoorsOrError(){
+  readMineForm();
+  const doors = mineCatalogButtons();
+  for (let index = 0; index < doors.length; index += 1) {
+    const item = doors[index];
+    if (!item.on) continue;
+    if (!item.name || item.name.length < 2) return 'У включённой кнопки '+(index + 1)+' нужно название.';
+    if (!/^https:\/\/\S+$/i.test(item.link || '')) return 'У включённой кнопки '+(index + 1)+' нужна ссылка https://';
+  }
+  const names = doors.filter(function(item){ return item.on && item.name; }).map(function(item){ return item.name.toLowerCase(); });
+  if (new Set(names).size !== names.length) return 'У двух кнопок каталога не может быть одного названия.';
+  return '';
 }
 async function sendMineMail(){
   const msg = document.getElementById('minemsg');

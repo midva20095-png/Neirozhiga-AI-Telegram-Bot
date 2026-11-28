@@ -406,7 +406,6 @@ test('чат и каталог в комментариях стоят в раз�
     assert.equal(html.slice(chat, catalog).includes('class="brow"'), true);
     assert.equal(html.includes('mineCommentLabel'), false);
     assert.equal(html.includes('Ещё одна ссылка'), true);
-    assert.equal(html.includes('id="mineSections"'), true);
     assert.equal(html.includes('id="mineChatLinks"'), true);
     assert.equal(html.includes("mineBox('mineHello', 2000"), true);
     assert.equal(html.includes("mineBox('mineContacts', 2500"), true);
@@ -417,6 +416,10 @@ test('чат и каталог в комментариях стоят в раз�
     assert.equal(html.includes('mineMailLabel2'), false);
     assert.equal(html.includes('id="mineGeoOn"'), true);
     assert.equal(html.includes('id="mineGeoMap"'), true);
+    assert.equal(html.includes('id="mineCatalogLink"'), true);
+    assert.equal(html.includes('data-catalog-door'), true);
+    assert.equal(html.includes('mineDoorName'), true);
+    assert.equal(html.includes('id="mineSections"'), false);
 });
 
 test('рассылка принимает одну ссылку без подписи', () => {

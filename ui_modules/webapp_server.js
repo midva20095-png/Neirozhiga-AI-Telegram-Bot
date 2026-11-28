@@ -616,6 +616,8 @@ function startWebApp() {
                     hourDaysChosen: reply.shopHourDaysChosen === true,
                     hourZone: Number.isInteger(reply.shopHourZone) ? reply.shopHourZone : 3,
                     newsLink: typeof reply.shopNewsLink === 'string' ? reply.shopNewsLink : '',
+                    catalogLink: typeof reply.shopCatalogLink === 'string' ? reply.shopCatalogLink : '',
+                    catalogButtons: Array.isArray(reply.shopCatalogButtons) ? reply.shopCatalogButtons : [],
                     geoOn: reply.shopGeoOn === true,
                     geoMap: typeof reply.shopGeoMap === 'string' ? reply.shopGeoMap : '',
                     geoLat: reply.shopGeoLat === '' || reply.shopGeoLat == null ? '' : reply.shopGeoLat,
