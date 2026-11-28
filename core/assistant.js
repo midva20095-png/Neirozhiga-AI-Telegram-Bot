@@ -728,6 +728,18 @@ async function saveShop(account, input, fetchImpl) {
         shopNewsLink: input && Object.prototype.hasOwnProperty.call(input, 'newsLink')
             ? String(input.newsLink || '')
             : ((row.reply && row.reply.shopNewsLink) || ''),
+        shopGeoOn: input && Object.prototype.hasOwnProperty.call(input, 'geoOn')
+            ? !!(input && input.geoOn)
+            : ((row.reply && row.reply.shopGeoOn) === true),
+        shopGeoMap: input && Object.prototype.hasOwnProperty.call(input, 'geoMap')
+            ? String(input.geoMap || '')
+            : ((row.reply && row.reply.shopGeoMap) || ''),
+        shopGeoLat: input && Object.prototype.hasOwnProperty.call(input, 'geoLat')
+            ? input.geoLat
+            : ((row.reply && row.reply.shopGeoLat) || ''),
+        shopGeoLong: input && Object.prototype.hasOwnProperty.call(input, 'geoLong')
+            ? input.geoLong
+            : ((row.reply && row.reply.shopGeoLong) || ''),
         shopNames: input && input.names ? input.names : ((row.reply && row.reply.shopNames) || {}),
         shopTexts: input && input.texts ? input.texts : ((row.reply && row.reply.shopTexts) || {}),
         goods
@@ -785,6 +797,10 @@ async function saveShop(account, input, fetchImpl) {
         shopHourDaysChosen: reply.shopHourDaysChosen === true,
         shopHourZone: reply.shopHourZone,
         shopNewsLink: reply.shopNewsLink || '',
+        shopGeoOn: reply.shopGeoOn === true,
+        shopGeoMap: reply.shopGeoMap || '',
+        shopGeoLat: reply.shopGeoLat === '' || reply.shopGeoLat == null ? '' : reply.shopGeoLat,
+        shopGeoLong: reply.shopGeoLong === '' || reply.shopGeoLong == null ? '' : reply.shopGeoLong,
         shopNames: reply.shopNames || {},
         shopTexts: reply.shopTexts || {},
         goods: reply.goods || []
@@ -1175,17 +1191,15 @@ async function ownShop(account) {
 }
 
 function mailLinks(value) {
-    const rows = [];
     const list = Array.isArray(value) ? value : [];
     for (const item of list) {
-        if (rows.length >= 2) break;
         if (!item || typeof item !== 'object') continue;
-        const label = String(item.label || '').replace(/\s+/g, ' ').trim().slice(0, 40);
-        const link = String(item.link || '').trim();
-        if (label.length < 2 || !/^https:\/\//i.test(link) || link.length > 300 || /\s/.test(link)) continue;
-        rows.push({ label, link });
+        const link = String(item.link || item.url || '').trim();
+        if (!/^https:\/\//i.test(link) || link.length > 300 || /\s/.test(link)) continue;
+        const label = String(item.label || 'Открыть').replace(/\s+/g, ' ').trim().slice(0, 40) || 'Открыть';
+        return [{ label, link }];
     }
-    return rows;
+    return [];
 }
 
 async function shopMail(account, text, links, offset, fetchImpl) {
@@ -1207,7 +1221,8 @@ async function shopMail(account, text, links, offset, fetchImpl) {
         sent: Number(result.sent) || 0,
         failed: Number(result.failed) || 0,
         total: Number(result.total) || 0,
-        next: Number(result.next) || 0
+        next: Number(result.next) || 0,
+        link: typeof result.link === 'string' ? result.link : (mailLinks(links)[0] ? mailLinks(links)[0].link : '')
     };
 }
 
@@ -1616,6 +1631,7 @@ module.exports = {
     loadListen,
     sendBroadcast,
     shopMail,
+    mailLinks,
     shopBlock,
     shopStats,
     shopAudit,

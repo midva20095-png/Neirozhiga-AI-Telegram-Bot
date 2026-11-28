@@ -4103,7 +4103,7 @@ let mineEdit = -1;
 let mineCommunity = null;
 let mineState = emptyMine();
 function emptyMine(){
-  return { catalog: false, contactsOn: false, order: false, admin: false, comments: false, commentLinks: [], chatLinks: false, sections: false, delivery: false, pickup: false, baker: false, kind: '', board: 'fixed', names: {}, texts: {}, contacts: '', greeting: '', hours: false, hourStart: 10, hourEnd: 19, hourDays: [1, 2, 3, 4, 5, 6, 7], hourZone: 3, newsLink: '' };
+  return { catalog: false, contactsOn: false, order: false, admin: false, comments: false, commentLinks: [], chatLinks: false, sections: false, delivery: false, pickup: false, baker: false, kind: '', board: 'fixed', names: {}, texts: {}, contacts: '', greeting: '', hours: false, hourStart: 10, hourEnd: 19, hourDays: [1, 2, 3, 4, 5, 6, 7], hourZone: 3, newsLink: '', geoOn: false, geoMap: '', geoLat: '', geoLong: '' };
 }
 function mineBack(){
   tab = 'cab';
@@ -4175,6 +4175,13 @@ function readMineForm(){
   if (contacts !== null) mineState.contacts = contacts;
   const hello = value('mineHello');
   if (hello !== null) mineState.greeting = hello;
+  if (flag('mineGeoOn') !== null) mineState.geoOn = flag('mineGeoOn');
+  const geoMap = value('mineGeoMap');
+  if (geoMap !== null) mineState.geoMap = geoMap.trim();
+  const geoLat = value('mineGeoLat');
+  if (geoLat !== null) mineState.geoLat = geoLat.trim();
+  const geoLong = value('mineGeoLong');
+  if (geoLong !== null) mineState.geoLong = geoLong.trim();
 }
 function mineBackRow(id, label){
   return '<button type="button" class="btn ghost" id="'+id+'" style="width:100%;margin:0 0 12px">'+label+'</button>';
@@ -4334,16 +4341,14 @@ function mineClients(){
     '<div id="minePeople"><p class="hint">Загружаю клиентов…</p></div><p id="minemsg" class="hint"></p></div>';
 }
 function mineMail(){
-  return mineHead('Рассылка', 'Уходит только тем, кто в боте принял согласие кнопкой «Новости». Можно закрепить до двух открытых ссылок.')+
+  return mineHead('Рассылка', 'Уходит только тем, кто в боте принял согласие кнопкой «Новости». Текст и одна ссылка — больше ничего.')+
     '<p class="now">Согласие на новости</p>'+
     '<label class="flabel" for="mineNewsLink">Ссылка на соглашение https</label><input id="mineNewsLink" maxlength="300" value="'+esc(mineState.newsLink || '')+'" placeholder="https://...">'+
     '<p class="hint">Необязательно. Если ссылки нет, бот всё равно покажет «Да» и «Нет». Если ссылка есть, появится кнопка «Соглашение».</p>'+
     '<button class="btn ghost" id="mineNewsSave" type="button" style="margin-top:8px">Сохранить соглашение</button>'+
     '<label class="flabel" for="mineMailText">Текст</label>'+mineBox('mineMailText', 900, '', 6)+
-    '<label class="flabel" for="mineMailLabel1">Подпись первой ссылки</label><input id="mineMailLabel1" maxlength="40">'+
-    '<label class="flabel" for="mineMailLink1">Ссылка https</label><input id="mineMailLink1" maxlength="300">'+
-    '<label class="flabel" for="mineMailLabel2">Подпись второй ссылки</label><input id="mineMailLabel2" maxlength="40">'+
-    '<label class="flabel" for="mineMailLink2">Ссылка https</label><input id="mineMailLink2" maxlength="300">'+
+    '<label class="flabel" for="mineMailLink">Ссылка https</label><input id="mineMailLink" maxlength="300" placeholder="https://...">'+
+    '<p class="hint">Необязательно. Ссылка попадёт в текст сообщения и в кнопку «Открыть».</p>'+
     '<button class="btn" id="mineMailSend" type="button" style="margin-top:12px">Отправить согласившимся</button><p id="minemsg" class="hint"></p></div>';
 }
 function mineStats(){
@@ -4358,6 +4363,12 @@ function mineAudit(){
 function mineContacts(){
   return mineHead('Контакты', 'Этот текст уходит по кнопке контактов. Описание сообщества сюда само не попадает.')+
     '<label class="flabel" for="mineContacts">Текст кнопки</label>'+mineBox('mineContacts', 2500, mineState.contacts || '', 8)+
+    '<label><input id="mineGeoOn" type="checkbox"'+(mineState.geoOn ? ' checked' : '')+'> Геометка с контактами и самовывозом</label>'+
+    '<p class="hint">Если включено, вместе с текстом уйдёт точка на карте ВК. Та же точка — когда клиент выбирает самовывоз в заявке.</p>'+
+    '<label class="flabel" for="mineGeoMap">Ссылка Яндекс Карт</label><input id="mineGeoMap" maxlength="300" placeholder="https://yandex.ru/maps/..." value="'+esc(mineState.geoMap || '')+'">'+
+    '<label class="flabel" for="mineGeoLat">Широта</label><input id="mineGeoLat" maxlength="20" value="'+esc(mineState.geoLat === 0 || mineState.geoLat ? String(mineState.geoLat) : '')+'" placeholder="55.755814">'+
+    '<label class="flabel" for="mineGeoLong">Долгота</label><input id="mineGeoLong" maxlength="20" value="'+esc(mineState.geoLong === 0 || mineState.geoLong ? String(mineState.geoLong) : '')+'" placeholder="37.617635">'+
+    '<p class="hint">Достаточно ссылки с точкой или широты и долготы. Ссылку возьмите из Яндекс Карт («Поделиться»).</p>'+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить контакты</button><p id="minemsg" class="hint"></p></div>';
 }
 function commentOwnSlots(){
@@ -4603,7 +4614,11 @@ async function loadMine(){
     hourEnd: Number.isInteger(community.hourEnd) ? community.hourEnd : 19,
     hourDays: community.hourDaysChosen && Array.isArray(community.hourDays) ? community.hourDays.map(Number).filter(function(day){ return day >= 1 && day <= 7; }) : [1, 2, 3, 4, 5, 6, 7],
     hourZone: Number.isInteger(community.hourZone) ? community.hourZone : 3,
-    newsLink: community.newsLink || ''
+    newsLink: community.newsLink || '',
+    geoOn: !!community.geoOn,
+    geoMap: community.geoMap || '',
+    geoLat: community.geoLat === 0 || community.geoLat ? community.geoLat : '',
+    geoLong: community.geoLong === 0 || community.geoLong ? community.geoLong : ''
   };
   paintMine();
 }
@@ -4744,7 +4759,11 @@ async function saveMine(){
         hourDays: Array.isArray(mineState.hourDays) ? mineState.hourDays : [1, 2, 3, 4, 5, 6, 7],
         hourDaysChosen: true,
         hourZone: Number(mineState.hourZone),
-        newsLink: mineState.newsLink || ''
+        newsLink: mineState.newsLink || '',
+        geoOn: !!mineState.geoOn,
+        geoMap: mineState.geoMap || '',
+        geoLat: mineState.geoLat,
+        geoLong: mineState.geoLong
       })
     });
     const data = await response.json();
@@ -4815,14 +4834,14 @@ async function sendMineMail(){
   const msg = document.getElementById('minemsg');
   const button = document.getElementById('mineMailSend');
   const text = String((document.getElementById('mineMailText') || {}).value || '').trim();
-  const links = [];
-  [1, 2].forEach(function(index){
-    const label = String((document.getElementById('mineMailLabel' + index) || {}).value || '').trim();
-    const link = String((document.getElementById('mineMailLink' + index) || {}).value || '').trim();
-    if (label || link) links.push({ label: label, link: link });
-  });
+  const link = String((document.getElementById('mineMailLink') || {}).value || '').trim();
+  const links = link ? [{ label: 'Открыть', link: link }] : [];
   if (!text) {
     if (msg) msg.textContent = 'Напишите текст рассылки.';
+    return;
+  }
+  if (link && !/^https:\/\/\S+$/i.test(link)) {
+    if (msg) msg.textContent = 'Ссылка должна начинаться с https://';
     return;
   }
   if (button) button.disabled = true;
@@ -4835,7 +4854,8 @@ async function sendMineMail(){
     }, 40000);
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || 'Рассылка не ушла');
-    if (msg) msg.textContent = 'Ушло '+data.sent+' из '+data.total+'. Не согласившимся на новости не отправлялось.';
+    const linked = data.link ? ' Ссылка ушла: '+data.link+'.' : (link ? ' Ссылка не принята.' : '');
+    if (msg) msg.textContent = 'Ушло '+data.sent+' из '+data.total+'. Не согласившимся на новости не отправлялось.'+linked;
   } catch (error) {
     if (msg) msg.textContent = error.message || 'Рассылка не ушла';
     if (button) button.disabled = false;

@@ -28,11 +28,41 @@ function shopPack(input) {
     shopHourDaysChosen: on(input.shopHourDaysChosen),
     shopHourZone: hourZone(input.shopHourZone),
     shopNewsLink: https(input.shopNewsLink),
+    shopGeoOn: on(input.shopGeoOn),
+    shopGeoMap: mapLink(input.shopGeoMap),
+    shopGeoLat: geoNumber(input.shopGeoLat, true),
+    shopGeoLong: geoNumber(input.shopGeoLong, false),
     shopNames: cleanNames(input.shopNames),
     shopTexts: cleanTexts(input.shopTexts),
     shopCommentLinks: cleanCommentLinks(input.shopCommentLinks),
     goods: cleanGoods(input.goods),
   };
+}
+
+function mapLink(value) {
+  const link = String(value || '').trim();
+  if (!link || link.length > 300 || /\s/.test(link)) return '';
+  let url;
+  try {
+    url = new URL(link);
+  } catch (error) {
+    return '';
+  }
+  if (url.protocol !== 'https:') return '';
+  const host = url.hostname.toLowerCase();
+  const yandex = host === 'yandex.ru' || host === 'yandex.com' || host.endsWith('.yandex.ru') || host.endsWith('.yandex.com');
+  if (!yandex) return '';
+  if (host !== 'maps.yandex.ru' && !/^\/(maps|map-widget|navi)(\/|$)/.test(url.pathname)) return '';
+  return url.toString();
+}
+
+function geoNumber(value, isLat) {
+  if (value == null || value === '') return '';
+  const n = Number(String(value).replace(',', '.'));
+  if (!Number.isFinite(n)) return '';
+  if (isLat && (n < -90 || n > 90)) return '';
+  if (!isLat && (n < -180 || n > 180)) return '';
+  return Math.round(n * 1e6) / 1e6;
 }
 
 function shopFields(previous, payload) {

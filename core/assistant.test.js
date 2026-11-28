@@ -412,6 +412,22 @@ test('чат и каталог в комментариях стоят в раз�
     assert.equal(html.includes("mineBox('mineContacts', 2500"), true);
     assert.equal(html.includes("mineBox(textId, 2000"), true);
     assert.equal(html.includes(" из "), true);
+    assert.equal(html.includes('id="mineMailLink"'), true);
+    assert.equal(html.includes('mineMailLink1'), false);
+    assert.equal(html.includes('mineMailLabel2'), false);
+    assert.equal(html.includes('id="mineGeoOn"'), true);
+    assert.equal(html.includes('id="mineGeoMap"'), true);
+});
+
+test('рассылка принимает одну ссылку без подписи', () => {
+    assert.deepEqual(assistant.mailLinks([{ link: 'https://vk.com/club1' }]), [
+        { label: 'Открыть', link: 'https://vk.com/club1' },
+    ]);
+    assert.deepEqual(assistant.mailLinks([
+        { label: 'Сайт', link: 'https://example.com' },
+        { label: 'Ещё', link: 'https://example.com/2' },
+    ]), [{ label: 'Сайт', link: 'https://example.com' }]);
+    assert.deepEqual(assistant.mailLinks([{ label: 'Сайт', link: 'http://bad' }]), []);
 });
 
 test('без адреса второго бота здоровье показывает, что он не подключён', async () => {
