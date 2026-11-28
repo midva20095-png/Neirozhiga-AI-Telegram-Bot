@@ -34,7 +34,7 @@ function shopPack(input) {
     shopGeoMap: mapLink(input.shopGeoMap),
     shopGeoLat: geoNumber(input.shopGeoLat, true),
     shopGeoLong: geoNumber(input.shopGeoLong, false),
-    shopNames: cleanNames(input.shopNames),
+    shopNames: cleanNames(input.shopKind),
     shopTexts: cleanTexts(input.shopTexts),
     shopCommentLinks: cleanCommentLinks(input.shopCommentLinks),
     goods: cleanGoods(input.goods),
@@ -533,23 +533,17 @@ function cleanCommentLinks(value) {
     } else if (item.kind === 'catalog') {
       links.push({ kind: 'catalog' });
       catalog = true;
-    } else if (item.kind === 'own') {
-      const label = String(item.label || '').replace(/\s+/g, ' ').trim().slice(0, 40);
-      const link = https(item.link);
-      if (label.length >= 2 && link) links.push({ kind: 'own', label, link });
     }
-    if (links.length >= 4) break;
+    if (links.length >= 2) break;
   }
   return links;
 }
 
-function cleanNames(value) {
-  const source = value && typeof value === 'object' ? value : {};
+function cleanNames(kind) {
+  const preset = kindPreset(kind);
   const names = {};
-  Object.keys(SHOP_DEFAULTS).forEach((keyName) => {
-    const text = String(source[keyName] == null ? '' : source[keyName]).replace(/\s+/g, ' ').trim().slice(0, 40);
-    if (text.length >= 2 && text !== SHOP_DEFAULTS[keyName]) names[keyName] = text;
-  });
+  if (preset.catalog && preset.catalog !== SHOP_DEFAULTS.catalog) names.catalog = preset.catalog;
+  if (preset.order && preset.order !== SHOP_DEFAULTS.order) names.order = preset.order;
   return names;
 }
 

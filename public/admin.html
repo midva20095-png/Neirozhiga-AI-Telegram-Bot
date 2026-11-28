@@ -1017,7 +1017,6 @@ function setupReadRow(row){
   return item;
 }
 let setupGoods = [];
-let setupOwn = [{ label: '', link: '' }];
 function shopPreset(kind){
   return {
     baker: { catalog: 'Каталог', order: 'Заявка', delivery: true, pickup: true, baker: true },
@@ -1028,17 +1027,10 @@ function shopPreset(kind){
 }
 function shopButtonRow(key, title, on, textId, textLabel, text){
   let html = '<p class="note" style="margin-top:12px"><b>'+esc(title)+'</b></p>'+
-    '<label class="check"><input id="shop'+key+'" type="checkbox"'+(on ? ' checked' : '')+'> Показывать кнопку</label>'+
-    '<label>Надпись для покупателя</label><input id="shopName'+key+'" maxlength="40" value="'+esc(shopNameValue(key, title))+'">';
+    '<label class="check"><input id="shop'+key+'" type="checkbox"'+(on ? ' checked' : '')+'> Показывать кнопку</label>';
   if (textId) html += '<label>'+esc(textLabel)+'</label><textarea id="'+textId+'" maxlength="2000">'+esc(text || '')+'</textarea>';
   return html;
 }
-function shopNameValue(key, title){
-  const names = setupNames || {};
-  const id = key.charAt(0).toLowerCase() + key.slice(1);
-  return names[id] || title;
-}
-let setupNames = {};
 function shopGoodsHtml(){
   if (!setupGoods.length) return '<p class="note">Товаров пока нет.</p>';
   return setupGoods.map(function(item, index){
@@ -1048,22 +1040,12 @@ function shopGoodsHtml(){
       ' <button type="button" class="ghost" data-shop-del="'+index+'">Убрать</button></div>';
   }).join('');
 }
-function shopOwnHtml(){
-  return setupOwn.map(function(item, index){
-    return '<div data-shop-own><label>Надпись</label><input class="shopOwnLabel" maxlength="40" value="'+esc(item.label || '')+'">'+
-      '<label>Ссылка https</label><input class="shopOwnLink" maxlength="300" value="'+esc(item.link || '')+'">'+
-      '<button type="button" class="ghost" data-shop-own-drop="'+index+'">Убрать эту ссылку</button></div>';
-  }).join('');
-}
-function readShopOwn(){
-  const rows = [];
-  document.querySelectorAll('[data-shop-own]').forEach(function(row){
-    rows.push({
-      label: String((row.querySelector('.shopOwnLabel') || {}).value || ''),
-      link: String((row.querySelector('.shopOwnLink') || {}).value || '')
-    });
-  });
-  setupOwn = rows.length ? rows : [{ label: '', link: '' }];
+function lockedShopNames(kind){
+  const preset = shopPreset(kind || 'shop');
+  const names = {};
+  if (preset.catalog !== 'Каталог') names.catalog = preset.catalog;
+  if (preset.order !== 'Заявка') names.order = preset.order;
+  return names;
 }
 function paintShopGoods(){
   const box = document.getElementById('shopGoods');
@@ -1075,28 +1057,12 @@ function paintShopGoods(){
     };
   });
 }
-function paintShopOwn(){
-  const box = document.getElementById('shopOwn');
-  if (!box) return;
-  box.innerHTML = shopOwnHtml();
-  document.querySelectorAll('[data-shop-own-drop]').forEach(function(button){
-    button.onclick = function(){
-      readShopOwn();
-      setupOwn.splice(Number(button.getAttribute('data-shop-own-drop')), 1);
-      if (!setupOwn.length) setupOwn = [{ label: '', link: '' }];
-      paintShopOwn();
-    };
-  });
-}
 function shopDesk(reply, groupId){
   const texts = reply.shopTexts || {};
   const links = Array.isArray(reply.shopCommentLinks) ? reply.shopCommentLinks : [];
-  setupNames = Object.assign({}, reply.shopNames || {});
   setupGoods = (Array.isArray(reply.goods) ? reply.goods : []).map(function(item){
     return { name: item.name || '', price: item.price || '', link: item.link || '', section: item.section || '' };
   });
-  const own = links.filter(function(item){ return item && item.kind === 'own'; });
-  setupOwn = own.length ? own.map(function(item){ return { label: item.label || '', link: item.link || '' }; }) : [{ label: '', link: '' }];
   const chat = links.some(function(item){ return item.kind === 'chat'; });
   const catalog = links.some(function(item){ return item.kind === 'catalog'; });
   const kind = ['baker', 'auto', 'nails', 'shop'].indexOf(reply.shopKind) >= 0 ? reply.shopKind : 'shop';
@@ -1137,14 +1103,11 @@ function shopDesk(reply, groupId){
     '<label class="check"><input id="shopComments" type="checkbox"'+(reply.shopComments === true ? ' checked' : '')+'> Отвечать в комментариях</label>'+
     '<label class="check"><input id="shopCommentChat" type="checkbox"'+(chat ? ' checked' : '')+'> Ссылка на чат'+(id ? ': https://vk.me/club'+esc(id) : '')+'</label>'+
     '<label class="check"><input id="shopCommentCatalog" type="checkbox"'+(catalog ? ' checked' : '')+'> Ссылка на каталог'+(id ? ': https://vk.com/market-'+esc(id) : '')+'</label>'+
-    '<div id="shopOwn">'+shopOwnHtml()+'</div>'+
-    '<button type="button" class="ghost" id="shopOwnAdd">Ещё одна ссылка</button>'+
     '<label class="check"><input id="shopChatLinks" type="checkbox"'+(reply.shopChatLinks === true ? ' checked' : '')+'> Эти ссылки кнопками в чате</label>'+
     '<div class="row" style="margin-top:12px"><button type="button" id="setupSave">Сохранить настройки бота</button></div>';
 }
 function bindShopDesk(){
   paintShopGoods();
-  paintShopOwn();
   const add = document.getElementById('shopAdd');
   if (add) add.onclick = function(){
     const msg = document.getElementById('setupmsg');
@@ -1170,22 +1133,9 @@ function bindShopDesk(){
     paintShopGoods();
     if (msg) msg.textContent = 'Товар в списке. Нажмите «Сохранить настройки бота».';
   };
-  const more = document.getElementById('shopOwnAdd');
-  if (more) more.onclick = function(){
-    readShopOwn();
-    const chat = !!(document.getElementById('shopCommentChat') || {}).checked;
-    const catalog = !!(document.getElementById('shopCommentCatalog') || {}).checked;
-    if ((chat ? 1 : 0) + (catalog ? 1 : 0) + setupOwn.length >= 4) return;
-    setupOwn.push({ label: '', link: '' });
-    paintShopOwn();
-  };
   const kind = document.getElementById('shopKindApply');
   if (kind) kind.onclick = function(){
     const preset = shopPreset((document.getElementById('shopKind') || {}).value || 'shop');
-    const catalog = document.getElementById('shopNameCatalog');
-    const order = document.getElementById('shopNameOrder');
-    if (catalog) catalog.value = preset.catalog;
-    if (order) order.value = preset.order;
     const delivery = document.getElementById('shopDelivery');
     const pickup = document.getElementById('shopPickup');
     const baker = document.getElementById('shopBaker');
@@ -1207,38 +1157,15 @@ function shopChecked(id){
   return !!(document.getElementById(id) || {}).checked;
 }
 function shopLinks(){
-  readShopOwn();
   const links = [];
   if (shopChecked('shopCommentChat')) links.push({ kind: 'chat' });
   if (shopChecked('shopCommentCatalog')) links.push({ kind: 'catalog' });
-  let error = '';
-  setupOwn.forEach(function(item){
-    const label = String(item.label || '').replace(/\s+/g, ' ').trim();
-    const link = String(item.link || '').trim();
-    if (!label && !link) return;
-    if (label.length < 2 || !/^https:\/\/\S+$/i.test(link)) error = 'Своей ссылке нужны надпись и адрес, который начинается с https://';
-    else links.push({ kind: 'own', label: label, link: link });
-  });
-  return { links: links, error: error };
+  return { links: links, error: '' };
 }
 async function saveShopDesk(){
   const msg = document.getElementById('setupmsg');
-  const names = {
-    catalog: String(shopField('shopNameCatalog')).replace(/\s+/g, ' ').trim(),
-    contacts: String(shopField('shopNameContacts')).replace(/\s+/g, ' ').trim(),
-    order: String(shopField('shopNameOrder')).replace(/\s+/g, ' ').trim(),
-    admin: String(shopField('shopNameAdmin')).replace(/\s+/g, ' ').trim()
-  };
-  const labels = [names.catalog, names.contacts, names.order, names.admin].filter(Boolean);
-  if (new Set(labels).size !== labels.length) {
-    if (msg) msg.textContent = 'У двух кнопок не может быть одной надписи.';
-    return;
-  }
+  const names = lockedShopNames(shopField('shopKind') || 'shop');
   const comment = shopLinks();
-  if (comment.error) {
-    if (msg) msg.textContent = comment.error;
-    return;
-  }
   const board = document.querySelector('input[name="shopBoard"]:checked');
   if (msg) msg.textContent = 'Сохраняю настройки бота…';
   const data = await api('/api/admin/vk/assistant/shop', { method:'POST', body: JSON.stringify({

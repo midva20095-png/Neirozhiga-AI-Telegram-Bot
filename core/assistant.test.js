@@ -334,8 +334,7 @@ test('простой бот хранит товары отдельно от ка
     });
     assert.deepEqual(links.shopCommentLinks, [
         { kind: 'chat' },
-        { kind: 'catalog' },
-        { kind: 'own', label: 'Сайт', link: 'https://bakery.example/' }
+        { kind: 'catalog' }
     ]);
     assert.equal(reply.goods[0].name, 'Торт');
     assert.equal(reply.goods[0].price, '1500');
@@ -368,8 +367,10 @@ test('простой бот хранит товары отдельно от ка
     assert.equal(wide.shopTexts.catalog.length, 1800);
     assert.equal(wide.goods[0].section, 'Торты');
     assert.equal(assistant.cleanReply({ greeting: 'Здравствуйте' }).level, undefined);
-    const named = assistant.cleanReply({ level: 1, shopNames: { catalog: 'Торты' }, shopTexts: { order: 'Напишите телефон.' } });
-    assert.equal(named.shopNames.catalog, 'Торты');
+    const named = assistant.cleanReply({ level: 1, shopKind: 'auto', shopNames: { catalog: 'Торты' }, shopTexts: { order: 'Напишите телефон.' } });
+    assert.equal(named.shopNames.catalog, 'Услуги');
+    assert.equal(named.shopNames.order, 'Запись');
+    assert.equal(assistant.cleanReply({ level: 1, shopNames: { catalog: 'Торты' } }).shopNames.catalog, undefined);
     assert.equal(named.shopTexts.order, 'Напишите телефон.');
     const about = 'Закажи торт своей мечты в Малоярославце с доставкой и длинным описанием витрины';
     const placed = require('./simple-bot').placeScan([
@@ -405,7 +406,13 @@ test('чат и каталог в комментариях стоят в раз�
     assert.ok(chat > 0 && catalog > chat);
     assert.equal(html.slice(chat, catalog).includes('class="brow"'), true);
     assert.equal(html.includes('mineCommentLabel'), false);
-    assert.equal(html.includes('Ещё одна ссылка'), true);
+    assert.equal(html.includes('Ещё одна ссылка'), false);
+    assert.equal(html.includes('Надпись для покупателя'), false);
+    assert.equal(html.includes('id="wizKeyAdd"'), false);
+    assert.equal(html.includes('id="assistAdd"'), false);
+    assert.equal(html.includes('id="assistPlainAdd"'), false);
+    assert.equal(html.includes('mineNamecatalog'), false);
+    assert.equal(html.includes('Своя кнопка'), false);
     assert.equal(html.includes('id="mineChatLinks"'), true);
     assert.equal(html.includes("mineBox('mineHello', 2000"), true);
     assert.equal(html.includes("mineBox('mineContacts', 2500"), true);

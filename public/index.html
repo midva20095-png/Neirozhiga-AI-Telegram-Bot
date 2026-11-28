@@ -1163,7 +1163,7 @@ function assistButtonHtml(button, depth){
   const name = button && button.label || '';
   const count = String(name).length;
   return '<div class="brow" data-brow data-depth="'+level+'">'+
-    '<label class="flabel">'+(level ? 'Кнопка внутри' : 'Своя кнопка')+'</label>'+
+    '<label class="flabel">'+(level ? 'Кнопка внутри' : 'Кнопка')+'</label>'+
     '<input data-blabel maxlength="24" placeholder="Прайс" value="'+esc(name)+'">'+
     '<input type="hidden" data-bcolor value="'+esc(button && (button.color === 'primary' || button.color === 'positive' || button.color === 'negative') ? button.color : 'secondary')+'">'+
     '<p class="count" data-bcount>'+count+' из 24</p>'+
@@ -1750,8 +1750,7 @@ function assistSimpleHtml(reply){
     '<div class="plain" data-plain data-role="hand">'+
     '<label style="display:block"><input data-multi type="checkbox"'+(!(reply && reply.multi === false) ? ' checked' : '')+'> Несколько услуг сразу. Клиент отмечает несколько, сумма складывается.</label>'+
     '<label style="display:block"><input data-phand type="checkbox"'+(hand ? ' checked' : '')+'> Кнопка «Администратор»</label>'+
-    '<p class="hint">Клиент нажмёт её, и вам придёт сообщение во ВК. Пока вы отвечаете, бот молчит.</p></div>'+
-    (slots.length < 8 ? '<button class="btn ghost simple-extra" id="assistPlainAdd" type="button" style="margin-top:8px">Ещё кнопка на главном экране</button>' : '');
+    '<p class="hint">Клиент нажмёт её, и вам придёт сообщение во ВК. Пока вы отвечаете, бот молчит.</p></div>';
 }
 let assistWizardAt = 0;
 let assistWizardKind = 'simple';
@@ -2084,17 +2083,15 @@ function assistDesk(reply, groupId){
       '<p class="gate-kicker">НейроЯга AI</p>'+
       '<p class="gate-title">Кнопки в чате</p>'+
       '<p class="hint">Под кнопкой написано, куда она ведёт. Нажмите её, чтобы поправить путь.</p>'+
-      '<div class="niches" id="wizKeyBoard"></div>'+
-      '<button type="button" class="textlink" id="wizKeyAdd">Своя кнопка</button></div>'+
+      '<div class="niches" id="wizKeyBoard"></div></div>'+
       '<div class="keys-raw">'+
-      '<p class="hint">«Записаться» стоит всегда и на всю ширину. Её можно только переименовать. Свои кнопки — текст, ссылка, контакты или кнопки внутри. На телефоне в ряд помещаются две короткие кнопки, не длиннее 24 знаков. «Скрыть» убирает кнопку из чата, но не стирает её.</p>'+
+      '<p class="hint">«Записаться» стоит всегда и на всю ширину. Её можно только переименовать. Новых кнопок сверху не ставят — только предложенные. Внутри раздела можно править путь: текст, ссылка, контакты или кнопки внутри. На телефоне в ряд помещаются две короткие кнопки, не длиннее 24 знаков. «Скрыть» убирает кнопку из чата, но не стирает её.</p>'+
       '<label class="flabel" for="assistBookLabel">Кнопка записи</label>'+
       '<input id="assistBookLabel" maxlength="24" placeholder="Записаться" value="'+esc(assistBookName(reply))+'">'+
       '<p class="hint">Эту кнопку нельзя удалить. Снять запись целиком можно на шаге 8.</p>'+
       '<label style="display:block;margin:8px 0"><input id="assistHandoff" type="checkbox"'+(handoff ? ' checked' : '')+'> Кнопка «Администратор»</label>'+
       '<p class="hint">Клиент нажмёт её, и вам придёт сообщение во ВК. Пока вы отвечаете, бот молчит.</p>'+
       '<div id="assistButtons">'+assistCustomButtons(reply, groupId).map(function(button){ return assistButtonHtml(button); }).join('')+'</div>'+
-      (assistCustomButtons(reply, groupId).length < 8 ? '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>' : '')+
       '<div id="assistKeyPreview"></div>'+
       '<button class="btn ghost" id="assistReset" type="button" style="margin-top:8px">Вернуть кнопки по умолчанию</button></div>']
   ];
@@ -2958,19 +2955,8 @@ function assistKind(select){
   if (add) add.hidden = !menu || (nest && nest.querySelectorAll(':scope > [data-brow]').length >= 6);
 }
 function ensureAssistAdd(){
-  const list = document.getElementById('assistButtons');
-  if (!list) return;
-  let add = document.getElementById('assistAdd');
-  const full = list.querySelectorAll(':scope > [data-brow]').length >= 8;
-  if (full) {
-    if (add) add.remove();
-    return;
-  }
-  if (!add) {
-    list.insertAdjacentHTML('afterend', '<button class="btn ghost" id="assistAdd" type="button" style="margin-top:8px">Добавить кнопку</button>');
-    add = document.getElementById('assistAdd');
-  }
-  if (add) add.onclick = addAssistButton;
+  const add = document.getElementById('assistAdd');
+  if (add) add.remove();
 }
 function wizardKeyNote(row){
   if (row.hidden) return 'скрыта, клиент её не видит';
@@ -3391,8 +3377,7 @@ function paintWizardBuild(){
   assistSand.path = assistSand.path.filter(function(n){ return n >= 0; }).slice(0, 2);
   const book = String((document.getElementById('assistBookLabel') || {}).value || '').trim() || 'Записаться';
   const adminOn = (document.getElementById('assistHandoff') || {}).checked !== false;
-  let tail = '<button type="button" class="sandkey primary wide" data-sand="add:">Добавить кнопку</button>';
-  tail += '<button type="button" class="sandkey positive wide" data-sand="book"><b>'+esc(book)+'</b><small>ведёт к выбору дня и времени</small></button>';
+  let tail = '<button type="button" class="sandkey positive wide" data-sand="book"><b>'+esc(book)+'</b><small>ведёт к выбору дня и времени</small></button>';
   tail += '<button type="button" class="sandkey primary" data-sand="admin"><b>Администратор</b><small>'+(adminOn ? 'ведёт к сообщению вам' : 'сейчас скрыта')+'</small></button>';
   if (assistSand.extra === 'book') tail += '<div class="sandedit"><label class="flabel">Название</label><input data-sandname maxlength="24" value="'+esc(book)+'"><button type="button" class="sandkey positive wide" data-sanddo="bookdone">Готово</button></div>';
   if (assistSand.extra === 'admin') tail += '<div class="sandedit"><label><input data-sandadmin type="checkbox"'+(adminOn ? ' checked' : '')+'> Показывать «Администратор»</label><button type="button" class="sandkey positive wide" data-sanddo="admindone">Готово</button></div>';
@@ -4173,10 +4158,6 @@ function readMineForm(){
   if (newsLink) mineState.newsLink = String(newsLink.value || '').trim();
   const kindPick = document.getElementById('mineKindPick');
   if (kindPick) mineState.kind = kindPick.value;
-  [['catalog', 'mineNamecatalog'], ['contacts', 'mineNamecontacts'], ['order', 'mineNameorder'], ['admin', 'mineNameadmin']].forEach(function(pair){
-    const text = value(pair[1]);
-    if (text !== null) mineState.names[pair[0]] = text.replace(/\s+/g, ' ').trim();
-  });
   [['catalog', 'mineTextCatalog'], ['order', 'mineTextOrder'], ['admin', 'mineTextAdmin']].forEach(function(pair){
     const text = value(pair[1]);
     if (text !== null) mineState.texts[pair[0]] = text.replace(/\s+/g, ' ').trim();
@@ -4258,24 +4239,22 @@ function mineCount(node){
 function buttonCard(key, title, note, textId, textLabel){
   const on = key === 'catalog' ? mineState.catalog : key === 'contacts' ? mineState.contactsOn : key === 'order' ? mineState.order : mineState.admin;
   const flagId = key === 'catalog' ? 'mineCatalog' : key === 'contacts' ? 'mineContactsOn' : key === 'order' ? 'mineOrder' : 'mineAdmin';
-  const name = mineState.names[key] || title;
   let html = '<p class="now">'+esc(title)+'</p>'+
     '<label><input id="'+flagId+'" type="checkbox"'+(on ? ' checked' : '')+'> Показывать кнопку</label>'+
-    '<label class="flabel" for="mineName'+key+'">Надпись для покупателя</label><input id="mineName'+key+'" maxlength="40" value="'+esc(name)+'">'+
     '<p class="hint">'+esc(note)+'</p>';
   if (textId) html += '<label class="flabel" for="'+textId+'">'+esc(textLabel)+'</label>'+mineBox(textId, 2000, mineState.texts[key] || '', 5);
   return html;
 }
 function mineButtons(){
-  return mineHead('Кнопки', 'Четыре кнопки в чате. Надпись можно заменить. Ниже уже лежит то, что бот сохранил.')+
+  return mineHead('Кнопки', 'Только эти кнопки: Каталог, Контакты, Заявка, Администратор. Свои кнопки поставить нельзя. Категория меняет «Каталог» на «Услуги» и «Заявку» на «Запись».')+
     mineHave()+
-    buttonCard('catalog', 'Каталог', 'Ссылка и дополнительные кнопки задаются в разделе «Каталог». Название этой кнопки можно заменить.', 'mineTextCatalog', 'Фраза перед ссылкой')+
+    buttonCard('catalog', 'Каталог', 'Ссылка и кнопки каталога задаются в разделе «Каталог».', 'mineTextCatalog', 'Фраза перед ссылкой')+
     buttonCard('contacts', 'Контакты', 'Телефон и адрес задаются в разделе «Контакты».', '', '')+
     buttonCard('order', 'Заявка', 'Покупатель выбирает товар и пишет телефон. Заявка приходит вам в сообщения сообщества.', 'mineTextOrder', 'Что написать покупателю')+
     buttonCard('admin', 'Администратор', 'После этой кнопки бот молчит, пока покупатель не нажмёт «Назад».', 'mineTextAdmin', 'Что написать покупателю')+
     '<p class="now">Категория</p>'+
     '<select id="mineKindPick"><option value="baker"'+(mineState.kind === 'baker' ? ' selected' : '')+'>Кондитер</option><option value="auto"'+(mineState.kind === 'auto' ? ' selected' : '')+'>Автосервис</option><option value="nails"'+(mineState.kind === 'nails' ? ' selected' : '')+'>Маникюр</option><option value="shop"'+(!mineState.kind || mineState.kind === 'shop' ? ' selected' : '')+'>Магазин</option></select>'+
-    '<p class="hint">Категория включает нужные поля заявки и подписи кнопок. Свои надписи выше остаются, пока не нажмёте «Кнопки категории».</p>'+
+    '<p class="hint">Категория включает нужные поля заявки и готовые надписи кнопок.</p>'+
     '<button class="btn ghost" id="mineKindApply" type="button">Кнопки категории</button>'+
     '<p class="now">Стиль кнопок</p>'+
     '<label><input type="radio" name="mineBoard" value="fixed"'+(mineState.board !== 'inline' ? ' checked' : '')+'> Внизу чата</label>'+
@@ -4295,10 +4274,10 @@ function mineCatalog(){
       '<label class="flabel">Ссылка https</label><input class="mineDoorLink" maxlength="300" value="'+esc(item.link || '')+'" placeholder="https://...">'+
       '</div>';
   }).join('');
-  return mineHead('Каталог', 'По умолчанию одна кнопка «Каталог» — для неё нужна ссылка ниже. Можно включить до 10 своих кнопок: название и ссылка у каждой свои. Правила те же, что у остальных кнопок бота.')+
+  return mineHead('Каталог', 'По умолчанию одна кнопка «Каталог» — для неё нужна ссылка ниже. Можно включить до 10 кнопок каталога: название и ссылка. Других кнопок в чат поставить нельзя.')+
     '<label class="flabel" for="mineCatalogLink">Ссылка для кнопки «Каталог»</label><input id="mineCatalogLink" maxlength="300" value="'+esc(mineState.catalogLink || '')+'" placeholder="https://vk.com/market-...">'+
-    '<p class="hint">Нужна, если свои кнопки выключены. Надпись «Каталог» меняется в разделе «Кнопки».</p>'+
-    '<p class="now">Свои кнопки</p>'+
+    '<p class="hint">Нужна, если кнопки каталога выключены.</p>'+
+    '<p class="now">Кнопки каталога</p>'+
     '<p class="hint">Все выключены по умолчанию. Включите, задайте название и ссылку.</p>'+
     doors+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить каталог</button><p id="minemsg" class="hint"></p></div>';
@@ -4380,28 +4359,11 @@ function mineContacts(){
     '<p class="hint">Достаточно ссылки с точкой или широты и долготы. Ссылку возьмите из Яндекс Карт («Поделиться»).</p>'+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить контакты</button><p id="minemsg" class="hint"></p></div>';
 }
-function commentOwnSlots(){
-  if (Array.isArray(mineState.ownDrafts)) return mineState.ownDrafts;
-  const saved = (Array.isArray(mineState.commentLinks) ? mineState.commentLinks : []).filter(function(item){ return item && item.kind === 'own'; });
-  return saved.length ? saved.map(function(item){ return { label: item.label || '', link: item.link || '' }; }) : [{ label: '', link: '' }];
-}
 function readCommentLinks(){
   if (!document.getElementById('mineCommentChat')) return null;
   const links = [];
   if (document.getElementById('mineCommentChat').checked) links.push({ kind: 'chat' });
   if (document.getElementById('mineCommentCatalog').checked) links.push({ kind: 'catalog' });
-  const drafts = [];
-  let bad = '';
-  document.querySelectorAll('[data-own]').forEach(function(row){
-    const label = String((row.querySelector('.mineOwnLabel') || {}).value || '').replace(/\s+/g, ' ').trim();
-    const link = String((row.querySelector('.mineOwnLink') || {}).value || '').trim();
-    drafts.push({ label: label, link: link });
-    if (!label && !link) return;
-    if (label.length < 2 || !/^https:\/\/\S+$/i.test(link)) bad = 'Своей ссылке нужны надпись и адрес, который начинается с https://';
-    else links.push({ kind: 'own', label: label, link: link });
-  });
-  mineState.ownDrafts = drafts.length ? drafts : [{ label: '', link: '' }];
-  if (bad) return { error: bad, links: links };
   return links;
 }
 function mineComments(){
@@ -4409,15 +4371,7 @@ function mineComments(){
   const chat = links.some(function(item){ return item.kind === 'chat'; });
   const catalog = links.some(function(item){ return item.kind === 'catalog'; });
   const groupId = String((mineCommunity && mineCommunity.groupId) || '').replace(/\D/g, '');
-  const slots = commentOwnSlots();
-  const room = 4 - (chat ? 1 : 0) - (catalog ? 1 : 0) - slots.length;
-  const own = slots.map(function(item, index){
-    return '<div class="brow" data-own><p class="now">Своя ссылка</p>'+
-      '<label class="flabel">Надпись</label><input class="mineOwnLabel" maxlength="40" value="'+esc(item.label || '')+'">'+
-      '<label class="flabel">Ссылка https</label><input class="mineOwnLink" maxlength="300" value="'+esc(item.link || '')+'">'+
-      '<button type="button" class="btn ghost" data-own-drop="'+index+'">Убрать это окно</button></div>';
-  }).join('');
-  return mineHead('Комментарии', 'Комментарий с названием товара или вопросом о цене получает текст товара. Каждая ссылка ниже — отдельное окно.')+
+  return mineHead('Комментарии', 'Комментарий с названием товара или вопросом о цене получает текст товара. Свои ссылки ставить нельзя — только чат и каталог.')+
     '<label><input id="mineComments" type="checkbox"'+(mineState.comments ? ' checked' : '')+'> Отвечать в комментариях</label>'+
     '<div class="brow"><p class="now">Ссылка на чат</p>'+
       '<label><input id="mineCommentChat" type="checkbox"'+(chat ? ' checked' : '')+'> Добавлять в ответ</label>'+
@@ -4425,8 +4379,6 @@ function mineComments(){
     '<div class="brow"><p class="now">Ссылка на каталог</p>'+
       '<label><input id="mineCommentCatalog" type="checkbox"'+(catalog ? ' checked' : '')+'> Добавлять в ответ</label>'+
       '<p class="hint">Каталог: '+(groupId ? 'https://vk.com/market-'+groupId : 'адрес товаров сообщества')+'</p></div>'+
-    own+
-    (room > 0 ? '<button type="button" class="btn ghost" id="mineCommentAdd">Ещё одна ссылка</button>' : '')+
     '<label><input id="mineChatLinks" type="checkbox"'+(mineState.chatLinks ? ' checked' : '')+'> Эти ссылки кнопками в чате</label>'+
     '<p class="hint">Выключено — ссылки только в комментариях. Включено — те же ссылки становятся кнопками внизу чата.</p>'+
     '<p class="hint">Пустое окно в ответ не попадает. Обычный комментарий бот не трогает.</p>'+
@@ -4499,37 +4451,6 @@ function bindMine(community){
       paintMine();
     };
   });
-  const moreLink = document.getElementById('mineCommentAdd');
-  if (moreLink) moreLink.onclick = function(){
-    readMineForm();
-    const slots = commentOwnSlots().slice();
-    const used = (Array.isArray(mineState.commentLinks) ? mineState.commentLinks : []).filter(function(item){
-      return item && (item.kind === 'chat' || item.kind === 'catalog');
-    }).length + slots.length;
-    if (used >= 4) {
-      paintMine();
-      return;
-    }
-    slots.push({ label: '', link: '' });
-    mineState.ownDrafts = slots;
-    paintMine();
-  };
-  document.querySelectorAll('[data-own-drop]').forEach(function(button){
-    button.onclick = function(){
-      readMineForm();
-      const slots = commentOwnSlots().slice();
-      slots.splice(Number(button.getAttribute('data-own-drop')), 1);
-      mineState.ownDrafts = slots.length ? slots : [{ label: '', link: '' }];
-      const kept = (Array.isArray(mineState.commentLinks) ? mineState.commentLinks : []).filter(function(item){
-        return item && item.kind !== 'own';
-      });
-      mineState.ownDrafts.forEach(function(item){
-        if (item.label && item.link) kept.push({ kind: 'own', label: item.label, link: item.link });
-      });
-      mineState.commentLinks = kept;
-      paintMine();
-    };
-  });
   const drop = document.getElementById('mineDrop');
   if (drop) drop.onclick = function(){
     if (!confirm('Удалить бота из сообщества? Ключ забудется, кнопки в чатах снимутся.')) return;
@@ -4580,7 +4501,7 @@ async function loadMine(){
       '<label class="flabel" for="mineGroup">Номер сообщества</label><input id="mineGroup" inputmode="numeric" placeholder="1234567">'+
       '<label class="flabel" for="mineToken">Ключ сообщества</label><input id="mineToken" type="password" autocomplete="off" placeholder="Ключ из настроек сообщества">'+
       '<label class="flabel" for="mineKind">Какое это сообщество</label><select id="mineKind"><option value="">Определить по сообществу</option><option value="baker">Кондитер</option><option value="auto">Автосервис</option><option value="nails">Маникюр</option><option value="shop">Магазин</option></select>'+
-      '<p class="hint">От категории зависят кнопки и поля заявки. Кондитер спрашивает доставку, самовывоз, пример и вес. Автосервис и маникюр открывают услуги и запись. Свои надписи кнопок правятся после подключения.</p>'+
+      '<p class="hint">От категории зависят кнопки и поля заявки. Кондитер спрашивает доставку, самовывоз, пример и вес. Автосервис и маникюр открывают услуги и запись. Свои кнопки поставить нельзя.</p>'+
       '<button class="btn" id="mineConnect" type="button" style="margin-top:12px">Подключить</button><p id="minemsg" class="hint"></p></div>';
     document.getElementById('mineBack').onclick = mineBack;
     document.getElementById('mineConnect').onclick = connectMine;
@@ -4605,8 +4526,7 @@ async function loadMine(){
     order: !!community.order,
     admin: !!community.admin,
     comments: !!community.comments,
-    commentLinks: Array.isArray(community.commentLinks) ? community.commentLinks.slice() : [],
-    ownDrafts: null,
+    commentLinks: Array.isArray(community.commentLinks) ? community.commentLinks.filter(function(item){ return item && (item.kind === 'chat' || item.kind === 'catalog'); }) : [],
     delivery: !!community.delivery,
     pickup: !!community.pickup,
     baker: !!community.baker,
@@ -4614,7 +4534,7 @@ async function loadMine(){
     board: community.board === 'inline' ? 'inline' : 'fixed',
     sections: !!community.sections,
     chatLinks: !!community.chatLinks,
-    names: Object.assign({}, community.names || {}),
+    names: lockedMineNames(community.kind || ''),
     texts: Object.assign({}, community.texts || {}),
     contacts: community.contacts || '',
     greeting: community.greeting || '',
@@ -4708,6 +4628,13 @@ function minePreset(kind){
     shop: { catalog: 'Каталог', order: 'Заявка', delivery: false, pickup: false, baker: false }
   }[kind] || { catalog: 'Каталог', order: 'Заявка', delivery: false, pickup: false, baker: false };
 }
+function lockedMineNames(kind){
+  const preset = minePreset(kind || 'shop');
+  const names = {};
+  if (preset.catalog !== 'Каталог') names.catalog = preset.catalog;
+  if (preset.order !== 'Заявка') names.order = preset.order;
+  return names;
+}
 function applyMineKind(){
   readMineForm();
   const kind = mineState.kind || 'shop';
@@ -4720,16 +4647,19 @@ function applyMineKind(){
   mineState.delivery = preset.delivery;
   mineState.pickup = preset.pickup;
   mineState.baker = preset.baker;
-  if (preset.catalog === 'Каталог') delete mineState.names.catalog;
-  else mineState.names.catalog = preset.catalog;
-  if (preset.order === 'Заявка') delete mineState.names.order;
-  else mineState.names.order = preset.order;
+  mineState.names = lockedMineNames(kind);
   paintMine();
   const note = document.getElementById('minemsg');
   if (note) note.textContent = 'Кнопки категории подставлены. Нажмите «Сохранить кнопки».';
 }
 async function saveMine(){
   readMineForm();
+  mineState.names = lockedMineNames(mineState.kind);
+  if (Array.isArray(mineState.commentLinks)) {
+    mineState.commentLinks = mineState.commentLinks.filter(function(item){
+      return item && (item.kind === 'chat' || item.kind === 'catalog');
+    });
+  }
   const msg = document.getElementById('minemsg');
   if (mineState.commentError) {
     if (msg) msg.textContent = mineState.commentError;
@@ -4743,12 +4673,6 @@ async function saveMine(){
   const button = document.getElementById('mineSave');
   if (button) button.disabled = true;
   if (msg) msg.textContent = 'Сохраняю…';
-  const labels = ['catalog', 'contacts', 'order', 'admin'].map(function(key){ return mineState.names[key] || ''; }).filter(Boolean);
-  if (new Set(labels).size !== labels.length) {
-    if (msg) msg.textContent = 'У двух кнопок не может быть одной надписи.';
-    if (button) button.disabled = false;
-    return false;
-  }
   const sheet = String((document.getElementById('mineSheet') || {}).value || '');
   try {
     const response = await fetch('/api/vk/shop', {
