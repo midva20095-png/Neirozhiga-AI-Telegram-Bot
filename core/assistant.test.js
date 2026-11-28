@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const assistant = require('./assistant');
 
 test('цвет кнопки сохраняется, чужой стиль отбрасывается', () => {
@@ -353,6 +355,16 @@ test('простой бот хранит товары отдельно от ка
     const sheet = require('./simple-bot').parseSheet('Торт | 1500 | https://vk.com/market-9_1\nпусто', 9);
     assert.equal(sheet.goods.length, 1);
     assert.equal(sheet.skipped, 1);
+});
+
+test('чат и каталог в комментариях стоят в разных окнах', () => {
+    const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+    const chat = html.indexOf('id="mineCommentChat"');
+    const catalog = html.indexOf('id="mineCommentCatalog"');
+    assert.ok(chat > 0 && catalog > chat);
+    assert.equal(html.slice(chat, catalog).includes('class="brow"'), true);
+    assert.equal(html.includes('mineCommentLabel'), false);
+    assert.equal(html.includes('Ещё одна ссылка'), true);
 });
 
 test('без адреса второго бота здоровье показывает, что он не подключён', async () => {
