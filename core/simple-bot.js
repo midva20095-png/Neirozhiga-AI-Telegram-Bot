@@ -12,6 +12,7 @@ function shopPack(input) {
     shopContacts: on(input.shopContacts),
     shopOrder: on(input.shopOrder),
     shopAdmin: on(input.shopAdmin),
+    shopComments: on(input.shopComments),
     goods: cleanGoods(input.goods),
   };
 }

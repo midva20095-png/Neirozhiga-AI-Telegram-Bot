@@ -571,12 +571,24 @@ function startWebApp() {
                     contactsOn: reply.shopContacts === true,
                     order: reply.shopOrder === true,
                     admin: reply.shopAdmin === true,
+                    comments: reply.shopComments === true,
                     contacts: reply.contacts || '',
                     goods: Array.isArray(reply.goods) ? reply.goods : []
                 } : null
             });
         } catch (e) {
             res.status(500).json({ error: 'Раздел сообщества не открылся.' });
+        }
+    });
+
+    app.post('/api/vk/shop/scan', requireUser, async (req, res) => {
+        try {
+            if (refuseCommunity(res)) return;
+            const found = await assistant.scanShop(req.userId, req.body || {});
+            res.json(found);
+        } catch (e) {
+            const message = e && e.public ? e.message : 'Сканирование остановилось.';
+            res.status(400).json({ ok: false, error: message });
         }
     });
 

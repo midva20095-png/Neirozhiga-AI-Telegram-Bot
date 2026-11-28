@@ -557,6 +557,7 @@ async function saveDesk(account, input, fetchImpl) {
         shopContacts: row.reply.shopContacts === true,
         shopOrder: row.reply.shopOrder === true,
         shopAdmin: row.reply.shopAdmin === true,
+        shopComments: row.reply.shopComments === true,
         goods: row.reply.goods
     } : null;
     const reply = cleanReply(keptShop ? Object.assign({}, input, keptShop) : input);
@@ -598,6 +599,7 @@ async function saveDesk(account, input, fetchImpl) {
             shopContacts: reply.shopContacts === true,
             shopOrder: reply.shopOrder === true,
             shopAdmin: reply.shopAdmin === true,
+            shopComments: reply.shopComments === true,
             goods: reply.goods || []
         } : {})
     }, fetchImpl);
@@ -630,6 +632,7 @@ async function saveShop(account, input, fetchImpl) {
         shopContacts: !!(input && input.contactsOn),
         shopOrder: !!(input && input.order),
         shopAdmin: !!(input && input.admin),
+        shopComments: !!(input && input.comments),
         goods
     }));
     if (!reply || reply.level !== 1) throw publicError('Настройки бота не собрались.');
@@ -669,6 +672,7 @@ async function saveShop(account, input, fetchImpl) {
         shopContacts: reply.shopContacts === true,
         shopOrder: reply.shopOrder === true,
         shopAdmin: reply.shopAdmin === true,
+        shopComments: reply.shopComments === true,
         goods: reply.goods || []
     }, fetchImpl);
     if (!pushed.ok && /кафедр/i.test(pushed.error || '')) throw publicError(pushed.error);
@@ -680,6 +684,33 @@ async function saveShop(account, input, fetchImpl) {
         skipped: parsed ? parsed.skipped : 0,
         goods: reply.goods || [],
         community: communityCard(Object.assign({}, saved || row, { reply, sync_state: pushed.ok ? 'on' : 'fail' }))
+    };
+}
+
+async function scanShop(account, input, fetchImpl) {
+    const ownerId = vkId(account);
+    if (!ownerId) throw publicError('Раздел открыт из ВК.');
+    const don = await db.getAssistantDon(ownerId);
+    if (!don || !don.active) throw publicError('Донат не продлён, сканирование молчит.');
+    const rows = await db.listAssistantCommunities(ownerId);
+    const row = rows[0];
+    if (!row) throw publicError('Сначала подключите сообщество.');
+    if (row.reply && row.reply.home === true) throw publicError('Это сообщество кафедры.');
+    const pushed = await postAssistant('/community/scan', {
+        userId: ownerId,
+        groupId: Number(row.group_id),
+        phase: input && input.phase === 'wall' ? 'wall' : 'card',
+        offset: Number(input && input.offset) || 0
+    }, fetchImpl, undefined, 20000);
+    if (!pushed.ok) throw publicError(pushed.error || 'Сканирование остановилось.');
+    return {
+        ok: true,
+        reading: typeof pushed.reading === 'string' ? pushed.reading : 'Смотрю сообщество',
+        readings: Array.isArray(pushed.readings) ? pushed.readings.filter(item => typeof item === 'string').slice(0, 12) : [],
+        items: Array.isArray(pushed.items) ? pushed.items.slice(0, 40) : [],
+        phase: pushed.phase === 'wall' ? 'wall' : '',
+        offset: Number(pushed.offset) || 0,
+        done: pushed.done !== false
     };
 }
 
@@ -1288,6 +1319,7 @@ module.exports = {
     connectCommunity,
     saveDesk,
     saveShop,
+    scanShop,
     setupNote,
     setupCard,
     askSetup,

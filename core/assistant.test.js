@@ -306,6 +306,8 @@ test('простой бот хранит товары отдельно от ка
     assert.equal(reply.level, 1);
     assert.equal(reply.shopCatalog, true);
     assert.equal(reply.shopOrder, false);
+    assert.equal(reply.shopComments, false);
+    assert.equal(assistant.cleanReply({ level: 1, shopComments: true }).shopComments, true);
     assert.equal(reply.goods[0].name, 'Торт');
     assert.equal(reply.goods[0].price, '1500');
     assert.equal(assistant.cleanReply({ greeting: 'Здравствуйте' }).level, undefined);

@@ -4091,6 +4091,7 @@ async function dropAssist(){
   }
 }
 let mineGoods = [];
+let mineFound = [];
 function mineBack(){
   tab = 'cab';
   draw();
@@ -4173,7 +4174,11 @@ async function loadMine(){
     '<label><input id="mineCatalog" type="checkbox"'+(community.catalog?' checked':'')+'> Каталог</label><br>'+
     '<label><input id="mineContactsOn" type="checkbox"'+(community.contactsOn?' checked':'')+'> Контакты</label><br>'+
     '<label><input id="mineOrder" type="checkbox"'+(community.order?' checked':'')+'> Заявка</label><br>'+
-    '<label><input id="mineAdmin" type="checkbox"'+(community.admin?' checked':'')+'> Администратор</label>'+
+    '<label><input id="mineAdmin" type="checkbox"'+(community.admin?' checked':'')+'> Администратор</label><br>'+
+    '<label><input id="mineComments" type="checkbox"'+(community.comments?' checked':'')+'> Ссылки в комментариях</label>'+
+    '<p class="hint">Комментарий про товар или с вопросом о цене получит ссылку из базы. Обычные комментарии бот не трогает.</p>'+
+    '<button class="btn ghost" id="mineScan" type="button">Сканировать сообщество</button>'+
+    '<div id="mineFound"></div>'+
     '<label class="flabel" for="mineContacts">Текст контактов</label><textarea id="mineContacts" maxlength="1500" rows="3" placeholder="Телефон, адрес, как написать">'+esc(community.contacts || '')+'</textarea>'+
     '<div id="mineGoods"></div>'+
     '<label class="flabel" for="mineName">Название</label><input id="mineName" maxlength="80" placeholder="Торт">'+
@@ -4184,13 +4189,18 @@ async function loadMine(){
     '<textarea id="mineSheet" hidden></textarea>'+
     '<p class="hint">Строка файла: название | цена | ссылка. Подойдёт и выгрузка товаров ВК, если в ней есть ссылка или номер товара. Файл заменяет список. Товаров не больше 40.</p>'+
     '<button class="btn" id="mineSave" type="button" style="margin-top:12px">Сохранить</button>'+
-    '<button class="btn ghost" id="mineDrop" type="button" style="margin-top:8px">Отключить</button>'+
+    '<button class="btn ghost" id="mineDrop" type="button" style="margin-top:8px">Удалить бота из сообщества</button>'+
+    '<p class="hint">Ключ забудется, а кнопки в чатах снимутся, пока ключ ещё действует.</p>'+
     '<p id="minemsg" class="hint"></p></div>';
   document.getElementById('mineBack').onclick = mineBack;
   document.getElementById('mineAdd').onclick = addMineGood;
   document.getElementById('mineFile').onchange = readMineFile;
   document.getElementById('mineSave').onclick = saveMine;
-  document.getElementById('mineDrop').onclick = function(){ dropAssistGroup(community.groupId); };
+  document.getElementById('mineScan').onclick = scanMine;
+  document.getElementById('mineDrop').onclick = function(){
+    if (!confirm('Удалить бота из сообщества? Ключ забудется, кнопки в чатах снимутся.')) return;
+    dropAssistGroup(community.groupId);
+  };
   paintMineGoods();
 }
 function addMineGood(){
@@ -4265,6 +4275,7 @@ async function saveMine(){
         contactsOn: !!(document.getElementById('mineContactsOn') || {}).checked,
         order: !!(document.getElementById('mineOrder') || {}).checked,
         admin: !!(document.getElementById('mineAdmin') || {}).checked,
+        comments: !!(document.getElementById('mineComments') || {}).checked,
         contacts: (document.getElementById('mineContacts') || {}).value || '',
         goods: mineGoods,
         sheet: sheet
@@ -4282,6 +4293,107 @@ async function saveMine(){
     if (msg) msg.textContent = error.message || 'Настройки не сохранились';
   }
   if (button) button.disabled = false;
+}
+function waitMine(ms){
+  return new Promise(function(resolve){ setTimeout(resolve, ms); });
+}
+async function scanMine(){
+  const button = document.getElementById('mineScan');
+  const msg = document.getElementById('minemsg');
+  if (button) button.disabled = true;
+  mineFound = [];
+  paintMineFound();
+  let phase = 'card';
+  let offset = 0;
+  let guard = 0;
+  try {
+    while (phase && guard < 12) {
+      guard += 1;
+      const response = await fetchT('/api/vk/shop/scan', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ phase: phase, offset: offset })
+      }, 22000);
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Сканирование остановилось');
+      const lines = Array.isArray(data.readings) && data.readings.length ? data.readings : [data.reading || 'Смотрю сообщество'];
+      for (let i = 0; i < lines.length; i += 1) {
+        if (button) button.textContent = String(lines[i] || 'Смотрю сообщество');
+        await waitMine(400);
+      }
+      (Array.isArray(data.items) ? data.items : []).forEach(function(item){
+        if (!item || mineFound.length >= 40) return;
+        const key = String(item.kind || '')+'|'+(item.link || item.title || '');
+        if (mineFound.some(function(row){ return row.key === key; })) return;
+        mineFound.push({
+          key: key,
+          on: true,
+          kind: item.kind || '',
+          title: String(item.title || ''),
+          text: String(item.text || ''),
+          link: String(item.link || ''),
+          price: String(item.price || '')
+        });
+      });
+      paintMineFound();
+      if (data.done) break;
+      phase = data.phase || '';
+      offset = Number(data.offset) || 0;
+    }
+    if (button) button.textContent = 'Сканировать ещё раз';
+    if (msg) msg.textContent = mineFound.length
+      ? 'Можем добавить в базу следующее. Снимите галочку с лишнего и нажмите «Добавить отмеченное».'
+      : 'В открытых записях не нашлось ссылок, товаров и контактов.';
+  } catch (error) {
+    if (button) button.textContent = 'Сканировать сообщество';
+    if (msg) msg.textContent = error.message || 'Сканирование остановилось';
+  }
+  if (button) button.disabled = false;
+}
+function paintMineFound(){
+  const box = document.getElementById('mineFound');
+  if (!box) return;
+  if (!mineFound.length) {
+    box.innerHTML = '';
+    return;
+  }
+  box.innerHTML = '<p class="now">Можем добавить в базу:</p>'+mineFound.map(function(item, index){
+    const kind = item.kind === 'article' ? 'Статья' : item.kind === 'product' ? 'Товар' : item.kind === 'contact' ? 'Контакт' : item.kind === 'about' ? 'Описание' : item.kind === 'site' ? 'Сайт' : 'Ссылка';
+    const extra = item.link ? '<br>'+esc(item.link) : (item.text ? '<br>'+esc(item.text) : '');
+    return '<label class="hint"><input type="checkbox" data-scan-on="'+index+'"'+(item.on ? ' checked' : '')+'> '+kind+': '+esc(item.title)+extra+'</label>';
+  }).join('<br>')+'<button class="btn" id="mineTake" type="button" style="margin-top:8px">Добавить отмеченное</button>';
+  box.querySelectorAll('[data-scan-on]').forEach(function(input){
+    input.onchange = function(){
+      mineFound[Number(input.getAttribute('data-scan-on'))].on = input.checked;
+    };
+  });
+  const take = document.getElementById('mineTake');
+  if (take) take.onclick = takeMineScan;
+}
+function takeMineScan(){
+  const contacts = document.getElementById('mineContacts');
+  const lines = [];
+  mineFound.forEach(function(item){
+    if (!item.on) return;
+    if (item.kind === 'about' || item.kind === 'contact' || item.kind === 'site') {
+      const line = [item.title, item.text, item.link].filter(Boolean).join(' — ');
+      if (line) lines.push(line);
+      return;
+    }
+    if (!/^https:\/\//i.test(item.link) || mineGoods.length >= 40) return;
+    const title = String(item.title || '').replace(/\s+/g, ' ').trim();
+    if (title.length < 2) return;
+    if (mineGoods.some(function(good){ return good.link === item.link || String(good.name || '').toLowerCase() === title.toLowerCase(); })) return;
+    mineGoods.push({ name: title, price: item.price || '', link: item.link });
+  });
+  if (contacts && lines.length) {
+    const prev = String(contacts.value || '').trim();
+    const add = lines.filter(function(line){ return prev.indexOf(line) === -1; }).join('\n');
+    if (add) contacts.value = prev ? prev+'\n'+add : add;
+  }
+  paintMineGoods();
+  const msg = document.getElementById('minemsg');
+  if (msg) msg.textContent = 'Отмеченное стоит в списке. Нажмите «Сохранить», чтобы бот начал этим пользоваться.';
 }
 async function dropAssistGroup(groupId){
   const msg = document.getElementById('minemsg');
